@@ -1,0 +1,45 @@
+# Contributing to ZeroJ
+
+Thank you for your interest in contributing to ZeroJ!
+
+## Development Setup
+
+1. Install Java 25 (GraalVM recommended):
+   ```bash
+   sdk use java 25.0.2-graal
+   ```
+
+2. Build the project:
+   ```bash
+   ./gradlew build
+   ```
+
+3. Run tests:
+   ```bash
+   ./gradlew test
+   ```
+
+## Project Structure
+
+ZeroJ is a Gradle multi-module project. All module names use the `zeroj-` prefix and all packages start with `com.bloxbean.cardano.zeroj`.
+
+See [docs/architecture-overview.md](docs/architecture-overview.md) for the full module dependency graph.
+
+## Code Style
+
+- Java 25 — use records, sealed interfaces, and pattern matching where appropriate
+- All types in `zeroj-api` must be immutable
+- Fail fast on malformed input — no silent defaults
+- GraalVM native-image compatible — avoid unnecessary reflection
+
+## Submitting Changes
+
+1. Fork the repository
+2. Create a feature branch from `main`
+3. Write tests for new functionality
+4. Ensure `./gradlew build` passes
+5. Submit a pull request
+
+## Architecture Decision Records
+
+Significant design decisions are documented as ADRs in `docs/adr/`. Please read the relevant ADRs before making changes to the architecture.

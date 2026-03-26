@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ verifier orchestrator — routes proofs to correct backend'
+
+dependencies {
+    api project(':zeroj-api')
+    api project(':zeroj-backend-spi')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Verifier Core'
+                description = 'Verifier orchestration and backend routing'
+            }
+        }
+    }
+}

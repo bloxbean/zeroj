@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ Cardano anchoring — proof anchor model, metadata encoding, datum helpers'
+
+dependencies {
+    api project(':zeroj-api')
+    api 'co.nstant.in:cbor:0.9'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Cardano'
+                description = 'ZK proof anchoring model and Cardano metadata encoding'
+            }
+        }
+    }
+}

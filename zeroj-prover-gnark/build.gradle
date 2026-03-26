@@ -1,0 +1,28 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ gnark prover — native in-process BLS12-381/BN254 Groth16 proving via FFM'
+
+dependencies {
+    api project(':zeroj-api')
+    api project(':zeroj-codec')
+    api project(':zeroj-prover-sidecar')
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+
+    testImplementation project(':zeroj-test-vectors')
+    testImplementation project(':zeroj-verifier-core')
+    testImplementation project(':zeroj-verifier-groth16')
+    testImplementation project(':zeroj-backend-spi')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Prover Gnark'
+                description = 'Native in-process BLS12-381/BN254 Groth16 proving via gnark FFM bindings'
+            }
+        }
+    }
+}

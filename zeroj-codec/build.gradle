@@ -1,0 +1,24 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ proof serialization — snarkjs JSON, CBOR, canonical hashing'
+
+dependencies {
+    api project(':zeroj-api')
+    api 'co.nstant.in:cbor:0.9'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+
+    testImplementation project(':zeroj-test-vectors')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Codec'
+                description = 'Proof envelope serialization (snarkjs JSON, CBOR)'
+            }
+        }
+    }
+}

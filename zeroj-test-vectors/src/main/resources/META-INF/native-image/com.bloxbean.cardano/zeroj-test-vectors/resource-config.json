@@ -1,0 +1,8 @@
+{
+  "resources": {
+    "includes": [
+      {"pattern": "test-vectors/groth16-bn254/.*\\.json$"},
+      {"pattern": "test-vectors/malformed/.*\\.json$"}
+    ]
+  }
+}

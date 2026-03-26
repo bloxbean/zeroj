@@ -1,0 +1,65 @@
+plugins {
+    id 'java-platform'
+    id 'maven-publish'
+    id 'signing'
+}
+
+description = 'ZeroJ Bill of Materials — import this platform to align all ZeroJ module versions'
+
+javaPlatform {
+    allowDependencies()
+}
+
+dependencies {
+    constraints {
+        api project(':zeroj-api')
+        api project(':zeroj-codec')
+        api project(':zeroj-backend-spi')
+        api project(':zeroj-verifier-core')
+        api project(':zeroj-verifier-groth16')
+        api project(':zeroj-blst')
+        api project(':zeroj-yaci-protocol')
+        api project(':zeroj-yaci-zk')
+        api project(':zeroj-cardano')
+        api project(':zeroj-ccl')
+        api project(':zeroj-patterns')
+        api project(':zeroj-prover-sidecar')
+    }
+}
+
+publishing {
+    publications {
+        bom(MavenPublication) {
+            from components.javaPlatform
+            pom {
+                name = 'ZeroJ BOM'
+                description = 'Bill of Materials for ZeroJ'
+                url = 'https://github.com/bloxbean/zeroj'
+                licenses {
+                    license {
+                        name = 'The MIT License'
+                        url = 'https://opensource.org/licenses/mit-license.php'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'satran004'
+                        name = 'Satya'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/bloxbean/zeroj.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/bloxbean/zeroj.git'
+                    url = 'https://github.com/bloxbean/zeroj'
+                }
+            }
+        }
+    }
+}
+
+ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
+if (isReleaseVersion && !project.hasProperty("skipSigning")) {
+    signing {
+        sign publishing.publications
+    }
+}

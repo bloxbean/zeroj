@@ -1,0 +1,23 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ CCL integration — fluent transaction builder helpers for ZK proof anchoring'
+
+dependencies {
+    api project(':zeroj-cardano')
+    api 'com.bloxbean.cardano:cardano-client-lib:0.7.1'
+
+    testImplementation project(':zeroj-test-vectors')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ CCL'
+                description = 'Cardano Client Lib integration for ZK proof anchoring'
+            }
+        }
+    }
+}

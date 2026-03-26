@@ -1,0 +1,26 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ standard proof-backed patterns — typed high-level APIs for common ZK use cases'
+
+dependencies {
+    api project(':zeroj-api')
+    api project(':zeroj-verifier-core')
+    implementation project(':zeroj-codec')
+    implementation project(':zeroj-cardano')
+
+    testImplementation project(':zeroj-test-vectors')
+    testImplementation project(':zeroj-verifier-groth16')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Patterns'
+                description = 'Standard proof-backed patterns: state transitions, nullifier claims, membership proofs'
+            }
+        }
+    }
+}

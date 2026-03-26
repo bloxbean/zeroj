@@ -1,0 +1,20 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ verifier SPI — backend discovery, ZkVerifier interface'
+
+dependencies {
+    api project(':zeroj-api')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Backend SPI'
+                description = 'Service Provider Interface for ZK verification backends'
+            }
+        }
+    }
+}

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  prover:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount your circuit artifacts here
+      # Each circuit needs a directory with: <name>.wasm, <name>_final.zkey, verification_key.json
+      - ./circuits:/circuits
+    environment:
+      - PORT=3000
+      - CIRCUITS_DIR=/circuits
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

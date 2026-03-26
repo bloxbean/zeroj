@@ -1,0 +1,24 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+description = 'ZeroJ end-to-end examples and demos'
+
+dependencies {
+    implementation project(':zeroj-api')
+    implementation project(':zeroj-codec')
+    implementation project(':zeroj-backend-spi')
+    implementation project(':zeroj-verifier-core')
+    implementation project(':zeroj-verifier-groth16')
+    implementation project(':zeroj-yaci-protocol')
+    implementation project(':zeroj-yaci-zk')
+    implementation project(':zeroj-cardano')
+    implementation project(':zeroj-ccl')
+    implementation project(':zeroj-patterns')
+    implementation project(':zeroj-test-vectors')
+}
+
+application {
+    mainClass = 'com.bloxbean.cardano.zeroj.examples.EndToEndDemo'
+}

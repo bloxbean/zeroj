@@ -1,0 +1,9 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ shared test fixtures — pre-generated proofs, VKs, public inputs'
+
+dependencies {
+    api project(':zeroj-api')
+}

@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ core proof model, envelopes, and verification result types'
+
+dependencies {
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ API'
+                description = 'Core ZK proof model and verification types'
+            }
+        }
+    }
+}
