@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "name": "com.bloxbean.cardano.zeroj.codec.SnarkjsProof",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.codec.SnarkjsVerificationKey",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

@@ -45,6 +45,13 @@ bin/
 
 ### Native libraries built from source (not distributed as binaries) ###
 zeroj-prover-gnark/src/main/resources/native/*/libzeroj_gnark.*
+zeroj-verifier-halo2/src/main/resources/native/*/libzeroj_halo2.*
+
+### Rust build artifacts (Halo2) ###
+zeroj-verifier-halo2/halo2-rust/target/
+
+### Go compiled binaries ###
+zeroj-prover-gnark/gnark-wrapper/gentestvectors
 
 ### Circom / snarkjs build artifacts ###
 *.r1cs
@@ -53,6 +60,12 @@ zeroj-prover-gnark/src/main/resources/native/*/libzeroj_gnark.*
 
 ### Node.js (circom tooling) ###
 node_modules/
+
+### Log files ###
+*.log
+
+### Windows ###
+Thumbs.db
 
 ### Development planning (not part of the source) ###
 plan.md

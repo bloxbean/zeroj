@@ -4,16 +4,25 @@ plugins {
 
 description = 'ZeroJ gnark prover — native in-process BLS12-381/BN254 Groth16 proving via FFM'
 
+test {
+    // Set GOMAXPROCS before Go runtime bootstraps inside the shared library.
+    // Without this, Go's work-stealing scheduler can crash (SIGABRT / exit 134)
+    // when its goroutines race with JVM thread management.
+    environment 'GOMAXPROCS', '2'
+    // Fork a new JVM per test class to isolate Go runtime lifecycle
+    forkEvery = 1
+}
+
 dependencies {
     api project(':zeroj-api')
     api project(':zeroj-codec')
+    api project(':zeroj-backend-spi')
     api project(':zeroj-prover-sidecar')
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 
     testImplementation project(':zeroj-test-vectors')
     testImplementation project(':zeroj-verifier-core')
     testImplementation project(':zeroj-verifier-groth16')
-    testImplementation project(':zeroj-backend-spi')
 }
 
 publishing {

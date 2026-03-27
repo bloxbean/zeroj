@@ -20,6 +20,18 @@ public class MembershipVerifier {
     }
 
     /**
+     * Verify a membership proof, returning an enriched result with root match status.
+     */
+    public MembershipResult verifyMembership(MembershipProof proof, byte[] expectedRoot,
+                                              VerificationMaterial material) {
+        if (!java.util.Arrays.equals(proof.merkleRoot(), expectedRoot)) {
+            return MembershipResult.rootMismatch();
+        }
+        var result = verify(proof, expectedRoot, material);
+        return MembershipResult.from(result);
+    }
+
+    /**
      * Verify a membership proof against an expected Merkle root.
      *
      * @param proof        the membership proof

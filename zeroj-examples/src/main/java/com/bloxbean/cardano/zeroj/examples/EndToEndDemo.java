@@ -13,11 +13,11 @@ import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Groth16BN254Verifier;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier;
-import com.bloxbean.cardano.zeroj.yaci.protocol.AppProofSubmission;
-import com.bloxbean.cardano.zeroj.yaci.protocol.Ed25519Signer;
-import com.bloxbean.cardano.zeroj.yaci.protocol.SubmissionHash;
-import com.bloxbean.cardano.zeroj.yaci.protocol.SubmissionResult;
-import com.bloxbean.cardano.zeroj.yaci.zk.*;
+import com.bloxbean.cardano.zeroj.submission.AppProofSubmission;
+import com.bloxbean.cardano.zeroj.submission.Ed25519Signer;
+import com.bloxbean.cardano.zeroj.submission.SubmissionHash;
+import com.bloxbean.cardano.zeroj.submission.SubmissionResult;
+import com.bloxbean.cardano.zeroj.ingestion.*;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -35,7 +35,7 @@ import java.util.List;
  * The scenario: A DeFi protocol uses ZK proofs to verify off-chain balance transfers.
  * - A user computes a balance transfer off-chain
  * - A ZK proof is generated externally (snarkjs/circom)
- * - The proof is submitted to a network of Yaci verifier nodes
+ * - The proof is submitted to a network of verifier nodes
  * - Each node verifies the proof WITHOUT re-executing the computation
  * - The verified result is anchored on Cardano L1
  *
@@ -75,9 +75,9 @@ public class EndToEndDemo {
         // ============================================================
         // STEP 2: Set up the ZeroJ verification infrastructure
         // ============================================================
-        // This runs on each Yaci node. Nodes never see the private input (b=11).
+        // This runs on each verifier node. Nodes never see the private input (b=11).
 
-        System.out.println("[Step 2] Setting up ZeroJ verifier (runs on each Yaci node)...");
+        System.out.println("[Step 2] Setting up ZeroJ verifier (runs on each verifier node)...");
 
         // Register verification backends
         var verifierRegistry = VerifierRegistry.empty();
@@ -113,13 +113,13 @@ public class EndToEndDemo {
         System.out.println();
 
         // ============================================================
-        // STEP 4: Submit as a proof-backed state transition (Yaci protocol)
+        // STEP 4: Submit as a proof-backed state transition
         // ============================================================
-        // The submitter signs the transition and submits to the Yaci network.
+        // The submitter signs the transition and submits to the verifier network.
         // The 6-stage pipeline validates everything: signature, authorization,
         // circuit allowlist, cryptographic proof, state root chain, replay protection.
 
-        System.out.println("[Step 4] Submitting proof-backed state transition to Yaci...");
+        System.out.println("[Step 4] Submitting proof-backed state transition...");
 
         // Set up identity
         KeyPair submitterKeys = Ed25519Signer.generateKeyPair();
@@ -238,7 +238,7 @@ public class EndToEndDemo {
         System.out.println("  What happened:");
         System.out.println("  1. Proof generated EXTERNALLY (snarkjs/circom)");
         System.out.println("  2. Verified in JAVA without re-executing the computation");
-        System.out.println("  3. Submitted with Ed25519 signature to Yaci network");
+        System.out.println("  3. Submitted with Ed25519 signature to verifier network");
         System.out.println("  4. 6-stage validation: auth + crypto + policy");
         System.out.println("  5. Anchored on Cardano L1 as CIP-10 metadata");
         System.out.println("  6. Replay attack automatically rejected");

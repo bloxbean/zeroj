@@ -1,0 +1,25 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ Halo2 verification — IPA/KZG via Rust FFM (no trusted setup)'
+
+dependencies {
+    api project(':zeroj-api')
+    api project(':zeroj-backend-spi')
+    api project(':zeroj-codec')
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+
+    testImplementation project(':zeroj-verifier-core')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Halo2'
+                description = 'Halo2 proof verification via Rust FFM bindings (IPA + KZG)'
+            }
+        }
+    }
+}

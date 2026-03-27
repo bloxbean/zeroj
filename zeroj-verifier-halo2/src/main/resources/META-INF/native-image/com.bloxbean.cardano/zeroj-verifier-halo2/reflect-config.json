@@ -1,0 +1,6 @@
+[
+  {
+    "name": "com.bloxbean.cardano.zeroj.verifier.halo2.Halo2Verifier",
+    "methods": [{"name": "<init>", "parameterTypes": []}]
+  }
+]

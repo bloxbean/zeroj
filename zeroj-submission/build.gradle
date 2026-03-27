@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ submission — proof submission model, CBOR wire format, Ed25519 signatures'
+
+dependencies {
+    api project(':zeroj-api')
+    api 'co.nstant.in:cbor:0.9'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Submission'
+                description = 'Proof submission protocol model and wire format'
+            }
+        }
+    }
+}

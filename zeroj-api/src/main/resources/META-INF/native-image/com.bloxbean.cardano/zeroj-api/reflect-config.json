@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "name": "com.bloxbean.cardano.zeroj.api.ProofSystemId",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.api.CurveId",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.api.VerificationResult$ReasonCode",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

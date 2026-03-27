@@ -1,0 +1,13 @@
+{
+  "circuit": "multiplier",
+  "commitmentScheme": "IPA",
+  "curve": "pallas",
+  "halo2Version": "0.3-zcash",
+  "k": 4,
+  "proofSystem": "halo2",
+  "publicC": 33,
+  "transcript": "Blake2b",
+  "trustedSetup": false,
+  "witnessA": 3,
+  "witnessB": 11
+}

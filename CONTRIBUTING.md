@@ -4,8 +4,11 @@ Thank you for your interest in contributing to ZeroJ!
 
 ## Development Setup
 
+### Required
+
 1. Install Java 25 (GraalVM recommended):
    ```bash
+   sdk install java 25.0.2-graal
    sdk use java 25.0.2-graal
    ```
 
@@ -19,11 +22,31 @@ Thank you for your interest in contributing to ZeroJ!
    ./gradlew test
    ```
 
+### Optional (for native modules)
+
+**gnark prover** (requires Go 1.21+):
+```bash
+cd zeroj-prover-gnark/gnark-wrapper
+make build
+```
+
+**Halo2 verifier** (requires Rust stable):
+```bash
+cd zeroj-verifier-halo2/halo2-rust
+cargo build --release
+```
+
+**Circuit development** (requires Node.js 18+):
+```bash
+cargo install circom
+npm install -g snarkjs
+```
+
 ## Project Structure
 
 ZeroJ is a Gradle multi-module project. All module names use the `zeroj-` prefix and all packages start with `com.bloxbean.cardano.zeroj`.
 
-See [docs/architecture-overview.md](docs/architecture-overview.md) for the full module dependency graph.
+See [docs/architecture-overview.md](docs/architecture-overview.md) for the full module dependency graph and each module's [README](zeroj-api/README.md) for details.
 
 ## Code Style
 
@@ -31,6 +54,13 @@ See [docs/architecture-overview.md](docs/architecture-overview.md) for the full 
 - All types in `zeroj-api` must be immutable
 - Fail fast on malformed input — no silent defaults
 - GraalVM native-image compatible — avoid unnecessary reflection
+- Include `META-INF/native-image/` configs for any new module
+
+## Testing
+
+- Write tests for new functionality using JUnit 5
+- Use test vectors from `zeroj-test-vectors` for proof-related tests
+- Run the full suite before submitting: `./gradlew test`
 
 ## Submitting Changes
 

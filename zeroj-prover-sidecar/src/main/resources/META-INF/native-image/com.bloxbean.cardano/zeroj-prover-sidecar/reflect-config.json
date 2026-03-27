@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "name": "com.bloxbean.cardano.zeroj.prover.sidecar.ProveRequest",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.prover.sidecar.ProveResponse",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.prover.sidecar.ProverConfig",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

@@ -3,9 +3,13 @@ package com.bloxbean.cardano.zeroj.ccl;
 import com.bloxbean.cardano.client.metadata.Metadata;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadata;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataMap;
+import com.bloxbean.cardano.zeroj.api.VerificationMaterial;
+import com.bloxbean.cardano.zeroj.api.VerificationResult;
+import com.bloxbean.cardano.zeroj.api.ZkProofEnvelope;
 import com.bloxbean.cardano.zeroj.cardano.AnchorMetadataEncoder;
 import com.bloxbean.cardano.zeroj.cardano.AnchorPattern;
 import com.bloxbean.cardano.zeroj.cardano.ProofAnchor;
+import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 
 import java.math.BigInteger;
 import java.util.Objects;
@@ -123,6 +127,28 @@ public final class ZkTransactionHelper {
 
         metadata.put(BigInteger.valueOf(label), map);
         return metadata;
+    }
+
+    /**
+     * Validate the proof before building anchor metadata.
+     * <p>
+     * Verifies the ZK proof cryptographically, then builds the metadata only if valid.
+     * Use this when you want the CCL layer to enforce proof validity before anchoring.
+     *
+     * @param envelope     the proof envelope to verify
+     * @param material     the verification key material
+     * @param orchestrator the verifier orchestrator
+     * @return the metadata if proof is valid
+     * @throws IllegalStateException if proof verification fails
+     */
+    public Metadata validateAndBuildMetadata(ZkProofEnvelope envelope, VerificationMaterial material,
+                                              VerifierOrchestrator orchestrator) {
+        VerificationResult result = orchestrator.verify(envelope, material);
+        if (!result.proofValid()) {
+            throw new IllegalStateException("Proof verification failed before anchoring: "
+                    + result.message().orElse("invalid proof"));
+        }
+        return buildMetadata();
     }
 
     /**

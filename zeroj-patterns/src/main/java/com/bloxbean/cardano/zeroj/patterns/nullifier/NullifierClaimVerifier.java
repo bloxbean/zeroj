@@ -23,6 +23,22 @@ public class NullifierClaimVerifier {
     }
 
     /**
+     * Verify and accept a claim, returning an enriched result with nullifier status.
+     */
+    public ClaimResult verifyAndAcceptClaim(NullifierClaim claim, VerificationMaterial material) {
+        var nullifierKey = java.nio.ByteBuffer.wrap(claim.nullifier());
+        if (usedNullifiers.contains(nullifierKey)) {
+            return ClaimResult.doubleSpend();
+        }
+
+        var result = verifyAndAccept(claim, material);
+        if (!result.accepted()) {
+            return ClaimResult.proofFailed(result);
+        }
+        return ClaimResult.accepted(result);
+    }
+
+    /**
      * Verify and accept a claim. Returns the verification result.
      *
      * <p>If the proof is valid and the nullifier hasn't been used, the nullifier is

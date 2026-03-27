@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  # ================================================================
+  # Stage 1: Build native libraries on each platform
+  # ================================================================
+
+  build-gnark-native:
+    name: gnark native (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux-x86_64
+            runner: ubuntu-latest
+            lib: libzeroj_gnark.so
+          - os: linux-arm64
+            runner: ubuntu-24.04-arm
+            lib: libzeroj_gnark.so
+          - os: macos-x86_64
+            runner: macos-13
+            lib: libzeroj_gnark.dylib
+          - os: macos-arm64
+            runner: macos-14
+            lib: libzeroj_gnark.dylib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build gnark shared library
+        working-directory: zeroj-prover-gnark/gnark-wrapper
+        run: make build
+
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnark-native-${{ matrix.os }}
+          path: zeroj-prover-gnark/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
+          retention-days: 1
+
+  build-halo2-native:
+    name: halo2 native (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux-x86_64
+            runner: ubuntu-latest
+            lib: libzeroj_halo2.so
+          - os: linux-arm64
+            runner: ubuntu-24.04-arm
+            lib: libzeroj_halo2.so
+          - os: macos-x86_64
+            runner: macos-13
+            lib: libzeroj_halo2.dylib
+          - os: macos-arm64
+            runner: macos-14
+            lib: libzeroj_halo2.dylib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build halo2 shared library
+        working-directory: zeroj-verifier-halo2/halo2-rust
+        run: cargo build --release
+
+      - name: Copy library to resource path
+        run: |
+          mkdir -p zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}
+          cp zeroj-verifier-halo2/halo2-rust/target/release/${{ matrix.lib }} \
+             zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/
+
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: halo2-native-${{ matrix.os }}
+          path: zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
+          retention-days: 1
+
+  # ================================================================
+  # Stage 2: Build JARs with all native libraries and publish
+  # ================================================================
+
+  publish:
+    name: Publish to Maven Central
+    needs: [ build-gnark-native, build-halo2-native ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for grgit version
+
+      - name: Set up Java 25 (GraalVM)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+
+      # Download ALL native libraries into resource directories
+      - name: Download gnark natives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gnark-native-*
+          merge-multiple: false
+
+      - name: Download halo2 natives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: halo2-native-*
+          merge-multiple: false
+
+      - name: Place native libraries in resource directories
+        run: |
+          for platform in linux-x86_64 linux-arm64 macos-x86_64 macos-arm64; do
+            # gnark
+            mkdir -p zeroj-prover-gnark/src/main/resources/native/$platform
+            cp gnark-native-$platform/* zeroj-prover-gnark/src/main/resources/native/$platform/ || true
+
+            # halo2
+            mkdir -p zeroj-verifier-halo2/src/main/resources/native/$platform
+            cp halo2-native-$platform/* zeroj-verifier-halo2/src/main/resources/native/$platform/ || true
+          done
+
+          echo "=== gnark native libraries ==="
+          find zeroj-prover-gnark/src/main/resources/native -type f
+          echo "=== halo2 native libraries ==="
+          find zeroj-verifier-halo2/src/main/resources/native -type f
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+        env:
+          GOMAXPROCS: '2'
+
+      - name: Decode GPG Key
+        run: |
+          mkdir -p ~/.gradle/
+          echo "${{ secrets.SIGNING_KEY }}" > ~/.gradle/secring.gpg.b64
+          base64 -d ~/.gradle/secring.gpg.b64 > ~/.gradle/secring.gpg
+
+      - name: Publish to Maven Central
+        run: ./gradlew publishToSonatype closeSonatypeStagingRepository -Psigning.keyId=${{ secrets.SIGNING_KEY_ID }} -Psigning.password=${{ secrets.SIGNING_PASSWORD }} -Psigning.secretKeyRingFile=$(echo ~/.gradle/secring.gpg) --warn --stacktrace
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}

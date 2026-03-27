@@ -17,7 +17,7 @@ A proof can be cryptographically valid but still unacceptable. Consider:
 Mixing cryptographic verification with protocol/policy checks in the same code leads to:
 - Unclear failure reasons (was the proof bad or the policy violated?)
 - Difficulty in testing each concern independently
-- Coupling between the generic ZK library and Yaci-specific protocol logic
+- Coupling between the generic ZK library and submission-specific protocol logic
 
 ## Decision
 
@@ -35,7 +35,7 @@ This service knows nothing about:
 - Application/plugin context
 - Nullifiers or replay protection
 
-### 2. SubmissionPolicyValidator (yaci-app-layer-zk)
+### 2. SubmissionPolicyValidator (zeroj-ingestion)
 Responsible for:
 - Previous state root matches current accepted root
 - Sequence/nonce is correct and not replayed
@@ -60,7 +60,7 @@ The submission ingestion pipeline calls both in sequence:
 
 **Easier:**
 - Clear, testable, single-responsibility services
-- Generic ZK library (zeroj-*) is reusable without Yaci
+- Generic ZK library (zeroj-*) is reusable standalone
 - Policy rules can evolve independently of crypto verification
 - Failure reasons are precise and actionable
 

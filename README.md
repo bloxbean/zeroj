@@ -1,52 +1,246 @@
 # ZeroJ
 
-Java-first ZK verification platform for Cardano.
+Java-first zero-knowledge proof verification platform for Cardano.
 
-ZeroJ provides zero-knowledge proof verification for Java developers building on Cardano, with integration across Yaci app-layer networks and Cardano Client Lib (CCL).
+ZeroJ lets Java developers verify ZK proofs, submit proof-backed state transitions, and anchor verified results on Cardano L1 — all without leaving the Java ecosystem.
 
-## Architecture
+## What You Can Do Today
 
-ZeroJ follows a **verifier-first** design — proofs are generated externally (snarkjs, gnark, arkworks, etc.) and verified in Java.
+### Verify ZK Proofs in Java
+- **Groth16 BN254** — pure Java verification (no native dependencies)
+- **Groth16 BLS12-381** — high-performance verification via blst native library
+- **PlonK BN254/BLS12-381** — universal setup via gnark (beta)
+- **Halo2 IPA** — no trusted setup, via Rust FFM bindings
+- Parse snarkjs proof artifacts (`proof.json`, `verification_key.json`, `public.json`)
+- Pluggable backend SPI — add new proof systems without changing application code
 
-### Supported Proof Systems
-- **Groth16** — BN254 (pure Java) and BLS12-381 (via blst native library)
-- PlonK, fflonk, Halo2 — planned via SPI backends
+### Submit Proof-Backed State Transitions
+- **External proof submission** with 6-stage ingestion pipeline
+- 6-stage validation pipeline: syntax → auth → circuit → crypto → policy → accept
+- Replay protection (sequence tracking), nullifier uniqueness, submitter authorization
+- Circuit allowlisting, version management, VK rotation
 
-### Modules
+### Anchor on Cardano L1
+- 4 anchor patterns: proof hash, state root + proof hash, full verification ref, nullifier commitment
+- CCL integration — fluent helpers for attaching proof metadata to transactions
+- Validation-before-anchoring — verify proof before committing to chain
 
-| Module | Description |
-|--------|-------------|
-| `zeroj-api` | Core proof model, envelopes, and verification result types |
-| `zeroj-codec` | Proof serialization — snarkjs JSON, CBOR, canonical hashing |
-| `zeroj-backend-spi` | Service Provider Interface for verification backends |
-| `zeroj-verifier-core` | Verifier orchestration and backend routing |
-| `zeroj-verifier-groth16` | Groth16 verification — BN254 + BLS12-381 |
-| `zeroj-blst` | BLS12-381 curve operations via blst |
-| `zeroj-test-vectors` | Shared test fixtures (pre-generated proofs, VKs) |
-| `zeroj-bom` | Bill of Materials for version alignment |
+### Use Standard ZK Patterns
+- **State Transition** — prove new_state = f(old_state) without revealing f or its inputs
+- **Nullifier Claim** — one-time claims with double-spend prevention
+- **Membership Proof** — prove set membership + constraints without revealing which element
+- Input/output objects, pre-built verification policies, enriched result types
 
-## Requirements
+### Generate Proofs
+- **Prover sidecar client** — HTTP client for external prover services (snarkjs, etc.)
+- **RapidSNARK backend** — native prover via FFM (Linux/macOS)
+- **gnark backend** — Go-based prover via FFM (BLS12-381 + BN254)
 
-- Java 25 (GraalVM recommended)
-- Gradle 9.2+
+## Prerequisites
+
+### Required
+
+| Dependency | Version | Notes |
+|------------|---------|-------|
+| **Java** | 25+ | GraalVM recommended for native-image support |
+| **Gradle** | 9.2+ | Included via wrapper (`./gradlew`) |
+
+Install Java 25 with [SDKMAN!](https://sdkman.io/):
+
+```bash
+sdk install java 25.0.2-graal
+sdk use java 25.0.2-graal
+```
+
+### Optional (for specific modules)
+
+| Dependency | Version | Required By | Notes |
+|------------|---------|-------------|-------|
+| **Go** | 1.21+ | `zeroj-prover-gnark` | Compile gnark native library |
+| **Rust** | stable | `zeroj-verifier-halo2` | Compile halo2 native library |
+| **circom** | 2.x | Circuit compilation | `cargo install circom` |
+| **snarkjs** | 0.7+ | Proof generation / ceremony | `npm install -g snarkjs` |
+| **Node.js** | 18+ | snarkjs runtime | — |
 
 ## Building
+
+### Core library (no native dependencies needed)
 
 ```bash
 ./gradlew build
 ```
 
-## Usage
+This builds and tests all modules. The core verification (Groth16 BN254) is pure Java and requires no native libraries. BLS12-381 verification uses the `blst-java` Maven dependency which bundles pre-compiled natives.
 
-Add the BOM to your project:
+### gnark native library (optional)
+
+Required only if you use `zeroj-prover-gnark` for in-process gnark proving:
+
+```bash
+cd zeroj-prover-gnark/gnark-wrapper
+make build
+```
+
+### Halo2 native library (optional)
+
+Required only if you use `zeroj-verifier-halo2`:
+
+```bash
+cd zeroj-verifier-halo2/halo2-rust
+cargo build --release
+```
+
+### Run tests
+
+```bash
+./gradlew test
+```
+
+### Run the end-to-end demo
+
+```bash
+./gradlew :zeroj-examples:run
+```
+
+## Architecture
+
+ZeroJ follows a **verifier-first** design. Proofs are generated by external tools (snarkjs, gnark, arkworks, noir) and verified in Java.
+
+```
+Application Code
+       |
+   zeroj-patterns          (typed high-level APIs: StateTransition, NullifierClaim, Membership)
+       |
+   zeroj-verifier-core     (orchestration, backend routing)
+       |
+   zeroj-backend-spi       (pluggable verifier interface)
+      / | \
+     /  |  \
+ BN254  BLS  Halo2         (concrete backends)
+(pure  (blst  (Rust
+ Java) native) FFM)
+```
+
+### Modules
+
+| Module | Description |
+|--------|-------------|
+| [`zeroj-api`](zeroj-api/) | Core proof model, envelopes, verification result types |
+| [`zeroj-codec`](zeroj-codec/) | Proof serialization — snarkjs JSON, CBOR, canonical hashing |
+| [`zeroj-backend-spi`](zeroj-backend-spi/) | Service Provider Interface for verification backends |
+| [`zeroj-verifier-core`](zeroj-verifier-core/) | Verifier orchestration and backend routing |
+| [`zeroj-verifier-groth16`](zeroj-verifier-groth16/) | Groth16 verification — BN254 (pure Java) + BLS12-381 (blst) |
+| [`zeroj-verifier-halo2`](zeroj-verifier-halo2/) | Halo2 IPA verification via Rust FFM (no trusted setup) |
+| [`zeroj-blst`](zeroj-blst/) | BLS12-381 pairing operations via blst native library |
+| [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
+| [`zeroj-submission`](zeroj-submission/) | Proof submission wire format, Ed25519 signatures |
+| [`zeroj-ingestion`](zeroj-ingestion/) | Submission ingestion pipeline, governance, security checks |
+| [`zeroj-cardano`](zeroj-cardano/) | Cardano anchoring — proof anchor model, metadata encoding |
+| [`zeroj-ccl`](zeroj-ccl/) | Cardano Client Lib integration — fluent transaction helpers |
+| [`zeroj-prover-sidecar`](zeroj-prover-sidecar/) | HTTP client for prover sidecar services |
+| [`zeroj-prover-rapidsnark`](zeroj-prover-rapidsnark/) | RapidSNARK native prover backend (FFM) |
+| [`zeroj-prover-gnark`](zeroj-prover-gnark/) | gnark native prover backend (FFM) |
+| [`zeroj-test-vectors`](zeroj-test-vectors/) | Shared test fixtures — pre-generated Groth16 proofs |
+| [`zeroj-examples`](zeroj-examples/) | End-to-end demo: prove, verify, submit, anchor |
+| [`zeroj-bom`](zeroj-bom/) | Bill of Materials for version alignment |
+
+## Quick Start
+
+### Verify a Groth16 Proof
+
+```java
+// 1. Load proof artifacts (snarkjs format)
+var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(proofJson, vkJson, publicJson,
+        new CircuitId("my-circuit"));
+
+// 2. Set up verifier
+var registry = VerifierRegistry.empty();
+registry.register(new Groth16BN254Verifier());
+var orchestrator = new VerifierOrchestrator(registry, vkRegistry);
+
+// 3. Verify
+var material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16,
+        CurveId.BN254, new CircuitId("my-circuit"));
+VerificationResult result = orchestrator.verify(envelope, material);
+
+if (result.proofValid()) {
+    System.out.println("Proof verified!");
+}
+```
+
+### Use a Pattern (State Transition)
+
+```java
+// 1. Prepare input from domain data
+var input = StateTransitionInput.fromRawStates(oldState, newState, publicInputs);
+
+// 2. Attach externally generated proof
+StateTransition transition = input.withProof(proofBytes, "my-circuit");
+
+// 3. Verify with enriched result
+var verifier = new StateTransitionVerifier(orchestrator);
+StateTransitionResult result = verifier.verifyTransition(transition, material);
+
+if (result.accepted()) {
+    byte[] anchorHash = result.transitionHash(); // for Cardano anchoring
+}
+```
+
+### Anchor on Cardano
+
+```java
+Metadata metadata = ZkTransactionHelper.anchorProofHash(proofHash)
+        .validateAndBuildMetadata(envelope, material, orchestrator);
+// Attach metadata to CCL transaction
+```
+
+### Dependency (Gradle)
 
 ```gradle
 dependencies {
     implementation platform('com.bloxbean.cardano:zeroj-bom:0.1.0')
     implementation 'com.bloxbean.cardano:zeroj-verifier-core'
     implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
+    implementation 'com.bloxbean.cardano:zeroj-patterns'
 }
 ```
+
+## What's Possible with Current Features
+
+### Privacy-Preserving Applications
+- **Anonymous voting** — voters prove eligibility without revealing identity; relayer submits on their behalf (no wallet needed)
+- **Sealed-bid auctions** — prove bid exceeds reserve without revealing exact amount
+- **Shielded pools** — private UTXO spending with partial withdrawals and nullifier tracking
+- **Private airdrops** — claim token allocations without revealing which recipient you are
+
+### Identity & Compliance
+- **Credential verification** — prove you hold a KYC/accredited/age-18+ credential without revealing it
+- **Social login** — authenticate via Google/GitHub with ZK proof (oracle attestation model)
+- **Email verification** — prove email domain ownership without revealing the full address
+
+### DeFi & Governance
+- **Token-gated access** — prove balance threshold without revealing exact holdings
+- **DAO governance** — anonymous voting with public tallies and double-vote prevention
+- **Proof-backed state machines** — verifiable state transitions for L2-like applications
+
+### Infrastructure
+- **Multi-node verification** — verifier nodes verify proofs without recomputing
+- **Cardano L1 anchoring** — commit proof hashes, state roots, nullifiers to mainnet
+- **Pluggable provers** — snarkjs sidecar, RapidSNARK, gnark — same API
+
+## Documentation
+
+- [Architecture Overview](docs/architecture-overview.md)
+- [PlonK Support](docs/plonk-support.md)
+- [ADR: Verifier-First Architecture](docs/adr/0001-verifier-first-architecture.md)
+- [ADR: External Proof Submission](docs/adr/0002-external-proof-submission-first-class.md)
+- [ADR: Hybrid Crypto Backend](docs/adr/0003-pure-java-mvp.md)
+- [ADR: Off-Chain Cardano Anchoring](docs/adr/0004-off-chain-cardano-anchoring-first.md)
+- [ADR: Crypto / Policy Separation](docs/adr/0006-separation-of-crypto-and-policy-verification.md)
+- [ADR: Module Structure](docs/adr/0007-module-structure-and-boundaries.md)
+- [ADR: PlonK via gnark](docs/adr/0008-plonk-support-via-gnark.md)
+- [ADR: Halo2 Strategy](docs/adr/0009-halo2-support-strategy.md)
+- [Contributing Guide](CONTRIBUTING.md)
 
 ## License
 

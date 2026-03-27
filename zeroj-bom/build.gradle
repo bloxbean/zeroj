@@ -18,12 +18,15 @@ dependencies {
         api project(':zeroj-verifier-core')
         api project(':zeroj-verifier-groth16')
         api project(':zeroj-blst')
-        api project(':zeroj-yaci-protocol')
-        api project(':zeroj-yaci-zk')
+        api project(':zeroj-submission')
+        api project(':zeroj-ingestion')
         api project(':zeroj-cardano')
         api project(':zeroj-ccl')
         api project(':zeroj-patterns')
         api project(':zeroj-prover-sidecar')
+        api project(':zeroj-prover-gnark')
+        api project(':zeroj-prover-rapidsnark')
+        api project(':zeroj-verifier-halo2')
     }
 }
 

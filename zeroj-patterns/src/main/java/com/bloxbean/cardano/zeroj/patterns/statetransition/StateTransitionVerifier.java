@@ -27,22 +27,21 @@ public class StateTransitionVerifier {
     }
 
     /**
+     * Verify a state transition, returning an enriched result with transition metadata.
+     */
+    public StateTransitionResult verifyTransition(StateTransition transition, VerificationMaterial material) {
+        var result = verify(transition, material);
+        return StateTransitionResult.from(result, transition);
+    }
+
+    /**
      * Verify a state transition.
      *
      * @param transition the state transition to verify
      * @return verification result
      */
     public VerificationResult verify(StateTransition transition) {
-        // Build the proof envelope from the typed state transition
-        var envelope = ZkProofEnvelope.builder()
-                .proofSystem(transition.proofSystem())
-                .curve(transition.curve())
-                .circuitId(new CircuitId(transition.circuitId()))
-                .proofBytes(transition.proofBytes())
-                .publicInputs(new PublicInputs(transition.allPublicInputs()))
-                .vkRef(new VerificationKeyRef.ById(transition.circuitId()))
-                .build();
-
+        var envelope = buildEnvelope(transition);
         return orchestrator.verify(envelope);
     }
 
@@ -50,7 +49,12 @@ public class StateTransitionVerifier {
      * Verify a state transition with explicitly provided verification material.
      */
     public VerificationResult verify(StateTransition transition, VerificationMaterial material) {
-        var envelope = ZkProofEnvelope.builder()
+        var envelope = buildEnvelope(transition);
+        return orchestrator.verify(envelope, material);
+    }
+
+    private ZkProofEnvelope buildEnvelope(StateTransition transition) {
+        return ZkProofEnvelope.builder()
                 .proofSystem(transition.proofSystem())
                 .curve(transition.curve())
                 .circuitId(new CircuitId(transition.circuitId()))
@@ -58,7 +62,5 @@ public class StateTransitionVerifier {
                 .publicInputs(new PublicInputs(transition.allPublicInputs()))
                 .vkRef(new VerificationKeyRef.ById(transition.circuitId()))
                 .build();
-
-        return orchestrator.verify(envelope, material);
     }
 }

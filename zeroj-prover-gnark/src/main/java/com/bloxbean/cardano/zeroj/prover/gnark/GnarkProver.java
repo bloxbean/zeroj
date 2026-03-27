@@ -102,7 +102,7 @@ public class GnarkProver implements ProverService, AutoCloseable {
 
         long provingTimeMs = (System.nanoTime() - startTime) / 1_000_000;
 
-        return toProveResponse(result, curve, provingTimeMs);
+        return toProveResponse(result, curve, provingTimeMs, "groth16");
     }
 
     /**
@@ -114,6 +114,62 @@ public class GnarkProver implements ProverService, AutoCloseable {
      */
     public GnarkLibrary.SetupResult setup(String curve, Path r1csPath) {
         return library.groth16Setup(curve, r1csPath.toAbsolutePath().toString());
+    }
+
+    // --- PlonK API ---
+
+    /**
+     * Run PlonK setup using gnark (generates SRS internally — for testing/dev only).
+     * <p>
+     * In production, use an MPC-generated SRS. The SRS is universal — one SRS
+     * works for any circuit whose size does not exceed the SRS threshold.
+     *
+     * @param curve    curve identifier ("bls12381" or "bn254")
+     * @param r1csPath path to the SparseR1CS constraint system file
+     * @return setup result with proving key path and verification key JSON
+     */
+    public GnarkLibrary.SetupResult plonkSetup(String curve, Path r1csPath) {
+        return library.plonkSetup(curve, r1csPath.toAbsolutePath().toString());
+    }
+
+    /**
+     * Generate a PlonK proof using gnark.
+     *
+     * @param curve       curve identifier ("bls12381" or "bn254")
+     * @param r1csPath    path to the SparseR1CS file
+     * @param pkPath      path to the proving key
+     * @param witnessPath path to the witness file (gnark binary format)
+     * @return prove response with proof JSON, public signals, protocol, and curve
+     * @throws ProverException if proving fails
+     */
+    public ProveResponse plonkProveRaw(String curve, Path r1csPath, Path pkPath, Path witnessPath) {
+        long startTime = System.nanoTime();
+
+        GnarkLibrary.ProveResult result = library.plonkProve(
+                curve,
+                r1csPath.toAbsolutePath().toString(),
+                pkPath.toAbsolutePath().toString(),
+                witnessPath.toAbsolutePath().toString());
+
+        long provingTimeMs = (System.nanoTime() - startTime) / 1_000_000;
+
+        return toProveResponse(result, curve, provingTimeMs, "plonk");
+    }
+
+    /**
+     * Verify a PlonK proof using gnark.
+     *
+     * @param curve       curve identifier
+     * @param vkPath      path to the verification key file
+     * @param proofBase64 base64-encoded proof bytes
+     * @param witnessPath path to the public witness file
+     * @return true if the proof is valid
+     */
+    public boolean plonkVerify(String curve, Path vkPath, String proofBase64, Path witnessPath) {
+        return library.plonkVerify(curve,
+                vkPath.toAbsolutePath().toString(),
+                proofBase64,
+                witnessPath.toAbsolutePath().toString());
     }
 
     /**
@@ -167,7 +223,7 @@ public class GnarkProver implements ProverService, AutoCloseable {
 
     // --- Internal helpers ---
 
-    private ProveResponse toProveResponse(GnarkLibrary.ProveResult result, String curve, long provingTimeMs) {
+    private ProveResponse toProveResponse(GnarkLibrary.ProveResult result, String curve, long provingTimeMs, String protocol) {
         try {
             // Parse public signals from JSON
             List<BigInteger> publicSignals = new ArrayList<>();
@@ -185,7 +241,7 @@ public class GnarkProver implements ProverService, AutoCloseable {
                 default -> curve;
             };
 
-            return new ProveResponse(result.resultJson(), publicSignals, "groth16", normalizedCurve, provingTimeMs);
+            return new ProveResponse(result.resultJson(), publicSignals, protocol, normalizedCurve, provingTimeMs);
         } catch (Exception e) {
             throw new ProverException(ProverException.ErrorCode.INVALID_RESPONSE,
                     "Failed to parse gnark output: " + e.getMessage(), e);

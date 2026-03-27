@@ -1,0 +1,13 @@
+{
+  "circuit": "multiplier",
+  "curve": "bls12381",
+  "fieldModulus": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+  "gnarkVersion": "v0.14.0",
+  "nConstraints": 2,
+  "nPublic": 0,
+  "proofSystem": "plonk",
+  "publicZ": 33,
+  "srsType": "unsafe-test-only",
+  "witnessX": 3,
+  "witnessY": 11
+}

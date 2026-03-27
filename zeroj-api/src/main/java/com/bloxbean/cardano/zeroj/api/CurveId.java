@@ -12,7 +12,13 @@ public enum CurveId {
     /**
      * BLS12-381 — Cardano-native curve (CIP-0381), also used by Zcash, Ethereum 2.0.
      */
-    BLS12_381("bls12381");
+    BLS12_381("bls12381"),
+
+    /**
+     * Pallas — Pasta cycle curve used by Halo2 IPA (no trusted setup).
+     * Part of the Pallas/Vesta cycle from Zcash Orchard.
+     */
+    PALLAS("pallas");
 
     private final String value;
 
