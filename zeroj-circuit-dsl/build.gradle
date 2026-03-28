@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ Circuit DSL — Java API for defining ZK circuits with R1CS and PlonK backends'
+
+dependencies {
+    api project(':zeroj-api')
+
+    testImplementation project(':zeroj-test-vectors')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Circuit DSL'
+                description = 'Java DSL for defining ZK arithmetic circuits — compiles to R1CS (Groth16) or PlonK constraint systems'
+            }
+        }
+    }
+}

@@ -1,0 +1,22 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ Circuit Library — reusable ZK circuit components (Poseidon, Merkle, comparators)'
+
+dependencies {
+    api project(':zeroj-circuit-dsl')
+
+    testImplementation project(':zeroj-test-vectors')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Circuit Library'
+                description = 'Standard library of reusable ZK circuit components for the ZeroJ circuit DSL'
+            }
+        }
+    }
+}
