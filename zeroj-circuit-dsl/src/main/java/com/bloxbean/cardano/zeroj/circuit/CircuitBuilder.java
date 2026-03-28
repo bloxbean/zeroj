@@ -66,10 +66,18 @@ public final class CircuitBuilder {
         return this;
     }
 
-    /** Define the circuit constraints. This freezes the circuit. */
+    /** Define the circuit constraints using the functional API. This freezes the circuit. */
     public CircuitBuilder define(CircuitDefinition definition) {
         var impl = new CircuitAPIImpl(publicVarNames, secretVarNames);
         definition.define(impl);
+        this.graph = impl.buildGraph(name);
+        return this;
+    }
+
+    /** Define the circuit constraints using the Signal-based (OO) API. This freezes the circuit. */
+    public CircuitBuilder defineSignals(CircuitSpec spec) {
+        var impl = new CircuitAPIImpl(publicVarNames, secretVarNames);
+        spec.define(new SignalBuilder(impl));
         this.graph = impl.buildGraph(name);
         return this;
     }
