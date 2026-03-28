@@ -27,12 +27,18 @@ public record FieldConfig(CurveId curve, BigInteger prime, int n32, String name)
             new BigInteger("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16),
             8, "BLS12-381");
 
+    /** Pallas scalar field (Pasta cycle, used by Halo2 IPA). */
+    public static final FieldConfig PALLAS = new FieldConfig(
+            CurveId.PALLAS,
+            new BigInteger("28948022309329048855892746252171976963363056481941560715954676764349967630337"),
+            8, "Pallas");
+
     /** Look up configuration for a curve. */
     public static FieldConfig forCurve(CurveId curve) {
         return switch (curve) {
             case BN254 -> BN254;
             case BLS12_381 -> BLS12_381;
-            default -> throw new IllegalArgumentException("Unsupported curve: " + curve);
+            case PALLAS -> PALLAS;
         };
     }
 

@@ -5,6 +5,8 @@ import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSCompiler;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import com.bloxbean.cardano.zeroj.circuit.plonk.PlonKCompiler;
 import com.bloxbean.cardano.zeroj.circuit.plonk.PlonKConstraintSystem;
+import com.bloxbean.cardano.zeroj.circuit.halo2.Halo2Compiler;
+import com.bloxbean.cardano.zeroj.circuit.halo2.Halo2CircuitSystem;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -88,6 +90,12 @@ public final class CircuitBuilder {
     public PlonKConstraintSystem compilePlonK(CurveId curve) {
         requireDefined();
         return PlonKCompiler.compile(graph, FieldConfig.forCurve(curve));
+    }
+
+    /** Compile to Halo2 PLONKish circuit system. */
+    public Halo2CircuitSystem compileHalo2(CurveId curve) {
+        requireDefined();
+        return Halo2Compiler.compile(graph, FieldConfig.forCurve(curve));
     }
 
     /** Calculate witness for given inputs. */
