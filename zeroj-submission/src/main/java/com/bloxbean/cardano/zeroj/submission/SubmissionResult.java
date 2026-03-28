@@ -59,11 +59,14 @@ public record SubmissionResult(
         INVALID_SIGNATURE,
         UNKNOWN_SUBMITTER,
         UNAUTHORIZED_SUBMITTER,
+        SUBMITTER_SUSPENDED,
 
         // Circuit resolution
         UNKNOWN_CIRCUIT,
+        DEPRECATED_CIRCUIT,
         RETIRED_CIRCUIT,
         VK_NOT_FOUND,
+        VK_EXPIRED,
 
         // Cryptographic
         PROOF_INVALID,

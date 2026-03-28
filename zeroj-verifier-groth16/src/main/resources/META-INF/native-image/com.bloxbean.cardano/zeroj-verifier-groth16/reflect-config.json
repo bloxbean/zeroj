@@ -6,5 +6,9 @@
   {
     "name": "com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier",
     "methods": [{"name": "<init>", "parameterTypes": []}]
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier",
+    "methods": [{"name": "<init>", "parameterTypes": []}]
   }
 ]

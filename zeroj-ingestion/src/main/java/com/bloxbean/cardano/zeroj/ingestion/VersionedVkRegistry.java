@@ -24,6 +24,15 @@ public class VersionedVkRegistry implements VerificationKeyRegistry {
 
     private final Map<String, VerificationMaterial> byHash = new ConcurrentHashMap<>();
     private final Map<String, List<VkEntry>> byCircuit = new ConcurrentHashMap<>();
+    private final VkRotationPolicy policy; // nullable — no policy enforcement if null
+
+    public VersionedVkRegistry() {
+        this(null);
+    }
+
+    public VersionedVkRegistry(VkRotationPolicy policy) {
+        this.policy = policy;
+    }
 
     /**
      * Register a new VK version for a circuit. Previous versions remain valid until expired.
@@ -43,13 +52,48 @@ public class VersionedVkRegistry implements VerificationKeyRegistry {
 
     /**
      * Rotate: register a new VK and set an expiry on the previous version.
+     * If a {@link VkRotationPolicy} is set, the rotation is validated against it.
      *
      * @param newMaterial     the new VK
      * @param transitionWindow how long the old VK remains valid after rotation
+     * @return the rotation result
      */
-    public void rotate(VerificationMaterial newMaterial, java.time.Duration transitionWindow) {
+    public RotationResult rotate(VerificationMaterial newMaterial, java.time.Duration transitionWindow) {
+        var circuitId = newMaterial.circuitId().value();
+
+        // Policy enforcement
+        if (policy != null) {
+            // Check minimum transition window
+            if (transitionWindow.compareTo(policy.minTransitionWindow()) < 0) {
+                return new RotationResult.Rejected("Transition window " + transitionWindow
+                        + " is shorter than policy minimum " + policy.minTransitionWindow());
+            }
+
+            var entries = byCircuit.get(circuitId);
+            if (entries != null) {
+                // Check max active VKs (count non-expired + the new one)
+                var now = Instant.now();
+                long activeCount = entries.stream()
+                        .filter(e -> e.expiresAt() == null || now.isBefore(e.expiresAt()))
+                        .count();
+                if (activeCount + 1 > policy.maxActiveVksPerCircuit()) {
+                    return new RotationResult.Rejected("Would exceed max active VKs per circuit ("
+                            + policy.maxActiveVksPerCircuit() + ")");
+                }
+
+                // Check min time between rotations
+                if (!policy.minTimeBetweenRotations().isZero() && !entries.isEmpty()) {
+                    var lastRegistered = entries.getLast().registeredAt();
+                    if (now.isBefore(lastRegistered.plus(policy.minTimeBetweenRotations()))) {
+                        return new RotationResult.Rejected("Too soon since last rotation; minimum interval is "
+                                + policy.minTimeBetweenRotations());
+                    }
+                }
+            }
+        }
+
         // Expire all current active VKs for this circuit
-        var entries = byCircuit.get(newMaterial.circuitId().value());
+        var entries = byCircuit.get(circuitId);
         if (entries != null) {
             var expiryTime = Instant.now().plus(transitionWindow);
             for (int i = 0; i < entries.size(); i++) {
@@ -62,6 +106,17 @@ public class VersionedVkRegistry implements VerificationKeyRegistry {
 
         // Register the new VK (never expires until next rotation)
         registerVersion(newMaterial, null);
+        return RotationResult.Success.INSTANCE;
+    }
+
+    /**
+     * Result of a VK rotation attempt.
+     */
+    public sealed interface RotationResult {
+        record Success() implements RotationResult {
+            static final Success INSTANCE = new Success();
+        }
+        record Rejected(String reason) implements RotationResult {}
     }
 
     /**

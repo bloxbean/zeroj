@@ -59,13 +59,14 @@ public class PlonkGnarkVerifier implements ZkVerifier {
             Files.write(vkTempFile, material.vkBytes());
 
             // Write public witness to temp file.
-            // Convention: if the VK material has a vkHash, the hash bytes are repurposed
-            // to carry the gnark binary public witness (hack for SPI compatibility).
-            // Proper solution: extend VerificationMaterial with auxiliary data.
+            // Priority: envelope metadata (base64-encoded gnark binary witness) > reconstruct from public inputs.
             Path pubWitTempFile = Files.createTempFile("zeroj-plonk-pubwit-", ".bin");
             byte[] pubWitBytes;
-            if (material.vkHash().isPresent() && material.vkHash().get().length > 32) {
-                // VK hash is overloaded with public witness binary
+            String metaWitness = envelope.metadata().get("gnark.publicWitness");
+            if (metaWitness != null) {
+                pubWitBytes = java.util.Base64.getDecoder().decode(metaWitness);
+            } else if (material.vkHash().isPresent() && material.vkHash().get().length > 32) {
+                // Legacy fallback: vkHash overloaded with public witness binary (deprecated)
                 pubWitBytes = material.vkHash().get();
             } else {
                 // Reconstruct from public inputs (best effort — may not match gnark format exactly)

@@ -46,6 +46,23 @@ public interface CircuitRegistry extends CircuitAllowlist {
     List<CircuitVersionInfo> listVersions(String circuitId);
 
     /**
+     * Validate that a migration from one circuit version to its declared successor is valid.
+     * Returns true if the successor circuit is registered and ACTIVE.
+     *
+     * @param circuitId the circuit being deprecated
+     * @param version   the version being deprecated
+     * @return true if the declared successor is valid and active
+     */
+    default boolean validateMigration(String circuitId, String version) {
+        var info = getInfo(circuitId, version);
+        if (info.isEmpty()) return false;
+        var cvi = info.get();
+        if (cvi.successorCircuitId() == null || cvi.successorVersion() == null) return false;
+        var successor = getInfo(cvi.successorCircuitId(), cvi.successorVersion());
+        return successor.isPresent() && successor.get().lifecycle() == Lifecycle.ACTIVE;
+    }
+
+    /**
      * Circuit version lifecycle state.
      */
     enum Lifecycle {

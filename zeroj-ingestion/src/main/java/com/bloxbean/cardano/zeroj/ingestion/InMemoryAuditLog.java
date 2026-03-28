@@ -43,6 +43,33 @@ public class InMemoryAuditLog implements AuditLog {
         return entries.size();
     }
 
+    @Override
+    public List<AuditEntry> queryByAppId(String appId) {
+        return entries.stream()
+                .filter(e -> appId.equals(e.appId()))
+                .toList();
+    }
+
+    @Override
+    public List<AuditEntry> queryByEventType(String eventType) {
+        return entries.stream()
+                .filter(e -> eventType.equals(e.eventType()))
+                .toList();
+    }
+
+    @Override
+    public List<AuditEntry> queryRejections() {
+        return entries.stream()
+                .filter(e -> !e.accepted())
+                .toList();
+    }
+
+    @Override
+    public List<AuditEntry> recent(int limit) {
+        int size = entries.size();
+        return entries.subList(Math.max(0, size - limit), size).stream().toList();
+    }
+
     /**
      * Get all entries (for testing/inspection).
      */

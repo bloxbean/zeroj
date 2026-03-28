@@ -60,6 +60,31 @@ public class InMemoryCircuitRegistry implements CircuitRegistry {
                 .toList();
     }
 
+    /**
+     * Retire all circuits whose deprecation deadline has passed.
+     * Intended for operator-triggered cleanup.
+     *
+     * @return the number of circuits retired
+     */
+    public int retireExpiredCircuits() {
+        int count = 0;
+        var now = Instant.now();
+        for (var entry : registry.entrySet()) {
+            var info = entry.getValue();
+            if (info.lifecycle() == CircuitRegistry.Lifecycle.DEPRECATED
+                    && info.deprecationDeadline() != null
+                    && now.isAfter(info.deprecationDeadline())) {
+                registry.put(entry.getKey(), new CircuitVersionInfo(
+                        info.circuitId(), info.version(), CircuitRegistry.Lifecycle.RETIRED,
+                        info.registeredAt(), info.deprecatedAt(),
+                        info.deprecationDeadline(), now,
+                        info.successorCircuitId(), info.successorVersion()));
+                count++;
+            }
+        }
+        return count;
+    }
+
     // --- CircuitAllowlist compatibility ---
 
     @Override

@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Codec for gnark PlonK proof artifacts.
@@ -60,6 +62,44 @@ public final class GnarkPlonkCodec {
                 .publicInputs(inputs)
                 .vkRef(new VerificationKeyRef.ByHash(vkHash))
                 .proofFormat("gnark-plonk-json")
+                .build();
+    }
+
+    /**
+     * Build a {@link ZkProofEnvelope} from gnark PlonK JSON strings with public witness metadata.
+     *
+     * <p>This variant embeds the gnark binary public witness in the envelope metadata
+     * under the key {@code gnark.publicWitness} (base64-encoded), avoiding the vkHash overload hack.</p>
+     *
+     * @param proofJson          gnark proof.json content
+     * @param vkJson             gnark verification_key.json content
+     * @param publicJson         public.json content (decimal string array)
+     * @param circuitId          the circuit identifier
+     * @param publicWitnessBytes gnark binary public witness bytes
+     * @return a fully populated proof envelope with witness in metadata
+     */
+    public static ZkProofEnvelope toEnvelopeWithWitness(String proofJson, String vkJson,
+                                                          String publicJson, CircuitId circuitId,
+                                                          byte[] publicWitnessBytes) {
+        CurveId curve = detectCurve(proofJson);
+        PublicInputs inputs = parsePublicInputs(publicJson);
+
+        byte[] proofBytes = proofJson.getBytes(StandardCharsets.UTF_8);
+        byte[] vkBytes = vkJson.getBytes(StandardCharsets.UTF_8);
+        byte[] vkHash = SnarkjsJsonCodec.sha256(vkBytes);
+
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("gnark.publicWitness", java.util.Base64.getEncoder().encodeToString(publicWitnessBytes));
+
+        return ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.PLONK)
+                .curve(curve)
+                .circuitId(circuitId)
+                .proofBytes(proofBytes)
+                .publicInputs(inputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash))
+                .proofFormat("gnark-plonk-json")
+                .metadata(metadata)
                 .build();
     }
 

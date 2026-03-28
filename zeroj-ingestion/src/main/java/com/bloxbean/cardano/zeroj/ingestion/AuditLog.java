@@ -4,6 +4,7 @@ import com.bloxbean.cardano.zeroj.submission.SubmissionResult;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -40,6 +41,42 @@ public interface AuditLog {
     long count();
 
     /**
+     * Query entries by app ID.
+     */
+    default List<AuditEntry> queryByAppId(String appId) {
+        return queryByTimeRange(Instant.MIN, Instant.MAX).stream()
+                .filter(e -> appId.equals(e.appId()))
+                .toList();
+    }
+
+    /**
+     * Query entries by event type.
+     */
+    default List<AuditEntry> queryByEventType(String eventType) {
+        return queryByTimeRange(Instant.MIN, Instant.MAX).stream()
+                .filter(e -> eventType.equals(e.eventType()))
+                .toList();
+    }
+
+    /**
+     * Query rejected entries only.
+     */
+    default List<AuditEntry> queryRejections() {
+        return queryByTimeRange(Instant.MIN, Instant.MAX).stream()
+                .filter(e -> !e.accepted())
+                .toList();
+    }
+
+    /**
+     * Get the most recent entries, up to the given limit.
+     */
+    default List<AuditEntry> recent(int limit) {
+        var all = queryByTimeRange(Instant.MIN, Instant.MAX);
+        int size = all.size();
+        return all.subList(Math.max(0, size - limit), size);
+    }
+
+    /**
      * An immutable audit log entry.
      */
     record AuditEntry(
@@ -52,13 +89,29 @@ public interface AuditLog {
             boolean accepted,
             SubmissionResult.ValidationStage stage,
             SubmissionResult.RejectionReason rejectionReason,
-            String message
+            String message,
+            String eventType,
+            Map<String, String> context
     ) {
         public AuditEntry {
             Objects.requireNonNull(timestamp);
             Objects.requireNonNull(appId);
             Objects.requireNonNull(submitterId);
             Objects.requireNonNull(stage);
+            if (context == null) context = Map.of();
+        }
+
+        /**
+         * Backward-compatible constructor (no eventType/context).
+         */
+        public AuditEntry(
+                Instant timestamp, String appId, String submitterId,
+                String circuitId, String circuitVersion, long sequence,
+                boolean accepted, SubmissionResult.ValidationStage stage,
+                SubmissionResult.RejectionReason rejectionReason, String message
+        ) {
+            this(timestamp, appId, submitterId, circuitId, circuitVersion, sequence,
+                    accepted, stage, rejectionReason, message, null, Map.of());
         }
 
         /**
@@ -76,7 +129,34 @@ public interface AuditLog {
                     result.accepted(),
                     result.stage(),
                     result.reason().orElse(null),
-                    result.message().orElse(null)
+                    result.message().orElse(null),
+                    result.accepted() ? "ACCEPTED" : "REJECTED",
+                    Map.of()
+            );
+        }
+
+        /**
+         * Create an audit entry with a custom event type and context.
+         */
+        public static AuditEntry withContext(
+                com.bloxbean.cardano.zeroj.submission.AppProofSubmission submission,
+                SubmissionResult result,
+                String eventType,
+                Map<String, String> context
+        ) {
+            return new AuditEntry(
+                    Instant.now(),
+                    submission.appId(),
+                    submission.submitterId(),
+                    submission.circuitId(),
+                    submission.circuitVersion(),
+                    submission.sequence(),
+                    result.accepted(),
+                    result.stage(),
+                    result.reason().orElse(null),
+                    result.message().orElse(null),
+                    eventType,
+                    context != null ? Map.copyOf(context) : Map.of()
             );
         }
     }

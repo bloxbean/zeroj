@@ -65,5 +65,8 @@ node_modules/
 ### Windows ###
 Thumbs.db
 
+### Stray compiled class files at repo root ###
+/com/
+
 ### Development planning (not part of the source) ###
 plan.md

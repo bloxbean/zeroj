@@ -10,6 +10,7 @@ import com.bloxbean.cardano.zeroj.submission.SubmissionResult;
 import com.bloxbean.cardano.zeroj.submission.SubmissionResult.RejectionReason;
 import com.bloxbean.cardano.zeroj.submission.SubmissionResult.ValidationStage;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -137,6 +138,13 @@ public class SubmissionIngestionPipeline {
                     "Unknown submitter: " + submission.submitterId());
         }
 
+        // Check submitter status (active check)
+        if (!submitterRegistry.isActive(submission.submitterId())) {
+            return SubmissionResult.rejected(ValidationStage.SIGNATURE,
+                    RejectionReason.SUBMITTER_SUSPENDED,
+                    "Submitter " + submission.submitterId() + " is suspended or revoked");
+        }
+
         // Check authorization for this app
         if (!submitterRegistry.isAuthorized(submission.submitterId(), submission.appId())) {
             return SubmissionResult.rejected(ValidationStage.SIGNATURE,
@@ -156,10 +164,37 @@ public class SubmissionIngestionPipeline {
     // --- Stage 3: Circuit resolution ---
 
     private SubmissionResult validateCircuit(AppProofSubmission submission) {
-        if (!circuitAllowlist.isAllowed(submission.circuitId(), submission.circuitVersion())) {
-            return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
-                    RejectionReason.RETIRED_CIRCUIT,
-                    "Circuit " + submission.circuitId() + " v" + submission.circuitVersion() + " is not allowed");
+        // Enhanced circuit lifecycle when using CircuitRegistry
+        if (circuitAllowlist instanceof CircuitRegistry registry) {
+            var infoOpt = registry.getInfo(submission.circuitId(), submission.circuitVersion());
+            if (infoOpt.isEmpty()) {
+                return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
+                        RejectionReason.UNKNOWN_CIRCUIT,
+                        "Circuit " + submission.circuitId() + " v" + submission.circuitVersion() + " is not registered");
+            }
+            var info = infoOpt.get();
+            if (info.lifecycle() == CircuitRegistry.Lifecycle.RETIRED) {
+                return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
+                        RejectionReason.RETIRED_CIRCUIT,
+                        "Circuit " + submission.circuitId() + " v" + submission.circuitVersion() + " is retired");
+            }
+            if (info.lifecycle() == CircuitRegistry.Lifecycle.DEPRECATED
+                    && !info.acceptsSubmissionsAt(Instant.now())) {
+                String hint = info.successorCircuitId() != null
+                        ? "; migrate to " + info.successorCircuitId() + " v" + info.successorVersion()
+                        : "";
+                return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
+                        RejectionReason.DEPRECATED_CIRCUIT,
+                        "Circuit " + submission.circuitId() + " v" + submission.circuitVersion()
+                                + " is deprecated past deadline" + hint);
+            }
+        } else {
+            // Fallback: simple allowlist
+            if (!circuitAllowlist.isAllowed(submission.circuitId(), submission.circuitVersion())) {
+                return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
+                        RejectionReason.RETIRED_CIRCUIT,
+                        "Circuit " + submission.circuitId() + " v" + submission.circuitVersion() + " is not allowed");
+            }
         }
 
         // Check VK exists in registry
@@ -169,6 +204,15 @@ public class SubmissionIngestionPipeline {
             return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
                     RejectionReason.VK_NOT_FOUND,
                     "Verification key not found for hash");
+        }
+
+        // Check VK expiry when using VersionedVkRegistry
+        if (vkRegistry instanceof VersionedVkRegistry versioned) {
+            if (!versioned.isValid(submission.vkHash())) {
+                return SubmissionResult.rejected(ValidationStage.CIRCUIT_RESOLUTION,
+                        RejectionReason.VK_EXPIRED,
+                        "Verification key has expired");
+            }
         }
 
         return null; // pass
@@ -232,9 +276,9 @@ public class SubmissionIngestionPipeline {
                     "Sequence " + submission.sequence() + " not greater than last accepted " + lastSeq);
         }
 
-        // Check nullifier uniqueness (if present)
+        // Check nullifier uniqueness (if present) — use app-scoped version
         byte[] nullifier = submission.nullifier();
-        if (nullifier != null && nullifierStore.isUsed(nullifier)) {
+        if (nullifier != null && nullifierStore.isUsed(submission.appId(), nullifier)) {
             return SubmissionResult.rejected(ValidationStage.POLICY,
                     RejectionReason.USED_NULLIFIER, "Nullifier already used");
         }
@@ -250,7 +294,7 @@ public class SubmissionIngestionPipeline {
 
         byte[] nullifier = submission.nullifier();
         if (nullifier != null) {
-            nullifierStore.markUsed(nullifier);
+            nullifierStore.markUsed(submission.appId(), nullifier);
         }
     }
 }
