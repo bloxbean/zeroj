@@ -1,0 +1,27 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ WASM prover — circom witness calculation via GraalVM WebAssembly runtime'
+
+dependencies {
+    api project(':zeroj-api')
+
+    // GraalVM polyglot runtime (version must match GraalVM JDK)
+    implementation 'org.graalvm.polyglot:polyglot:25.0.1'
+    implementation 'org.graalvm.polyglot:wasm:25.0.1'
+    implementation 'org.graalvm.polyglot:js:25.0.1'
+
+    testImplementation project(':zeroj-test-vectors')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Prover WASM'
+                description = 'Circom witness calculation via GraalVM WebAssembly — no Node.js dependency'
+            }
+        }
+    }
+}
