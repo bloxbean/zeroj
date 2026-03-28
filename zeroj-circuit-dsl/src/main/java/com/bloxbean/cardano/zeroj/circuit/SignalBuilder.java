@@ -89,6 +89,11 @@ public final class SignalBuilder {
         return new Signal(api.arrayAccess(vars, index.variable()), api);
     }
 
+    /** Wrap a Variable as a Signal (for stdlib interop). */
+    public Signal wrap(Variable variable) {
+        return new Signal(variable, api);
+    }
+
     /** Access to the underlying CircuitAPI (for advanced use / stdlib interop). */
     public CircuitAPI api() { return api; }
 }
