@@ -41,21 +41,20 @@ class Groth16EndToEndTest {
      */
     @Test
     void fullPipeline_multiplier_proveAndVerify() throws IOException {
-        // === Step 1: Import .zkey (proving key) ===
-        var pk = ZkeyImporter.importZkey(getClass().getResourceAsStream(ZKEY_PATH));
+        // === Step 1: Import .zkey (proving key + constraints) ===
+        var zkeyData = ZkeyImporter.importZkeyFull(
+                getClass().getResourceAsStream(ZKEY_PATH).readAllBytes());
+        var pk = zkeyData.provingKey();
         assertFalse(pk.alphaG1().isInfinity(), "alpha must not be infinity");
         assertTrue(pk.alphaG1().isOnCurve(), "alpha must be on curve");
 
-        // === Step 2: Import .r1cs (constraints matching the .zkey's trusted setup) ===
-        var r1csData = R1CSImporter.importR1CS(getClass().getResourceAsStream(R1CS_PATH));
-
-        // === Step 3: Import .wtns (witness) ===
+        // === Step 2: Import .wtns (witness) ===
         var witness = ZkeyImporter.importWtns(getClass().getResourceAsStream(WTNS_PATH));
         assertEquals(BigInteger.ONE, witness[0], "witness[0] = 1");
         assertEquals(BigInteger.valueOf(33), witness[1], "c=33");
 
-        // === Step 4: PROVE (pure Java!) ===
-        var proof = Groth16Prover.prove(pk, witness, r1csData.constraints(), r1csData.numWires());
+        // === Step 3: PROVE (pure Java!) ===
+        var proof = Groth16Prover.prove(pk, witness, zkeyData.constraints(), zkeyData.numWires());
 
         assertNotNull(proof);
         assertFalse(proof.a().isInfinity(), "Proof A should not be infinity");
@@ -107,14 +106,15 @@ class Groth16EndToEndTest {
      */
     @Test
     void tamperedWitness_failsVerification() throws IOException {
-        var pk = ZkeyImporter.importZkey(getClass().getResourceAsStream(ZKEY_PATH));
-        var r1csData = R1CSImporter.importR1CS(getClass().getResourceAsStream(R1CS_PATH));
+        var zkeyData2 = ZkeyImporter.importZkeyFull(
+                getClass().getResourceAsStream(ZKEY_PATH).readAllBytes());
 
         var witness = ZkeyImporter.importWtns(getClass().getResourceAsStream(WTNS_PATH));
         // Tamper: change c from 33 to 99
         witness[1] = BigInteger.valueOf(99);
 
-        var proof = Groth16Prover.prove(pk, witness, r1csData.constraints(), r1csData.numWires());
+        var proof = Groth16Prover.prove(zkeyData2.provingKey(), witness,
+                zkeyData2.constraints(), zkeyData2.numWires());
         assertNotNull(proof);
 
         // Verify against the ORIGINAL public input (33)

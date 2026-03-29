@@ -66,10 +66,27 @@ public final class Groth16Prover {
         // Step 1: Compute h(x) polynomial
         BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
-        // Step 2: Random blinding factors
+        // Step 2: Random blinding factors (set to 0 for debugging with proveUnblinded)
         var rng = new SecureRandom();
         BigInteger r = randomScalar(rng);
         BigInteger s = randomScalar(rng);
+
+        return proveInternal(pk, witness, hCoeffs, r, s);
+    }
+
+    /** Prove without blinding (r=0, s=0) — for debugging only. */
+    static Groth16Proof proveUnblinded(
+            Groth16ProvingKey pk, BigInteger[] witness,
+            R1CSConstraint[] constraints, int numWires, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.length, domainSize);
+        BigInteger r = BigInteger.ZERO;
+        BigInteger s = BigInteger.ZERO;
+        return proveInternal(pk, witness, hCoeffs, r, s);
+    }
+
+    private static Groth16Proof proveInternal(
+            Groth16ProvingKey pk, BigInteger[] witness, BigInteger[] hCoeffs,
+            BigInteger r, BigInteger s) {
 
         // Step 3a: π_A = α + Σ(w_i * pk.A_i) + r * δ  (in G1)
         var piA = computePiA(pk, witness, r);
@@ -87,103 +104,91 @@ public final class Groth16Prover {
     }
 
     /**
-     * Compute h(x) = (A(x)*B(x) - C(x)) / Z_H(x) via FFT.
+     * Compute h(x) scalars for the H-point MSM, using snarkjs's coset evaluation approach.
      *
-     * <p>A(x) = Σ w_i * a_i(x), B(x) = Σ w_i * b_i(x), C(x) = Σ w_i * c_i(x)
-     * where a_i, b_i, c_i are the Lagrange basis representations of the R1CS matrices.</p>
+     * <p>The .zkey's H points (Section 9) are odd-indexed Lagrange basis elements,
+     * so the MSM scalars must be coset evaluations of (A*B - C), NOT monomial coefficients.</p>
+     *
+     * <p>Algorithm (matching snarkjs groth16_prove.js):
+     * <ol>
+     *   <li>Build A, B evaluations on the standard domain from constraints + witness</li>
+     *   <li>Compute C = A * B pointwise (on the standard domain)</li>
+     *   <li>For each of A, B, C: IFFT → shift by coset generator → FFT (coset evaluation)</li>
+     *   <li>Compute (A_coset * B_coset - C_coset) pointwise</li>
+     *   <li>Return these coset evaluations as the MSM scalars (no final IFFT)</li>
+     * </ol>
+     *
+     * <p>The coset generator is omega_{2n} = the primitive (2*domainSize)-th root of unity,
+     * which equals the square root of the domain's omega_n.</p>
      */
     static BigInteger[] computeH(R1CSConstraint[] constraints, BigInteger[] witness,
                                   int numConstraints, int domainSize) {
-        BigInteger r = MontFr254.modulus();
+        BigInteger mod = MontFr254.modulus();
         if (domainSize < 2) domainSize = 2;
+        int logN = Integer.numberOfTrailingZeros(domainSize);
 
-        // Evaluate A(x), B(x), C(x) at the witness: these are the constraint evaluations
-        // For each constraint i: a_eval[i] = Σ_j a_ij * w_j, etc.
+        // Step 1: Build A, B evaluations on the standard domain from R1CS constraints
         MontFr254[] aEval = new MontFr254[domainSize];
         MontFr254[] bEval = new MontFr254[domainSize];
-        MontFr254[] cEval = new MontFr254[domainSize];
 
         for (int i = 0; i < domainSize; i++) {
-            if (i < numConstraints) {
-                aEval[i] = evalLinComb(constraints[i].a(), witness, r);
-                bEval[i] = evalLinComb(constraints[i].b(), witness, r);
-                cEval[i] = evalLinComb(constraints[i].c(), witness, r);
+            if (i < numConstraints && i < constraints.length) {
+                aEval[i] = evalLinComb(constraints[i].a(), witness, mod);
+                bEval[i] = evalLinComb(constraints[i].b(), witness, mod);
             } else {
                 aEval[i] = MontFr254.ZERO;
                 bEval[i] = MontFr254.ZERO;
-                cEval[i] = MontFr254.ZERO;
             }
         }
 
-        // These are evaluations at the roots of unity omega^0, ..., omega^{n-1}.
-        // We have: A(omega^i) * B(omega^i) - C(omega^i) = 0 for valid witnesses.
-        // h(x) = (A(x)*B(x) - C(x)) / Z_H(x) where Z_H(x) = x^n - 1.
-
-        // To compute h: evaluate A*B-C on a *coset* (shift by a generator),
-        // divide by Z_H on the coset, then IFFT back to coefficients.
-        // For simplicity, use the direct approach:
-        // 1. IFFT to get coefficient form of A, B, C
-        // 2. Multiply A*B in coefficient form (via FFT at 2n points)
-        // 3. Subtract C
-        // 4. Divide by Z_H(x) = x^n - 1
-
-        // Step 1: Get coefficients via IFFT
-        var aCoeffs = FieldFFT.ifft(aEval);
-        var bCoeffs = FieldFFT.ifft(bEval);
-        var cCoeffs = FieldFFT.ifft(cEval);
-
-        // Step 2: A*B via FFT polynomial multiplication
-        var abCoeffs = FieldFFT.polyMul(aCoeffs, bCoeffs);
-
-        // Step 3: A*B - C (pad C to match length)
-        int abLen = abCoeffs.length;
-        MontFr254[] abMinusC = new MontFr254[abLen];
-        for (int i = 0; i < abLen; i++) {
-            MontFr254 ci = (i < cCoeffs.length) ? cCoeffs[i] : MontFr254.ZERO;
-            abMinusC[i] = abCoeffs[i].sub(ci);
+        // C = A * B pointwise on the standard domain
+        // This is what snarkjs does: C is NOT from the R1CS C matrix.
+        // The R1CS constraint A*B = C means that on the standard domain,
+        // the product equals the C evaluation. The difference A*B - C = 0
+        // on the standard domain (for valid witness), but NOT on a coset.
+        MontFr254[] cEval = new MontFr254[domainSize];
+        for (int i = 0; i < domainSize; i++) {
+            cEval[i] = aEval[i].mul(bEval[i]);
         }
 
-        // Step 4: Divide by Z_H(x) = x^n - 1
-        // Z_H has coefficients: [-1, 0, ..., 0, 1] (degree n)
-        // Polynomial long division: quotient has degree (2n-2) - n = n-2
-        BigInteger[] hResult = polyDivByVanishing(abMinusC, domainSize);
+        // Step 2: Coset shift — IFFT, multiply by inc^i, FFT
+        // inc = omega_{2n} (primitive 2*domainSize-th root of unity)
+        MontFr254 inc = FieldFFT.rootOfUnity(logN + 1);
 
-        return hResult;
+        var aCoset = cosetFFT(aEval, inc);
+        var bCoset = cosetFFT(bEval, inc);
+        var cCoset = cosetFFT(cEval, inc);
+
+        // Step 3: Pointwise (A*B - C) on the coset
+        // A_coset[i] * B_coset[i] is the "true" product at coset point i
+        // C_coset[i] is the coset evaluation of the degree-(n-1) product polynomial
+        // The difference captures the high-degree terms — exactly h(x) * Z_H(x) on the coset
+        // Combined with the Lagrange-basis H points, this gives the correct h contribution
+        BigInteger[] result = new BigInteger[domainSize];
+        for (int i = 0; i < domainSize; i++) {
+            var val = aCoset[i].mul(bCoset[i]).sub(cCoset[i]);
+            result[i] = val.toBigInteger();
+        }
+        return result;
     }
 
     /**
-     * Polynomial division by Z_H(x) = x^n - 1.
-     * Given f(x) of degree 2n-2, compute q(x) = f(x) / (x^n - 1).
-     * Returns coefficients as BigInteger (for MSM scalars).
+     * Coset FFT: evaluate polynomial on the coset {inc * omega^i}.
+     * Computed as: IFFT → multiply coeff[i] by inc^i → FFT.
      */
-    private static BigInteger[] polyDivByVanishing(MontFr254[] f, int n) {
-        // f(x) / (x^n - 1): process from highest degree down
-        // For degree d coefficient: q[d-n] += f[d], then f[d-n] += f[d] (since x^n = 1 in the quotient)
-        int fLen = f.length;
-        MontFr254[] q = new MontFr254[fLen]; // quotient (oversized, will trim)
-        MontFr254[] rem = new MontFr254[fLen];
-        for (int i = 0; i < fLen; i++) rem[i] = f[i];
+    private static MontFr254[] cosetFFT(MontFr254[] evals, MontFr254 inc) {
+        // IFFT: evaluations → coefficients
+        var coeffs = FieldFFT.ifft(evals);
 
-        for (int i = fLen - 1; i >= n; i--) {
-            // Leading coefficient of remainder at position i
-            // Divide by x^n: subtract rem[i] * (x^n - 1) * x^{i-n}
-            // This sets q[i-n] = rem[i] and rem[i-n] += rem[i]
-            MontFr254 coeff = rem[i];
-            if (!coeff.isZero()) {
-                q[i - n] = coeff;
-                rem[i] = MontFr254.ZERO;
-                rem[i - n] = rem[i - n].add(coeff); // since we're dividing by (x^n - 1)
-            } else {
-                q[i - n] = MontFr254.ZERO;
-            }
+        // Shift: coeff[i] *= inc^i
+        MontFr254 power = MontFr254.ONE;
+        for (int i = 0; i < coeffs.length; i++) {
+            coeffs[i] = coeffs[i].mul(power);
+            power = power.mul(inc);
         }
 
-        // Convert to BigInteger, padded to domain size n
-        BigInteger[] result = new BigInteger[n];
-        for (int i = 0; i < n; i++) {
-            result[i] = (i < fLen && q[i] != null) ? q[i].toBigInteger() : BigInteger.ZERO;
-        }
-        return result;
+        // FFT: coefficients → evaluations on coset
+        return FieldFFT.fft(coeffs);
     }
 
     // --- Proof element computation ---

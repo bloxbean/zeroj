@@ -60,7 +60,7 @@ class Groth16ProverTest {
         }
 
         // Compute h(x) — this should succeed without error for a valid witness
-        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 2, 4);
+        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 2, 4) /* 2 constraints, domainSize=4 */;
         assertNotNull(h);
         assertTrue(h.length > 0, "h polynomial should have at least one coefficient");
     }
