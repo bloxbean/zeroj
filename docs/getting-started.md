@@ -9,15 +9,19 @@ We'll build a **sealed-bid auction** where a bidder proves their bid exceeds a r
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Java | 25+ (GraalVM) | `sdk use java 25.0.2-graal` |
-| Go | 1.21+ | gnark native prover |
-| Yaci DevKit | latest | Local Cardano devnet |
+| Yaci DevKit | latest | Local Cardano devnet (only for on-chain steps) |
 
-Build the gnark native library (one-time):
+### Building the gnark native prover (optional)
+
+The gnark native library is only needed if you want to generate proofs using the in-process gnark FFM prover (Steps 3+). Circuit definition, R1CS compilation, witness calculation, and off-chain verification are all **pure Java** with no native dependencies.
+
+If you want to use the gnark prover, you need **Go 1.21+** to build the native library once:
+
 ```bash
 cd zeroj-prover-gnark/gnark-wrapper && make build
 ```
 
-Start Yaci DevKit:
+Start Yaci DevKit (only for on-chain Steps 5-7):
 ```bash
 yaci-cli:default> create-node -o --start
 ```
