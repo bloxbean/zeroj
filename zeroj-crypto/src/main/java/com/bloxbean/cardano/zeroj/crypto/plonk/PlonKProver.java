@@ -50,6 +50,23 @@ public final class PlonKProver {
         var rng = new SecureRandom();
         MontFr254[] b = new MontFr254[9];
         for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);
+    }
+
+    /** Prove without blinding (for debugging). */
+    static PlonKProof proveUnblinded(PlonKProvingKey pk, MontFr254[] wireA, MontFr254[] wireB,
+                                      MontFr254[] wireC, BigInteger[] pubInputs) {
+        MontFr254[] b = new MontFr254[9];
+        for (int i = 0; i < 9; i++) b[i] = MontFr254.ZERO;
+        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);
+    }
+
+    private static PlonKProof proveInternal(PlonKProvingKey pk, MontFr254[] wireA, MontFr254[] wireB,
+                                             MontFr254[] wireC, BigInteger[] pubInputs, MontFr254[] b) {
+        int n = pk.domainSize();
+        int logN = Integer.numberOfTrailingZeros(n);
+        MontFr254 omega = pk.omega();
+        AffineG1[] srs = pk.srsG1();
 
         // Pad wire evaluations to domain size
         MontFr254[] aEvals = padTo(wireA, n);
@@ -367,14 +384,17 @@ public final class PlonKProver {
         return result;
     }
 
-    /** Build PI(X) polynomial: PI(omega^i) = -pubInputs[i-1] for i=1..nPub, 0 elsewhere */
+    /** Build PI(X) polynomial: PI(omega^i) = -pubInputs[i] for i=0..nPub-1, 0 elsewhere.
+     *  Our compiler emits public input rows at positions 0..nPub-1 (the first nPub rows). */
     private static MontFr254[] buildPICoeffs(BigInteger[] pubInputs, MontFr254 omega, int n, int logN) {
         MontFr254[] piEvals = new MontFr254[n];
-        piEvals[0] = MontFr254.ZERO;
-        for (int i = 1; i <= pubInputs.length && i < n; i++) {
-            piEvals[i] = MontFr254.fromBigInteger(pubInputs[i - 1]).neg();
+        for (int i = 0; i < n; i++) {
+            if (i < pubInputs.length) {
+                piEvals[i] = MontFr254.fromBigInteger(pubInputs[i]).neg();
+            } else {
+                piEvals[i] = MontFr254.ZERO;
+            }
         }
-        for (int i = pubInputs.length + 1; i < n; i++) piEvals[i] = MontFr254.ZERO;
         return FieldFFT.ifft(piEvals);
     }
 

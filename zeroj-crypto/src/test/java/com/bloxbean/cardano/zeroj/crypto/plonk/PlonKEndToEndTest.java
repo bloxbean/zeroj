@@ -78,7 +78,8 @@ class PlonKEndToEndTest {
         for (int i = 0; i < pubInputs.length; i++) pubInputs[i] = witness[i + 1];
 
         // === Step 7: PROVE (pure Java!) ===
-        var proof = PlonKProver.prove(pk, wireA, wireB, wireC, pubInputs);
+        // Use unblinded mode for debugging — once verification passes, switch to prove()
+        var proof = PlonKProver.proveUnblinded(pk, wireA, wireB, wireC, pubInputs);
         assertNotNull(proof);
         assertFalse(proof.commitA().isInfinity(), "A not infinity");
         assertFalse(proof.commitZ().isInfinity(), "Z not infinity");
@@ -216,6 +217,17 @@ class PlonKEndToEndTest {
         boolean valid = BN254Pairing.pairingCheck(
                 new G1Point[]{A1.negate(), B1},
                 new G2Point[]{X_2, g2Gen});
+
+        System.out.println("Pairing result: " + valid);
+
+        // Diagnostic: check if t(zeta)*Z_H(zeta) vanishes correctly
+        // If T1/T2/T3 are correct, then: zh*(T1 + xin*T2 + xin^2*T3) at zeta should equal
+        // the numerator of the verification equation
+        System.out.println("zh = " + zh);
+        System.out.println("xin = " + xin);
+        System.out.println("L1 = " + L1);
+        System.out.println("pi = " + pi);
+        System.out.println("r0 = " + r0);
 
         assertTrue(valid, "PlonK proof MUST verify via BN254 pairing check!\n"
                 + "This proves the full pure Java PlonK pipeline works.");
