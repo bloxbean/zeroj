@@ -12,6 +12,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.*;
 
+// Also provides .wtns witness file parsing
+
 /**
  * Imports Groth16 proving keys from snarkjs .zkey binary format (iden3 binfile).
  *
@@ -56,7 +58,14 @@ public final class ZkeyImporter {
      * @throws IOException if the file format is invalid
      */
     public static Groth16ProvingKey importZkey(InputStream input) throws IOException {
-        byte[] data = input.readAllBytes();
+        return importZkeyFull(input.readAllBytes()).provingKey();
+    }
+
+    /**
+     * Import the complete .zkey data: proving key + R1CS constraints.
+     * The constraints are needed for h(x) polynomial computation in the prover.
+     */
+    public static ZkeyData importZkeyFull(byte[] data) throws IOException {
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
 
         // Global header
@@ -73,7 +82,6 @@ public final class ZkeyImporter {
 
         // Read section directory: sectionType → (offset, size)
         Map<Integer, long[]> sections = new LinkedHashMap<>();
-        int pos = buf.position();
         for (int i = 0; i < numSections; i++) {
             int sectionType = buf.getInt();
             long sectionSize = buf.getLong();
@@ -95,7 +103,7 @@ public final class ZkeyImporter {
         BigInteger q = readFieldElementLE(buf, n8q); // base field prime
 
         int n8r = buf.getInt();
-        BigInteger r = readFieldElementLE(buf, n8r); // scalar field prime
+        BigInteger rField = readFieldElementLE(buf, n8r); // scalar field prime
 
         int nVars = buf.getInt();
         int nPublic = buf.getInt();
@@ -104,9 +112,56 @@ public final class ZkeyImporter {
         var alphaG1 = readG1Montgomery(buf, n8q, q);
         var betaG1 = readG1Montgomery(buf, n8q, q);
         var betaG2 = readG2Montgomery(buf, n8q, q);
-        var gammaG2 = readG2Montgomery(buf, n8q, q); // not stored in proving key but read to advance
+        var gammaG2 = readG2Montgomery(buf, n8q, q); // read to advance position
         var deltaG1 = readG1Montgomery(buf, n8q, q);
         var deltaG2 = readG2Montgomery(buf, n8q, q);
+
+        // Section 4: Coefficients — reconstruct R1CS constraints
+        // R^2 mod r (double Montgomery for coefficients)
+        BigInteger FR_R = BigInteger.ONE.shiftLeft(256).mod(rField);
+        BigInteger FR_R_INV = FR_R.modInverse(rField);
+        // Coefficients are stored in R^2 Montgomery form
+        BigInteger FR_R2_INV = FR_R_INV.multiply(FR_R_INV).mod(rField);
+
+        buf.position((int) sections.get(4)[0]);
+        int numCoeffs = buf.getInt();
+        // Build constraints from coefficient entries
+        // Each: matrix(u32), constraint(u32), signal(u32), value(n8r bytes, R^2 Montgomery)
+        int numConstraints = domainSize; // snarkjs pads to domainSize
+        Map<Integer, BigInteger>[] aMap = new Map[numConstraints];
+        Map<Integer, BigInteger>[] bMap = new Map[numConstraints];
+        Map<Integer, BigInteger>[] cMap = new Map[numConstraints];
+        for (int i = 0; i < numConstraints; i++) {
+            aMap[i] = new HashMap<>();
+            bMap[i] = new HashMap<>();
+            cMap[i] = new HashMap<>();
+        }
+        for (int i = 0; i < numCoeffs; i++) {
+            int matrix = buf.getInt(); // 0=A, 1=B, 2=C
+            int constraint = buf.getInt();
+            int signal = buf.getInt();
+            BigInteger valueMont = readFieldElementLE(buf, n8r);
+            // Convert from R^2 Montgomery: value = valueMont * R^{-2} mod r
+            BigInteger value = valueMont.multiply(FR_R2_INV).mod(rField);
+            if (constraint < numConstraints && value.signum() != 0) {
+                switch (matrix) {
+                    case 0 -> aMap[constraint].merge(signal, value, (a, b) -> a.add(b).mod(rField));
+                    case 1 -> bMap[constraint].merge(signal, value, (a, b) -> a.add(b).mod(rField));
+                    case 2 -> cMap[constraint].merge(signal, value, (a, b) -> a.add(b).mod(rField));
+                }
+            }
+        }
+        // Find actual number of non-empty constraints
+        int actualConstraints = 0;
+        for (int i = 0; i < numConstraints; i++) {
+            if (!aMap[i].isEmpty() || !bMap[i].isEmpty() || !cMap[i].isEmpty()) {
+                actualConstraints = i + 1;
+            }
+        }
+        var constraints = new Groth16Prover.R1CSConstraint[numConstraints];
+        for (int i = 0; i < numConstraints; i++) {
+            constraints[i] = new Groth16Prover.R1CSConstraint(aMap[i], bMap[i], cMap[i]);
+        }
 
         // Section 5: A points in G1
         buf.position((int) sections.get(5)[0]);
@@ -129,9 +184,11 @@ public final class ZkeyImporter {
         buf.position((int) sections.get(9)[0]);
         AffineG1[] pointsH = readG1Array(buf, domainSize, n8q, q);
 
-        return new Groth16ProvingKey(
+        var pk = new Groth16ProvingKey(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,
                 pointsA, pointsB1, pointsB2, pointsH, pointsL, nPublic);
+
+        return new ZkeyData(pk, constraints, actualConstraints, nVars, domainSize);
     }
 
     // --- Point reading ---
@@ -189,5 +246,45 @@ public final class ZkeyImporter {
     /** Convert from Montgomery form: value * R^{-1} mod q. */
     private static BigInteger fromMontgomery(BigInteger montValue, BigInteger q) {
         return montValue.multiply(FP_MONT_R_INV).mod(q);
+    }
+
+    // --- .wtns witness file parsing ---
+
+    private static final byte[] WTNS_MAGIC = {0x77, 0x74, 0x6e, 0x73}; // "wtns"
+
+    /**
+     * Parse a snarkjs .wtns binary witness file.
+     *
+     * @param input the .wtns file contents
+     * @return witness vector as BigInteger array
+     */
+    public static BigInteger[] importWtns(InputStream input) throws IOException {
+        byte[] data = input.readAllBytes();
+        ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+
+        // Global header
+        byte[] magic = new byte[4];
+        buf.get(magic);
+        if (!Arrays.equals(magic, WTNS_MAGIC))
+            throw new IOException("Invalid .wtns magic: expected 'wtns'");
+
+        int version = buf.getInt();
+        int numSections = buf.getInt();
+
+        // Section 1: Header
+        int sType = buf.getInt();
+        long sSize = buf.getLong();
+        int n8 = buf.getInt();
+        BigInteger prime = readFieldElementLE(buf, n8);
+        int nWitness = buf.getInt();
+
+        // Section 2: Witness values
+        sType = buf.getInt();
+        sSize = buf.getLong();
+        BigInteger[] witness = new BigInteger[nWitness];
+        for (int i = 0; i < nWitness; i++) {
+            witness[i] = readFieldElementLE(buf, n8);
+        }
+        return witness;
     }
 }

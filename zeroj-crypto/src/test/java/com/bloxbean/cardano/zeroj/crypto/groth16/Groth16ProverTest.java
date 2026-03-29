@@ -60,7 +60,7 @@ class Groth16ProverTest {
         }
 
         // Compute h(x) — this should succeed without error for a valid witness
-        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 2);
+        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 2, 4);
         assertNotNull(h);
         assertTrue(h.length > 0, "h polynomial should have at least one coefficient");
     }
@@ -77,7 +77,7 @@ class Groth16ProverTest {
         BigInteger[] witness = {BigInteger.ONE};
 
         // h(x) should be computable (may be zero polynomial for trivial cases)
-        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 1);
+        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 1, 2);
         assertNotNull(h);
     }
 
@@ -103,7 +103,7 @@ class Groth16ProverTest {
         BigInteger cVal = evalLC(constraints[0].c(), witness);
         assertEquals(aVal.multiply(bVal).mod(R), cVal);
 
-        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 1);
+        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 1, 2);
         assertNotNull(h);
     }
 
@@ -125,7 +125,7 @@ class Groth16ProverTest {
         BigInteger[] witness = {BigInteger.ONE, BigInteger.valueOf(3), BigInteger.valueOf(11), BigInteger.valueOf(99)};
 
         // This should not crash (but the proof would be invalid)
-        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 1);
+        BigInteger[] h = Groth16Prover.computeH(constraints, witness, 1, 2);
         assertNotNull(h);
     }
 

@@ -5,6 +5,10 @@ plugins {
 description = 'Pure Java optimized cryptographic primitives — Montgomery field arithmetic, EC operations, FFT, MSM'
 
 dependencies {
+    // Test-only: integration test uses the circuit DSL, codec, and verifier to close the loop
+    testImplementation project(':zeroj-circuit-dsl')
+    testImplementation project(':zeroj-verifier-groth16')
+    testImplementation project(':zeroj-codec')
 }
 
 publishing {

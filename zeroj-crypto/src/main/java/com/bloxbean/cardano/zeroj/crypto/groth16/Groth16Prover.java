@@ -49,11 +49,22 @@ public final class Groth16Prover {
             BigInteger[] witness,
             R1CSConstraint[] constraints,
             int numWires) {
+        // Domain size = length of H points array in proving key
+        int domainSize = pk.pointsH().length;
+        return prove(pk, witness, constraints, numWires, domainSize);
+    }
+
+    public static Groth16Proof prove(
+            Groth16ProvingKey pk,
+            BigInteger[] witness,
+            R1CSConstraint[] constraints,
+            int numWires,
+            int domainSize) {
 
         int numConstraints = constraints.length;
 
         // Step 1: Compute h(x) polynomial
-        BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints);
+        BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
         // Step 2: Random blinding factors
         var rng = new SecureRandom();
@@ -81,12 +92,9 @@ public final class Groth16Prover {
      * <p>A(x) = Σ w_i * a_i(x), B(x) = Σ w_i * b_i(x), C(x) = Σ w_i * c_i(x)
      * where a_i, b_i, c_i are the Lagrange basis representations of the R1CS matrices.</p>
      */
-    static BigInteger[] computeH(R1CSConstraint[] constraints, BigInteger[] witness, int numConstraints) {
+    static BigInteger[] computeH(R1CSConstraint[] constraints, BigInteger[] witness,
+                                  int numConstraints, int domainSize) {
         BigInteger r = MontFr254.modulus();
-
-        // Domain size = next power of 2 >= numConstraints
-        int domainSize = Integer.highestOneBit(numConstraints);
-        if (domainSize < numConstraints) domainSize <<= 1;
         if (domainSize < 2) domainSize = 2;
 
         // Evaluate A(x), B(x), C(x) at the witness: these are the constraint evaluations
@@ -170,11 +178,10 @@ public final class Groth16Prover {
             }
         }
 
-        // Trim quotient and convert to BigInteger
-        int qDeg = fLen - n; // max quotient degree + 1
-        BigInteger[] result = new BigInteger[qDeg];
-        for (int i = 0; i < qDeg; i++) {
-            result[i] = (q[i] != null) ? q[i].toBigInteger() : BigInteger.ZERO;
+        // Convert to BigInteger, padded to domain size n
+        BigInteger[] result = new BigInteger[n];
+        for (int i = 0; i < n; i++) {
+            result[i] = (i < fLen && q[i] != null) ? q[i].toBigInteger() : BigInteger.ZERO;
         }
         return result;
     }
