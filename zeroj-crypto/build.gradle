@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'Pure Java optimized cryptographic primitives — Montgomery field arithmetic, EC operations, FFT, MSM'
+
+dependencies {
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Crypto'
+                description = 'Pure Java optimized field arithmetic and elliptic curve operations for ZK proving'
+            }
+        }
+    }
+}
