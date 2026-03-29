@@ -269,26 +269,7 @@ public final class MontFr254 {
      */
     public BigInteger toBigInteger() {
         MontFr254 normal = fromMontgomery();
-        return limbsToBigInteger(normal.l0, normal.l1, normal.l2, normal.l3);
-    }
-
-    /**
-     * Convert 4 unsigned 64-bit limbs (little-endian) to BigInteger.
-     */
-    static BigInteger limbsToBigInteger(long l0, long l1, long l2, long l3) {
-        BigInteger mask = BigInteger.valueOf(Long.MAX_VALUE).shiftLeft(1).or(BigInteger.ONE); // 2^64 - 1
-        BigInteger result = BigInteger.valueOf(l3 >>> 1).shiftLeft(1).or(BigInteger.valueOf(l3 & 1));
-        // Treat each long as unsigned via masking
-        result = result.shiftLeft(64).or(toUnsignedBigInteger(l2));
-        result = result.shiftLeft(64).or(toUnsignedBigInteger(l1));
-        result = result.shiftLeft(64).or(toUnsignedBigInteger(l0));
-        return result;
-    }
-
-    private static BigInteger toUnsignedBigInteger(long v) {
-        if (v >= 0) return BigInteger.valueOf(v);
-        // For negative longs (high bit set), compute unsigned value
-        return BigInteger.valueOf(v >>> 1).shiftLeft(1).or(BigInteger.valueOf(v & 1));
+        return MontUtil.limbsToBigInteger(normal.l0, normal.l1, normal.l2, normal.l3);
     }
 
     /**
