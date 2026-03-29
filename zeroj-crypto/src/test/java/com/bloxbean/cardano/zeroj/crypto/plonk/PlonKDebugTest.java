@@ -237,5 +237,108 @@ class PlonKDebugTest {
         System.out.println("t(zeta) = fullConstraint/Z_H = " + tZeta.toBigInteger());
         System.out.println("Check: t(zeta)*Z_H(zeta) == fullConstraint: " +
                 tZeta.mul(zhZeta).equals(fullConstraint));
+
+        // Now test the coset FFT approach matches
+        // Build the full constraint numerator on a 4n coset, IFFT to get t(X) coefficients
+        int n4 = 4 * n;
+        int logN4 = Integer.numberOfTrailingZeros(n4);
+        MontFr254 shift = MontFr254.fromLong(5); // same as prover
+
+        // Coset-evaluate all polynomials
+        var aCoset = cosetEval(aCoeffs, shift, n4);
+        var bCoset = cosetEval(bCoeffs, shift, n4);
+        var cCoset = cosetEval(cCoeffs, shift, n4);
+        var zCoset = cosetEval(zCoeffs, shift, n4);
+        var qlC = cosetEval(qlCoeffs, shift, n4);
+        var qrC = cosetEval(qrCoeffs, shift, n4);
+        var qmC = cosetEval(qmCoeffs, shift, n4);
+        var qoC = cosetEval(qoCoeffs, shift, n4);
+        var qcC = cosetEval(qcCoeffs, shift, n4);
+        var piC = cosetEval(piCoeffs, shift, n4);
+        var s1C = cosetEval(s1Coeffs, shift, n4);
+        var s2C = cosetEval(s2Coeffs, shift, n4);
+        var s3C = cosetEval(s3Coeffs, shift, n4);
+        var l1C = cosetEval(l1Coeffs, shift, n4);
+        var zOmC = cosetEval(zOmegaCoeffs, shift, n4);
+
+        MontFr254 omega4 = FieldFFT.rootOfUnity(logN4);
+        MontFr254 shiftN = shift;
+        for (int i = 1; i < n; i++) shiftN = shiftN.mul(shift);
+        MontFr254 omega4N = omega4;
+        for (int i = 1; i < n; i++) omega4N = omega4N.mul(omega4);
+
+        // Compute t on coset
+        MontFr254[] tCoset = new MontFr254[n4];
+        MontFr254 omega4Ni = MontFr254.ONE;
+        MontFr254 cosetPt = shift;
+        for (int i = 0; i < n4; i++) {
+            var zhI = shiftN.mul(omega4Ni).sub(MontFr254.ONE);
+
+            var gateI = qmC[i].mul(aCoset[i]).mul(bCoset[i])
+                    .add(qlC[i].mul(aCoset[i]))
+                    .add(qrC[i].mul(bCoset[i]))
+                    .add(qoC[i].mul(cCoset[i]))
+                    .add(qcC[i]).add(piC[i]);
+
+            MontFr254 bTest = MontFr254.fromLong(7);
+            MontFr254 gTest = MontFr254.fromLong(13);
+            MontFr254 k1Test = MontFr254.fromBigInteger(pk.k1());
+            MontFr254 k2Test = MontFr254.fromBigInteger(pk.k2());
+
+            var pnC = aCoset[i].add(bTest.mul(cosetPt)).add(gTest)
+                    .mul(bCoset[i].add(bTest.mul(k1Test).mul(cosetPt)).add(gTest))
+                    .mul(cCoset[i].add(bTest.mul(k2Test).mul(cosetPt)).add(gTest))
+                    .mul(zCoset[i]);
+            var pdC = aCoset[i].add(bTest.mul(s1C[i])).add(gTest)
+                    .mul(bCoset[i].add(bTest.mul(s2C[i])).add(gTest))
+                    .mul(cCoset[i].add(bTest.mul(s3C[i])).add(gTest))
+                    .mul(zOmC[i]);
+            var permI = bTest.mul(pnC.sub(pdC));
+
+            MontFr254 a2Test = MontFr254.fromLong(17);
+            var startI = a2Test.mul(zCoset[i].sub(MontFr254.ONE)).mul(l1C[i]);
+
+            tCoset[i] = gateI.add(permI).add(startI).mul(zhI.inverse());
+
+            omega4Ni = omega4Ni.mul(omega4N);
+            if (i < n4 - 1) cosetPt = cosetPt.mul(omega4);
+        }
+
+        // Inverse coset FFT to get t(X) coefficients
+        var tCoeffsFromCoset = cosetIFFT(tCoset, shift, n4);
+
+        // Evaluate t at our test zeta
+        MontFr254 tFromCoset = FieldFFT.polyEval(tCoeffsFromCoset, zeta);
+        System.out.println("\nt(zeta) from direct division: " + tZeta.toBigInteger());
+        System.out.println("t(zeta) from coset FFT:       " + tFromCoset.toBigInteger());
+        System.out.println("Match: " + tZeta.equals(tFromCoset));
+        assertEquals(tZeta.toBigInteger(), tFromCoset.toBigInteger(),
+                "Coset FFT t(zeta) must match direct computation");
+    }
+
+    // Helpers for coset FFT
+    private static MontFr254[] cosetEval(MontFr254[] coeffs, MontFr254 shift, int n) {
+        MontFr254[] padded = new MontFr254[n];
+        for (int i = 0; i < n; i++)
+            padded[i] = i < coeffs.length ? coeffs[i].mul(powFr(shift, i)) : MontFr254.ZERO;
+        return FieldFFT.fft(padded);
+    }
+
+    private static MontFr254[] cosetIFFT(MontFr254[] vals, MontFr254 shift, int n) {
+        var coeffs = FieldFFT.ifft(vals);
+        MontFr254 shiftInv = shift.inverse();
+        MontFr254 power = MontFr254.ONE;
+        for (int i = 0; i < coeffs.length; i++) {
+            coeffs[i] = coeffs[i].mul(power);
+            power = power.mul(shiftInv);
+        }
+        return coeffs;
+    }
+
+    private static MontFr254 powFr(MontFr254 base, int exp) {
+        if (exp == 0) return MontFr254.ONE;
+        MontFr254 r = base;
+        for (int i = 1; i < exp; i++) r = r.mul(base);
+        return r;
     }
 }
