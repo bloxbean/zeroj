@@ -100,10 +100,20 @@ public final class R1CSSerializer {
     }
 
     private static void writeFieldElementLE(ByteArrayOutputStream out, BigInteger value, int n8) {
+        if (value.signum() < 0)
+            throw new IllegalArgumentException(
+                    "Field element must be non-negative. Reduce mod p before serializing.");
         byte[] beBytes = value.toByteArray();
+        // BigInteger.toByteArray() may include a leading 0x00 sign byte for positive numbers
+        // whose MSB bit is 1. Strip it before checking the value fits in n8 bytes.
+        int dataStart = (beBytes.length > 0 && beBytes[0] == 0) ? 1 : 0;
+        int dataLen = beBytes.length - dataStart;
+        if (dataLen > n8)
+            throw new IllegalArgumentException("Value too large for " + n8 + "-byte field element: "
+                    + value.bitLength() + " bits");
+        // Copy data bytes (skip sign byte), reversing to little-endian
         byte[] leBytes = new byte[n8];
-        int srcLen = Math.min(beBytes.length, n8);
-        for (int i = 0; i < srcLen; i++) {
+        for (int i = 0; i < dataLen; i++) {
             leBytes[i] = beBytes[beBytes.length - 1 - i];
         }
         out.writeBytes(leBytes);

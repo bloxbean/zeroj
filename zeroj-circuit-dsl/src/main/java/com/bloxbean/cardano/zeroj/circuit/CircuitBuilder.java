@@ -43,6 +43,7 @@ public final class CircuitBuilder {
     private final String name;
     private final List<String> publicVarNames = new ArrayList<>();
     private final List<String> secretVarNames = new ArrayList<>();
+    private final Set<String> declaredNames = new HashSet<>();
     private ConstraintGraph graph;
 
     private CircuitBuilder(String name) {
@@ -56,12 +57,18 @@ public final class CircuitBuilder {
 
     /** Declare a public input variable. */
     public CircuitBuilder publicVar(String name) {
+        Objects.requireNonNull(name, "Variable name must not be null");
+        if (!declaredNames.add(name))
+            throw new IllegalArgumentException("Duplicate variable name: " + name);
         publicVarNames.add(name);
         return this;
     }
 
     /** Declare a secret (private) input variable. */
     public CircuitBuilder secretVar(String name) {
+        Objects.requireNonNull(name, "Variable name must not be null");
+        if (!declaredNames.add(name))
+            throw new IllegalArgumentException("Duplicate variable name: " + name);
         secretVarNames.add(name);
         return this;
     }

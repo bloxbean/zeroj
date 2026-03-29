@@ -189,4 +189,54 @@ class CircuitBuilderTest {
                 "x", List.of(BigInteger.ONE)), CurveId.BLS12_381);
         assertEquals(BigInteger.ONE, witness[1]);
     }
+
+    @Test
+    void duplicatePublicVar_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CircuitBuilder.create("dup").publicVar("a").publicVar("a"));
+    }
+
+    @Test
+    void duplicateSecretVar_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CircuitBuilder.create("dup").secretVar("x").secretVar("x"));
+    }
+
+    @Test
+    void duplicatePublicSecretVar_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CircuitBuilder.create("dup").publicVar("a").secretVar("a"));
+    }
+
+    @Test
+    void nullVarName_throws() {
+        assertThrows(NullPointerException.class, () ->
+                CircuitBuilder.create("test").publicVar(null));
+        assertThrows(NullPointerException.class, () ->
+                CircuitBuilder.create("test").secretVar(null));
+    }
+
+    @Test
+    void toBinary_zeroNBits_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CircuitBuilder.create("bad")
+                        .secretVar("x")
+                        .define(api -> api.toBinary(api.var("x"), 0)));
+    }
+
+    @Test
+    void toBinary_negativeNBits_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CircuitBuilder.create("bad")
+                        .secretVar("x")
+                        .define(api -> api.toBinary(api.var("x"), -1)));
+    }
+
+    @Test
+    void toBinary_exceedsMaxBits_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CircuitBuilder.create("bad")
+                        .secretVar("x")
+                        .define(api -> api.toBinary(api.var("x"), 254)));
+    }
 }

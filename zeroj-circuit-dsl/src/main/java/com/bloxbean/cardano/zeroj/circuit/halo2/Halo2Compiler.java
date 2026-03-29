@@ -34,49 +34,81 @@ public final class Halo2Compiler {
      */
     public static Halo2CircuitSystem compile(ConstraintGraph graph, FieldConfig config) {
         BigInteger p = config.prime();
+        // Normalize constants to field: -1 mod p = p-1
+        BigInteger negOne = NEG_ONE.mod(p);
         int dummyWire = graph.oneWire().id();
 
-        // Build gate rows (same logic as PlonK compiler)
+        // Build gate rows
         List<GateRow> rows = new ArrayList<>();
+        int virtualWireOffset = 0; // offset for intermediate wires created during LinComb chaining
 
         for (var gate : graph.gates()) {
             switch (gate) {
                 case Gate.Add(var out, var left, var right) ->
-                        rows.add(new GateRow(ONE, ONE, NEG_ONE, ZERO, ZERO,
+                        rows.add(new GateRow(ONE, ONE, negOne, ZERO, ZERO,
                                 left.id(), right.id(), out.id()));
 
                 case Gate.Mul(var out, var left, var right) ->
-                        rows.add(new GateRow(ZERO, ZERO, NEG_ONE, ONE, ZERO,
+                        rows.add(new GateRow(ZERO, ZERO, negOne, ONE, ZERO,
                                 left.id(), right.id(), out.id()));
 
                 case Gate.Const(var out, var value) ->
-                        rows.add(new GateRow(ZERO, ZERO, NEG_ONE, ZERO, value.mod(p),
+                        rows.add(new GateRow(ZERO, ZERO, negOne, ZERO, value.mod(p),
                                 dummyWire, dummyWire, out.id()));
 
                 case Gate.AssertEq(var left, var right) ->
-                        rows.add(new GateRow(ONE, NEG_ONE, ZERO, ZERO, ZERO,
+                        rows.add(new GateRow(ONE, negOne, ZERO, ZERO, ZERO,
                                 left.id(), right.id(), dummyWire));
 
                 case Gate.LinComb(var out, var terms) -> {
-                    if (terms.size() >= 2) {
-                        rows.add(new GateRow(
-                                terms.get(0).coefficient().mod(p),
-                                terms.get(1).coefficient().mod(p),
-                                NEG_ONE, ZERO, ZERO,
-                                terms.get(0).variable().id(),
-                                terms.get(1).variable().id(),
-                                out.id()));
+                    if (terms.isEmpty()) {
+                        // output = 0
+                        rows.add(new GateRow(ZERO, ZERO, negOne, ZERO, ZERO,
+                                dummyWire, dummyWire, out.id()));
                     } else if (terms.size() == 1) {
                         rows.add(new GateRow(
-                                terms.getFirst().coefficient().mod(p),
-                                ZERO, NEG_ONE, ZERO, ZERO,
+                                terms.getFirst().coefficient().mod(p), ZERO, negOne, ZERO, ZERO,
                                 terms.getFirst().variable().id(), dummyWire, out.id()));
+                    } else if (terms.size() == 2) {
+                        var t0 = terms.get(0);
+                        var t1 = terms.get(1);
+                        rows.add(new GateRow(
+                                t0.coefficient().mod(p), t1.coefficient().mod(p), negOne, ZERO, ZERO,
+                                t0.variable().id(), t1.variable().id(), out.id()));
+                    } else {
+                        // Chain multi-term LinComb through intermediate addition gates.
+                        // t0+t1 → inter0, inter0+t2 → inter1, ..., interN+tLast → out
+                        var t0 = terms.get(0);
+                        var t1 = terms.get(1);
+                        int intermediateWire = graph.numWires() + virtualWireOffset;
+                        virtualWireOffset++;
+
+                        // First pair → intermediate
+                        rows.add(new GateRow(
+                                t0.coefficient().mod(p), t1.coefficient().mod(p), negOne, ZERO, ZERO,
+                                t0.variable().id(), t1.variable().id(), intermediateWire));
+
+                        // Remaining terms: accumulate running sum + next term
+                        for (int i = 2; i < terms.size(); i++) {
+                            var ti = terms.get(i);
+                            boolean isLast = (i == terms.size() - 1);
+                            int targetWire = isLast ? out.id() : (graph.numWires() + virtualWireOffset);
+                            if (!isLast) virtualWireOffset++;
+
+                            // running_sum * 1 + ti.coeff * ti.wire - target = 0
+                            rows.add(new GateRow(
+                                    ONE, ti.coefficient().mod(p), negOne, ZERO, ZERO,
+                                    intermediateWire, ti.variable().id(), targetWire));
+                            intermediateWire = targetWire;
+                        }
                     }
                 }
 
-                case Gate.Select(var out, _, _, _) ->
-                        rows.add(new GateRow(ZERO, ZERO, NEG_ONE, ZERO, ZERO,
-                                dummyWire, dummyWire, out.id()));
+                case Gate.Select(var out, var cond, var ifTrue, var ifFalse) -> {
+                    // Decomposed into Add/Mul/AssertEq by CircuitAPIImpl, so shouldn't appear.
+                    throw new UnsupportedOperationException(
+                            "Select gate should be decomposed before Halo2 compilation");
+                }
 
                 // Hints and BitDecompose don't create gates
                 case Gate.Hint(_, _, _) -> {}
@@ -105,16 +137,16 @@ public final class Halo2Compiler {
             colC[i] = rows.get(i).wireC;
         }
 
-        // Build fixed selector columns (store selector values as encoded integers)
-        // For serialization, we store the raw BigInteger values
-        int[] fqL = new int[numRows], fqR = new int[numRows], fqO = new int[numRows];
-        int[] fqM = new int[numRows], fqC = new int[numRows];
+        // Build fixed selector columns (BigInteger values — no truncation)
+        BigInteger[] fqL = new BigInteger[numRows], fqR = new BigInteger[numRows];
+        BigInteger[] fqO = new BigInteger[numRows], fqM = new BigInteger[numRows];
+        BigInteger[] fqC = new BigInteger[numRows];
         for (int i = 0; i < numRows; i++) {
-            fqL[i] = rows.get(i).qL.intValue();
-            fqR[i] = rows.get(i).qR.intValue();
-            fqO[i] = rows.get(i).qO.intValue();
-            fqM[i] = rows.get(i).qM.intValue();
-            fqC[i] = rows.get(i).qC.intValue();
+            fqL[i] = rows.get(i).qL;
+            fqR[i] = rows.get(i).qR;
+            fqO[i] = rows.get(i).qO;
+            fqM[i] = rows.get(i).qM;
+            fqC[i] = rows.get(i).qC;
         }
 
         // Build permutation cycles
@@ -139,16 +171,16 @@ public final class Halo2Compiler {
         return new Halo2CircuitSystem(
                 config, numRows, graph.publicInputs().size(),
                 List.of(
-                        new Halo2CircuitSystem.Column("a", colA),
-                        new Halo2CircuitSystem.Column("b", colB),
-                        new Halo2CircuitSystem.Column("c", colC)),
+                        new Halo2CircuitSystem.AdviceColumn("a", colA),
+                        new Halo2CircuitSystem.AdviceColumn("b", colB),
+                        new Halo2CircuitSystem.AdviceColumn("c", colC)),
                 List.of(
-                        new Halo2CircuitSystem.Column("qL", fqL),
-                        new Halo2CircuitSystem.Column("qR", fqR),
-                        new Halo2CircuitSystem.Column("qO", fqO),
-                        new Halo2CircuitSystem.Column("qM", fqM),
-                        new Halo2CircuitSystem.Column("qC", fqC)),
-                cycles, k);
+                        new Halo2CircuitSystem.SelectorColumn("qL", fqL),
+                        new Halo2CircuitSystem.SelectorColumn("qR", fqR),
+                        new Halo2CircuitSystem.SelectorColumn("qO", fqO),
+                        new Halo2CircuitSystem.SelectorColumn("qM", fqM),
+                        new Halo2CircuitSystem.SelectorColumn("qC", fqC)),
+                cycles, k, graph.numWires() + virtualWireOffset);
     }
 
     /** Internal gate row representation. */

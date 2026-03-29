@@ -8,6 +8,11 @@ import java.util.*;
  */
 class CircuitAPIImpl implements CircuitAPI {
 
+    // Max bit decomposition: 253 for BN254, safe upper bound for all supported curves.
+    // BN254 ~253.6 bits, BLS12-381 ~254.8 bits, Pallas ~254.9 bits.
+    // We use 253 because it's the tightest constraint (BN254 field order < 2^254).
+    static final int MAX_SAFE_BITS = 253;
+
     private final List<Gate> gates = new ArrayList<>();
     private final Map<String, Variable> namedVars = new LinkedHashMap<>();
     private final Map<BigInteger, Variable> constantCache = new HashMap<>();
@@ -129,6 +134,8 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public Variable[] toBinary(Variable a, int nBits) {
+        if (nBits <= 0 || nBits > MAX_SAFE_BITS)
+            throw new IllegalArgumentException("nBits must be in [1, " + MAX_SAFE_BITS + "], got " + nBits);
         var bits = new Variable[nBits];
         for (int i = 0; i < nBits; i++) {
             bits[i] = newIntermediate();
@@ -226,6 +233,9 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public Variable lessThan(Variable a, Variable b, int nBits) {
+        if (nBits <= 0 || nBits >= MAX_SAFE_BITS)
+            throw new IllegalArgumentException(
+                    "lessThan nBits must be in [1, " + (MAX_SAFE_BITS - 1) + "], got " + nBits);
         // diff = (2^nBits - 1) + b - a.
         // If a < b: diff >= 2^nBits, MSB of (nBits+1)-bit decomposition is 1
         // If a == b: diff = 2^nBits - 1 < 2^nBits, MSB is 0
