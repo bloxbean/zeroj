@@ -12,10 +12,14 @@ import (
 	"os"
 	"path/filepath"
 
+	crypto_sha256 "crypto/sha256"
+	"hash"
+
 	"github.com/consensys/gnark-crypto/ecc"
 	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	bls12381_fr "github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
 	bls12381_kzg "github.com/consensys/gnark-crypto/ecc/bls12-381/kzg"
+	fiatshamir "github.com/consensys/gnark-crypto/fiat-shamir"
 	"github.com/consensys/gnark/backend/plonk"
 	plonk_bls12381 "github.com/consensys/gnark/backend/plonk/bls12-381"
 	"github.com/consensys/gnark/backend/witness"
@@ -324,9 +328,47 @@ func exportCardanoPlonkData(path string, proof plonk.Proof, vk plonk.VerifyingKe
 		}
 	}
 
+	// Export Fiat-Shamir challenges by reproducing gnark's transcript derivation.
+	// This enables the on-chain verifier to validate its transcript implementation.
+	challenges := extractFiatShamirChallenges(concreteProof, concreteVk, publicWit)
+	if challenges != nil {
+		data["challenges"] = challenges
+		fmt.Println("  Exported Fiat-Shamir challenge values for transcript validation")
+	}
+
+	// Also export the G1 uncompressed (RawBytes) representations used in the transcript
+	data["proof_uncompressed"] = map[string]string{
+		"cmL_raw": g1UncompressedHex(concreteProof.LRO[0]),
+		"cmR_raw": g1UncompressedHex(concreteProof.LRO[1]),
+		"cmO_raw": g1UncompressedHex(concreteProof.LRO[2]),
+		"cmZ_raw": g1UncompressedHex(concreteProof.Z),
+		"cmH0_raw": g1UncompressedHex(concreteProof.H[0]),
+		"cmH1_raw": g1UncompressedHex(concreteProof.H[1]),
+		"cmH2_raw": g1UncompressedHex(concreteProof.H[2]),
+	}
+
+	// Export VK uncompressed (Marshal = RawBytes = 96 bytes) for Fiat-Shamir transcript
+	data["vk_uncompressed"] = map[string]string{
+		"s1_raw": g1UncompressedHex(concreteVk.S[0]),
+		"s2_raw": g1UncompressedHex(concreteVk.S[1]),
+		"s3_raw": g1UncompressedHex(concreteVk.S[2]),
+		"ql_raw": g1UncompressedHex(concreteVk.Ql),
+		"qr_raw": g1UncompressedHex(concreteVk.Qr),
+		"qm_raw": g1UncompressedHex(concreteVk.Qm),
+		"qo_raw": g1UncompressedHex(concreteVk.Qo),
+		"qk_raw": g1UncompressedHex(concreteVk.Qk),
+	}
+
+	// Export VK domain parameters needed for on-chain verification
+	data["vk_params"] = map[string]string{
+		"generator": frToDecimal(concreteVk.Generator),
+		"sizeInv":   frToDecimal(concreteVk.SizeInv),
+		"cosetShift": frToDecimal(concreteVk.CosetShift),
+	}
+
 	jsonBytes2, _ := json.MarshalIndent(data, "", "  ")
 	os.WriteFile(path, jsonBytes2, 0o644)
-	fmt.Println("  Exported plonk_cardano.json (decomposed proof points + pairing inputs)")
+	fmt.Println("  Exported plonk_cardano.json (decomposed proof points + challenges + pairing inputs)")
 }
 
 // computePairingInputs extracts the two G1 pairing input points from a PlonK proof
@@ -375,6 +417,109 @@ func computePairingInputs(proof *plonk_bls12381.Proof, vk *plonk_bls12381.Verify
 	shiftedH.FromAffine((*bls12381.G1Affine)(&proof.ZShiftedOpening.H))
 
 	return &lhs, &shiftedH
+}
+
+// extractFiatShamirChallenges reproduces gnark's exact Fiat-Shamir transcript
+// to export the intermediate challenge values (gamma, beta, alpha, zeta).
+// This enables byte-by-byte validation of on-chain transcript implementations.
+func extractFiatShamirChallenges(proof *plonk_bls12381.Proof, vk *plonk_bls12381.VerifyingKey, publicWit witness.Witness) map[string]interface{} {
+	// Use the same fiatshamir transcript as gnark's verifier
+	fs := fiatshamir.NewTranscript(sha256Hash(), "gamma", "beta", "alpha", "zeta")
+
+	// Bind public data to "gamma" challenge (same as bindPublicData in verify.go)
+	// Permutation
+	fs.Bind("gamma", vk.S[0].Marshal())
+	fs.Bind("gamma", vk.S[1].Marshal())
+	fs.Bind("gamma", vk.S[2].Marshal())
+	// Coefficients
+	fs.Bind("gamma", vk.Ql.Marshal())
+	fs.Bind("gamma", vk.Qr.Marshal())
+	fs.Bind("gamma", vk.Qm.Marshal())
+	fs.Bind("gamma", vk.Qo.Marshal())
+	fs.Bind("gamma", vk.Qk.Marshal())
+	// Public inputs
+	pubVec := publicWit.Vector().(bls12381_fr.Vector)
+	for _, fe := range pubVec {
+		fs.Bind("gamma", fe.Marshal())
+	}
+	// Proof commitments L, R, O (uncompressed RawBytes)
+	var buf [bls12381.SizeOfG1AffineUncompressed]byte
+	buf = (*bls12381.G1Affine)(&proof.LRO[0]).RawBytes()
+	fs.Bind("gamma", buf[:])
+	buf = (*bls12381.G1Affine)(&proof.LRO[1]).RawBytes()
+	fs.Bind("gamma", buf[:])
+	buf = (*bls12381.G1Affine)(&proof.LRO[2]).RawBytes()
+	fs.Bind("gamma", buf[:])
+
+	gammaBytes, err := fs.ComputeChallenge("gamma")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to compute gamma: %v\n", err)
+		return nil
+	}
+	var gammaFr bls12381_fr.Element
+	gammaFr.SetBytes(gammaBytes)
+
+	// beta (no additional bindings — just name + previous challenge)
+	betaBytes, err := fs.ComputeChallenge("beta")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to compute beta: %v\n", err)
+		return nil
+	}
+	var betaFr bls12381_fr.Element
+	betaFr.SetBytes(betaBytes)
+
+	// alpha (bind Z commitment)
+	buf = (*bls12381.G1Affine)(&proof.Z).RawBytes()
+	fs.Bind("alpha", buf[:])
+	alphaBytes, err := fs.ComputeChallenge("alpha")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to compute alpha: %v\n", err)
+		return nil
+	}
+	var alphaFr bls12381_fr.Element
+	alphaFr.SetBytes(alphaBytes)
+
+	// zeta (bind H0, H1, H2 commitments)
+	buf = (*bls12381.G1Affine)(&proof.H[0]).RawBytes()
+	fs.Bind("zeta", buf[:])
+	buf = (*bls12381.G1Affine)(&proof.H[1]).RawBytes()
+	fs.Bind("zeta", buf[:])
+	buf = (*bls12381.G1Affine)(&proof.H[2]).RawBytes()
+	fs.Bind("zeta", buf[:])
+	zetaBytes, err := fs.ComputeChallenge("zeta")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to compute zeta: %v\n", err)
+		return nil
+	}
+	var zetaFr bls12381_fr.Element
+	zetaFr.SetBytes(zetaBytes)
+
+	fmt.Printf("  Fiat-Shamir challenges (hex):\n")
+	fmt.Printf("    gamma: %s\n", hex.EncodeToString(gammaBytes))
+	fmt.Printf("    beta:  %s\n", hex.EncodeToString(betaBytes))
+	fmt.Printf("    alpha: %s\n", hex.EncodeToString(alphaBytes))
+	fmt.Printf("    zeta:  %s\n", hex.EncodeToString(zetaBytes))
+
+	return map[string]interface{}{
+		"gamma": frToDecimal(gammaFr),
+		"beta":  frToDecimal(betaFr),
+		"alpha": frToDecimal(alphaFr),
+		"zeta":  frToDecimal(zetaFr),
+		"_note": "Derived using gnark's fiatshamir.Transcript with SHA-256. " +
+			"Transcript format: SHA-256(challenge_name || previous_challenge_hash || bindings...). " +
+			"VK points use Marshal() (compressed 48 bytes). Proof G1 points use RawBytes() (uncompressed 96 bytes). " +
+			"Challenge order: gamma(0) -> beta(1) -> alpha(2) -> zeta(3).",
+	}
+}
+
+func sha256Hash() hash.Hash {
+	return crypto_sha256.New()
+}
+
+func g1UncompressedHex(p bls12381_kzg.Digest) string {
+	g1 := bls12381.G1Affine(p)
+	raw := g1.RawBytes()
+	return hex.EncodeToString(raw[:])
 }
 
 func g1CompressedHex(p bls12381_kzg.Digest) string {
