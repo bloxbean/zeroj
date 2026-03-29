@@ -1,10 +1,12 @@
 rootProject.name = 'zeroj'
 
+// === Core modules ===
 include 'zeroj-api'
 include 'zeroj-codec'
 include 'zeroj-backend-spi'
 include 'zeroj-verifier-core'
 include 'zeroj-verifier-groth16'
+include 'zeroj-verifier-plonk'
 include 'zeroj-blst'
 include 'zeroj-test-vectors'
 include 'zeroj-submission'
@@ -12,14 +14,25 @@ include 'zeroj-ingestion'
 include 'zeroj-cardano'
 include 'zeroj-ccl'
 include 'zeroj-patterns'
-include 'zeroj-prover-sidecar'
-include 'zeroj-prover-rapidsnark'
-include 'zeroj-prover-gnark'
-include 'zeroj-verifier-halo2'
-include 'zeroj-verifier-plonk'
-include 'zeroj-onchain-experimental'
-include 'zeroj-prover-wasm'
 include 'zeroj-circuit-dsl'
 include 'zeroj-circuit-lib'
+include 'zeroj-prover-gnark'
+include 'zeroj-onchain-julc'
 include 'zeroj-examples'
 include 'zeroj-bom'
+
+// === Incubator modules (experimental, alternative backends) ===
+include 'zeroj-prover-rapidsnark'
+project(':zeroj-prover-rapidsnark').projectDir = file('incubator/zeroj-prover-rapidsnark')
+
+include 'zeroj-prover-sidecar'
+project(':zeroj-prover-sidecar').projectDir = file('incubator/zeroj-prover-sidecar')
+
+include 'zeroj-prover-wasm'
+project(':zeroj-prover-wasm').projectDir = file('incubator/zeroj-prover-wasm')
+
+include 'zeroj-verifier-halo2'
+project(':zeroj-verifier-halo2').projectDir = file('incubator/zeroj-verifier-halo2')
+
+include 'zeroj-onchain-experimental'
+project(':zeroj-onchain-experimental').projectDir = file('incubator/zeroj-onchain-experimental')

@@ -30,15 +30,15 @@ public final class R1CSSerializer {
             writeUint32LE(out, 1); // version
             writeUint32LE(out, 3); // numSections
 
-            // Section 1: Header (type=2)
+            // Section 1: Header (iden3 section type = 1)
             byte[] headerSection = buildHeaderSection(r1cs, n8);
-            writeUint32LE(out, 2); // sectionType = Header
+            writeUint32LE(out, 1); // sectionType = Header
             writeUint64LE(out, headerSection.length);
             out.write(headerSection);
 
-            // Section 2: Constraints (type=1)
+            // Section 2: Constraints (iden3 section type = 2)
             byte[] constraintSection = buildConstraintSection(r1cs, n8);
-            writeUint32LE(out, 1); // sectionType = Constraints
+            writeUint32LE(out, 2); // sectionType = Constraints
             writeUint64LE(out, constraintSection.length);
             out.write(constraintSection);
 

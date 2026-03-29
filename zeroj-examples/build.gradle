@@ -5,6 +5,20 @@ plugins {
 
 description = 'ZeroJ end-to-end examples and demos'
 
+ext {
+    julcVersion = '0.1.0-pre10-7c66301-SNAPSHOT'
+    cclVersion = '0.8.0-pre2'
+}
+
+repositories {
+    maven {
+        url = uri("https://central.sonatype.com/repository/maven-snapshots")
+        content {
+            snapshotsOnly()
+        }
+    }
+}
+
 dependencies {
     implementation project(':zeroj-api')
     implementation project(':zeroj-codec')
@@ -13,14 +27,53 @@ dependencies {
     implementation project(':zeroj-verifier-groth16')
     implementation project(':zeroj-verifier-plonk')
     implementation project(':zeroj-prover-gnark')
+    implementation project(':zeroj-prover-wasm')
+    implementation project(':zeroj-circuit-dsl')
+    implementation project(':zeroj-circuit-lib')
     implementation project(':zeroj-submission')
     implementation project(':zeroj-ingestion')
     implementation project(':zeroj-cardano')
     implementation project(':zeroj-ccl')
     implementation project(':zeroj-patterns')
     implementation project(':zeroj-test-vectors')
+
+    // On-chain verifier module (Julc-based Plutus V3 validators)
+    implementation project(':zeroj-onchain-julc')
+
+    // Julc for on-chain compilation
+    implementation "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
+    annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
+
+    // Cardano Client Lib for tx building in E2E tests
+    testImplementation "com.bloxbean.cardano:cardano-client-lib:${cclVersion}"
+    testImplementation "com.bloxbean.cardano:cardano-client-backend-blockfrost:${cclVersion}"
+    testImplementation "com.bloxbean.cardano:julc-cardano-client-lib:${julcVersion}"
+    testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
+    testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
 }
 
 application {
     mainClass = 'com.bloxbean.cardano.zeroj.examples.EndToEndDemo'
+}
+
+test {
+    useJUnitPlatform {
+        excludeTags 'e2e'
+    }
+}
+
+// E2E integration tests — requires Yaci DevKit running locally
+// Run with: ./gradlew :zeroj-examples:e2eTest
+tasks.register('e2eTest', Test) {
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'e2e'
+    }
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    maxHeapSize = '1g'
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
 }

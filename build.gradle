@@ -80,7 +80,7 @@ subprojects {
     }
 
     // Publishing for publishable modules
-    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples']
+    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples', 'zeroj-prover-rapidsnark']
     if (!nonPublishable.contains(project.name)) {
         apply plugin: 'maven-publish'
         apply plugin: 'signing'

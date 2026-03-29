@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -22,6 +23,9 @@ import (
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/backend/plonk"
 	"github.com/consensys/gnark/backend/witness"
+	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/frontend/cs/r1cs"
+	"github.com/consensys/gnark/frontend/cs/scs"
 	"github.com/consensys/gnark/test/unsafekzg"
 )
 
@@ -398,15 +402,319 @@ func serializePublicWitness(wit witness.Witness, curve ecc.ID) (string, error) {
 	return string(jsonBytes), nil
 }
 
+// getFieldSize returns the byte size of a scalar field element (Fr) for the given curve.
+// gnark witness serialization uses Fr elements, NOT base field (Fq) elements.
+// BN254 Fr: 254 bits → 32 bytes. BLS12-381 Fr: 255 bits → 32 bytes.
 func getFieldSize(curve ecc.ID) int {
 	switch curve {
 	case ecc.BN254:
 		return 32
 	case ecc.BLS12_381:
-		return 48
+		return 32
 	default:
 		return 32
 	}
+}
+
+// ============================================================
+// Generic R1CS circuit — replays constraints via gnark frontend
+// ============================================================
+
+// R1CS constraint input from Java: each linear combination is a map of wireIdx→coefficient
+type R1CSConstraintJSON struct {
+	A map[string]string `json:"a"`
+	B map[string]string `json:"b"`
+	C map[string]string `json:"c"`
+}
+
+// Full R1CS input from Java
+type R1CSInput struct {
+	NumPublic   int                  `json:"numPublic"`
+	NumWires    int                  `json:"numWires"`
+	Constraints []R1CSConstraintJSON `json:"constraints"`
+}
+
+// Witness values input from Java (wire values excluding wire 0)
+type WitnessInput struct {
+	NumPublic int      `json:"numPublic"`
+	Values    []string `json:"values"` // values for wires 1..numWires-1
+}
+
+// GenericR1CS is a gnark circuit that replays R1CS constraints.
+// Public/Secret slices match the iden3 wire layout (excluding wire 0).
+type GenericR1CS struct {
+	Public []frontend.Variable `gnark:",public"`
+	Secret []frontend.Variable
+	data   *R1CSInput // constraint data, used during Define() only
+}
+
+func (c *GenericR1CS) Define(api frontend.API) error {
+	numPublic := len(c.Public)
+
+	// Wire mapping: wire 0 = constant 1, wires 1..numPublic = Public, rest = Secret
+	wires := make([]frontend.Variable, c.data.NumWires)
+	wires[0] = frontend.Variable(1)
+	for i := 0; i < numPublic; i++ {
+		wires[i+1] = c.Public[i]
+	}
+	for i := 0; i < len(c.Secret); i++ {
+		wires[numPublic+1+i] = c.Secret[i]
+	}
+
+	for _, con := range c.data.Constraints {
+		a := buildLC(api, wires, con.A)
+		b := buildLC(api, wires, con.B)
+		cc := buildLC(api, wires, con.C)
+		api.AssertIsEqual(api.Mul(a, b), cc)
+	}
+	return nil
+}
+
+func buildLC(api frontend.API, wires []frontend.Variable, terms map[string]string) frontend.Variable {
+	if len(terms) == 0 {
+		return frontend.Variable(0)
+	}
+	var result frontend.Variable
+	first := true
+	for wireIdxStr, coeffStr := range terms {
+		wireIdx, _ := strconv.Atoi(wireIdxStr)
+		coeff, _ := new(big.Int).SetString(coeffStr, 10)
+		term := api.Mul(wires[wireIdx], coeff)
+		if first {
+			result = term
+			first = false
+		} else {
+			result = api.Add(result, term)
+		}
+	}
+	return result
+}
+
+// compileAndProveGroth16 compiles the circuit via gnark's frontend, then runs setup + prove.
+func compileAndProveGroth16(curve ecc.ID, r1csData *R1CSInput, witnessData *WitnessInput) (
+	proof groth16.Proof, vk groth16.VerifyingKey, wit witness.Witness, provingMs int64, err error) {
+
+	numPublic := r1csData.NumPublic
+	numSecret := r1csData.NumWires - numPublic - 1
+
+	// 1. Compile circuit
+	circuit := &GenericR1CS{
+		Public: make([]frontend.Variable, numPublic),
+		Secret: make([]frontend.Variable, numSecret),
+		data:   r1csData,
+	}
+	cs, err := frontend.Compile(curve.ScalarField(), r1cs.NewBuilder, circuit)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("compilation failed: %v", err)
+	}
+
+	// 2. Build witness assignment
+	assignment := &GenericR1CS{
+		Public: make([]frontend.Variable, numPublic),
+		Secret: make([]frontend.Variable, numSecret),
+	}
+	for i := 0; i < numPublic; i++ {
+		val, ok := new(big.Int).SetString(witnessData.Values[i], 10)
+		if !ok {
+			return nil, nil, nil, 0, fmt.Errorf("invalid public witness value at %d", i)
+		}
+		assignment.Public[i] = val
+	}
+	for i := 0; i < numSecret; i++ {
+		val, ok := new(big.Int).SetString(witnessData.Values[numPublic+i], 10)
+		if !ok {
+			return nil, nil, nil, 0, fmt.Errorf("invalid secret witness value at %d", i)
+		}
+		assignment.Secret[i] = val
+	}
+
+	wit, err = frontend.NewWitness(assignment, curve.ScalarField())
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("failed to build witness: %v", err)
+	}
+
+	// 3. Setup
+	var pk groth16.ProvingKey
+	pk, vk, err = groth16.Setup(cs)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("setup failed: %v", err)
+	}
+
+	// 4. Prove
+	start := time.Now()
+	proof, err = groth16.Prove(cs, pk, wit)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("proving failed: %v", err)
+	}
+	provingMs = time.Since(start).Milliseconds()
+	return
+}
+
+// compileAndProvePlonk compiles the circuit via gnark's frontend for PlonK, then runs setup + prove.
+func compileAndProvePlonk(curve ecc.ID, r1csData *R1CSInput, witnessData *WitnessInput) (
+	proof plonk.Proof, vk plonk.VerifyingKey, wit witness.Witness, provingMs int64, err error) {
+
+	numPublic := r1csData.NumPublic
+	numSecret := r1csData.NumWires - numPublic - 1
+
+	// 1. Compile circuit (PlonK uses SparseR1CS builder)
+	circuit := &GenericR1CS{
+		Public: make([]frontend.Variable, numPublic),
+		Secret: make([]frontend.Variable, numSecret),
+		data:   r1csData,
+	}
+	cs, err := frontend.Compile(curve.ScalarField(), scs.NewBuilder, circuit)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("plonk compilation failed: %v", err)
+	}
+
+	// 2. Build witness assignment
+	assignment := &GenericR1CS{
+		Public: make([]frontend.Variable, numPublic),
+		Secret: make([]frontend.Variable, numSecret),
+	}
+	for i := 0; i < numPublic; i++ {
+		val, ok := new(big.Int).SetString(witnessData.Values[i], 10)
+		if !ok {
+			return nil, nil, nil, 0, fmt.Errorf("invalid public witness value at %d", i)
+		}
+		assignment.Public[i] = val
+	}
+	for i := 0; i < numSecret; i++ {
+		val, ok := new(big.Int).SetString(witnessData.Values[numPublic+i], 10)
+		if !ok {
+			return nil, nil, nil, 0, fmt.Errorf("invalid secret witness value at %d", i)
+		}
+		assignment.Secret[i] = val
+	}
+
+	wit, err = frontend.NewWitness(assignment, curve.ScalarField())
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("failed to build witness: %v", err)
+	}
+
+	// 3. Generate SRS + Setup
+	srsInst, srsLagrange, err := unsafekzg.NewSRS(cs)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("failed to generate SRS: %v", err)
+	}
+
+	var pk plonk.ProvingKey
+	pk, vk, err = plonk.Setup(cs, srsInst, srsLagrange)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("plonk setup failed: %v", err)
+	}
+
+	// 4. Prove
+	start := time.Now()
+	proof, err = plonk.Prove(cs, pk, wit)
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("plonk proving failed: %v", err)
+	}
+	provingMs = time.Since(start).Milliseconds()
+	return
+}
+
+// ============================================================
+// Groth16 full prove: JSON constraints + JSON witness → proof
+// ============================================================
+
+//export zeroj_groth16_fullprove
+func zeroj_groth16_fullprove(
+	curveCStr *C.char, constraintsJsonC *C.char, valuesJsonC *C.char,
+	proofOut **C.char, publicOut **C.char, vkOut **C.char, errorOut **C.char,
+) C.int {
+	curve, err := parseCurve(C.GoString(curveCStr))
+	if err != nil {
+		*errorOut = C.CString(err.Error())
+		return PROVER_ERROR
+	}
+
+	var r1csData R1CSInput
+	if err := json.Unmarshal([]byte(C.GoString(constraintsJsonC)), &r1csData); err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to parse constraints JSON: %v", err))
+		return PROVER_ERROR
+	}
+
+	var witnessData WitnessInput
+	if err := json.Unmarshal([]byte(C.GoString(valuesJsonC)), &witnessData); err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to parse witness JSON: %v", err))
+		return PROVER_ERROR
+	}
+
+	proof, vk, wit, provingMs, err := compileAndProveGroth16(curve, &r1csData, &witnessData)
+	if err != nil {
+		*errorOut = C.CString(err.Error())
+		return PROVER_ERROR
+	}
+
+	return writeFullProveResult(proof, vk, wit, curve, provingMs, "groth16", proofOut, publicOut, vkOut, errorOut)
+}
+
+// ============================================================
+// PlonK full prove: JSON constraints + JSON witness → proof
+// ============================================================
+
+//export zeroj_plonk_fullprove
+func zeroj_plonk_fullprove(
+	curveCStr *C.char, constraintsJsonC *C.char, valuesJsonC *C.char,
+	proofOut **C.char, publicOut **C.char, vkOut **C.char, errorOut **C.char,
+) C.int {
+	curve, err := parseCurve(C.GoString(curveCStr))
+	if err != nil {
+		*errorOut = C.CString(err.Error())
+		return PROVER_ERROR
+	}
+
+	var r1csData R1CSInput
+	if err := json.Unmarshal([]byte(C.GoString(constraintsJsonC)), &r1csData); err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to parse constraints JSON: %v", err))
+		return PROVER_ERROR
+	}
+
+	var witnessData WitnessInput
+	if err := json.Unmarshal([]byte(C.GoString(valuesJsonC)), &witnessData); err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to parse witness JSON: %v", err))
+		return PROVER_ERROR
+	}
+
+	proof, vk, wit, provingMs, err := compileAndProvePlonk(curve, &r1csData, &witnessData)
+	if err != nil {
+		*errorOut = C.CString(err.Error())
+		return PROVER_ERROR
+	}
+
+	return writeFullProveResult(proof, vk, wit, curve, provingMs, "plonk", proofOut, publicOut, vkOut, errorOut)
+}
+
+func writeFullProveResult(proof writerTo, vk writerTo, wit witness.Witness, curve ecc.ID,
+	provingMs int64, protocol string,
+	proofOut **C.char, publicOut **C.char, vkOut **C.char, errorOut **C.char) C.int {
+
+	proofJSON, err := serializeTo(proof, protocol)
+	if err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to serialize proof: %v", err))
+		return PROVER_ERROR
+	}
+
+	publicJSON, err := serializePublicWitness(wit, curve)
+	if err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to serialize public witness: %v", err))
+		return PROVER_ERROR
+	}
+
+	vkJSON, err := serializeTo(vk, protocol)
+	if err != nil {
+		*errorOut = C.CString(fmt.Sprintf("failed to serialize vk: %v", err))
+		return PROVER_ERROR
+	}
+
+	result := ProveResult{ProofJSON: proofJSON, PublicJSON: publicJSON, ProvingMs: provingMs}
+	resultBytes, _ := json.Marshal(result)
+	*proofOut = C.CString(string(resultBytes))
+	*publicOut = C.CString(publicJSON)
+	*vkOut = C.CString(vkJSON)
+	return PROVER_OK
 }
 
 func main() {}

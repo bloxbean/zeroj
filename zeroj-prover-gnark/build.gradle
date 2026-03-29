@@ -18,6 +18,7 @@ dependencies {
     api project(':zeroj-codec')
     api project(':zeroj-backend-spi')
     api project(':zeroj-prover-sidecar')
+    api project(':zeroj-circuit-dsl')
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 
     testImplementation project(':zeroj-test-vectors')

@@ -19,11 +19,20 @@ public final class GnarkLibrary implements AutoCloseable {
 
     private static final int PROVER_OK = 0;
 
-    private final Arena libraryArena;
+    // Go's runtime is process-global and cannot be re-initialized after dlclose.
+    // Use a single long-lived arena so the shared library stays loaded for the
+    // lifetime of the JVM.  Individual GnarkLibrary / GnarkProver instances
+    // share this arena; close() is intentionally a no-op.
+    private static final Arena LIBRARY_ARENA = Arena.ofShared();
+    private static volatile SymbolLookup cachedLookup;
+    private static volatile Path cachedLookupPath;
+
     private final MethodHandle groth16Prove;
     private final MethodHandle groth16Setup;
+    private final MethodHandle groth16FullProve;
     private final MethodHandle plonkSetup;
     private final MethodHandle plonkProve;
+    private final MethodHandle plonkFullProve;
     private final MethodHandle plonkVerify;
     private final MethodHandle gnarkVersion;
     private final MethodHandle free;
@@ -43,9 +52,7 @@ public final class GnarkLibrary implements AutoCloseable {
      * @param libraryPath path to {@code libzeroj_gnark.so} or {@code libzeroj_gnark.dylib}
      */
     public GnarkLibrary(Path libraryPath) {
-        this.libraryArena = Arena.ofShared();
-
-        SymbolLookup lookup = SymbolLookup.libraryLookup(libraryPath, libraryArena);
+        SymbolLookup lookup = getOrLoadLookup(libraryPath);
         Linker linker = Linker.nativeLinker();
 
         // zeroj_groth16_prove(curve, r1cs_path, pk_path, witness_json,
@@ -77,6 +84,22 @@ public final class GnarkLibrary implements AutoCloseable {
                         ValueLayout.ADDRESS      // error_out
                 ));
 
+        // zeroj_groth16_fullprove(curve, r1cs_path, values_json,
+        //                        proof_out**, public_out**, vk_out**, error_out**) -> int
+        this.groth16FullProve = linker.downcallHandle(
+                lookup.find("zeroj_groth16_fullprove").orElseThrow(
+                        () -> new IllegalStateException("Symbol 'zeroj_groth16_fullprove' not found")),
+                FunctionDescriptor.of(
+                        ValueLayout.JAVA_INT,    // return
+                        ValueLayout.ADDRESS,     // curve
+                        ValueLayout.ADDRESS,     // r1cs_path
+                        ValueLayout.ADDRESS,     // values_json
+                        ValueLayout.ADDRESS,     // proof_out
+                        ValueLayout.ADDRESS,     // public_out
+                        ValueLayout.ADDRESS,     // vk_out
+                        ValueLayout.ADDRESS      // error_out
+                ));
+
         // zeroj_plonk_setup(curve, r1cs_path, pk_path_out**, vk_out**, error_out**) -> int
         this.plonkSetup = linker.downcallHandle(
                 lookup.find("zeroj_plonk_setup").orElseThrow(
@@ -103,6 +126,22 @@ public final class GnarkLibrary implements AutoCloseable {
                         ValueLayout.ADDRESS,     // witness_path
                         ValueLayout.ADDRESS,     // proof_out
                         ValueLayout.ADDRESS,     // public_out
+                        ValueLayout.ADDRESS      // error_out
+                ));
+
+        // zeroj_plonk_fullprove(curve, r1cs_path, values_json,
+        //                      proof_out**, public_out**, vk_out**, error_out**) -> int
+        this.plonkFullProve = linker.downcallHandle(
+                lookup.find("zeroj_plonk_fullprove").orElseThrow(
+                        () -> new IllegalStateException("Symbol 'zeroj_plonk_fullprove' not found")),
+                FunctionDescriptor.of(
+                        ValueLayout.JAVA_INT,    // return
+                        ValueLayout.ADDRESS,     // curve
+                        ValueLayout.ADDRESS,     // r1cs_path
+                        ValueLayout.ADDRESS,     // values_json
+                        ValueLayout.ADDRESS,     // proof_out
+                        ValueLayout.ADDRESS,     // public_out
+                        ValueLayout.ADDRESS,     // vk_out
                         ValueLayout.ADDRESS      // error_out
                 ));
 
@@ -384,6 +423,90 @@ public final class GnarkLibrary implements AutoCloseable {
     }
 
     /**
+     * Result of a full prove operation (setup + prove in one call).
+     *
+     * @param resultJson proof result JSON (proof binary + timing)
+     * @param publicJson public witness JSON
+     * @param vkJson     verification key JSON
+     */
+    public record FullProveResult(String resultJson, String publicJson, String vkJson) {}
+
+    /**
+     * Groth16 full prove: reads iden3 R1CS, builds witness from JSON values,
+     * runs setup + prove in a single FFM call.
+     *
+     * @param curve      curve identifier ("bls12381" or "bn254")
+     * @param r1csPath   path to the iden3 .r1cs file
+     * @param valuesJson JSON witness values: {"numPublic": N, "values": ["1", "33", ...]}
+     * @return full prove result
+     * @throws ProverException if proving fails
+     */
+    public FullProveResult groth16FullProve(String curve, String r1csPath, String valuesJson) {
+        return invokeFullProve(groth16FullProve, curve, r1csPath, valuesJson, "zeroj_groth16_fullprove");
+    }
+
+    /**
+     * PlonK full prove: reads SparseR1CS, builds witness from JSON values,
+     * runs SRS generation + setup + prove in a single FFM call.
+     *
+     * @param curve      curve identifier ("bls12381" or "bn254")
+     * @param r1csPath   path to the SparseR1CS file
+     * @param valuesJson JSON witness values: {"numPublic": N, "values": ["1", "33", ...]}
+     * @return full prove result
+     * @throws ProverException if proving fails
+     */
+    public FullProveResult plonkFullProve(String curve, String r1csPath, String valuesJson) {
+        return invokeFullProve(plonkFullProve, curve, r1csPath, valuesJson, "zeroj_plonk_fullprove");
+    }
+
+    private FullProveResult invokeFullProve(MethodHandle handle, String curve, String r1csPath,
+                                            String valuesJson, String fnName) {
+        try (var arena = Arena.ofConfined()) {
+            MemorySegment curveStr = arena.allocateFrom(curve, StandardCharsets.UTF_8);
+            MemorySegment r1csStr = arena.allocateFrom(r1csPath, StandardCharsets.UTF_8);
+            MemorySegment valuesStr = arena.allocateFrom(valuesJson, StandardCharsets.UTF_8);
+
+            MemorySegment proofOutPtr = arena.allocate(ValueLayout.ADDRESS);
+            MemorySegment publicOutPtr = arena.allocate(ValueLayout.ADDRESS);
+            MemorySegment vkOutPtr = arena.allocate(ValueLayout.ADDRESS);
+            MemorySegment errorOutPtr = arena.allocate(ValueLayout.ADDRESS);
+
+            int result = (int) handle.invokeExact(
+                    curveStr, r1csStr, valuesStr,
+                    proofOutPtr, publicOutPtr, vkOutPtr, errorOutPtr);
+
+            if (result != PROVER_OK) {
+                MemorySegment errorPtr = errorOutPtr.get(ValueLayout.ADDRESS, 0);
+                String errorMsg = errorPtr.equals(MemorySegment.NULL)
+                        ? "Unknown gnark error"
+                        : errorPtr.reinterpret(4096).getString(0, StandardCharsets.UTF_8);
+                freeIfNotNull(errorPtr);
+                throw new ProverException(ProverException.ErrorCode.PROVING_FAILED,
+                        "gnark " + fnName + " failed: " + errorMsg);
+            }
+
+            MemorySegment proofPtr = proofOutPtr.get(ValueLayout.ADDRESS, 0);
+            MemorySegment publicPtr = publicOutPtr.get(ValueLayout.ADDRESS, 0);
+            MemorySegment vkPtr = vkOutPtr.get(ValueLayout.ADDRESS, 0);
+
+            String resultJson = proofPtr.reinterpret(10 * 1024 * 1024).getString(0, StandardCharsets.UTF_8);
+            String publicJson = publicPtr.reinterpret(10 * 1024 * 1024).getString(0, StandardCharsets.UTF_8);
+            String vkJson = vkPtr.reinterpret(10 * 1024 * 1024).getString(0, StandardCharsets.UTF_8);
+
+            freeIfNotNull(proofPtr);
+            freeIfNotNull(publicPtr);
+            freeIfNotNull(vkPtr);
+
+            return new FullProveResult(resultJson, publicJson, vkJson);
+        } catch (ProverException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new ProverException(ProverException.ErrorCode.PROVING_FAILED,
+                    "FFM call to " + fnName + " failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Get the gnark version string from the native library.
      *
      * @return version string (e.g., "v0.14.0")
@@ -409,8 +532,29 @@ public final class GnarkLibrary implements AutoCloseable {
         }
     }
 
+    /**
+     * No-op — the Go shared library stays loaded for the JVM's lifetime
+     * because Go's runtime cannot be cleanly re-initialized after unload.
+     */
     @Override
     public void close() {
-        libraryArena.close();
+        // intentionally empty — see LIBRARY_ARENA javadoc
+    }
+
+    private static SymbolLookup getOrLoadLookup(Path libraryPath) {
+        SymbolLookup lookup = cachedLookup;
+        if (lookup != null && libraryPath.equals(cachedLookupPath)) {
+            return lookup;
+        }
+        synchronized (GnarkLibrary.class) {
+            lookup = cachedLookup;
+            if (lookup != null && libraryPath.equals(cachedLookupPath)) {
+                return lookup;
+            }
+            lookup = SymbolLookup.libraryLookup(libraryPath, LIBRARY_ARENA);
+            cachedLookupPath = libraryPath;
+            cachedLookup = lookup;
+            return lookup;
+        }
     }
 }

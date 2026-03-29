@@ -17,7 +17,9 @@ The module structure must allow each audience to depend on only what they need.
 
 ## Decision
 
-### Layer 1: Core ZK Library (standalone, no Cardano dependency)
+### Core Modules (top-level)
+
+#### Layer 1: Core ZK Library (standalone, no Cardano dependency)
 
 | Module | Purpose |
 |--------|---------|
@@ -26,29 +28,57 @@ The module structure must allow each audience to depend on only what they need.
 | `zeroj-backend-spi` | `ZkVerifier` SPI, `VerificationKeyRegistry`, `CircuitRegistry`, backend discovery |
 | `zeroj-verifier-core` | Orchestration, verifier registry, prepared key cache |
 | `zeroj-verifier-groth16` | Groth16 verification backend (BN254 + BLS12-381 pure Java) |
+| `zeroj-verifier-plonk` | PlonK verification backend (BN254 + BLS12-381 pure Java) |
+| `zeroj-blst` | BLS12-381 pairing operations via blst native library |
 
-### Layer 2: Submission & Ingestion
+#### Layer 2: Circuit Definition
+
+| Module | Purpose |
+|--------|---------|
+| `zeroj-circuit-dsl` | Java Circuit DSL -- define circuits, compile to R1CS/PlonK/Halo2 |
+| `zeroj-circuit-lib` | Circuit standard library -- Poseidon, MiMC, Merkle, comparators |
+
+#### Layer 3: Proving
+
+| Module | Purpose |
+|--------|---------|
+| `zeroj-prover-gnark` | gnark native Groth16/PlonK prover via Go FFM (primary) |
+
+#### Layer 4: Submission & Ingestion
 
 | Module | Purpose |
 |--------|---------|
 | `zeroj-submission` | `AppProofSubmission` wire format, sequence model, submitter signature |
 | `zeroj-ingestion` | Submission pipeline, state-root validation, replay protection, policy validator |
 
-### Layer 3: Cardano Integration
+#### Layer 5: Cardano Integration
 
 | Module | Purpose |
 |--------|---------|
 | `zeroj-cardano` | Anchor model, metadata encoding, datum helpers |
 | `zeroj-ccl` | CCL transaction builder integration, fluent anchoring API |
+| `zeroj-onchain-julc` | Reusable Plutus V3 Groth16/PlonK validators via Julc |
 
-### Layer 4: Extended (later milestones)
+#### Layer 6: High-Level APIs & Infrastructure
 
 | Module | Purpose |
 |--------|---------|
-| `zeroj-prover-sidecar-client` | Client SDK for external prover sidecar service |
-| `zeroj-ffi` | Java 25 FFM bindings to native backends |
-| `zeroj-verifier-plonk` | PlonK verification backend |
-| `zeroj-onchain-experimental` | Plutus/Aiken on-chain verifier experiments |
+| `zeroj-patterns` | State transition, nullifier claim, membership proof APIs |
+| `zeroj-test-vectors` | Shared test fixtures (not published) |
+| `zeroj-examples` | End-to-end demos (not published) |
+| `zeroj-bom` | Bill of Materials for version alignment |
+
+### Incubator Modules (`incubator/`)
+
+Experimental and alternative backends. Still compiled, tested, and published, but visually separated.
+
+| Module | Purpose |
+|--------|---------|
+| `zeroj-prover-rapidsnark` | RapidSNARK native BN254 Groth16 prover via FFM |
+| `zeroj-prover-sidecar` | HTTP client SDK for external prover sidecar service |
+| `zeroj-prover-wasm` | Circom witness calculation via GraalVM WebAssembly |
+| `zeroj-verifier-halo2` | Halo2 IPA verification via Rust FFM |
+| `zeroj-onchain-experimental` | On-chain helpers -- proof preparation, budget estimation |
 
 ### Dependency Rules
 

@@ -30,9 +30,9 @@ cd zeroj-prover-gnark/gnark-wrapper
 make build
 ```
 
-**Halo2 verifier** (requires Rust stable):
+**Halo2 verifier** (incubator, requires Rust stable):
 ```bash
-cd zeroj-verifier-halo2/halo2-rust
+cd incubator/zeroj-verifier-halo2/halo2-rust
 cargo build --release
 ```
 
@@ -46,7 +46,9 @@ npm install -g snarkjs
 
 ZeroJ is a Gradle multi-module project. All module names use the `zeroj-` prefix and all packages start with `com.bloxbean.cardano.zeroj`.
 
-See [docs/architecture-overview.md](docs/architecture-overview.md) for the full module dependency graph and each module's [README](zeroj-api/README.md) for details.
+Modules are organized into **core** (top-level) and **incubator** (`incubator/` subfolder). Incubator modules are experimental or alternative backends -- still compiled, tested, and published, but visually separated from the primary flow.
+
+See [docs/architecture-overview.md](docs/architecture-overview.md) for the full module dependency graph and each module's README for details.
 
 ## Code Style
 

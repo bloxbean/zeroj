@@ -1,16 +1,22 @@
 # PlonK Support in ZeroJ
 
-## Status: Beta (Off-Chain Ready, On-Chain Experimental)
+## Status: Production (Off-Chain Pure Java, On-Chain via Julc)
 
-ZeroJ supports PlonK proof generation and verification via gnark (Go FFM integration) on BLS12-381 and BN254 curves.
+ZeroJ supports PlonK proof generation via gnark FFM and **pure Java verification** on BLS12-381 and BN254 curves. On-chain PlonK verification is available via a Julc-compiled Plutus V3 validator.
 
 ## What Works Today
 
 ### Off-Chain PlonK (Production-Ready)
 - **Setup**: Universal SRS generation (one setup works for any circuit up to the SRS size)
 - **Prove**: Generate PlonK proofs from gnark circuits via FFM
-- **Verify**: Verify PlonK proofs in Java (delegates to gnark native library)
+- **Verify**: **Pure Java verification** -- zero native dependencies, byte-for-byte verified against gnark
 - **Both BN254 and BLS12-381 curves supported**
+
+### On-Chain PlonK (Working)
+- **Full on-chain PlonK verifier** via `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc`
+- Fiat-Shamir challenge re-derivation matching gnark's exact transcript format
+- BLS12-381 only (Plutus V3 builtins)
+- Tested end-to-end on Yaci DevKit
 
 ### Advantage Over Groth16
 | Feature | Groth16 | PlonK |
@@ -57,10 +63,8 @@ try (var prover = new GnarkProver()) {
 
 ## Limitations
 
-1. **Native dependency**: PlonK verification currently requires the gnark shared library (`libzeroj_gnark.so/.dylib`). A pure Java/blst PlonK verifier is planned.
-2. **Test SRS**: The setup uses gnark's `unsafekzg.NewSRS()` which is NOT suitable for production. Production deployments must use an MPC-generated SRS.
-3. **gnark format**: Proofs and VKs are in gnark's binary format, not snarkjs format. A codec adapter is planned.
-4. **SPI integration**: The PlonK verifier does not yet implement the `ZkVerifier` SPI due to gnark's file-based API. Integration is planned once a pure-Java verifier is implemented.
+1. **Test SRS**: The setup uses gnark's `unsafekzg.NewSRS()` which is NOT suitable for production. Production deployments must use an MPC-generated SRS.
+2. **gnark format**: Proofs and VKs are in gnark's binary format, not snarkjs format. A codec adapter is planned.
 
 ## Architecture
 

@@ -1,94 +1,122 @@
 # zeroj-examples
 
-End-to-end demonstrations of ZeroJ capabilities.
+End-to-end demonstrations of ZeroJ capabilities -- from Java DSL circuit definition through proof generation to on-chain verification on Cardano.
 
-## Two Demo Flows
-
-### 1. EndToEndDemo — snarkjs Groth16/BN254 (pure Java, no native deps)
-
-Shows the complete flow using externally-generated snarkjs proofs:
-
-1. **Load proof** — Parse a snarkjs-generated Groth16/BN254 proof
-2. **Set up verifier** — Register pure Java verification backends
-3. **Verify standalone** — Cryptographic proof verification in Java
-4. **Submit state transition** — Signed submission through 6-stage ingestion pipeline
-5. **Anchor on Cardano** — Generate CIP-10 metadata for L1 anchoring
-6. **Security demo** — Replay attack is automatically rejected
-
-**External tools needed:** circom + snarkjs (for proof generation only, run beforehand)
-**Runtime deps:** None — pure Java verification
+## Quick Start
 
 ```bash
-./gradlew :zeroj-examples:run
+# Off-chain tests (unit): DSL → prove → verify
+./gradlew :zeroj-examples:test
+
+# On-chain E2E tests (requires Yaci DevKit running)
+./gradlew :zeroj-examples:e2eTest
 ```
 
-### 2. GnarkPlonkEndToEndDemo — gnark PlonK/BLS12-381 (in-process FFM)
+## Example Circuits
 
-Shows the complete flow with gnark proving **inside the JVM** — no external tools at runtime:
+### 1. Sealed-Bid Auction
+Prove your bid exceeds a reserve price without revealing the bid amount.
+- **Private**: bidAmount, salt
+- **Public**: reservePrice, bidCommitment (MiMC hash), isAboveReserve (0/1)
+- **Source**: [`SealedBidCircuit.java`](src/main/java/com/bloxbean/cardano/zeroj/examples/dsl/auction/SealedBidCircuit.java)
 
-1. **gnark FFM: setup + prove** — PlonK setup and proof generation via Go native library, in-process
-2. **Pure Java: verify** — PlonK verification with zero native dependencies
-3. **Pipeline: governance** — 6-stage validation with circuit lifecycle and audit
+### 2. Anonymous Voting
+Prove a vote is valid (0 or 1) with a hash commitment for double-vote prevention.
+- **Private**: vote, nullifier
+- **Public**: commitment (MiMC hash)
+- **Source**: [`AnonymousVotingCircuit.java`](src/main/java/com/bloxbean/cardano/zeroj/examples/dsl/voting/AnonymousVotingCircuit.java)
 
-**External tools needed:** None at runtime (gnark native lib loaded via FFM)
-**Runtime deps:** gnark `.dylib`/`.so` (for proving only); verification is pure Java
+### 3. Balance Threshold
+Prove a balance exceeds a threshold without revealing the exact balance.
+- **Private**: balance
+- **Public**: threshold, isAboveThreshold (0/1)
+- **Source**: [`BalanceThresholdCircuit.java`](src/main/java/com/bloxbean/cardano/zeroj/examples/dsl/balance/BalanceThresholdCircuit.java)
 
-```bash
-# Build gnark native library first (one-time):
-cd zeroj-prover-gnark/gnark-wrapper && make build
+## Test Matrix
 
-# Run the demo:
-./gradlew :zeroj-examples:run -PmainClass=com.bloxbean.cardano.zeroj.examples.GnarkPlonkEndToEndDemo
+| Test | Circuit | Prover | Verifier | On-Chain |
+|------|---------|--------|----------|----------|
+| `SealedBidE2ETest` | Sealed bid | snarkjs CLI | Pure Java (BLS12-381) | No |
+| `SealedBidGnarkE2ETest` | Sealed bid | gnark FFM | Pure Java (BLS12-381) | No |
+| `SealedBidOnChainE2ETest` | Sealed bid | Pre-generated | Julc/Plutus V3 | Yes (Yaci DevKit) |
+| `AnonymousVotingE2ETest` | Voting | snarkjs CLI | Pure Java (BLS12-381) | No |
+| `BalanceThresholdE2ETest` | Balance | snarkjs CLI | Pure Java (BLS12-381) | No |
+
+## Three Proving Paths
+
+### Path 1: snarkjs CLI (external tools)
 ```
-
-## Architecture Comparison
-
+Java DSL → R1CS (pure Java) → snarkjs CLI (Node.js) → Java verify (pure Java)
 ```
-Demo 1: snarkjs flow (current EndToEndDemo)
-────────────────────────────────────────────
-  circom CLI      →  compile circuit (.circom → .r1cs + .wasm)
-  snarkjs CLI     →  setup + prove (Node.js, external)
-  ZeroJ Java      →  verify (pure Java) + pipeline + anchor
+Used in: `SealedBidE2ETest`, `AnonymousVotingE2ETest`, `BalanceThresholdE2ETest`
 
-Demo 2: gnark flow (GnarkPlonkEndToEndDemo)
-────────────────────────────────────────────
-  gnark Go code   →  define circuit (one-time, compiled into native lib)
-  gnark FFM       →  setup + prove (in-process, no external tools)
-  ZeroJ Java      →  verify (pure Java) + pipeline + anchor
+### Path 2: gnark FFM (in-process, no external tools)
 ```
+Java DSL → R1CS (pure Java) → gnark FFM (in-JVM) → Java verify (pure Java)
+```
+Used in: `SealedBidGnarkE2ETest`
+
+### Path 3: On-chain (Julc / Plutus V3)
+```
+Java DSL → R1CS → gnark/snarkjs prove → Julc Plutus V3 verify (Yaci DevKit)
+```
+Used in: `SealedBidOnChainE2ETest`
+
+## On-Chain Flow (SealedBidOnChainE2ETest)
+
+This is the full end-to-end flow from circuit to on-chain execution:
+
+1. **Load** pre-generated BLS12-381 proof artifacts
+2. **Compile** `Groth16BLS12381Verifier` Julc script with VK parameters baked in
+3. **Lock** ADA at script address with public inputs (commitment, reservePrice) as datum
+4. **Unlock** with ZK proof (piA, piB, piC) as redeemer
+5. **Plutus V3 executes** BLS12-381 pairing verification on-chain
+6. **Transaction succeeds** = proof verified on Cardano
+
+See the [Getting Started Guide](../docs/getting-started.md) for a detailed walkthrough.
+
+## On-Chain Verifiers
+
+The on-chain Plutus V3 validators live in [`zeroj-onchain-julc`](../zeroj-onchain-julc/):
+
+| Validator | Proof System | Source |
+|-----------|-------------|--------|
+| `Groth16BLS12381Verifier` | Groth16 BLS12-381 | `zeroj-onchain-julc` |
+| `PlonkBLS12381FullVerifier` | PlonK BLS12-381 | `zeroj-onchain-julc` |
+
+The example-specific `ZkAuctionVerifier` in this module extends the pattern with auction-specific logic (reserve price check).
 
 ## Prover Toolchains
 
 | Toolchain | Circuit Language | Prove | Verify | External Deps |
 |-----------|-----------------|-------|--------|---------------|
-| **snarkjs** | circom | Node.js CLI | Pure Java | circom + Node.js |
-| **gnark FFM** | Go | In-process FFM | Pure Java | gnark native lib |
-| **rapidsnark FFM** | circom | In-process FFM | Pure Java | rapidsnark native lib + circom |
+| **gnark FFM** | Java DSL | In-process FFM | Pure Java | gnark native lib |
+| **snarkjs** | Java DSL / circom | Node.js CLI | Pure Java | circom + Node.js |
+| **rapidsnark FFM** | Java DSL / circom | In-process FFM | Pure Java | rapidsnark native lib |
 
-## Future: GraalWasm Witness Calculator
+## Verification Options (all pure Java, zero native deps)
 
-The remaining Node.js dependency (for circom circuits) can be eliminated using GraalVM's WASM runtime:
+| Proof System | Curve | Verifier Class |
+|-------------|-------|----------------|
+| Groth16 | BN254 | `Groth16BN254Verifier` |
+| Groth16 | BLS12-381 | `Groth16BLS12381PureJavaVerifier` |
+| Groth16 | BLS12-381 | `Groth16BLS12381Verifier` (blst, faster) |
+| PlonK | BN254 | `PlonkBN254Verifier` |
+| PlonK | BLS12-381 | `PlonkBLS12381Verifier` |
 
+## Legacy Demos
+
+### EndToEndDemo (snarkjs Groth16/BN254)
+Pre-generated snarkjs proof flow: load → verify → submit → anchor → replay attack demo.
+
+```bash
+./gradlew :zeroj-examples:run
 ```
-Current circom flow:
-  circom CLI → .wasm + .r1cs
-  Node.js snarkjs → witness calculation    ← requires Node.js
-  rapidsnark FFM → prove
 
-Future with GraalWasm:
-  circom CLI → .wasm + .r1cs
-  GraalWasm → witness calculation           ← Java only, no Node.js
-  rapidsnark FFM → prove
+### GnarkPlonkEndToEndDemo (gnark PlonK/BLS12-381)
+In-process gnark proving + pure Java verification + ingestion pipeline.
+
+```bash
+cd zeroj-prover-gnark/gnark-wrapper && make build  # one-time
+./gradlew :zeroj-examples:run -PmainClass=com.bloxbean.cardano.zeroj.examples.GnarkPlonkEndToEndDemo
 ```
-
-This would make the entire runtime Java-only for circom circuits too — the only external tool would be `circom` itself (a build-time Rust CLI for compiling `.circom` files).
-
-## Verification Options (all pure Java)
-
-| Proof System | Curve | Verifier Class | Native Deps |
-|-------------|-------|----------------|-------------|
-| Groth16 | BN254 | `Groth16BN254Verifier` | None |
-| Groth16 | BLS12-381 | `Groth16BLS12381PureJavaVerifier` | None |
-| Groth16 | BLS12-381 | `Groth16BLS12381Verifier` | blst (optional, faster) |
-| PlonK | BN254 | `PlonkBN254Verifier` | None |
-| PlonK | BLS12-381 | `PlonkBLS12381Verifier` | None |
