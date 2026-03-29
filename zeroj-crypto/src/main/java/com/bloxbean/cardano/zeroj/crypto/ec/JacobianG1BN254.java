@@ -18,9 +18,9 @@ import java.math.BigInteger;
  *
  * <h3>Operation costs (M = Fp mul, S = Fp square)</h3>
  * <ul>
- *   <li>Point addition (mixed, Z2=1): 7M + 4S</li>
- *   <li>Point addition (general): 11M + 5S</li>
- *   <li>Point doubling: 1M + 8S (using a=0 optimization)</li>
+ *   <li>Point addition (mixed, Z2=1): 8M + 3S</li>
+ *   <li>Point addition (general): 12M + 4S</li>
+ *   <li>Point doubling: 2M + 5S (using a=0 optimization, EFD dbl-2009-l)</li>
  *   <li>Compare: affine addition costs 1M + 1S + 1 inversion (~50x M)</li>
  * </ul>
  */
@@ -115,7 +115,7 @@ public final class JacobianG1BN254 {
      * Point addition.
      *
      * <p>Handles all cases: infinity, equal points (doubling), negation.</p>
-     * <p>Reference: https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-2007-bl</p>
+     * <p>Standard Jacobian addition formula for short Weierstrass curves (a=0).</p>
      */
     public JacobianG1BN254 add(JacobianG1BN254 other) {
         if (this.isInfinity()) return other;

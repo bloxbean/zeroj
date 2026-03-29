@@ -119,6 +119,44 @@ class PippengerTest {
         assertMsmMatchesNaive(64);
     }
 
+    // --- Negative scalars ---
+
+    @Test
+    void msm_negativeScalar_matchesNaive() {
+        var g = JacobianG1BN254.GENERATOR.toAffine();
+        // (-5)*G should equal (r-5)*G
+        var result = Pippenger.msm(
+                new AffineG1[]{g},
+                new BigInteger[]{BigInteger.valueOf(-5)});
+        var expected = Pippenger.naiveMsm(
+                new AffineG1[]{g},
+                new BigInteger[]{BigInteger.valueOf(-5)});
+        assertPointsEqual(expected, result);
+    }
+
+    @Test
+    void msm_mixedNegativePositive_matchesNaive() {
+        var g = JacobianG1BN254.GENERATOR.toAffine();
+        var twoG = JacobianG1BN254.GENERATOR.doublePoint().toAffine();
+        // (-3)*G + 7*(2G) = -3G + 14G = 11G
+        var result = Pippenger.msm(
+                new AffineG1[]{g, twoG},
+                new BigInteger[]{BigInteger.valueOf(-3), BigInteger.valueOf(7)});
+        var expected = JacobianG1BN254.GENERATOR.scalarMul(BigInteger.valueOf(11));
+        assertPointsEqual(expected, result);
+    }
+
+    @Test
+    void msm_allSamePoint_matchesSumOfScalars() {
+        var g = JacobianG1BN254.GENERATOR.toAffine();
+        // 3*G + 7*G + 11*G = 21*G
+        var result = Pippenger.msm(
+                new AffineG1[]{g, g, g},
+                new BigInteger[]{BigInteger.valueOf(3), BigInteger.valueOf(7), BigInteger.valueOf(11)});
+        var expected = JacobianG1BN254.GENERATOR.scalarMul(BigInteger.valueOf(21));
+        assertPointsEqual(expected, result);
+    }
+
     // --- Large scalars ---
 
     @Test

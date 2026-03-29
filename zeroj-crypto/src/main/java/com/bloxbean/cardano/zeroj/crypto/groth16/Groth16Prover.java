@@ -63,6 +63,10 @@ public final class Groth16Prover {
 
         int numConstraints = constraints.length;
 
+        // Note: witness validation is available via validateWitness() for R1CS-standard constraints.
+        // Not called here because .zkey Section 4 constraints use a different encoding
+        // where C is implicit (the R1CS C matrix is absorbed into the proving key L points).
+
         // Step 1: Compute h(x) polynomial
         BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
@@ -217,19 +221,56 @@ public final class Groth16Prover {
         // π_B = β + Σ(w_i * B2_i) + s * δ  (in G2)
         var result = JacobianG2BN254.fromAffine(pk.betaG2().x(), pk.betaG2().y());
 
-        // Naive sum (no Pippenger for G2 yet — G2 MSM is less critical)
+        // G2 MSM — same bucket approach as Pippenger but for G2 points
         int n = Math.min(witness.length, pk.pointsB2().length);
-        for (int i = 0; i < n; i++) {
-            if (witness[i].signum() != 0 && !pk.pointsB2()[i].isInfinity()) {
-                result = result.add(
-                        JacobianG2BN254.fromAffine(pk.pointsB2()[i].x(), pk.pointsB2()[i].y())
-                                .scalarMul(witness[i]));
-            }
-        }
+        result = result.add(g2Msm(pk.pointsB2(), witness, n));
 
         // + s * δ
         result = result.add(JacobianG2BN254.fromAffine(pk.deltaG2().x(), pk.deltaG2().y()).scalarMul(s));
 
+        return result;
+    }
+
+    /** Simple Pippenger-style MSM for G2 points. */
+    private static JacobianG2BN254 g2Msm(AffineG2[] points, BigInteger[] scalars, int n) {
+        if (n == 0) return JacobianG2BN254.INFINITY;
+
+        BigInteger fr = MontFr254.modulus();
+        int c = Math.max(3, Math.min(31 - Integer.numberOfLeadingZeros(n), 12));
+        int numBuckets = (1 << c) - 1;
+        int numWindows = (254 + c - 1) / c;
+
+        JacobianG2BN254 result = JacobianG2BN254.INFINITY;
+        for (int w = numWindows - 1; w >= 0; w--) {
+            if (!result.isInfinity()) {
+                for (int d = 0; d < c; d++) result = result.doublePoint();
+            }
+
+            JacobianG2BN254[] buckets = new JacobianG2BN254[numBuckets + 1];
+            for (int i = 0; i <= numBuckets; i++) buckets[i] = JacobianG2BN254.INFINITY;
+
+            int bitOffset = w * c;
+            for (int i = 0; i < n; i++) {
+                BigInteger s_i = scalars[i].signum() < 0 ? scalars[i].mod(fr) : scalars[i];
+                int digit = 0;
+                for (int b = 0; b < c; b++) {
+                    int bitPos = bitOffset + b;
+                    if (bitPos < s_i.bitLength() && s_i.testBit(bitPos)) digit |= (1 << b);
+                }
+                if (digit != 0 && !points[i].isInfinity()) {
+                    buckets[digit] = buckets[digit].add(
+                            JacobianG2BN254.fromAffine(points[i].x(), points[i].y()));
+                }
+            }
+
+            JacobianG2BN254 runningSum = JacobianG2BN254.INFINITY;
+            JacobianG2BN254 windowSum = JacobianG2BN254.INFINITY;
+            for (int j = numBuckets; j >= 1; j--) {
+                runningSum = runningSum.add(buckets[j]);
+                windowSum = windowSum.add(runningSum);
+            }
+            result = result.add(windowSum);
+        }
         return result;
     }
 
@@ -309,9 +350,47 @@ public final class Groth16Prover {
     }
 
     private static BigInteger randomScalar(SecureRandom rng) {
-        byte[] bytes = new byte[32];
+        // Sample 512 bits and reduce mod r for negligible bias (~2^{-258}).
+        // Using only 256 bits would give ~20% relative bias (2^256/r ≈ 5.29).
+        byte[] bytes = new byte[64];
         rng.nextBytes(bytes);
         return new BigInteger(1, bytes).mod(MontFr254.modulus());
+    }
+
+    /**
+     * Validate that the witness satisfies all non-empty R1CS constraints.
+     * Throws IllegalArgumentException if any constraint is violated.
+     *
+     * <p>Use this with standard R1CS constraints (from .r1cs files), NOT with .zkey
+     * Section 4 constraints which use a different encoding where C is implicit.</p>
+     */
+    public static void validateWitness(R1CSConstraint[] constraints, BigInteger[] witness, int numConstraints) {
+        BigInteger mod = MontFr254.modulus();
+        for (int i = 0; i < numConstraints; i++) {
+            var c = constraints[i];
+            if (c.a().isEmpty() && c.b().isEmpty() && c.c().isEmpty()) continue;
+
+            BigInteger aVal = evalLCBigInt(c.a(), witness, mod);
+            BigInteger bVal = evalLCBigInt(c.b(), witness, mod);
+            BigInteger cVal = evalLCBigInt(c.c(), witness, mod);
+            BigInteger lhs = aVal.multiply(bVal).mod(mod);
+
+            if (!lhs.equals(cVal)) {
+                throw new IllegalArgumentException(
+                        "Witness does not satisfy R1CS constraint " + i
+                                + ": A·w * B·w = " + lhs + " but C·w = " + cVal);
+            }
+        }
+    }
+
+    private static BigInteger evalLCBigInt(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
+        BigInteger sum = BigInteger.ZERO;
+        for (var entry : lc.entrySet()) {
+            if (entry.getKey() < witness.length && entry.getValue().signum() != 0) {
+                sum = sum.add(entry.getValue().multiply(witness[entry.getKey()]));
+            }
+        }
+        return sum.mod(mod);
     }
 
     /** R1CS constraint: A · w × B · w = C · w */

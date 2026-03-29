@@ -26,23 +26,9 @@ import java.math.BigInteger;
  */
 public final class MontFr254 {
 
-    // BN254 scalar field modulus r (little-endian limbs)
+    // BN254 scalar field modulus r (little-endian 64-bit limbs)
     // r = 21888242871839275222246405745257275088548364400416034343698204186575808495617
-    static final long R0 = 0x30644e72e131a029L;  // r[0] — least significant
-    static final long R1 = 0xb85045b68181585dL;
-    static final long R2 = 0x2833e84879b97091L;  // NOTE: This is r in LE 64-bit words
-    static final long R3 = 0x30644e72e131a029L;
-
-    // Let me compute the correct limbs from the actual modulus value
-    // r = 21888242871839275222246405745257275088548364400416034343698204186575808495617
-    // In hex: 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
-    // Little-endian 64-bit limbs:
-    // l0 = 0x43e1f593f0000001  (bits 0-63)
-    // l1 = 0x2833e84879b97091  (bits 64-127)
-    // l2 = 0xb85045b68181585d  (bits 128-191)
-    // l3 = 0x30644e72e131a029  (bits 192-255)
-
-    // Corrected modulus limbs (little-endian)
+    // Hex: 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
     static final long MOD0 = 0x43e1f593f0000001L;
     static final long MOD1 = 0x2833e84879b97091L;
     static final long MOD2 = 0xb85045b68181585dL;
@@ -221,14 +207,17 @@ public final class MontFr254 {
     }
 
     /**
-     * Exponentiation: a^exp mod r.
+     * Exponentiation: a^exp mod r. The exponent is treated as unsigned.
+     *
+     * @param exp non-negative exponent (negative values are rejected)
      */
     public MontFr254 pow(long exp) {
+        if (exp < 0) throw new IllegalArgumentException("Exponent must be non-negative, got " + exp);
         if (exp == 0) return ONE;
         if (exp == 1) return this;
         MontFr254 result = ONE;
         MontFr254 base = this;
-        while (exp > 0) {
+        while (exp != 0) {
             if ((exp & 1) == 1) result = result.mul(base);
             base = base.square();
             exp >>>= 1;

@@ -138,6 +138,66 @@ class Groth16EndToEndTest {
         assertFalse(valid, "Tampered witness proof should NOT verify against original public inputs");
     }
 
+    /**
+     * Cubic circuit: x^3 + x + 5 = y (multiple constraints, larger domain).
+     * This tests that the prover works beyond the trivial 1-constraint multiplier.
+     */
+    @Test
+    void cubicCircuit_proveAndVerify() throws IOException {
+        var zkeyData = ZkeyImporter.importZkeyFull(
+                getClass().getResourceAsStream("/test-circuits/cubic/cubic.zkey").readAllBytes());
+        var witness = ZkeyImporter.importWtns(
+                getClass().getResourceAsStream("/test-circuits/cubic/cubic_witness.wtns"));
+
+        assertTrue(zkeyData.numConstraints() > 1,
+                "Cubic circuit should have multiple constraints, got " + zkeyData.numConstraints());
+
+        var proof = Groth16Prover.prove(zkeyData.provingKey(), witness,
+                zkeyData.constraints(), zkeyData.numWires());
+
+        assertNotNull(proof);
+        assertTrue(proof.a().isOnCurve(), "A on curve");
+        assertTrue(proof.b().isOnCurve(), "B on curve");
+        assertTrue(proof.c().isOnCurve(), "C on curve");
+
+        // Verify via pairing
+        var vkJson = new String(getClass().getResourceAsStream("/test-circuits/cubic/verification_key.json").readAllBytes());
+        var vk = com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec.parseVerificationKey(vkJson);
+
+        var vkX = parseG1(vk.ic().get(0));
+        for (int i = 0; i < vk.nPublic(); i++) {
+            vkX = vkX.add(parseG1(vk.ic().get(i + 1)).scalarMul(witness[i + 1]));
+        }
+
+        boolean valid = BN254Pairing.pairingCheck(
+                new G1Point[]{toVerifierG1(proof.a()), parseG1(vk.vkAlpha1()).negate(),
+                        vkX.negate(), toVerifierG1(proof.c()).negate()},
+                new G2Point[]{toVerifierG2(proof.b()), parseG2(vk.vkBeta2()),
+                        parseG2(vk.vkGamma2()), parseG2(vk.vkDelta2())}
+        );
+
+        assertTrue(valid, "Cubic circuit proof should verify");
+        System.out.println("Cubic circuit: VERIFIED (pure Java)");
+    }
+
+    /**
+     * Validates that validateWitness rejects an invalid witness with a clear error.
+     */
+    @Test
+    void invalidWitness_validateWitnessThrows() throws IOException {
+        var r1csData = R1CSImporter.importR1CS(getClass().getResourceAsStream(R1CS_PATH));
+        var witness = ZkeyImporter.importWtns(getClass().getResourceAsStream(WTNS_PATH));
+
+        // Corrupt the witness
+        witness[1] = BigInteger.valueOf(99);
+
+        var ex = assertThrows(IllegalArgumentException.class, () ->
+                Groth16Prover.validateWitness(r1csData.constraints(), witness, r1csData.numConstraints()));
+
+        assertTrue(ex.getMessage().contains("does not satisfy"),
+                "Error should mention constraint violation: " + ex.getMessage());
+    }
+
     // --- Conversion helpers ---
 
     private static G1Point toVerifierG1(JacobianG1BN254.AffineG1 p) {

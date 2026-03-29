@@ -48,12 +48,23 @@ public final class Pippenger {
      * @param scalars scalar multipliers as BigInteger
      * @return the MSM result as a Jacobian point
      */
+    /** BN254 scalar field order (for normalizing negative scalars). */
+    private static final BigInteger FR = new BigInteger(
+            "21888242871839275222246405745257275088548364400416034343698204186575808495617");
+
     public static JacobianG1BN254 msm(JacobianG1BN254.AffineG1[] points, BigInteger[] scalars) {
         if (points.length != scalars.length)
             throw new IllegalArgumentException("points and scalars must have the same length");
         int n = points.length;
         if (n == 0) return JacobianG1BN254.INFINITY;
         if (n == 1) return JacobianG1BN254.fromAffine(points[0].x(), points[0].y()).scalarMul(scalars[0]);
+
+        // Normalize negative scalars to [0, r) — BigInteger.testBit returns two's-complement
+        // bits for negatives, which would produce wrong window digits
+        scalars = scalars.clone(); // don't mutate caller's array
+        for (int i = 0; i < n; i++) {
+            if (scalars[i].signum() < 0) scalars[i] = scalars[i].mod(FR);
+        }
 
         // Choose window size
         int c = windowSize(n);
