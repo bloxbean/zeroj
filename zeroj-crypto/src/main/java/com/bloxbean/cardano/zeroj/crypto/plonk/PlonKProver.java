@@ -13,16 +13,15 @@ import java.security.SecureRandom;
 /**
  * Pure Java PlonK prover for BN254 (snarkjs-compatible, 5-round protocol).
  *
- * <p>Generates PlonK proofs that can be verified by the existing
- * {@code PlonkBN254Verifier} using the snarkjs Fiat-Shamir transcript.</p>
+ * <p>Produces proofs verifiable by the existing {@code PlonkBN254Verifier}.</p>
  *
  * <h3>Protocol rounds</h3>
  * <ol>
  *   <li>Round 1: Commit to wire polynomials a(X), b(X), c(X) with blinding</li>
  *   <li>Round 2: Compute permutation accumulator Z(X), commit</li>
- *   <li>Round 3: Compute quotient polynomial t(X), split and commit T1, T2, T3</li>
+ *   <li>Round 3: Compute quotient t(X) = (gate + alpha*perm + alpha^2*start) / Z_H, commit T1/T2/T3</li>
  *   <li>Round 4: Evaluate polynomials at challenge zeta</li>
- *   <li>Round 5: Compute KZG opening proofs at zeta and zeta*omega</li>
+ *   <li>Round 5: Compute batched KZG opening proofs at zeta and zeta*omega</li>
  * </ol>
  */
 public final class PlonKProver {
@@ -34,198 +33,299 @@ public final class PlonKProver {
     /**
      * Generate a PlonK proof.
      *
-     * @param pk      PlonK proving key (from .zkey import)
-     * @param witness full witness [1, public..., private..., intermediates...]
+     * @param pk       PlonK proving key (from setup)
+     * @param wireA    wire values for column A per constraint row
+     * @param wireB    wire values for column B per constraint row
+     * @param wireC    wire values for column C per constraint row
+     * @param pubInputs public input values (for PI polynomial)
      * @return PlonK proof with 9 commitments + 6 evaluations
      */
-    public static PlonKProof prove(PlonKProvingKey pk, BigInteger[] witness) {
+    public static PlonKProof prove(PlonKProvingKey pk, MontFr254[] wireA, MontFr254[] wireB,
+                                    MontFr254[] wireC, BigInteger[] pubInputs) {
         int n = pk.domainSize();
         int logN = Integer.numberOfTrailingZeros(n);
         MontFr254 omega = pk.omega();
+        AffineG1[] srs = pk.srsG1();
 
-        // Blinding randomness (9 random scalars for zero-knowledge)
         var rng = new SecureRandom();
-        MontFr254[] blind = new MontFr254[9];
-        for (int i = 0; i < 9; i++) blind[i] = randomFr(rng);
+        MontFr254[] b = new MontFr254[9];
+        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
 
-        // Build wire evaluations from witness + constraint system
-        // The .zkey provides the selector polynomials evaluated on the domain.
-        // Wire polynomials a, b, c are built from the witness.
-        // For snarkjs, wire evaluations map witness values to constraint rows.
-        // We use the first nConstraints witness values (after wire 0) mapped directly.
-        MontFr254[] aEvals = new MontFr254[n];
-        MontFr254[] bEvals = new MontFr254[n];
-        MontFr254[] cEvals = new MontFr254[n];
-        for (int i = 0; i < n; i++) {
-            // Witness mapping: w[0]=1, w[1..nPublic]=public, w[nPublic+1..]=private
-            // For PlonK, the wire evaluation at row i is the witness value at the wire
-            // assigned to that row. For snarkjs, this comes from the A/B/C wire maps
-            // (sections 4-6 of .zkey). Since we don't parse those yet, we use a
-            // simplified mapping for the multiplier circuit.
-            // TODO: Parse wire maps from .zkey for general circuits
-            aEvals[i] = i < witness.length ? MontFr254.fromBigInteger(witness[i < n ? i : 0]) : MontFr254.ZERO;
-            bEvals[i] = MontFr254.ZERO;
-            cEvals[i] = MontFr254.ZERO;
-        }
+        // Pad wire evaluations to domain size
+        MontFr254[] aEvals = padTo(wireA, n);
+        MontFr254[] bEvals = padTo(wireB, n);
+        MontFr254[] cEvals = padTo(wireC, n);
 
-        // For now, use the constraint system's selector evaluations to derive wire values
-        // from the Ql*a + Qr*b + Qm*a*b + Qo*c + Qc = 0 gate equation
-        // This requires the wire maps which we'll add in a follow-up.
-
-        // Placeholder: build polynomials from the evaluations
+        // === Round 1: Wire polynomial commitments ===
         var aCoeffs = FieldFFT.ifft(aEvals);
         var bCoeffs = FieldFFT.ifft(bEvals);
         var cCoeffs = FieldFFT.ifft(cEvals);
 
-        // Add blinding: a(X) += b1*X^n + b2*X^{n+1} (degree n+1 with blinding)
-        var aBlinded = addBlinding(aCoeffs, blind[0], blind[1], n);
-        var bBlinded = addBlinding(bCoeffs, blind[2], blind[3], n);
-        var cBlinded = addBlinding(cCoeffs, blind[4], blind[5], n);
+        // Add blinding: poly(X) += b1*X^n + b2*X^{n+1}
+        var aBlind = addBlinding2(aCoeffs, b[0], b[1], n);
+        var bBlind = addBlinding2(bCoeffs, b[2], b[3], n);
+        var cBlind = addBlinding2(cCoeffs, b[4], b[5], n);
 
-        // === Round 1: Wire commitments ===
-        var commitA = KZGCommitment.commit(pk.srsG1(), toBI(aBlinded)).toAffine();
-        var commitB = KZGCommitment.commit(pk.srsG1(), toBI(bBlinded)).toAffine();
-        var commitC = KZGCommitment.commit(pk.srsG1(), toBI(cBlinded)).toAffine();
+        var commitA = KZGCommitment.commit(srs, aBlind).toAffine();
+        var commitB = KZGCommitment.commit(srs, bBlind).toAffine();
+        var commitC = KZGCommitment.commit(srs, cBlind).toAffine();
 
-        // Fiat-Shamir Round 1: derive beta, gamma
+        // Fiat-Shamir: derive beta, gamma
         var transcript = new FiatShamirTranscript(FR);
-        // Add VK commitments to transcript (matching snarkjs verifier order)
         addG1(transcript, pk.qmCommit()); addG1(transcript, pk.qlCommit());
         addG1(transcript, pk.qrCommit()); addG1(transcript, pk.qoCommit());
         addG1(transcript, pk.qcCommit());
         addG1(transcript, pk.s1Commit()); addG1(transcript, pk.s2Commit());
         addG1(transcript, pk.s3Commit());
-        // Add public inputs
-        for (int i = 1; i <= pk.nPublic(); i++) {
-            transcript.addScalar(i < witness.length ? witness[i] : BigInteger.ZERO);
-        }
-        // Add wire commitments
+        for (var pi : pubInputs) transcript.addScalar(pi);
         addG1(transcript, commitA); addG1(transcript, commitB); addG1(transcript, commitC);
-        BigInteger beta = transcript.getChallenge();
+        BigInteger betaBi = transcript.getChallenge();
+        MontFr254 beta = MontFr254.fromBigInteger(betaBi);
 
-        transcript.reset();
-        transcript.addScalar(beta);
-        BigInteger gamma = transcript.getChallenge();
+        transcript.reset(); transcript.addScalar(betaBi);
+        BigInteger gammaBi = transcript.getChallenge();
+        MontFr254 gamma = MontFr254.fromBigInteger(gammaBi);
 
         // === Round 2: Permutation accumulator Z(X) ===
-        // Z(omega^0) = 1
-        // Z(omega^{i+1}) = Z(omega^i) * [(a_i + beta*omega^i + gamma)(b_i + beta*k1*omega^i + gamma)(c_i + beta*k2*omega^i + gamma)]
-        //                              / [(a_i + beta*s1_i + gamma)(b_i + beta*s2_i + gamma)(c_i + beta*s3_i + gamma)]
-        MontFr254 betaFr = MontFr254.fromBigInteger(beta);
-        MontFr254 gammaFr = MontFr254.fromBigInteger(gamma);
-        MontFr254 k1Fr = MontFr254.fromBigInteger(pk.k1());
-        MontFr254 k2Fr = MontFr254.fromBigInteger(pk.k2());
+        MontFr254 k1 = MontFr254.fromBigInteger(pk.k1());
+        MontFr254 k2 = MontFr254.fromBigInteger(pk.k2());
 
         MontFr254[] zEvals = new MontFr254[n];
         zEvals[0] = MontFr254.ONE;
-        MontFr254 w_i = MontFr254.ONE;
+        MontFr254 wi = MontFr254.ONE;
         for (int i = 0; i < n - 1; i++) {
-            var ai = aEvals[i]; var bi = bEvals[i]; var ci = cEvals[i];
-
-            // Numerator: (a + beta*omega^i + gamma)(b + beta*k1*omega^i + gamma)(c + beta*k2*omega^i + gamma)
-            var num = ai.add(betaFr.mul(w_i)).add(gammaFr)
-                    .mul(bi.add(betaFr.mul(k1Fr).mul(w_i)).add(gammaFr))
-                    .mul(ci.add(betaFr.mul(k2Fr).mul(w_i)).add(gammaFr));
-
-            // Denominator: (a + beta*s1[i] + gamma)(b + beta*s2[i] + gamma)(c + beta*s3[i] + gamma)
-            var den = ai.add(betaFr.mul(pk.s1()[i])).add(gammaFr)
-                    .mul(bi.add(betaFr.mul(pk.s2()[i])).add(gammaFr))
-                    .mul(ci.add(betaFr.mul(pk.s3()[i])).add(gammaFr));
-
+            var num = aEvals[i].add(beta.mul(wi)).add(gamma)
+                    .mul(bEvals[i].add(beta.mul(k1).mul(wi)).add(gamma))
+                    .mul(cEvals[i].add(beta.mul(k2).mul(wi)).add(gamma));
+            var den = aEvals[i].add(beta.mul(pk.s1()[i])).add(gamma)
+                    .mul(bEvals[i].add(beta.mul(pk.s2()[i])).add(gamma))
+                    .mul(cEvals[i].add(beta.mul(pk.s3()[i])).add(gamma));
             zEvals[i + 1] = zEvals[i].mul(num).mul(den.inverse());
-            w_i = w_i.mul(omega);
+            wi = wi.mul(omega);
         }
 
         var zCoeffs = FieldFFT.ifft(zEvals);
-        var zBlinded = addBlinding3(zCoeffs, blind[6], blind[7], blind[8], n);
-        var commitZ = KZGCommitment.commit(pk.srsG1(), toBI(zBlinded)).toAffine();
+        var zBlind = addBlinding3(zCoeffs, b[6], b[7], b[8], n);
+        var commitZ = KZGCommitment.commit(srs, zBlind).toAffine();
 
-        // Fiat-Shamir Round 2: derive alpha
-        transcript.reset();
-        transcript.addScalar(beta);
-        transcript.addScalar(gamma);
+        transcript.reset(); transcript.addScalar(betaBi); transcript.addScalar(gammaBi);
         addG1(transcript, commitZ);
-        BigInteger alpha = transcript.getChallenge();
+        BigInteger alphaBi = transcript.getChallenge();
+        MontFr254 alpha = MontFr254.fromBigInteger(alphaBi);
+        MontFr254 alpha2 = alpha.mul(alpha);
 
-        // === Round 3: Quotient polynomial ===
-        // t(X) = [gate + alpha*perm + alpha^2*start] / Z_H(X)
-        // For now, compute on a coset and use IFFT to get coefficients
-        // (Same coset approach as Groth16 h(x) computation)
-        MontFr254 alphaFr = MontFr254.fromBigInteger(alpha);
-        MontFr254 alpha2Fr = alphaFr.mul(alphaFr);
+        // === Round 3: Quotient polynomial t(X) via coset evaluation ===
+        // t(X) = [gate(X) + alpha*perm(X) + alpha^2*start(X)] / Z_H(X)
+        // Evaluate on a coset of size 4n to handle degree 3n
 
-        // Evaluate the full constraint on the coset
-        // This is complex — for the initial version, compute t(X) via pointwise evaluation
-        // on a coset of size 4n (to handle degree 3n polynomial)
+        int n4 = 4 * n;
+        int logN4 = Integer.numberOfTrailingZeros(n4);
+        MontFr254 omega4 = FieldFFT.rootOfUnity(logN4);
 
-        // Placeholder: for the multiplier circuit, t(X) is computable from the gate equation
-        // Full implementation requires coset FFT at 4n points — we'll build this incrementally
+        // Coset generator: must NOT be a root of unity (otherwise Z_H = 0 on coset)
+        // snarkjs uses Fr.shift = nqr^2 where nqr = 5 (smallest quadratic non-residue)
+        // So shift = 25 for BN254 Fr. But actually snarkjs uses w[power+1] which is omega_{2n}.
+        // For safety, use the multiplicative generator g=5 as coset shift.
+        MontFr254 shift = MontFr254.fromLong(5);
 
-        // For now, compute a dummy t that produces valid proofs for trivial cases
-        MontFr254[] tCoeffs = new MontFr254[3 * n];
-        for (int i = 0; i < 3 * n; i++) tCoeffs[i] = MontFr254.ZERO;
+        // Evaluate all polynomials on the 4n coset
+        var aCoset = cosetEval(aBlind, shift, n4, logN4);
+        var bCoset = cosetEval(bBlind, shift, n4, logN4);
+        var cCoset = cosetEval(cBlind, shift, n4, logN4);
+        var zCoset = cosetEval(zBlind, shift, n4, logN4);
 
-        // Split t into 3 parts of degree < n
-        var t1Coeffs = new MontFr254[n];
-        var t2Coeffs = new MontFr254[n];
-        var t3Coeffs = new MontFr254[n];
-        for (int i = 0; i < n; i++) {
-            t1Coeffs[i] = tCoeffs[i];
-            t2Coeffs[i] = i + n < tCoeffs.length ? tCoeffs[i + n] : MontFr254.ZERO;
-            t3Coeffs[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr254.ZERO;
+        // Selector polynomials (from evaluations → coefficients → coset eval)
+        var qlCoset = cosetEval(FieldFFT.ifft(pk.ql()), shift, n4, logN4);
+        var qrCoset = cosetEval(FieldFFT.ifft(pk.qr()), shift, n4, logN4);
+        var qmCoset = cosetEval(FieldFFT.ifft(pk.qm()), shift, n4, logN4);
+        var qoCoset = cosetEval(FieldFFT.ifft(pk.qo()), shift, n4, logN4);
+        var qcCoset = cosetEval(FieldFFT.ifft(pk.qc()), shift, n4, logN4);
+
+        // Sigma polynomials
+        var s1Coset = cosetEval(FieldFFT.ifft(pk.s1()), shift, n4, logN4);
+        var s2Coset = cosetEval(FieldFFT.ifft(pk.s2()), shift, n4, logN4);
+        var s3Coset = cosetEval(FieldFFT.ifft(pk.s3()), shift, n4, logN4);
+
+        // Z(X * omega) on coset: shift coefficients by omega
+        var zOmegaCoeffs = shiftPoly(zBlind, omega);
+        var zOmegaCoset = cosetEval(zOmegaCoeffs, shift, n4, logN4);
+
+        // PI polynomial on coset
+        var piCoeffs = buildPICoeffs(pubInputs, omega, n, logN);
+        var piCoset = cosetEval(piCoeffs, shift, n4, logN4);
+
+        // L1 polynomial on coset
+        var l1Coeffs = buildL1Coeffs(omega, n, logN);
+        var l1Coset = cosetEval(l1Coeffs, shift, n4, logN4);
+
+        // Z_H on coset: Z_H(x) = x^n - 1
+        // For coset point x_i = shift * omega4^i: Z_H(x_i) = (shift * omega4^i)^n - 1
+        // = shift^n * (omega4^i)^n - 1 = shift^n * omega4^{in} - 1
+        // Since omega4 is the 4n-th root: omega4^n = omega_{4n}^n = primitive 4th root of unity
+        MontFr254 shiftN = powFr(shift, n); // shift^n (constant across all coset points)
+        MontFr254 omega4N = powFr(omega4, n); // omega4^n = primitive 4th root of unity
+        MontFr254[] zhCoset = new MontFr254[n4];
+        MontFr254 omega4Ni = MontFr254.ONE; // (omega4^n)^i
+        for (int i = 0; i < n4; i++) {
+            zhCoset[i] = shiftN.mul(omega4Ni).sub(MontFr254.ONE);
+            omega4Ni = omega4Ni.mul(omega4N);
         }
 
-        var commitT1 = KZGCommitment.commit(pk.srsG1(), toBI(t1Coeffs)).toAffine();
-        var commitT2 = KZGCommitment.commit(pk.srsG1(), toBI(t2Coeffs)).toAffine();
-        var commitT3 = KZGCommitment.commit(pk.srsG1(), toBI(t3Coeffs)).toAffine();
+        // Precompute coset points: x_i = shift * omega4^i
+        MontFr254[] cosetPoints = new MontFr254[n4];
+        cosetPoints[0] = shift;
+        for (int i = 1; i < n4; i++) cosetPoints[i] = cosetPoints[i - 1].mul(omega4);
 
-        // Fiat-Shamir Round 3: derive zeta (xi)
-        transcript.reset();
-        transcript.addScalar(alpha);
+        // Compute t(X) pointwise on the coset
+        MontFr254[] tCoset = new MontFr254[n4];
+        for (int i = 0; i < n4; i++) {
+            var gate = qmCoset[i].mul(aCoset[i]).mul(bCoset[i])
+                    .add(qlCoset[i].mul(aCoset[i]))
+                    .add(qrCoset[i].mul(bCoset[i]))
+                    .add(qoCoset[i].mul(cCoset[i]))
+                    .add(qcCoset[i])
+                    .add(piCoset[i]);
+
+            MontFr254 xi = cosetPoints[i];
+
+            var permNum = aCoset[i].add(beta.mul(xi)).add(gamma)
+                    .mul(bCoset[i].add(beta.mul(k1).mul(xi)).add(gamma))
+                    .mul(cCoset[i].add(beta.mul(k2).mul(xi)).add(gamma))
+                    .mul(zCoset[i]);
+            var permDen = aCoset[i].add(beta.mul(s1Coset[i])).add(gamma)
+                    .mul(bCoset[i].add(beta.mul(s2Coset[i])).add(gamma))
+                    .mul(cCoset[i].add(beta.mul(s3Coset[i])).add(gamma))
+                    .mul(zOmegaCoset[i]);
+            var perm = alpha.mul(permNum.sub(permDen));
+
+            // Start constraint: alpha^2 * (z - 1) * L1
+            var start = alpha2.mul(zCoset[i].sub(MontFr254.ONE)).mul(l1Coset[i]);
+
+            // t(X) = (gate + perm + start) / Z_H
+            tCoset[i] = gate.add(perm).add(start).mul(zhCoset[i].inverse());
+        }
+
+        // IFFT coset to get t(X) coefficients
+        var tCoeffs = cosetIFFT(tCoset, shift, n4, logN4);
+
+        // Split t into 3 parts of degree < n
+        var t1 = new MontFr254[n]; var t2 = new MontFr254[n]; var t3 = new MontFr254[n];
+        for (int i = 0; i < n; i++) {
+            t1[i] = i < tCoeffs.length ? tCoeffs[i] : MontFr254.ZERO;
+            t2[i] = i + n < tCoeffs.length ? tCoeffs[i + n] : MontFr254.ZERO;
+            t3[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr254.ZERO;
+        }
+
+        var commitT1 = KZGCommitment.commit(srs, t1).toAffine();
+        var commitT2 = KZGCommitment.commit(srs, t2).toAffine();
+        var commitT3 = KZGCommitment.commit(srs, t3).toAffine();
+
+        transcript.reset(); transcript.addScalar(alphaBi);
         addG1(transcript, commitT1); addG1(transcript, commitT2); addG1(transcript, commitT3);
-        BigInteger zeta = transcript.getChallenge();
+        BigInteger zetaBi = transcript.getChallenge();
+        MontFr254 zeta = MontFr254.fromBigInteger(zetaBi);
 
         // === Round 4: Opening evaluations ===
-        MontFr254 zetaFr = MontFr254.fromBigInteger(zeta);
-        BigInteger evalA = FieldFFT.polyEval(aBlinded, zetaFr).toBigInteger();
-        BigInteger evalB = FieldFFT.polyEval(bBlinded, zetaFr).toBigInteger();
-        BigInteger evalC = FieldFFT.polyEval(cBlinded, zetaFr).toBigInteger();
+        BigInteger evalA = FieldFFT.polyEval(aBlind, zeta).toBigInteger();
+        BigInteger evalB = FieldFFT.polyEval(bBlind, zeta).toBigInteger();
+        BigInteger evalC = FieldFFT.polyEval(cBlind, zeta).toBigInteger();
 
-        // S1, S2 evaluated at zeta (need coefficient form)
         var s1Coeffs = FieldFFT.ifft(pk.s1());
         var s2Coeffs = FieldFFT.ifft(pk.s2());
-        BigInteger evalS1 = FieldFFT.polyEval(s1Coeffs, zetaFr).toBigInteger();
-        BigInteger evalS2 = FieldFFT.polyEval(s2Coeffs, zetaFr).toBigInteger();
+        BigInteger evalS1 = FieldFFT.polyEval(s1Coeffs, zeta).toBigInteger();
+        BigInteger evalS2 = FieldFFT.polyEval(s2Coeffs, zeta).toBigInteger();
 
-        // Z(zeta * omega)
-        MontFr254 zetaOmega = zetaFr.mul(omega);
-        BigInteger evalZw = FieldFFT.polyEval(zBlinded, zetaOmega).toBigInteger();
+        MontFr254 zetaOmega = zeta.mul(omega);
+        BigInteger evalZw = FieldFFT.polyEval(zBlind, zetaOmega).toBigInteger();
 
-        // Fiat-Shamir Round 4: derive v
-        transcript.reset();
-        transcript.addScalar(zeta);
+        transcript.reset(); transcript.addScalar(zetaBi);
         transcript.addScalar(evalA); transcript.addScalar(evalB); transcript.addScalar(evalC);
         transcript.addScalar(evalS1); transcript.addScalar(evalS2); transcript.addScalar(evalZw);
-        BigInteger v = transcript.getChallenge();
+        BigInteger v1Bi = transcript.getChallenge();
+        MontFr254 v1 = MontFr254.fromBigInteger(v1Bi);
 
-        // === Round 5: Opening proofs ===
-        // Batched opening at zeta: r(X) + v*a(X) + v^2*b(X) + v^3*c(X) + v^4*s1(X) + v^5*s2(X)
-        // where r(X) is the linearization polynomial
-        // For the initial version, compute individual openings
-        MontFr254 vFr = MontFr254.fromBigInteger(v);
+        // === Round 5: Batched KZG opening proofs ===
+        // W_zeta: opening of r(X) + v*a(X) + v^2*b(X) + v^3*c(X) + v^4*s1(X) + v^5*s2(X) at zeta
+        // r(X) is the linearization polynomial
 
-        // Opening proof at zeta for a(X)
-        var commitWxi = KZGCommitment.openingProof(pk.srsG1(), aBlinded, zetaFr,
-                MontFr254.fromBigInteger(evalA)).toAffine();
+        // Build r(X) coefficient-form from the verification equation
+        // r(X) = a_eval*b_eval*Qm(X) + a_eval*Ql(X) + b_eval*Qr(X) + c_eval*Qo(X) + Qc(X)
+        //      + alpha * [(a_eval+beta*zeta+gamma)(b_eval+beta*k1*zeta+gamma)(c_eval+beta*k2*zeta+gamma)*Z(X)
+        //               - (a_eval+beta*s1_eval+gamma)(b_eval+beta*s2_eval+gamma)*beta*zw_eval*S3(X)]
+        //      + alpha^2 * L1(zeta) * Z(X)
 
-        // Opening proof at zeta*omega for Z(X)
-        var commitWxiw = KZGCommitment.openingProof(pk.srsG1(), zBlinded, zetaOmega,
+        MontFr254 aEv = MontFr254.fromBigInteger(evalA);
+        MontFr254 bEv = MontFr254.fromBigInteger(evalB);
+        MontFr254 cEv = MontFr254.fromBigInteger(evalC);
+        MontFr254 s1Ev = MontFr254.fromBigInteger(evalS1);
+        MontFr254 s2Ev = MontFr254.fromBigInteger(evalS2);
+        MontFr254 zwEv = MontFr254.fromBigInteger(evalZw);
+
+        var qmCoeffs = FieldFFT.ifft(pk.qm());
+        var qlCoeffs = FieldFFT.ifft(pk.ql());
+        var qrCoeffs = FieldFFT.ifft(pk.qr());
+        var qoCoeffs = FieldFFT.ifft(pk.qo());
+        var qcCoeffs = FieldFFT.ifft(pk.qc());
+        var s3Coeffs = FieldFFT.ifft(pk.s3());
+
+        // Build r(X) as sum of weighted polynomials
+        int maxLen = Math.max(zBlind.length, Math.max(qmCoeffs.length, s3Coeffs.length));
+        MontFr254[] rCoeffs = new MontFr254[maxLen];
+        for (int i = 0; i < maxLen; i++) rCoeffs[i] = MontFr254.ZERO;
+
+        // r += a*b*Qm + a*Ql + b*Qr + c*Qo + Qc
+        addScaled(rCoeffs, qmCoeffs, aEv.mul(bEv));
+        addScaled(rCoeffs, qlCoeffs, aEv);
+        addScaled(rCoeffs, qrCoeffs, bEv);
+        addScaled(rCoeffs, qoCoeffs, cEv);
+        addScaled(rCoeffs, qcCoeffs, MontFr254.ONE);
+
+        // Z coefficient in r: alpha * (a+beta*zeta+gamma)(b+beta*k1*zeta+gamma)(c+beta*k2*zeta+gamma) + alpha^2*L1(zeta) + u
+        // (the u term is added by the verifier, not by the prover)
+        MontFr254 betaZeta = beta.mul(zeta);
+        MontFr254 zCoeffInR = alpha.mul(
+                aEv.add(betaZeta).add(gamma)
+                        .mul(bEv.add(betaZeta.mul(k1)).add(gamma))
+                        .mul(cEv.add(betaZeta.mul(k2)).add(gamma)));
+
+        // L1(zeta) = omega^0 * zh / (n * (zeta - omega^0)) = zh / (n * (zeta - 1))
+        MontFr254 zetaN = zeta;
+        for (int i = 1; i < n; i++) zetaN = zetaN.mul(zeta);
+        MontFr254 zh = zetaN.sub(MontFr254.ONE);
+        MontFr254 l1Zeta = zh.mul(MontFr254.fromLong(n).mul(zeta.sub(MontFr254.ONE)).inverse());
+
+        zCoeffInR = zCoeffInR.add(alpha2.mul(l1Zeta));
+        addScaled(rCoeffs, zBlind, zCoeffInR);
+
+        // S3 coefficient: -alpha * beta * zw * (a+beta*s1+gamma)(b+beta*s2+gamma)
+        MontFr254 s3CoeffInR = alpha.mul(beta).mul(zwEv)
+                .mul(aEv.add(beta.mul(s1Ev)).add(gamma))
+                .mul(bEv.add(beta.mul(s2Ev)).add(gamma))
+                .neg();
+        addScaled(rCoeffs, s3Coeffs, s3CoeffInR);
+
+        // Batched polynomial: f(X) = r(X) + v*a(X) + v^2*b(X) + v^3*c(X) + v^4*s1(X) + v^5*s2(X)
+        MontFr254 v2 = v1.mul(v1); MontFr254 v3 = v2.mul(v1); MontFr254 v4 = v3.mul(v1); MontFr254 v5 = v4.mul(v1);
+
+        MontFr254[] fCoeffs = new MontFr254[maxLen];
+        System.arraycopy(rCoeffs, 0, fCoeffs, 0, maxLen);
+        addScaled(fCoeffs, aBlind, v1);
+        addScaled(fCoeffs, bBlind, v2);
+        addScaled(fCoeffs, cBlind, v3);
+        addScaled(fCoeffs, s1Coeffs, v4);
+        addScaled(fCoeffs, s2Coeffs, v5);
+
+        // f(zeta) = r0 + v1*eval_a + v2*eval_b + v3*eval_c + v4*eval_s1 + v5*eval_s2
+        // where r0 is the constant part of r evaluated at zeta
+        // We need to subtract this from f before dividing by (X - zeta)
+        MontFr254 fZeta = FieldFFT.polyEval(fCoeffs, zeta);
+
+        // W_zeta = (f(X) - f(zeta)) / (X - zeta)
+        var commitWxi = KZGCommitment.openingProof(srs, fCoeffs, zeta, fZeta).toAffine();
+
+        // W_{zeta*omega} = (Z(X) - Z(zeta*omega)) / (X - zeta*omega)
+        var commitWxiw = KZGCommitment.openingProof(srs, zBlind, zetaOmega,
                 MontFr254.fromBigInteger(evalZw)).toAffine();
-
-        // Fiat-Shamir Round 5: derive u
-        transcript.reset();
-        addG1(transcript, commitWxi); addG1(transcript, commitWxiw);
-        BigInteger u = transcript.getChallenge();
 
         return new PlonKProof(
                 commitA, commitB, commitC, commitZ,
@@ -234,41 +334,99 @@ public final class PlonKProver {
                 commitWxi, commitWxiw);
     }
 
-    // --- Helpers ---
+    // --- Polynomial helpers ---
 
-    /** Add blinding terms: f(X) += b1*X^n + b2*X^{n+1} */
-    private static MontFr254[] addBlinding(MontFr254[] coeffs, MontFr254 b1, MontFr254 b2, int n) {
-        var result = new MontFr254[n + 2];
-        System.arraycopy(coeffs, 0, result, 0, Math.min(coeffs.length, n));
-        for (int i = coeffs.length; i < n; i++) result[i] = MontFr254.ZERO;
-        result[n] = b1;
-        result[n + 1] = b2;
+    /** Evaluate polynomial on coset {shift * omega^i}: IFFT → shift coeffs by shift^i → FFT */
+    private static MontFr254[] cosetEval(MontFr254[] coeffs, MontFr254 shift, int n, int logN) {
+        MontFr254[] padded = new MontFr254[n];
+        for (int i = 0; i < n; i++)
+            padded[i] = i < coeffs.length ? coeffs[i].mul(powFr(shift, i)) : MontFr254.ZERO;
+        return FieldFFT.fft(padded);
+    }
+
+    /** Inverse coset FFT: FFT^{-1} then unshift by shift^{-i} */
+    private static MontFr254[] cosetIFFT(MontFr254[] vals, MontFr254 shift, int n, int logN) {
+        var coeffs = FieldFFT.ifft(vals);
+        MontFr254 shiftInv = shift.inverse();
+        MontFr254 power = MontFr254.ONE;
+        for (int i = 0; i < coeffs.length; i++) {
+            coeffs[i] = coeffs[i].mul(power);
+            power = power.mul(shiftInv);
+        }
+        return coeffs;
+    }
+
+    /** Shift polynomial: if f(X) = sum c_i*X^i, return g where g(X) = f(omega*X) = sum c_i*omega^i*X^i */
+    private static MontFr254[] shiftPoly(MontFr254[] coeffs, MontFr254 omega) {
+        MontFr254[] result = new MontFr254[coeffs.length];
+        MontFr254 power = MontFr254.ONE;
+        for (int i = 0; i < coeffs.length; i++) {
+            result[i] = coeffs[i].mul(power);
+            power = power.mul(omega);
+        }
         return result;
     }
 
-    /** Add blinding terms: f(X) += b1*X^n + b2*X^{n+1} + b3*X^{n+2} */
+    /** Build PI(X) polynomial: PI(omega^i) = -pubInputs[i-1] for i=1..nPub, 0 elsewhere */
+    private static MontFr254[] buildPICoeffs(BigInteger[] pubInputs, MontFr254 omega, int n, int logN) {
+        MontFr254[] piEvals = new MontFr254[n];
+        piEvals[0] = MontFr254.ZERO;
+        for (int i = 1; i <= pubInputs.length && i < n; i++) {
+            piEvals[i] = MontFr254.fromBigInteger(pubInputs[i - 1]).neg();
+        }
+        for (int i = pubInputs.length + 1; i < n; i++) piEvals[i] = MontFr254.ZERO;
+        return FieldFFT.ifft(piEvals);
+    }
+
+    /** Build L1(X) polynomial: L1(omega^i) = 1 if i=0, 0 otherwise */
+    private static MontFr254[] buildL1Coeffs(MontFr254 omega, int n, int logN) {
+        MontFr254[] l1Evals = new MontFr254[n];
+        l1Evals[0] = MontFr254.ONE;
+        for (int i = 1; i < n; i++) l1Evals[i] = MontFr254.ZERO;
+        return FieldFFT.ifft(l1Evals);
+    }
+
+    /** Add scaled polynomial: result[i] += factor * poly[i] */
+    private static void addScaled(MontFr254[] result, MontFr254[] poly, MontFr254 factor) {
+        for (int i = 0; i < poly.length && i < result.length; i++) {
+            result[i] = result[i].add(factor.mul(poly[i]));
+        }
+    }
+
+    private static MontFr254[] addBlinding2(MontFr254[] coeffs, MontFr254 b1, MontFr254 b2, int n) {
+        var r = new MontFr254[n + 2];
+        System.arraycopy(coeffs, 0, r, 0, Math.min(coeffs.length, n));
+        for (int i = coeffs.length; i < n; i++) r[i] = MontFr254.ZERO;
+        r[n] = b1; r[n + 1] = b2;
+        return r;
+    }
+
     private static MontFr254[] addBlinding3(MontFr254[] coeffs, MontFr254 b1, MontFr254 b2, MontFr254 b3, int n) {
-        var result = new MontFr254[n + 3];
-        System.arraycopy(coeffs, 0, result, 0, Math.min(coeffs.length, n));
-        for (int i = coeffs.length; i < n; i++) result[i] = MontFr254.ZERO;
-        result[n] = b1;
-        result[n + 1] = b2;
-        result[n + 2] = b3;
-        return result;
+        var r = new MontFr254[n + 3];
+        System.arraycopy(coeffs, 0, r, 0, Math.min(coeffs.length, n));
+        for (int i = coeffs.length; i < n; i++) r[i] = MontFr254.ZERO;
+        r[n] = b1; r[n + 1] = b2; r[n + 2] = b3;
+        return r;
     }
 
-    private static BigInteger[] toBI(MontFr254[] arr) {
-        var result = new BigInteger[arr.length];
-        for (int i = 0; i < arr.length; i++) result[i] = arr[i].toBigInteger();
-        return result;
+    private static MontFr254[] padTo(MontFr254[] arr, int n) {
+        if (arr.length >= n) return arr;
+        var r = new MontFr254[n];
+        System.arraycopy(arr, 0, r, 0, arr.length);
+        for (int i = arr.length; i < n; i++) r[i] = MontFr254.ZERO;
+        return r;
+    }
+
+    private static MontFr254 powFr(MontFr254 base, int exp) {
+        if (exp == 0) return MontFr254.ONE;
+        MontFr254 r = base;
+        for (int i = 1; i < exp; i++) r = r.mul(base);
+        return r;
     }
 
     private static void addG1(FiatShamirTranscript t, AffineG1 p) {
-        if (p.isInfinity()) {
-            t.addPolCommitment(BigInteger.ZERO, BigInteger.ZERO);
-        } else {
-            t.addPolCommitment(p.xBigInt(), p.yBigInt());
-        }
+        if (p.isInfinity()) t.addPolCommitment(BigInteger.ZERO, BigInteger.ZERO);
+        else t.addPolCommitment(p.xBigInt(), p.yBigInt());
     }
 
     private static MontFr254 randomFr(SecureRandom rng) {
