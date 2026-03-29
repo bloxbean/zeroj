@@ -125,10 +125,11 @@ class PlonKDSLProverTest {
                 plonk.numWires(), srs);
 
         // Verify: Ql[i]*a + Qr[i]*b + Qm[i]*a*b + Qo[i]*c + Qc[i] = 0
-        // at each gate row (using the witness values from the PlonK wire assignments)
+        // Skip public input rows (first nPublic) — they satisfy gate + PI = 0
         BigInteger p = new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"); // Fr
         var gateRows = plonk.gateRows();
-        for (int i = 0; i < numGates; i++) {
+        int nPub = plonk.numPublicInputs();
+        for (int i = nPub; i < numGates; i++) {
             var row = gateRows.get(i);
             BigInteger a = witness[row.wireA()];
             BigInteger b = witness[row.wireB()];

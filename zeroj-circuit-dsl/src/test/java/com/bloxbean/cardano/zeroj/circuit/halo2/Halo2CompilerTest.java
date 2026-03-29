@@ -399,9 +399,11 @@ class Halo2CompilerTest {
         verifyHalo2GateSatisfaction(halo2, witness);
 
         var plonk = circuit.compilePlonK(CurveId.BN254);
-        // PlonK also satisfied (cross-check)
+        // PlonK also satisfied (cross-check) — skip public input rows (first nPub)
         var extendedPlonk = plonk.extendWitness(witness);
-        for (var row : plonk.gateRows()) {
+        var plonkRows = plonk.gateRows();
+        for (int i = plonk.numPublicInputs(); i < plonkRows.size(); i++) {
+            var row = plonkRows.get(i);
             BigInteger a = extendedPlonk[row.wireA()];
             BigInteger b = extendedPlonk[row.wireB()];
             BigInteger c = extendedPlonk[row.wireC()];
@@ -411,7 +413,7 @@ class Halo2CompilerTest {
                     .add(row.qM().multiply(a).multiply(b))
                     .add(row.qC())
                     .mod(BN254_PRIME);
-            assertEquals(BigInteger.ZERO, result, "PlonK gate not satisfied");
+            assertEquals(BigInteger.ZERO, result, "PlonK gate " + i + " not satisfied");
         }
     }
 

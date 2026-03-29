@@ -464,7 +464,11 @@ class R1CSConformanceTest {
     private static void verifyPlonKGateSatisfaction(
             com.bloxbean.cardano.zeroj.circuit.plonk.PlonKConstraintSystem plonk, BigInteger[] baseWitness) {
         BigInteger[] witness = plonk.extendWitness(baseWitness);
-        for (var row : plonk.gateRows()) {
+        int nPub = plonk.numPublicInputs();
+        // Skip public input rows (first nPub rows) — they satisfy gate + PI = 0, not gate = 0
+        var allRows = plonk.gateRows();
+        for (int rowIdx = nPub; rowIdx < allRows.size(); rowIdx++) {
+            var row = allRows.get(rowIdx);
             assertTrue(row.wireA() < witness.length,
                     "wireA index " + row.wireA() + " out of bounds (witness length=" + witness.length + ")");
             assertTrue(row.wireB() < witness.length,

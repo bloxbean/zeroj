@@ -9,6 +9,13 @@ import java.util.List;
  * A compiled PlonK constraint system — gate table + copy constraints (permutation).
  *
  * <p>Each gate row enforces: qL*a + qR*b + qO*c + qM*(a*b) + qC = 0</p>
+ *
+ * <p>Follows the snarkjs PlonK convention:</p>
+ * <ul>
+ *   <li>Public input rows come first (one per public input, with qL=1)</li>
+ *   <li>Virtual wire computations are tracked as separate {@link Addition} records</li>
+ *   <li>Selector signs in reduction gates: qL=-coeff, qR=-coeff, qO=+1 (output positive on C)</li>
+ * </ul>
  */
 public record PlonKConstraintSystem(
         FieldConfig fieldConfig,
@@ -17,7 +24,8 @@ public record PlonKConstraintSystem(
         List<GateRow> gateRows,
         int[] sigmaA, int[] sigmaB, int[] sigmaC,
         int numWires,
-        BigInteger k1, BigInteger k2
+        BigInteger k1, BigInteger k2,
+        List<Addition> additions
 ) {
     /**
      * A single PlonK gate row.
@@ -27,6 +35,16 @@ public record PlonKConstraintSystem(
             int wireA, int wireB, int wireC
     ) {}
 
+    /**
+     * A virtual wire computation instruction (snarkjs "addition").
+     *
+     * <p>Computes: {@code virtualWire = factorA * witness[wireA] + factorB * witness[wireB]}</p>
+     *
+     * <p>The prover uses these to extend the witness with virtual wire values
+     * before evaluating the gate polynomials.</p>
+     */
+    public record Addition(int wireA, int wireB, BigInteger factorA, BigInteger factorB, int outputWire) {}
+
     public int domainSize() {
         // Pad to next power of 2
         int n = 1;
@@ -35,35 +53,23 @@ public record PlonKConstraintSystem(
     }
 
     /**
-     * Extend a base witness to include values for virtual intermediate wires
-     * created during LinComb chaining.
+     * Extend a base witness to include values for virtual intermediate wires.
      *
-     * <p>The base witness has values for wires 0..baseLen-1 from the constraint graph.
-     * Virtual wires (baseLen..numWires-1) are computed by evaluating gate rows in order:
-     * for each row where wireC &ge; baseLen, compute c = (qL*a + qR*b + qM*a*b + qC) / (-qO).</p>
+     * <p>Uses the {@link Addition} records (snarkjs-compatible) to compute virtual wire values.</p>
      */
     public BigInteger[] extendWitness(BigInteger[] baseWitness) {
-        if (numWires <= baseWitness.length) return baseWitness;
+        if (additions.isEmpty() && numWires <= baseWitness.length) return baseWitness;
         BigInteger p = fieldConfig.prime();
         BigInteger[] extended = new BigInteger[numWires];
-        System.arraycopy(baseWitness, 0, extended, 0, baseWitness.length);
-        // Virtual wires are null until computed
-        // Compute virtual wire values from gate rows in order
-        for (var row : gateRows) {
-            if (row.wireC() >= baseWitness.length && extended[row.wireC()] == null) {
-                BigInteger a = extended[row.wireA()];
-                BigInteger b = extended[row.wireB()];
-                // qL*a + qR*b + qM*a*b + qC + qO*c = 0  →  c = -(qL*a + qR*b + qM*a*b + qC) / qO
-                BigInteger sum = row.qL().multiply(a)
-                        .add(row.qR().multiply(b))
-                        .add(row.qM().multiply(a).multiply(b))
-                        .add(row.qC())
-                        .mod(p);
-                // qO is always NEG_ONE (p-1) for these rows, so c = sum
-                BigInteger negQO = row.qO().negate().mod(p);
-                BigInteger c = sum.multiply(negQO.modInverse(p)).mod(p);
-                extended[row.wireC()] = c;
-            }
+        System.arraycopy(baseWitness, 0, extended, 0, Math.min(baseWitness.length, numWires));
+
+        // Compute virtual wires from additions (in order)
+        for (var add : additions) {
+            BigInteger a = extended[add.wireA()];
+            BigInteger b = extended[add.wireB()];
+            if (a == null) a = BigInteger.ZERO;
+            if (b == null) b = BigInteger.ZERO;
+            extended[add.outputWire()] = add.factorA().multiply(a).add(add.factorB().multiply(b)).mod(p);
         }
         return extended;
     }
