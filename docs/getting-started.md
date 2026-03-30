@@ -244,6 +244,19 @@ The `zeroj-examples` module contains complete working examples:
 
 ### Available Examples
 
+**Pure Java prover (zero external tools):**
+
+| Example | Circuit | Prove | Verify | On-Chain |
+|---------|---------|-------|--------|----------|
+| `SealedBidPureJavaE2ETest` | Sealed bid (497 constraints) | Pure Java | Pairing | No |
+| `AnonymousVotingPureJavaE2ETest` | Anonymous voting (367 constraints) | Pure Java | Pairing | No |
+| `BalanceThresholdPureJavaE2ETest` | Balance threshold (132 constraints) | Pure Java | Pairing | No |
+| `PureJavaProverYaciE2ETest` | Multiplier | Pure Java | **Yaci DevKit** | **Yes** |
+| `CircomToOnChainE2ETest` | Circom multiplier | Pure Java | **Julc VM** | Yes |
+| `ParameterizedCircuitE2ETest` | Hash chain, Merkle, multi-commit | Pure Java | Pairing | No |
+
+**FFM/CLI provers (native dependencies):**
+
 | Example | Circuit | Prove | Verify | On-Chain |
 |---------|---------|-------|--------|----------|
 | `SealedBidE2ETest` | Sealed bid auction | snarkjs | Pure Java | No |
@@ -264,11 +277,14 @@ See the [examples README](../zeroj-examples/README.md) for detailed descriptions
 
 | Prover | Proof System | Curve | External Deps | Speed |
 |--------|-------------|-------|---------------|-------|
+| **Pure Java** | Groth16 + PlonK | BLS12-381, BN254 | **None** | Seconds |
 | **gnark FFM** | Groth16 + PlonK | BLS12-381, BN254 | gnark native lib | ~50-300ms |
 | **snarkjs CLI** | Groth16 + PlonK | BLS12-381, BN254 | Node.js + snarkjs | Minutes |
 | **rapidsnark** | Groth16 | BN254 only | rapidsnark native lib | ~10-50ms |
 
-gnark FFM is the recommended prover for production use -- everything runs in-process.
+**Pure Java** is the recommended prover for Cardano -- zero dependencies, GraalVM-compatible, proven end-to-end on-chain. See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.
+
+For maximum speed with large circuits, see [Alternate Prover Backends](alternate-prover-backends.md) (gnark FFM, rapidsnark).
 
 ## Curves and On-Chain Feasibility
 

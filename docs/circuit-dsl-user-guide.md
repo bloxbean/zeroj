@@ -6,36 +6,70 @@ The ZeroJ Circuit DSL lets you define ZK arithmetic circuits in Java and compile
 
 | Backend | Proof System | Prover | Use Case |
 |---------|-------------|--------|----------|
-| R1CS | Groth16 | rapidsnark FFM, gnark FFM | Smallest proofs, cheapest on-chain verification |
-| PlonK | PlonK | gnark FFM | Universal setup, no per-circuit ceremony |
+| R1CS | Groth16 | **Pure Java**, gnark FFM, rapidsnark FFM | Smallest proofs, cheapest on-chain verification |
+| PlonK | PlonK | **Pure Java**, gnark FFM | Universal setup, no per-circuit ceremony |
 | Halo2 | Halo2 (IPA/KZG) | Halo2 Rust FFM | No trusted setup (IPA), recursive proofs |
 
-No circom, no Go, no Rust needed to define circuits. Just Java.
+No circom, no Go, no Rust needed. Just Java.
+
+## Two Ways to Define Circuits
+
+### Recommended: CircuitSpec Class (reusable, testable, composable)
+
+```java
+public class MultiplierCircuit implements CircuitSpec {
+    @Override
+    public void define(SignalBuilder c) {
+        Signal x = c.privateInput("x");
+        Signal y = c.privateInput("y");
+        Signal z = c.publicOutput("z");
+        c.assertEqual(x.mul(y), z);
+    }
+
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("multiplier")
+                .publicVar("z").secretVar("x").secretVar("y")
+                .defineSignals(new MultiplierCircuit());
+    }
+}
+
+// Usage
+var circuit = MultiplierCircuit.build();
+var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+```
+
+### Alternative: Inline Lambda (quick prototyping)
+
+```java
+var circuit = CircuitBuilder.create("multiplier")
+    .publicVar("z").secretVar("x").secretVar("y")
+    .define(api -> {
+        api.assertEqual(api.mul(api.var("x"), api.var("y")), api.var("z"));
+    });
+```
+
+Both produce identical R1CS constraints. **Use CircuitSpec for production code** — it's testable, reusable, and self-documenting.
 
 ## Quick Start
 
 ```java
 // 1. Define the circuit
-var circuit = CircuitBuilder.create("multiplier")
-    .publicVar("z")           // public: the product (visible to verifier)
-    .secretVar("x")           // private: first factor (hidden)
-    .secretVar("y")           // private: second factor (hidden)
-    .define(api -> {
-        var product = api.mul(api.var("x"), api.var("y"));
-        api.assertEqual(product, api.var("z"));
-    });
+var circuit = MultiplierCircuit.build();
 
 // 2. Calculate witness
 var witness = circuit.calculateWitness(Map.of(
     "z", List.of(BigInteger.valueOf(33)),
     "x", List.of(BigInteger.valueOf(3)),
     "y", List.of(BigInteger.valueOf(11))
-), CurveId.BN254);
+), CurveId.BLS12_381);
 
 // 3. Compile to any proof system
-var r1cs  = circuit.compileR1CS(CurveId.BN254);      // Groth16
-var plonk = circuit.compilePlonK(CurveId.BN254);      // PlonK
-var halo2 = circuit.compileHalo2(CurveId.PALLAS);     // Halo2
+var r1cs  = circuit.compileR1CS(CurveId.BLS12_381);   // Groth16
+var plonk = circuit.compilePlonK(CurveId.BLS12_381);   // PlonK
+var halo2 = circuit.compileHalo2(CurveId.PALLAS);      // Halo2
+
+// 4. Prove with pure Java prover (see pure-java-prover-guide.md)
+var proof = Groth16ProverBLS381.prove(pk, witness, constraints, numWires);
 ```
 
 ## Core Concepts
@@ -69,6 +103,189 @@ Constraints enforce relationships between variables. If the witness doesn't sati
 api.assertEqual(a, b);     // a must equal b
 api.assertBoolean(flag);   // flag must be 0 or 1
 api.assertInRange(v, 8);   // 0 ≤ v < 256 (8-bit range)
+```
+
+## Writing CircuitSpec Circuits (Recommended)
+
+A `CircuitSpec` is a Java class that defines a ZK circuit. This is the **preferred pattern** for production circuits because it's reusable, testable, and self-documenting.
+
+### Anatomy of a CircuitSpec
+
+```java
+import com.bloxbean.cardano.zeroj.circuit.*;
+import com.bloxbean.cardano.zeroj.circuit.lib.*;
+
+public class MyCircuit implements CircuitSpec {
+
+    // Optional: constructor parameters (Java replaces Circom's template parameters)
+    private final int bitWidth;
+    public MyCircuit(int bitWidth) { this.bitWidth = bitWidth; }
+
+    @Override
+    public void define(SignalBuilder c) {
+        // 1. Declare signals
+        Signal secretValue = c.privateInput("secret");  // only prover knows
+        Signal publicResult = c.publicOutput("result");  // verifier sees this
+        Signal threshold = c.publicInput("threshold");   // verifier provides this
+
+        // 2. Build constraints using Signal operations
+        Signal comparison = SignalComparators.greaterOrEqual(c, secretValue, threshold, bitWidth);
+        c.assertEqual(comparison, publicResult);
+    }
+
+    // 3. Factory method (declares variable layout)
+    public static CircuitBuilder build(int bitWidth) {
+        return CircuitBuilder.create("my-circuit")
+                .publicVar("threshold")
+                .publicVar("result")
+                .secretVar("secret")
+                .defineSignals(new MyCircuit(bitWidth));
+    }
+}
+```
+
+### Signal API vs Functional API
+
+The `CircuitSpec` uses the **Signal API** where operations are methods on `Signal` objects:
+
+```java
+// Signal API (recommended for CircuitSpec)
+Signal sum = a.add(b);           // a + b
+Signal product = a.mul(b);       // a * b (1 constraint)
+Signal cond = flag.select(x, y); // flag ? x : y
+flag.assertBoolean();            // flag ∈ {0, 1}
+c.assertEqual(product, output);  // constrain equality
+```
+
+The inline lambda uses the **Functional API** where operations are methods on `api`:
+
+```java
+// Functional API (for inline lambdas)
+var sum = api.mul(api.var("a"), api.var("b"));
+api.assertEqual(sum, api.var("output"));
+```
+
+Both produce identical constraints. Use whichever feels natural.
+
+### Example: Hash Commitment Circuit
+
+Prove knowledge of a preimage without revealing it:
+
+```java
+public class HashCommitmentCircuit implements CircuitSpec {
+    @Override
+    public void define(SignalBuilder c) {
+        Signal secret = c.privateInput("secret");
+        Signal salt = c.privateInput("salt");
+        Signal commitment = c.publicOutput("commitment");
+
+        // MiMC hash: commitment = MiMC(secret, salt)
+        c.assertEqual(SignalMiMC.hash(c, secret, salt), commitment);
+    }
+
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("hash-commitment")
+                .publicVar("commitment")
+                .secretVar("secret")
+                .secretVar("salt")
+                .defineSignals(new HashCommitmentCircuit());
+    }
+}
+```
+
+### Example: Parameterized Circuit (Java Replaces Circom Templates)
+
+In Circom: `template HashChain(depth) { ... }`. In Java: constructor parameter.
+
+```java
+public class HashChainCircuit implements CircuitSpec {
+    private final int depth;  // parameter (like Circom template parameter)
+
+    public HashChainCircuit(int depth) { this.depth = depth; }
+
+    @Override
+    public void define(SignalBuilder c) {
+        Signal secret = c.privateInput("secret");
+        Signal digest = c.publicOutput("digest");
+
+        Signal current = secret;
+        Signal zero = c.constant(0);
+        for (int i = 0; i < depth; i++) {
+            current = SignalMiMC.hash(c, current, zero);
+        }
+        c.assertEqual(current, digest);
+    }
+
+    public static CircuitBuilder build(int depth) {
+        return CircuitBuilder.create("hash-chain-" + depth)
+                .publicVar("digest")
+                .secretVar("secret")
+                .defineSignals(new HashChainCircuit(depth));
+    }
+}
+
+// Usage: different depths, same code
+var shallow = HashChainCircuit.build(1);  // ~364 constraints
+var deep = HashChainCircuit.build(5);     // ~1821 constraints
+```
+
+### Example: Merkle Proof Circuit (Array Signals + Hash Function Parameter)
+
+```java
+public class MerkleProofCircuit implements CircuitSpec {
+    private final int depth;
+    private final SignalMerkle.HashFn hashFn;
+
+    public MerkleProofCircuit(int depth, SignalMerkle.HashFn hashFn) {
+        this.depth = depth;
+        this.hashFn = hashFn;
+    }
+
+    @Override
+    public void define(SignalBuilder c) {
+        Signal leaf = c.privateInput("leaf");
+        Signal root = c.publicOutput("root");
+
+        Signal[] siblings = new Signal[depth];
+        Signal[] pathBits = new Signal[depth];
+        for (int i = 0; i < depth; i++) {
+            siblings[i] = c.privateInput("sibling_" + i);
+            pathBits[i] = c.privateInput("pathBit_" + i);
+        }
+
+        SignalMerkle.verifyProof(c, leaf, root, siblings, pathBits, hashFn);
+    }
+
+    public static CircuitBuilder build(int depth) {
+        var builder = CircuitBuilder.create("merkle-d" + depth)
+                .publicVar("root").secretVar("leaf");
+        for (int i = 0; i < depth; i++) {
+            builder = builder.secretVar("sibling_" + i).secretVar("pathBit_" + i);
+        }
+        return builder.defineSignals(new MerkleProofCircuit(depth, SignalMiMC::hash));
+    }
+}
+```
+
+### Compiling and Serializing to R1CS
+
+```java
+var circuit = HashCommitmentCircuit.build();
+
+// Compile to R1CS (for Groth16)
+var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+System.out.println("Constraints: " + r1cs.numConstraints());
+System.out.println("Wires: " + r1cs.numWires());
+System.out.println("Public inputs: " + r1cs.numPublicInputs());
+
+// Serialize to iden3 .r1cs binary (compatible with snarkjs)
+byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
+Files.write(Path.of("circuit.r1cs"), r1csBytes);
+
+// Calculate and export witness
+BigInteger[] witness = circuit.calculateWitness(inputs, CurveId.BLS12_381);
+byte[] wtnsBytes = WitnessExporter.toWtns(witness, r1cs.prime(), r1cs.fieldConfig().n32());
+Files.write(Path.of("witness.wtns"), wtnsBytes);
 ```
 
 ## CircuitAPI Reference
@@ -126,6 +343,31 @@ api.assertInRange(v, 8);   // 0 ≤ v < 256 (8-bit range)
 
 Import: `com.bloxbean.cardano.zeroj.circuit.lib.*`
 
+### Hash Functions
+
+```java
+// MiMC-7 hash (2 inputs → 1 output, ~364 constraints)
+var hash = MiMC.hash(api, api.var("left"), api.var("right"));
+
+// Poseidon hash (2 inputs → 1 output, ~330 constraints)
+var hash = Poseidon.hash(api, api.var("in0"), api.var("in1"));
+
+// Variable-arity Poseidon (N inputs via left-fold)
+var hash = PoseidonN.hash(api, api.var("a"), api.var("b"), api.var("c"), api.var("d"));
+
+// MiMC Sponge (variable-length input, single or multi-output)
+var hash = MiMCSponge.hash(api, new Variable[]{api.var("in0"), api.var("in1"), api.var("in2")});
+var outputs = MiMCSponge.hashMulti(api, inputs, 2);  // 2 outputs
+```
+
+Signal API equivalents:
+```java
+Signal hash = SignalMiMC.hash(c, left, right);
+Signal hash = SignalPoseidon.hash(c, in0, in1);
+Signal hash = PoseidonN.hash(c, a, b, c, d);
+Signal hash = MiMCSponge.hash(c, new Signal[]{in0, in1, in2});
+```
+
 ### Comparators
 
 ```java
@@ -134,23 +376,15 @@ var inBounds = Comparators.inRange(api, api.var("value"), min, max, 16);
 var smallest = Comparators.min(api, a, b, 8);
 ```
 
-### MiMC Hash
-
-```java
-// Hash two field elements
-var hash = MiMC.hash(api, api.var("left"), api.var("right"));
-```
-
-Approximately 364 constraints per hash (91 rounds × 4 multiplications).
-
 ### Merkle Proof
 
 ```java
 // Verify a Merkle proof with any hash function
 Merkle.verifyProof(api, leaf, root, siblings, pathBits, MiMC::hash);
+Merkle.verifyProof(api, leaf, root, siblings, pathBits, Poseidon::hash);  // or Poseidon
 ```
 
-For a depth-20 tree: 20 × 364 ≈ 7,280 constraints with MiMC.
+For a depth-20 tree: 20 × 364 ≈ 7,280 constraints with MiMC, or 20 × 330 ≈ 6,600 with Poseidon.
 
 ### Binary Utilities
 
@@ -167,6 +401,13 @@ var rotated = Binary.rotateLeft(bits, 3);             // free (index shift)
 var result = Mux.mux1(api, selector, valueA, valueB);               // 2-way
 var result = Mux.mux2(api, sel0, sel1, a, b, c, d);                 // 4-way
 var element = Mux.arrayAccess(api, array, index);                    // array lookup
+```
+
+### AliasCheck
+
+```java
+// Assert value is in canonical field range [0, p-1] (prevents field aliasing)
+AliasCheck.check(api, api.var("value"), 253);
 ```
 
 ## Practical Examples
@@ -350,28 +591,29 @@ void multiplier_validWitness() {
 ## End-to-End Flow
 
 ```
-Java CircuitBuilder DSL
+Java CircuitSpec / CircuitBuilder DSL
         │
-        ├──▶ compileR1CS()  ──▶ .r1cs binary ──▶ rapidsnark FFM ──▶ proof
-        │                                          └──▶ gnark FFM ──▶ proof
+        ├──▶ compileR1CS()  ──▶ Groth16ProverBLS381 (pure Java) ──▶ proof
+        │                    └──▶ gnark FFM ──▶ proof (see alternate-backends.md)
+        │                    └──▶ rapidsnark FFM ──▶ proof
         │
-        ├──▶ compilePlonK() ──▶ PlonK gates  ──▶ gnark FFM ──▶ proof
+        ├──▶ compilePlonK() ──▶ PlonKProverBLS381 (pure Java) ──▶ proof
+        │                    └──▶ gnark FFM ──▶ proof
         │
-        ├──▶ compileHalo2() ──▶ Halo2 JSON   ──▶ Halo2 Rust FFM ──▶ proof
+        ├──▶ compileHalo2() ──▶ Halo2 Rust FFM ──▶ proof
         │
         └──▶ calculateWitness() ──▶ BigInteger[] (pure Java)
-                                         │
-                                         ▼
-                               WitnessExporter.toWtns()
-                                         │
-                                         ▼
-                                    .wtns binary
 
 Verification (pure Java, zero native deps):
   Groth16BN254Verifier / Groth16BLS12381PureJavaVerifier
   PlonkBN254Verifier / PlonkBLS12381Verifier
-  Halo2Verifier (Rust FFM)
+
+On-Chain (Cardano Plutus V3):
+  Groth16BLS12381Verifier / PlonkBLS12381FullVerifier (Julc)
 ```
+
+**Recommended path**: CircuitSpec → `compileR1CS(BLS12_381)` → `Groth16ProverBLS381` → on-chain verify.
+See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.
 
 ## Constraint Optimization Tips
 
