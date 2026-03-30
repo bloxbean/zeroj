@@ -1,5 +1,25 @@
 # ZeroJ Circuit DSL — User Guide
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Two Ways to Define Circuits](#two-ways-to-define-circuits)
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+- [Writing CircuitSpec Circuits (Recommended)](#writing-circuitspec-circuits-recommended)
+- [CircuitAPI Reference](#circuitapi-reference)
+- [Standard Library (zeroj-circuit-lib)](#standard-library-zeroj-circuit-lib)
+- [Practical Examples (CircuitSpec)](#practical-examples-circuitspec)
+- [Compilation Backends](#compilation-backends)
+- [Curves](#curves)
+- [Witness Calculation](#witness-calculation)
+- [Testing Circuits](#testing-circuits)
+- [End-to-End Flow](#end-to-end-flow)
+- [Constraint Optimization Tips](#constraint-optimization-tips)
+- [Module Dependencies](#module-dependencies)
+
+---
+
 ## Overview
 
 The ZeroJ Circuit DSL lets you define ZK arithmetic circuits in Java and compile them to **three proof systems** from a single definition:
