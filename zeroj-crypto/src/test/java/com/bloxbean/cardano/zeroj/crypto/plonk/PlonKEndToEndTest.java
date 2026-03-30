@@ -78,7 +78,7 @@ class PlonKEndToEndTest {
         for (int i = 0; i < pubInputs.length; i++) pubInputs[i] = witness[i + 1];
 
         // === Step 7: PROVE (pure Java!) ===
-        // Use unblinded mode for debugging — once verification passes, switch to prove()
+        // Proof without blinding (blinding support is WIP)
         var proof = PlonKProver.proveUnblinded(pk, wireA, wireB, wireC, pubInputs);
         assertNotNull(proof);
         assertFalse(proof.commitA().isInfinity(), "A not infinity");

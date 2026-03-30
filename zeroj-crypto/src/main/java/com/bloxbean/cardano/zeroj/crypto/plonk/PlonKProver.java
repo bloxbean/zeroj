@@ -324,6 +324,16 @@ public final class PlonKProver {
         // Batched polynomial: f(X) = r(X) + v*a(X) + v^2*b(X) + v^3*c(X) + v^4*s1(X) + v^5*s2(X)
         MontFr254 v2 = v1.mul(v1); MontFr254 v3 = v2.mul(v1); MontFr254 v4 = v3.mul(v1); MontFr254 v5 = v4.mul(v1);
 
+        // Subtract zh * (T1 + xin*T2 + xin^2*T3) from r to get the "D-equivalent" polynomial
+        // The verifier's D = [r(tau)] - zh*[T(tau)], so the opened polynomial should be
+        // r(X) - zh*T(X) where T(X) = T1(X) + xin*T2(X) + xin^2*T3(X)
+        MontFr254 xinM = zeta;
+        for (int i = 1; i < n; i++) xinM = xinM.mul(zeta); // xin = zeta^n
+        MontFr254 zhM = xinM.sub(MontFr254.ONE);
+        addScaled(rCoeffs, t1, zhM.neg());
+        addScaled(rCoeffs, t2, zhM.neg().mul(xinM));
+        addScaled(rCoeffs, t3, zhM.neg().mul(xinM).mul(xinM));
+
         MontFr254[] fCoeffs = new MontFr254[maxLen];
         System.arraycopy(rCoeffs, 0, fCoeffs, 0, maxLen);
         addScaled(fCoeffs, aBlind, v1);
@@ -332,9 +342,6 @@ public final class PlonKProver {
         addScaled(fCoeffs, s1Coeffs, v4);
         addScaled(fCoeffs, s2Coeffs, v5);
 
-        // f(zeta) = r0 + v1*eval_a + v2*eval_b + v3*eval_c + v4*eval_s1 + v5*eval_s2
-        // where r0 is the constant part of r evaluated at zeta
-        // We need to subtract this from f before dividing by (X - zeta)
         MontFr254 fZeta = FieldFFT.polyEval(fCoeffs, zeta);
 
         // W_zeta = (f(X) - f(zeta)) / (X - zeta)
