@@ -1,13 +1,13 @@
 package com.bloxbean.cardano.zeroj.crypto.setup;
 
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254.AffineG2;
-import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKey;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381.AffineG2;
+import com.bloxbean.cardano.zeroj.crypto.field.MontFr381;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
-import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFT;
+import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- * Groth16 Phase 2 setup — generates a proving key from R1CS constraints + Powers of Tau SRS.
+ * Groth16 Phase 2 setup for BLS12-381 — generates a proving key from R1CS constraints + Powers of Tau SRS.
  *
  * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b> This is a single-party setup — the toxic
  * waste (alpha, beta, gamma, delta, tau) is known to one party. For production, use
@@ -30,26 +30,26 @@ import java.util.Map;
  *   <li>Compute H points as odd-indexed Lagrange basis on double-sized domain / delta</li>
  * </ol>
  */
-public final class Groth16Setup {
+public final class Groth16SetupBLS381 {
 
-    private Groth16Setup() {}
+    private Groth16SetupBLS381() {}
 
-    private static final BigInteger FR = MontFr254.modulus();
+    private static final BigInteger FR = MontFr381.modulus();
 
     /**
      * Generate a Groth16 proving key from R1CS constraints and known tau.
      *
      * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b></p>
      *
-     * @param constraints R1CS constraints (A*w × B*w = C*w)
+     * @param constraints R1CS constraints (A*w x B*w = C*w)
      * @param numWires    total wire count
      * @param numPublic   number of public inputs (wires 1..numPublic)
-     * @param tau         the toxic waste from PowersOfTau (KNOWN — dev/test only)
-     * @return Groth16 proving key ready for Groth16Prover.prove()
+     * @param tau         the toxic waste from PowersOfTauBLS381 (KNOWN — dev/test only)
+     * @return Groth16 proving key ready for Groth16ProverBLS381.prove()
      */
-    public static Groth16ProvingKey setup(R1CSConstraint[] constraints, int numWires,
-                                           int numPublic, BigInteger tau) {
-        System.err.println("WARNING: Single-party Groth16 Phase 2 setup — "
+    public static SetupResult setup(R1CSConstraint[] constraints, int numWires,
+                                     int numPublic, BigInteger tau) {
+        System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
 
@@ -72,7 +72,7 @@ public final class Groth16Setup {
         BigInteger deltaInv = delta.modInverse(FR);
 
         // Compute omega (primitive domainSize-th root of unity)
-        MontFr254 omega = FieldFFT.rootOfUnity(logN);
+        MontFr381 omega = FieldFFTBLS381.rootOfUnity(logN);
 
         // Compute Lagrange basis evaluations at tau: L_i(tau) = (tau^N - 1) / (N * (tau - omega^i))
         BigInteger tauN = tau.modPow(BigInteger.valueOf(domainSize), FR);
@@ -112,8 +112,8 @@ public final class Groth16Setup {
         }
 
         // Compute group elements
-        var g1 = JacobianG1BN254.GENERATOR;
-        var g2 = JacobianG2BN254.GENERATOR;
+        var g1 = JacobianG1BLS381.GENERATOR;
+        var g2 = JacobianG2BLS381.GENERATOR;
 
         AffineG1 alphaG1 = g1.scalarMul(alpha).toAffine();
         AffineG1 betaG1 = g1.scalarMul(beta).toAffine();
@@ -152,7 +152,7 @@ public final class Groth16Setup {
         // H points: odd-indexed Lagrange basis on double-sized domain / delta
         // L_{2i+1}^{(2N)}(tau) / delta * G1
         int domainSize2 = 2 * domainSize;
-        MontFr254 omega2 = FieldFFT.rootOfUnity(logN + 1); // primitive 2N-th root
+        MontFr381 omega2 = FieldFFTBLS381.rootOfUnity(logN + 1); // primitive 2N-th root
         BigInteger omega2Bi = omega2.toBigInteger();
         BigInteger tauN2 = tau.modPow(BigInteger.valueOf(domainSize2), FR);
         BigInteger zh2 = tauN2.subtract(BigInteger.ONE).mod(FR);
@@ -161,6 +161,7 @@ public final class Groth16Setup {
         AffineG1[] pointsH = new AffineG1[domainSize];
         for (int i = 0; i < domainSize; i++) {
             int lagIdx = 2 * i + 1; // odd index
+            // omega2^lagIdx
             BigInteger omegaPow = omega2Bi.modPow(BigInteger.valueOf(lagIdx), FR);
             BigInteger diff = tau.subtract(omegaPow).mod(FR);
             BigInteger hLagrange;
@@ -175,13 +176,39 @@ public final class Groth16Setup {
             pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(hVal).toAffine();
         }
 
-        // Securely discard toxic waste (best-effort — see PowersOfTau.java for caveats)
+        // Verification key components: gamma_G2 and IC points
+        AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
+
+        // IC[s] = (beta*u_s + alpha*v_s + w_s) / gamma * G1  for public wires s = 0..numPublic
+        AffineG1[] ic = new AffineG1[numPublic + 1];
+        for (int s = 0; s <= numPublic; s++) {
+            BigInteger icVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
+                    .multiply(gammaInv).mod(FR);
+            ic[s] = icVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(icVal).toAffine();
+        }
+
+        // Securely discard toxic waste (best-effort — see PowersOfTauBLS381.java for caveats)
         alpha = beta = gamma = delta = BigInteger.ZERO;
 
-        return new Groth16ProvingKey(
+        var pk = new Groth16ProvingKeyBLS381(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,
                 pointsA, pointsB1, pointsB2, pointsH, pointsL, numPublic);
+
+        return new SetupResult(pk, gammaG2, ic);
     }
+
+    /**
+     * Setup result containing both proving key and verification key components.
+     *
+     * @param provingKey the Groth16 proving key
+     * @param gammaG2    gamma in G2 (needed for verification equation)
+     * @param ic         input commitment points: IC[0] + sum(pub_i * IC[i+1])
+     */
+    public record SetupResult(
+            Groth16ProvingKeyBLS381 provingKey,
+            AffineG2 gammaG2,
+            AffineG1[] ic
+    ) {}
 
     private static void accumulate(BigInteger[] target, Map<Integer, BigInteger> sparse, BigInteger lagrange) {
         for (var entry : sparse.entrySet()) {

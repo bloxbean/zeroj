@@ -30,6 +30,8 @@ dependencies {
     implementation project(':zeroj-prover-wasm')
     implementation project(':zeroj-circuit-dsl')
     implementation project(':zeroj-circuit-lib')
+    implementation project(':zeroj-crypto')
+    implementation project(':zeroj-blst')
     implementation project(':zeroj-submission')
     implementation project(':zeroj-ingestion')
     implementation project(':zeroj-cardano')

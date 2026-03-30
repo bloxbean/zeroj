@@ -196,16 +196,24 @@ public final class MontFr254 {
     }
 
     /**
-     * Field inversion: a^{-1} mod r via Fermat's little theorem: a^{r-2} mod r.
+     * Field inversion via Fermat's little theorem: a^{-1} = a^{r-2} mod r.
+     * Uses fixed-length square-and-multiply for constant-time behavior.
      */
     public MontFr254 inverse() {
         if (isZero()) throw new ArithmeticException("Cannot invert zero");
-        // r - 2 in hex: 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffffff
-        // Use square-and-multiply with the addition chain
-        // For now, use the BigInteger path (correct, optimize later with addition chain)
-        BigInteger val = toBigInteger();
-        BigInteger inv = val.modInverse(modulus());
-        return fromBigInteger(inv);
+        return pow(modulus().subtract(BigInteger.TWO));
+    }
+
+    /** Exponentiation with BigInteger exponent. */
+    public MontFr254 pow(BigInteger exp) {
+        if (exp.signum() == 0) return ONE;
+        MontFr254 result = ONE;
+        MontFr254 base = this;
+        for (int i = exp.bitLength() - 1; i >= 0; i--) {
+            result = result.square();
+            if (exp.testBit(i)) result = result.mul(base);
+        }
+        return result;
     }
 
     /**

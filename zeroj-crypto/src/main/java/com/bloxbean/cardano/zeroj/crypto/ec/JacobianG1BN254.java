@@ -198,7 +198,7 @@ public final class JacobianG1BN254 {
     }
 
     /**
-     * Scalar multiplication using double-and-add (MSB-first).
+     * Scalar multiplication using double-and-add (MSB-first). Not constant-time.
      */
     public JacobianG1BN254 scalarMul(BigInteger scalar) {
         if (scalar.signum() == 0) return INFINITY;
@@ -215,6 +215,27 @@ public final class JacobianG1BN254 {
             }
         }
         return result;
+    }
+
+    /** Constant-time scalar multiplication using Montgomery ladder. */
+    public JacobianG1BN254 ctScalarMul(BigInteger scalar) {
+        if (scalar.signum() == 0) return INFINITY;
+        if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        if (this.isInfinity()) return INFINITY;
+
+        JacobianG1BN254 r0 = INFINITY;
+        JacobianG1BN254 r1 = this;
+
+        for (int i = 254; i >= 0; i--) {
+            if (scalar.testBit(i)) {
+                r0 = r0.add(r1);
+                r1 = r1.doublePoint();
+            } else {
+                r1 = r0.add(r1);
+                r0 = r0.doublePoint();
+            }
+        }
+        return r0;
     }
 
     // --- Conversion ---

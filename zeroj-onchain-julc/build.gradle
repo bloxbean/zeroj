@@ -33,6 +33,10 @@ dependencies {
     testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
     testImplementation "com.bloxbean.cardano:julc-compiler:${julcVersion}"
     testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
+
+    // Test — pure Java prover for on-chain verification tests
+    testImplementation project(':zeroj-crypto')
+    testImplementation project(':zeroj-circuit-dsl')
 }
 
 publishing {

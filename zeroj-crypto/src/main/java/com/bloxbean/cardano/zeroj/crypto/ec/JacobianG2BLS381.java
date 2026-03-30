@@ -1,34 +1,27 @@
 package com.bloxbean.cardano.zeroj.crypto.ec;
 
-import com.bloxbean.cardano.zeroj.crypto.field.MontFp254;
-import com.bloxbean.cardano.zeroj.crypto.field.MontFp2_254;
+import com.bloxbean.cardano.zeroj.crypto.field.MontFp381;
+import com.bloxbean.cardano.zeroj.crypto.field.MontFp2_381;
 
 import java.math.BigInteger;
 
 /**
- * BN254 G2 point in Jacobian coordinates over Fp2.
+ * BLS12-381 G2 point in Jacobian coordinates over Fp2.
  *
- * <p>G2 is defined on the sextic twist of the BN254 curve over Fp2:
- * y^2 = x^3 + b' where b' = 3/(9+u) in Fp2.</p>
+ * <p>G2 is defined on the sextic twist of the BLS12-381 curve over Fp2:
+ * y^2 = x^3 + 4(1+u) where Fp2 = Fp[u]/(u^2+1).</p>
  *
  * <p>Same Jacobian formulas as G1 but all field operations are in Fp2.</p>
  */
-public final class JacobianG2BN254 {
+public final class JacobianG2BLS381 {
 
-    /** Twist parameter b' = 3/(9+u) in Fp2. */
-    private static final MontFp2_254 B_TWIST;
-    static {
-        // b' = 3*(9-u)/82  since (9+u)^{-1} = (9-u)/(9^2+1^2) = (9-u)/82
-        BigInteger p = MontFp254.modulus();
-        BigInteger inv82 = BigInteger.valueOf(82).modInverse(p);
-        BigInteger bRe = BigInteger.valueOf(27).multiply(inv82).mod(p);   // 3*9/82
-        BigInteger bIm = p.subtract(BigInteger.valueOf(3).multiply(inv82).mod(p)); // -3/82
-        B_TWIST = MontFp2_254.of(bRe, bIm);
-    }
+    /** Twist parameter b' = 4(1+u) in Fp2. */
+    static final MontFp2_381 B_TWIST = MontFp2_381.of(
+            MontFp381.fromLong(4), MontFp381.fromLong(4));
 
-    private final MontFp2_254 x, y, z;
+    private final MontFp2_381 x, y, z;
 
-    private JacobianG2BN254(MontFp2_254 x, MontFp2_254 y, MontFp2_254 z) {
+    private JacobianG2BLS381(MontFp2_381 x, MontFp2_381 y, MontFp2_381 z) {
         this.x = x;
         this.y = y;
         this.z = z;
@@ -36,36 +29,36 @@ public final class JacobianG2BN254 {
 
     // --- Constants ---
 
-    public static final JacobianG2BN254 INFINITY = new JacobianG2BN254(
-            MontFp2_254.ONE, MontFp2_254.ONE, MontFp2_254.ZERO);
+    public static final JacobianG2BLS381 INFINITY = new JacobianG2BLS381(
+            MontFp2_381.ONE, MontFp2_381.ONE, MontFp2_381.ZERO);
 
-    /** BN254 G2 generator (standard, EIP-197 compatible). */
-    public static final JacobianG2BN254 GENERATOR = fromAffine(
-            MontFp2_254.of(
-                    new BigInteger("10857046999023057135944570762232829481370756359578518086990519993285655852781"),
-                    new BigInteger("11559732032986387107991004021392285783925812861821192530917403151452391805634")),
-            MontFp2_254.of(
-                    new BigInteger("8495653923123431417604973247489272438418190587263600148770280649306958101930"),
-                    new BigInteger("4082367875863433681332203403145435568316851327593401208105741076214120093531")));
+    /** BLS12-381 G2 generator (standard). */
+    public static final JacobianG2BLS381 GENERATOR = fromAffine(
+            MontFp2_381.of(
+                    new BigInteger("024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8", 16),
+                    new BigInteger("13e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e", 16)),
+            MontFp2_381.of(
+                    new BigInteger("0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801", 16),
+                    new BigInteger("0606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be", 16)));
 
     // --- Factory ---
 
-    public static JacobianG2BN254 fromAffine(MontFp2_254 x, MontFp2_254 y) {
+    public static JacobianG2BLS381 fromAffine(MontFp2_381 x, MontFp2_381 y) {
         if (x.isZero() && y.isZero()) return INFINITY;
-        return new JacobianG2BN254(x, y, MontFp2_254.ONE);
+        return new JacobianG2BLS381(x, y, MontFp2_381.ONE);
     }
 
     // --- Point operations ---
 
     public boolean isInfinity() { return z.isZero(); }
 
-    public JacobianG2BN254 negate() {
+    public JacobianG2BLS381 negate() {
         if (isInfinity()) return this;
-        return new JacobianG2BN254(x, y.neg(), z);
+        return new JacobianG2BLS381(x, y.neg(), z);
     }
 
-    /** Point doubling (a=0 optimization — same formula as G1 but over Fp2). */
-    public JacobianG2BN254 doublePoint() {
+    /** Point doubling (a=0 optimization over Fp2). */
+    public JacobianG2BLS381 doublePoint() {
         if (isInfinity()) return this;
         if (y.isZero()) return INFINITY;
 
@@ -73,7 +66,7 @@ public final class JacobianG2BN254 {
         var b = y.square();
         var c = b.square();
         var d = x.add(b).square().sub(a).sub(c).dbl();
-        var e = a.add(a).add(a); // 3*x^2 (a=0, so no +a*z^4 term)
+        var e = a.add(a).add(a); // 3*x^2
         var f = e.square();
 
         var x3 = f.sub(d.dbl());
@@ -81,11 +74,11 @@ public final class JacobianG2BN254 {
         var y3 = e.mul(d.sub(x3)).sub(c8);
         var z3 = y.mul(z).dbl();
 
-        return new JacobianG2BN254(x3, y3, z3);
+        return new JacobianG2BLS381(x3, y3, z3);
     }
 
     /** General point addition. */
-    public JacobianG2BN254 add(JacobianG2BN254 other) {
+    public JacobianG2BLS381 add(JacobianG2BLS381 other) {
         if (this.isInfinity()) return other;
         if (other.isInfinity()) return this;
 
@@ -112,17 +105,17 @@ public final class JacobianG2BN254 {
         var y3 = r.mul(v.sub(x3)).sub(s1.mul(hhh));
         var z3 = this.z.mul(other.z).mul(h);
 
-        return new JacobianG2BN254(x3, y3, z3);
+        return new JacobianG2BLS381(x3, y3, z3);
     }
 
     /** Scalar multiplication (not constant-time). */
-    public JacobianG2BN254 scalarMul(BigInteger scalar) {
+    public JacobianG2BLS381 scalarMul(BigInteger scalar) {
         if (scalar.signum() == 0) return INFINITY;
         if (scalar.signum() < 0) return negate().scalarMul(scalar.negate());
         if (this.isInfinity()) return INFINITY;
 
-        JacobianG2BN254 result = INFINITY;
-        JacobianG2BN254 base = this;
+        JacobianG2BLS381 result = INFINITY;
+        JacobianG2BLS381 base = this;
 
         for (int i = scalar.bitLength() - 1; i >= 0; i--) {
             result = result.doublePoint();
@@ -132,15 +125,15 @@ public final class JacobianG2BN254 {
     }
 
     /** Constant-time scalar multiplication using Montgomery ladder. */
-    public JacobianG2BN254 ctScalarMul(BigInteger scalar) {
+    public JacobianG2BLS381 ctScalarMul(BigInteger scalar) {
         if (scalar.signum() == 0) return INFINITY;
         if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
         if (this.isInfinity()) return INFINITY;
 
-        JacobianG2BN254 r0 = INFINITY;
-        JacobianG2BN254 r1 = this;
+        JacobianG2BLS381 r0 = INFINITY;
+        JacobianG2BLS381 r1 = this;
 
-        for (int i = 254; i >= 0; i--) {
+        for (int i = 255; i >= 0; i--) {
             if (scalar.testBit(i)) {
                 r0 = r0.add(r1);
                 r1 = r1.doublePoint();
@@ -152,7 +145,8 @@ public final class JacobianG2BN254 {
         return r0;
     }
 
-    /** Convert to affine (X/Z^2, Y/Z^3). */
+    // --- Conversion ---
+
     public AffineG2 toAffine() {
         if (isInfinity()) return AffineG2.INFINITY;
         var zInv = z.inverse();
@@ -162,11 +156,11 @@ public final class JacobianG2BN254 {
     }
 
     /** Affine G2 point. */
-    public record AffineG2(MontFp2_254 x, MontFp2_254 y) {
-        public static final AffineG2 INFINITY = new AffineG2(MontFp2_254.ZERO, MontFp2_254.ZERO);
+    public record AffineG2(MontFp2_381 x, MontFp2_381 y) {
+        public static final AffineG2 INFINITY = new AffineG2(MontFp2_381.ZERO, MontFp2_381.ZERO);
         public boolean isInfinity() { return x.isZero() && y.isZero(); }
 
-        /** Check on twist curve: y^2 = x^3 + b'. */
+        /** Check on twist curve: y^2 = x^3 + 4(1+u). */
         public boolean isOnCurve() {
             if (isInfinity()) return true;
             var lhs = y.square();
