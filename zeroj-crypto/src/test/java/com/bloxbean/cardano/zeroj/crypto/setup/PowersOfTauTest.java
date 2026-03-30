@@ -24,16 +24,16 @@ class PowersOfTauTest {
 
     @Test
     void generate_producesValidSRS() {
-        var srs = PowersOfTau.generate(3); // 2^3 = 8 constraints max
+        var srs = PowersOfTau.generate(4); // 2^4 = 16 constraints max
 
-        // G1 points: 2*8 - 1 = 15
-        assertEquals(15, srs.tauG1().length);
+        // G1 points: 2*16 + 1 = 33
+        assertEquals(33, srs.tauG1().length);
 
         // G2 points: 2
         assertEquals(2, srs.tauG2().length);
 
         // Power
-        assertEquals(3, srs.power());
+        assertEquals(4, srs.power());
 
         // tau^0 * G1 = generator (1, 2)
         var g1_0 = srs.tauG1()[0];
@@ -53,21 +53,43 @@ class PowersOfTauTest {
 
     @Test
     void generate_tauG1PointsAreConsecutivePowers() {
-        var srs = PowersOfTau.generate(2); // small for speed
+        var srs = PowersOfTau.generate(4);
 
-        // Verify: tauG1[i] = tau * tauG1[i-1]
-        // We can check: e(tauG1[1], G2) = e(tauG1[0], tauG2[1])
-        // i.e., e(tau*G1, G2) = e(G1, tau*G2) — both are e(G1, G2)^tau
-        // This is the standard KZG consistency check
-
-        // Simpler check: tauG1[2] should be on curve and distinct from tauG1[0], tauG1[1]
+        // Distinctness check: consecutive points are different
         assertNotEquals(srs.tauG1()[0].xBigInt(), srs.tauG1()[1].xBigInt());
         assertNotEquals(srs.tauG1()[1].xBigInt(), srs.tauG1()[2].xBigInt());
     }
 
     @Test
+    void generate_pairingConsistencyCheck() {
+        // The standard KZG SRS consistency check:
+        // e(tauG1[1], G2) == e(G1, tauG2[1])
+        // Both sides equal e(G1, G2)^tau — confirms same tau was used for G1 and G2 points
+        var srs = PowersOfTau.generate(4);
+
+        var tauG1_1 = new G1Point(Fp.of(srs.tauG1()[1].xBigInt()), Fp.of(srs.tauG1()[1].yBigInt()));
+        var g1 = G1Point.GENERATOR;
+        var g2 = new G2Point(
+                Fp2.of(Fp.of("10857046999023057135944570762232829481370756359578518086990519993285655852781"),
+                        Fp.of("11559732032986387107991004021392285783925812861821192530917403151452391805634")),
+                Fp2.of(Fp.of("8495653923123431417604973247489272438418190587263600148770280649306958101930"),
+                        Fp.of("4082367875863433681332203403145435568316851327593401208105741076214120093531")));
+        var tauG2_1 = new G2Point(
+                Fp2.of(Fp.of(srs.x2().x().reBigInt()), Fp.of(srs.x2().x().imBigInt())),
+                Fp2.of(Fp.of(srs.x2().y().reBigInt()), Fp.of(srs.x2().y().imBigInt())));
+
+        // e(tauG1[1], G2) == e(G1, tauG2[1])
+        // Equivalently: e(tauG1[1], G2) * e(-G1, tauG2[1]) == 1
+        boolean consistent = BN254Pairing.pairingCheck(
+                new G1Point[]{tauG1_1, g1.negate()},
+                new G2Point[]{g2, tauG2_1});
+        assertTrue(consistent, "SRS pairing consistency: e(tau*G1, G2) must equal e(G1, tau*G2)");
+    }
+
+    @Test
     void generate_invalidPower_throws() {
         assertThrows(IllegalArgumentException.class, () -> PowersOfTau.generate(0));
+        assertThrows(IllegalArgumentException.class, () -> PowersOfTau.generate(3)); // min is 4
         assertThrows(IllegalArgumentException.class, () -> PowersOfTau.generate(29));
     }
 

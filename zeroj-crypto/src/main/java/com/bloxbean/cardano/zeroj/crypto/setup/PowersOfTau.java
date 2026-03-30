@@ -43,8 +43,9 @@ public final class PowersOfTau {
      * @return SRS containing tau^i * G1 and tau^i * G2 points
      */
     public static PtauImporter.SRS generate(int power) {
-        if (power < 1 || power > 28)
-            throw new IllegalArgumentException("Power must be in [1, 28], got " + power);
+        if (power < 4 || power > 28)
+            throw new IllegalArgumentException("Power must be in [4, 28], got " + power
+                    + " (minimum 4 required for PlonK domain size >= 8)");
 
         System.err.println("WARNING: Single-party Powers of Tau generation — "
                 + "for DEVELOPMENT and TESTING only. "
@@ -58,9 +59,10 @@ public final class PowersOfTau {
         rng.nextBytes(tauBytes);
         BigInteger tau = new BigInteger(1, tauBytes).mod(FR);
 
-        // Compute tau^i * G1 for i = 0..2n-1
-        // The full .ptau has 2n-1 G1 points for the quotient polynomial evaluation
-        int numG1 = 2 * n - 1;
+        // Compute tau^i * G1 for i = 0..2n
+        // Need 2n+1 points: PlonK quotient T3 may have up to n+3 coefficients with blinding,
+        // and the KZG commit requires srs.length >= coeffs.length
+        int numG1 = 2 * n + 1;
         AffineG1[] tauG1 = new AffineG1[numG1];
 
         var g1 = JacobianG1BN254.GENERATOR;
@@ -77,7 +79,12 @@ public final class PowersOfTau {
         tauG2[0] = g2.toAffine();
         tauG2[1] = g2.scalarMul(tau).toAffine();
 
-        // Securely discard toxic waste (best-effort in Java)
+        // Discard toxic waste — best-effort in Java.
+        // NOTE: BigInteger is immutable. Reassigning tau = ZERO does NOT overwrite the original
+        // object's internal int[] in memory. The original tau value persists until GC collects it.
+        // Intermediate tauPow values also litter the heap as unreachable BigInteger objects.
+        // For a development-only tool this is acceptable. For production MPC ceremonies,
+        // use native memory (MemorySegment) with explicit zeroing.
         Arrays.fill(tauBytes, (byte) 0);
         tau = BigInteger.ZERO;
         tauPow = BigInteger.ZERO;
@@ -88,6 +95,8 @@ public final class PowersOfTau {
     /**
      * Generate a small Powers of Tau SRS for quick testing.
      * Equivalent to {@code generate(8)} (supports circuits up to 256 constraints).
+     *
+     * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b> See {@link #generate(int)} for details.</p>
      */
     public static PtauImporter.SRS generateForTesting() {
         return generate(8);
