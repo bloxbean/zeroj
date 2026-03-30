@@ -131,19 +131,21 @@ public final class PlonKProver {
         MontFr254 alpha = MontFr254.fromBigInteger(alphaBi);
         MontFr254 alpha2 = alpha.mul(alpha);
 
-        // === Round 3: Quotient polynomial t(X) via coset evaluation ===
-        // t(X) = [gate(X) + alpha*perm(X) + alpha^2*start(X)] / Z_H(X)
-        // Evaluate on a coset of size 4n to handle degree 3n
+        // === Pre-compute polynomial coefficient forms (used in Round 3 and Round 5) ===
+        var qlCoeffs = FieldFFT.ifft(pk.ql());
+        var qrCoeffs = FieldFFT.ifft(pk.qr());
+        var qmCoeffs = FieldFFT.ifft(pk.qm());
+        var qoCoeffs = FieldFFT.ifft(pk.qo());
+        var qcCoeffs = FieldFFT.ifft(pk.qc());
+        var s1Coeffs = FieldFFT.ifft(pk.s1());
+        var s2Coeffs = FieldFFT.ifft(pk.s2());
+        var s3Coeffs = FieldFFT.ifft(pk.s3());
 
+        // === Round 3: Quotient polynomial t(X) via coset evaluation ===
         int n4 = 4 * n;
         int logN4 = Integer.numberOfTrailingZeros(n4);
         MontFr254 omega4 = FieldFFT.rootOfUnity(logN4);
-
-        // Coset generator: must NOT be a root of unity (otherwise Z_H = 0 on coset)
-        // snarkjs uses Fr.shift = nqr^2 where nqr = 5 (smallest quadratic non-residue)
-        // So shift = 25 for BN254 Fr. But actually snarkjs uses w[power+1] which is omega_{2n}.
-        // For safety, use the multiplicative generator g=5 as coset shift.
-        MontFr254 shift = MontFr254.fromLong(5);
+        MontFr254 shift = MontFr254.fromLong(5); // multiplicative generator, not a root of unity
 
         // Evaluate all polynomials on the 4n coset
         var aCoset = cosetEval(aBlind, shift, n4, logN4);
@@ -151,17 +153,15 @@ public final class PlonKProver {
         var cCoset = cosetEval(cBlind, shift, n4, logN4);
         var zCoset = cosetEval(zBlind, shift, n4, logN4);
 
-        // Selector polynomials (from evaluations → coefficients → coset eval)
-        var qlCoset = cosetEval(FieldFFT.ifft(pk.ql()), shift, n4, logN4);
-        var qrCoset = cosetEval(FieldFFT.ifft(pk.qr()), shift, n4, logN4);
-        var qmCoset = cosetEval(FieldFFT.ifft(pk.qm()), shift, n4, logN4);
-        var qoCoset = cosetEval(FieldFFT.ifft(pk.qo()), shift, n4, logN4);
-        var qcCoset = cosetEval(FieldFFT.ifft(pk.qc()), shift, n4, logN4);
+        var qlCoset = cosetEval(qlCoeffs, shift, n4, logN4);
+        var qrCoset = cosetEval(qrCoeffs, shift, n4, logN4);
+        var qmCoset = cosetEval(qmCoeffs, shift, n4, logN4);
+        var qoCoset = cosetEval(qoCoeffs, shift, n4, logN4);
+        var qcCoset = cosetEval(qcCoeffs, shift, n4, logN4);
 
-        // Sigma polynomials
-        var s1Coset = cosetEval(FieldFFT.ifft(pk.s1()), shift, n4, logN4);
-        var s2Coset = cosetEval(FieldFFT.ifft(pk.s2()), shift, n4, logN4);
-        var s3Coset = cosetEval(FieldFFT.ifft(pk.s3()), shift, n4, logN4);
+        var s1Coset = cosetEval(s1Coeffs, shift, n4, logN4);
+        var s2Coset = cosetEval(s2Coeffs, shift, n4, logN4);
+        var s3Coset = cosetEval(s3Coeffs, shift, n4, logN4);
 
         // Z(X * omega) on coset: shift coefficients by omega
         var zOmegaCoeffs = shiftPoly(zBlind, omega);
@@ -225,11 +225,16 @@ public final class PlonKProver {
         // IFFT coset to get t(X) coefficients
         var tCoeffs = cosetIFFT(tCoset, shift, n4, logN4);
 
-        // Split t into 3 parts of degree < n
-        var t1 = new MontFr254[n]; var t2 = new MontFr254[n]; var t3 = new MontFr254[n];
+        // Split t into 3 parts: T1 (deg<n), T2 (deg<n), T3 (remaining — may be > n with blinding)
+        var t1 = new MontFr254[n]; var t2 = new MontFr254[n];
+        // T3 gets all remaining coefficients (degree 2n onwards) — may exceed n due to blinding
+        int t3Len = Math.max(n, tCoeffs.length - 2 * n);
+        var t3 = new MontFr254[t3Len];
         for (int i = 0; i < n; i++) {
             t1[i] = i < tCoeffs.length ? tCoeffs[i] : MontFr254.ZERO;
             t2[i] = i + n < tCoeffs.length ? tCoeffs[i + n] : MontFr254.ZERO;
+        }
+        for (int i = 0; i < t3Len; i++) {
             t3[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr254.ZERO;
         }
 
@@ -247,8 +252,7 @@ public final class PlonKProver {
         BigInteger evalB = FieldFFT.polyEval(bBlind, zeta).toBigInteger();
         BigInteger evalC = FieldFFT.polyEval(cBlind, zeta).toBigInteger();
 
-        var s1Coeffs = FieldFFT.ifft(pk.s1());
-        var s2Coeffs = FieldFFT.ifft(pk.s2());
+        // s1Coeffs, s2Coeffs already computed above
         BigInteger evalS1 = FieldFFT.polyEval(s1Coeffs, zeta).toBigInteger();
         BigInteger evalS2 = FieldFFT.polyEval(s2Coeffs, zeta).toBigInteger();
 
@@ -278,12 +282,7 @@ public final class PlonKProver {
         MontFr254 s2Ev = MontFr254.fromBigInteger(evalS2);
         MontFr254 zwEv = MontFr254.fromBigInteger(evalZw);
 
-        var qmCoeffs = FieldFFT.ifft(pk.qm());
-        var qlCoeffs = FieldFFT.ifft(pk.ql());
-        var qrCoeffs = FieldFFT.ifft(pk.qr());
-        var qoCoeffs = FieldFFT.ifft(pk.qo());
-        var qcCoeffs = FieldFFT.ifft(pk.qc());
-        var s3Coeffs = FieldFFT.ifft(pk.s3());
+        // qmCoeffs..s3Coeffs already computed above
 
         // Build r(X) as sum of weighted polynomials
         int maxLen = Math.max(zBlind.length, Math.max(qmCoeffs.length, s3Coeffs.length));
