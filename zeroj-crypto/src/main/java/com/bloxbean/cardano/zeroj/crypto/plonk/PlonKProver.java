@@ -285,7 +285,9 @@ public final class PlonKProver {
         // qmCoeffs..s3Coeffs already computed above
 
         // Build r(X) as sum of weighted polynomials
-        int maxLen = Math.max(zBlind.length, Math.max(qmCoeffs.length, s3Coeffs.length));
+        // maxLen must accommodate the largest polynomial (including blinding and T3)
+        int maxLen = Math.max(zBlind.length, Math.max(aBlind.length,
+                Math.max(qmCoeffs.length, Math.max(s3Coeffs.length, t3.length))));
         MontFr254[] rCoeffs = new MontFr254[maxLen];
         for (int i = 0; i < maxLen; i++) rCoeffs[i] = MontFr254.ZERO;
 
@@ -333,8 +335,8 @@ public final class PlonKProver {
         addScaled(rCoeffs, t2, zhM.neg().mul(xinM));
         addScaled(rCoeffs, t3, zhM.neg().mul(xinM).mul(xinM));
 
-        MontFr254[] fCoeffs = new MontFr254[maxLen];
-        System.arraycopy(rCoeffs, 0, fCoeffs, 0, maxLen);
+        MontFr254[] fCoeffs = new MontFr254[rCoeffs.length];
+        System.arraycopy(rCoeffs, 0, fCoeffs, 0, rCoeffs.length);
         addScaled(fCoeffs, aBlind, v1);
         addScaled(fCoeffs, bBlind, v2);
         addScaled(fCoeffs, cBlind, v3);
@@ -419,19 +421,31 @@ public final class PlonKProver {
         }
     }
 
+    /**
+     * Add blinding via Z_H(X) = X^n - 1: f(X) += b1*Z_H(X) + b2*X*Z_H(X).
+     * Z_H vanishes on the domain, so the blinded polynomial agrees with the original
+     * at all omega^i points — preserving the Z accumulator's correctness.
+     * Coefficients: [-b1, -b2, 0..0, +b1, +b2] at positions 0,1 and n,n+1.
+     */
     private static MontFr254[] addBlinding2(MontFr254[] coeffs, MontFr254 b1, MontFr254 b2, int n) {
         var r = new MontFr254[n + 2];
         System.arraycopy(coeffs, 0, r, 0, Math.min(coeffs.length, n));
-        for (int i = coeffs.length; i < n; i++) r[i] = MontFr254.ZERO;
-        r[n] = b1; r[n + 1] = b2;
+        for (int i = coeffs.length; i < n + 2; i++) r[i] = MontFr254.ZERO;
+        r[0] = r[0].sub(b1);       r[n] = r[n].add(b1);
+        r[1] = r[1].sub(b2);       r[n + 1] = r[n + 1].add(b2);
         return r;
     }
 
+    /**
+     * Add blinding via Z_H(X): f(X) += b1*Z_H(X) + b2*X*Z_H(X) + b3*X^2*Z_H(X).
+     */
     private static MontFr254[] addBlinding3(MontFr254[] coeffs, MontFr254 b1, MontFr254 b2, MontFr254 b3, int n) {
         var r = new MontFr254[n + 3];
         System.arraycopy(coeffs, 0, r, 0, Math.min(coeffs.length, n));
-        for (int i = coeffs.length; i < n; i++) r[i] = MontFr254.ZERO;
-        r[n] = b1; r[n + 1] = b2; r[n + 2] = b3;
+        for (int i = coeffs.length; i < n + 3; i++) r[i] = MontFr254.ZERO;
+        r[0] = r[0].sub(b1);       r[n] = r[n].add(b1);
+        r[1] = r[1].sub(b2);       r[n + 1] = r[n + 1].add(b2);
+        r[2] = r[2].sub(b3);       r[n + 2] = r[n + 2].add(b3);
         return r;
     }
 
