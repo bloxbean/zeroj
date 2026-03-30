@@ -28,6 +28,10 @@ public final class KZGCommitment {
      * @return commitment as a G1 point
      */
     public static JacobianG1BN254 commit(AffineG1[] srsG1, BigInteger[] coeffs) {
+        if (coeffs.length > srsG1.length)
+            throw new IllegalArgumentException(
+                    "Polynomial degree (" + coeffs.length + ") exceeds SRS size (" + srsG1.length
+                            + ") — the SRS is too small for this polynomial");
         int n = Math.min(srsG1.length, coeffs.length);
         if (n == 0) return JacobianG1BN254.INFINITY;
 
@@ -42,6 +46,10 @@ public final class KZGCommitment {
      * Commit to a polynomial given as MontFr254 values.
      */
     public static JacobianG1BN254 commit(AffineG1[] srsG1, MontFr254[] coeffs) {
+        if (coeffs.length > srsG1.length)
+            throw new IllegalArgumentException(
+                    "Polynomial degree (" + coeffs.length + ") exceeds SRS size (" + srsG1.length
+                            + ") — the SRS is too small for this polynomial");
         BigInteger[] scalars = new BigInteger[coeffs.length];
         for (int i = 0; i < coeffs.length; i++) {
             scalars[i] = coeffs[i].toBigInteger();

@@ -68,6 +68,17 @@ public final class PlonKProver {
         MontFr254 omega = pk.omega();
         AffineG1[] srs = pk.srsG1();
 
+        // --- Input validation ---
+        if (wireA.length < n)
+            throw new IllegalArgumentException("wireA.length (" + wireA.length + ") must be >= domainSize (" + n + ")");
+        if (wireB.length < n)
+            throw new IllegalArgumentException("wireB.length (" + wireB.length + ") must be >= domainSize (" + n + ")");
+        if (wireC.length < n)
+            throw new IllegalArgumentException("wireC.length (" + wireC.length + ") must be >= domainSize (" + n + ")");
+        if (pubInputs.length != pk.nPublic())
+            throw new IllegalArgumentException(
+                    "pubInputs.length (" + pubInputs.length + ") must equal nPublic (" + pk.nPublic() + ")");
+
         // Pad wire evaluations to domain size
         MontFr254[] aEvals = padTo(wireA, n);
         MontFr254[] bEvals = padTo(wireB, n);

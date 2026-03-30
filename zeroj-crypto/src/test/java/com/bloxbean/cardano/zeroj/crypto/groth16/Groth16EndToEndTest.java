@@ -139,6 +139,55 @@ class Groth16EndToEndTest {
     }
 
     /**
+     * Tamper a PRIVATE wire value (not the public output), then verify against the
+     * claimed (correct) public inputs. The proof must fail even though public inputs
+     * are unchanged — this ensures the private witness is actually bound by the proof.
+     *
+     * <p>Circuit: c = a * b.  Witness: a=3, b=11, c=33.
+     * We tamper b (a private wire) from 11 → 7 while leaving public input c=33 intact.
+     * The R1CS relation 3*7 = 21 != 33 is violated, so the proof must not verify.</p>
+     */
+    @Test
+    void tamperedPrivateWire_failsVerification() throws IOException {
+        var zkeyData = ZkeyImporter.importZkeyFull(
+                getClass().getResourceAsStream(ZKEY_PATH).readAllBytes());
+        var pk = zkeyData.provingKey();
+
+        var witness = ZkeyImporter.importWtns(getClass().getResourceAsStream(WTNS_PATH));
+        assertEquals(BigInteger.valueOf(33), witness[1], "public output c=33");
+
+        // Tamper a PRIVATE wire: change b from 11 to 7
+        // In the multiplier circuit, the wire layout is [1, c, a, b]
+        // witness[3] = b (private), witness[1] = c (public)
+        witness[3] = BigInteger.valueOf(7);
+
+        var proof = Groth16Prover.prove(pk, witness, zkeyData.constraints(), zkeyData.numWires());
+        assertNotNull(proof);
+
+        // Verify against the CORRECT public input c=33
+        var vkJson = new String(getClass().getResourceAsStream(VK_PATH).readAllBytes());
+        var vk = com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec.parseVerificationKey(vkJson);
+
+        var vkX = parseG1(vk.ic().get(0));
+        // Public input is c=33 (correct, untampered)
+        vkX = vkX.add(parseG1(vk.ic().get(1)).scalarMul(BigInteger.valueOf(33)));
+        if (vk.nPublic() > 1) {
+            vkX = vkX.add(parseG1(vk.ic().get(2)).scalarMul(witness[2]));
+        }
+
+        boolean valid = BN254Pairing.pairingCheck(
+                new G1Point[]{toVerifierG1(proof.a()), parseG1(vk.vkAlpha1()).negate(),
+                        vkX.negate(), toVerifierG1(proof.c()).negate()},
+                new G2Point[]{toVerifierG2(proof.b()), parseG2(vk.vkBeta2()),
+                        parseG2(vk.vkGamma2()), parseG2(vk.vkDelta2())}
+        );
+
+        assertFalse(valid,
+                "Tampered PRIVATE wire proof should NOT verify — the R1CS relation is violated "
+                        + "even though public inputs are correct");
+    }
+
+    /**
      * Cubic circuit: x^3 + x + 5 = y (multiple constraints, larger domain).
      * This tests that the prover works beyond the trivial 1-constraint multiplier.
      */

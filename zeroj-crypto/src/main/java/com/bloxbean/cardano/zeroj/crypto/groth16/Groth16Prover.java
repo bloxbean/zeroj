@@ -61,6 +61,27 @@ public final class Groth16Prover {
             int numWires,
             int domainSize) {
 
+        // --- Input validation ---
+        if (witness == null || witness.length == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        if (!BigInteger.ONE.equals(witness[0]))
+            throw new IllegalArgumentException("witness[0] must be 1 (the constant wire), got " + witness[0]);
+        if (witness.length != numWires)
+            throw new IllegalArgumentException(
+                    "witness.length (" + witness.length + ") must match numWires (" + numWires + ")");
+
+        // On-curve validation for key points
+        if (!pk.alphaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key alphaG1 is not on curve");
+        if (!pk.betaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key betaG1 is not on curve");
+        if (!pk.betaG2().isOnCurve())
+            throw new IllegalArgumentException("Proving key betaG2 is not on curve");
+        if (!pk.deltaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key deltaG1 is not on curve");
+        if (!pk.deltaG2().isOnCurve())
+            throw new IllegalArgumentException("Proving key deltaG2 is not on curve");
+
         int numConstraints = constraints.length;
 
         // Note: witness validation is available via validateWitness() for R1CS-standard constraints.

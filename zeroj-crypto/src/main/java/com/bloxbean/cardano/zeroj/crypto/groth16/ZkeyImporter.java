@@ -116,6 +116,18 @@ public final class ZkeyImporter {
         var deltaG1 = readG1Montgomery(buf, n8q, q);
         var deltaG2 = readG2Montgomery(buf, n8q, q);
 
+        // On-curve validation for critical proving key points
+        if (!alphaG1.isOnCurve())
+            throw new IOException("alphaG1 is not on BN254 G1 curve — .zkey may be corrupted");
+        if (!betaG1.isOnCurve())
+            throw new IOException("betaG1 is not on BN254 G1 curve — .zkey may be corrupted");
+        if (!betaG2.isOnCurve())
+            throw new IOException("betaG2 is not on BN254 G2 twist curve — .zkey may be corrupted");
+        if (!deltaG1.isOnCurve())
+            throw new IOException("deltaG1 is not on BN254 G1 curve — .zkey may be corrupted");
+        if (!deltaG2.isOnCurve())
+            throw new IOException("deltaG2 is not on BN254 G2 twist curve — .zkey may be corrupted");
+
         // Section 4: Coefficients — reconstruct R1CS constraints
         // R^2 mod r (double Montgomery for coefficients)
         BigInteger FR_R = BigInteger.ONE.shiftLeft(256).mod(rField);

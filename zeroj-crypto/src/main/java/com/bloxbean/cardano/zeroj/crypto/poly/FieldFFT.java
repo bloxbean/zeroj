@@ -190,6 +190,25 @@ public final class FieldFFT {
      */
     public static MontFr254[] polyMul(MontFr254[] a, MontFr254[] b) {
         int resultLen = a.length + b.length - 1;
+
+        // Handle degree-0 polynomials (single coefficient) — no FFT needed
+        if (resultLen <= 1) {
+            MontFr254 product = (a.length > 0 && b.length > 0) ? a[0].mul(b[0]) : MontFr254.ZERO;
+            return new MontFr254[]{product};
+        }
+        if (a.length == 1) {
+            // Scalar * polynomial — direct multiply
+            MontFr254[] result = new MontFr254[b.length];
+            for (int i = 0; i < b.length; i++) result[i] = a[0].mul(b[i]);
+            return result;
+        }
+        if (b.length == 1) {
+            // Polynomial * scalar — direct multiply
+            MontFr254[] result = new MontFr254[a.length];
+            for (int i = 0; i < a.length; i++) result[i] = b[0].mul(a[i]);
+            return result;
+        }
+
         int n = Integer.highestOneBit(resultLen - 1) << 1; // next power of 2
         if (n < resultLen) n = Integer.highestOneBit(resultLen) << 1;
         if ((resultLen & (resultLen - 1)) == 0) n = resultLen; // exact power of 2
