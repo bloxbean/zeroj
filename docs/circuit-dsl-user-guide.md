@@ -410,81 +410,204 @@ var element = Mux.arrayAccess(api, array, index);                    // array lo
 AliasCheck.check(api, api.var("value"), 253);
 ```
 
-## Practical Examples
+## Practical Examples (CircuitSpec)
+
+All examples use the recommended `CircuitSpec` pattern — a reusable Java class per circuit.
 
 ### 1. Age Verification — Prove age ≥ 18 without revealing age
 
 ```java
-var circuit = CircuitBuilder.create("age-check")
-    .publicVar("minAge")         // 18 (verifier knows the threshold)
-    .publicVar("isOldEnough")    // 1 or 0 (verifier sees the result)
-    .secretVar("myAge")          // actual age (hidden from verifier)
-    .define(api -> {
-        var result = Comparators.greaterOrEqual(
-            api, api.var("myAge"), api.var("minAge"), 8);
-        api.assertEqual(result, api.var("isOldEnough"));
-    });
+public class AgeVerificationCircuit implements CircuitSpec {
+    private final int bitWidth;
+
+    public AgeVerificationCircuit(int bitWidth) { this.bitWidth = bitWidth; }
+
+    @Override
+    public void define(SignalBuilder c) {
+        Signal myAge       = c.privateInput("myAge");        // actual age (hidden)
+        Signal minAge      = c.publicInput("minAge");        // 18 (verifier knows)
+        Signal isOldEnough = c.publicOutput("isOldEnough");  // 1 or 0 (verifier sees)
+
+        c.assertEqual(
+            SignalComparators.greaterOrEqual(c, myAge, minAge, bitWidth),
+            isOldEnough);
+    }
+
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("age-check")
+                .publicVar("minAge")
+                .publicVar("isOldEnough")
+                .secretVar("myAge")
+                .defineSignals(new AgeVerificationCircuit(8));
+    }
+}
+
+// Usage
+var circuit = AgeVerificationCircuit.build();
+var witness = circuit.calculateWitness(Map.of(
+    "myAge", List.of(BigInteger.valueOf(25)),
+    "minAge", List.of(BigInteger.valueOf(18)),
+    "isOldEnough", List.of(BigInteger.ONE)), CurveId.BLS12_381);
 ```
 
 ### 2. Voting — Prove vote is valid with hash commitment
 
 ```java
-var circuit = CircuitBuilder.create("vote")
-    .publicVar("commitment")     // hash(vote, nullifier) — public
-    .secretVar("vote")           // 0 or 1 — hidden
-    .secretVar("nullifier")      // unique per voter — hidden
-    .define(api -> {
-        api.assertBoolean(api.var("vote"));
-        var hash = MiMC.hash(api, api.var("vote"), api.var("nullifier"));
-        api.assertEqual(hash, api.var("commitment"));
-    });
+public class VotingCircuit implements CircuitSpec {
+    @Override
+    public void define(SignalBuilder c) {
+        Signal vote       = c.privateInput("vote");       // 0 or 1 (hidden)
+        Signal nullifier  = c.privateInput("nullifier");  // unique per voter (hidden)
+        Signal commitment = c.publicOutput("commitment");  // hash output (public)
+
+        vote.assertBoolean();  // vote must be 0 or 1
+        c.assertEqual(SignalMiMC.hash(c, vote, nullifier), commitment);
+    }
+
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("vote")
+                .publicVar("commitment")
+                .secretVar("vote")
+                .secretVar("nullifier")
+                .defineSignals(new VotingCircuit());
+    }
+}
 ```
 
 ### 3. Merkle Membership — Prove you own a leaf in a tree
 
 ```java
-var circuit = CircuitBuilder.create("membership")
-    .publicVar("root")
-    .secretVar("leaf")
-    .secretVar("sibling0").secretVar("sibling1").secretVar("sibling2")
-    .secretVar("path0").secretVar("path1").secretVar("path2")
-    .define(api -> {
-        var siblings = new Variable[]{
-            api.var("sibling0"), api.var("sibling1"), api.var("sibling2")};
-        var pathBits = new Variable[]{
-            api.var("path0"), api.var("path1"), api.var("path2")};
-        Merkle.verifyProof(api, api.var("leaf"), api.var("root"),
-            siblings, pathBits, MiMC::hash);
-    });
+public class MerkleMembershipCircuit implements CircuitSpec {
+    private final int depth;
+
+    public MerkleMembershipCircuit(int depth) { this.depth = depth; }
+
+    @Override
+    public void define(SignalBuilder c) {
+        Signal leaf = c.privateInput("leaf");
+        Signal root = c.publicOutput("root");
+
+        Signal[] siblings = new Signal[depth];
+        Signal[] pathBits = new Signal[depth];
+        for (int i = 0; i < depth; i++) {
+            siblings[i] = c.privateInput("sibling_" + i);
+            pathBits[i] = c.privateInput("path_" + i);
+        }
+
+        // Verify Merkle path using MiMC hash (or swap to SignalPoseidon::hash)
+        SignalMerkle.verifyProof(c, leaf, root, siblings, pathBits, SignalMiMC::hash);
+    }
+
+    public static CircuitBuilder build(int depth) {
+        var builder = CircuitBuilder.create("merkle-d" + depth)
+                .publicVar("root")
+                .secretVar("leaf");
+        for (int i = 0; i < depth; i++) {
+            builder = builder.secretVar("sibling_" + i).secretVar("path_" + i);
+        }
+        return builder.defineSignals(new MerkleMembershipCircuit(depth));
+    }
+}
+
+// Usage: parameterized depth
+var shallow = MerkleMembershipCircuit.build(3);   // ~1,100 constraints
+var deep    = MerkleMembershipCircuit.build(20);   // ~7,300 constraints
 ```
 
 ### 4. Conditional Logic — Different computation based on flag
 
 ```java
-var circuit = CircuitBuilder.create("conditional")
-    .publicVar("result")
-    .secretVar("flag").secretVar("a").secretVar("b")
-    .define(api -> {
-        var product = api.mul(api.var("a"), api.var("b"));
-        var sum = api.add(api.var("a"), api.var("b"));
+public class ConditionalCircuit implements CircuitSpec {
+    @Override
+    public void define(SignalBuilder c) {
+        Signal flag   = c.privateInput("flag");
+        Signal a      = c.privateInput("a");
+        Signal b      = c.privateInput("b");
+        Signal result = c.publicOutput("result");
+
+        flag.assertBoolean();
+
+        Signal product = a.mul(b);
+        Signal sum     = a.add(b);
+
         // flag=1 → result = a*b, flag=0 → result = a+b
-        var out = api.select(api.var("flag"), product, sum);
-        api.assertEqual(out, api.var("result"));
-    });
+        c.assertEqual(flag.select(product, sum), result);
+    }
+
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("conditional")
+                .publicVar("result")
+                .secretVar("flag").secretVar("a").secretVar("b")
+                .defineSignals(new ConditionalCircuit());
+    }
+}
 ```
 
 ### 5. Range Proof — Prove balance is within bounds
 
 ```java
-var circuit = CircuitBuilder.create("balance-check")
-    .publicVar("lowerBound").publicVar("upperBound")
-    .publicVar("inRange")
-    .secretVar("balance")
-    .define(api -> {
-        var result = Comparators.inRange(api,
-            api.var("balance"), api.var("lowerBound"), api.var("upperBound"), 16);
-        api.assertEqual(result, api.var("inRange"));
-    });
+public class RangeProofCircuit implements CircuitSpec {
+    private final int bitWidth;
+
+    public RangeProofCircuit(int bitWidth) { this.bitWidth = bitWidth; }
+
+    @Override
+    public void define(SignalBuilder c) {
+        Signal balance    = c.privateInput("balance");
+        Signal lowerBound = c.publicInput("lowerBound");
+        Signal upperBound = c.publicInput("upperBound");
+        Signal inRange    = c.publicOutput("inRange");
+
+        Signal aboveLower = SignalComparators.greaterOrEqual(c, balance, lowerBound, bitWidth);
+        Signal belowUpper = SignalComparators.lessOrEqual(c, balance, upperBound, bitWidth);
+
+        c.assertEqual(aboveLower.and(belowUpper), inRange);
+    }
+
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("range-proof")
+                .publicVar("lowerBound").publicVar("upperBound").publicVar("inRange")
+                .secretVar("balance")
+                .defineSignals(new RangeProofCircuit(16));
+    }
+}
+```
+
+### 6. Multi-Input Commitment — Hash N secret fields into one digest
+
+```java
+public class MultiFieldCommitCircuit implements CircuitSpec {
+    private final String[] fieldNames;
+
+    public MultiFieldCommitCircuit(String... fieldNames) {
+        this.fieldNames = fieldNames;
+    }
+
+    @Override
+    public void define(SignalBuilder c) {
+        Signal[] inputs = new Signal[fieldNames.length];
+        for (int i = 0; i < fieldNames.length; i++) {
+            inputs[i] = c.privateInput(fieldNames[i]);
+        }
+        Signal commitment = c.publicOutput("commitment");
+
+        // Chain: MiMC(MiMC(in[0], in[1]), in[2]) ...
+        Signal acc = SignalMiMC.hash(c, inputs[0], inputs[1]);
+        for (int i = 2; i < inputs.length; i++) {
+            acc = SignalMiMC.hash(c, acc, inputs[i]);
+        }
+        c.assertEqual(acc, commitment);
+    }
+
+    public static CircuitBuilder build(String... fieldNames) {
+        var builder = CircuitBuilder.create("multi-commit").publicVar("commitment");
+        for (String name : fieldNames) builder = builder.secretVar(name);
+        return builder.defineSignals(new MultiFieldCommitCircuit(fieldNames));
+    }
+}
+
+// Usage with descriptive field names (impossible in Circom templates!)
+var circuit = MultiFieldCommitCircuit.build("name", "age", "address", "balance");
 ```
 
 ## Compilation Backends
