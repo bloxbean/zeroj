@@ -333,31 +333,49 @@ public final class PlonKProver {
                 .neg();
         addScaled(rCoeffs, s3Coeffs, s3CoeffInR);
 
-        // Batched polynomial: f(X) = r(X) + v*a(X) + v^2*b(X) + v^3*c(X) + v^4*s1(X) + v^5*s2(X)
-        MontFr254 v2 = v1.mul(v1); MontFr254 v3 = v2.mul(v1); MontFr254 v4 = v3.mul(v1); MontFr254 v5 = v4.mul(v1);
-
-        // Subtract zh * (T1 + xin*T2 + xin^2*T3) from r to get the "D-equivalent" polynomial
-        // The verifier's D = [r(tau)] - zh*[T(tau)], so the opened polynomial should be
-        // r(X) - zh*T(X) where T(X) = T1(X) + xin*T2(X) + xin^2*T3(X)
-        MontFr254 xinM = zeta;
-        for (int i = 1; i < n; i++) xinM = xinM.mul(zeta); // xin = zeta^n
-        MontFr254 zhM = xinM.sub(MontFr254.ONE);
+        // === snarkjs approach: build R(X) with r0 in constant term so R(zeta) = 0 ===
+        // Subtract zh * (T1(X) + xin*T2(X) + xin^2*T3(X)) from R
+        MontFr254 xinM = zetaN; // zeta^n, already computed
+        MontFr254 zhM = zh;     // zeta^n - 1, already computed
         addScaled(rCoeffs, t1, zhM.neg());
         addScaled(rCoeffs, t2, zhM.neg().mul(xinM));
         addScaled(rCoeffs, t3, zhM.neg().mul(xinM).mul(xinM));
 
-        MontFr254[] fCoeffs = new MontFr254[rCoeffs.length];
-        System.arraycopy(rCoeffs, 0, fCoeffs, 0, rCoeffs.length);
-        addScaled(fCoeffs, aBlind, v1);
-        addScaled(fCoeffs, bBlind, v2);
-        addScaled(fCoeffs, cBlind, v3);
-        addScaled(fCoeffs, s1Coeffs, v4);
-        addScaled(fCoeffs, s2Coeffs, v5);
+        // Compute r0 = PI(zeta) - alpha*(a+beta*s1+gamma)(b+beta*s2+gamma)*zw*(c+gamma) - alpha^2*L1(zeta)
+        // and add to R(X) constant term so that R(zeta) = 0
+        MontFr254 e3 = aEv.add(beta.mul(s1Ev)).add(gamma)
+                .mul(bEv.add(beta.mul(s2Ev)).add(gamma))
+                .mul(zwEv).mul(alpha);
+        MontFr254 piZeta = FieldFFT.polyEval(piCoeffs, zeta);
+        MontFr254 r0 = piZeta.sub(e3.mul(cEv.add(gamma))).sub(alpha2.mul(l1Zeta));
+        rCoeffs[0] = rCoeffs[0].add(r0);
 
-        MontFr254 fZeta = FieldFFT.polyEval(fCoeffs, zeta);
+        // Build W_zeta numerator = R(X) + v*A(X) + v^2*B(X) + v^3*C(X) + v^4*S1(X) + v^5*S2(X)
+        //                        - (v*eval_a + v^2*eval_b + v^3*eval_c + v^4*eval_s1 + v^5*eval_s2)
+        // Since R(zeta)=0, the numerator at zeta = 0 + v*(A(zeta)-eval_a) + ... = 0
+        // So the numerator is divisible by (X - zeta)
+        MontFr254 v2 = v1.mul(v1); MontFr254 v3 = v2.mul(v1);
+        MontFr254 v4 = v3.mul(v1); MontFr254 v5 = v4.mul(v1);
 
-        // W_zeta = (f(X) - f(zeta)) / (X - zeta)
-        var commitWxi = KZGCommitment.openingProof(srs, fCoeffs, zeta, fZeta).toAffine();
+        MontFr254[] wxiNum = new MontFr254[rCoeffs.length];
+        System.arraycopy(rCoeffs, 0, wxiNum, 0, rCoeffs.length);
+        addScaled(wxiNum, aBlind, v1);
+        addScaled(wxiNum, bBlind, v2);
+        addScaled(wxiNum, cBlind, v3);
+        addScaled(wxiNum, s1Coeffs, v4);
+        addScaled(wxiNum, s2Coeffs, v5);
+
+        // Subtract the scalar evaluation terms from the constant coefficient
+        wxiNum[0] = wxiNum[0].sub(v1.mul(aEv)).sub(v2.mul(bEv)).sub(v3.mul(cEv))
+                .sub(v4.mul(s1Ev)).sub(v5.mul(s2Ev));
+
+        // The numerator must vanish at zeta for exact division
+
+        // Divide by (X - zeta) via synthetic division — exact since numerator vanishes
+        var wxiQuotient = KZGCommitment.syntheticDivision(wxiNum, zeta, MontFr254.ZERO);
+
+        // Commit W_zeta
+        var commitWxi = KZGCommitment.commit(srs, wxiQuotient).toAffine();
 
         // W_{zeta*omega} = (Z(X) - Z(zeta*omega)) / (X - zeta*omega)
         var commitWxiw = KZGCommitment.openingProof(srs, zBlind, zetaOmega,

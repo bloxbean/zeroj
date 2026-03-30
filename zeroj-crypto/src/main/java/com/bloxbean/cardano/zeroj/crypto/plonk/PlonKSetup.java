@@ -43,9 +43,11 @@ public final class PlonKSetup {
             PtauImporter.SRS srs) {
 
         // Domain size = next power of 2 >= numGates
+        // Minimum 8: with blinding (degree n+2 wire/Z polynomials), the quotient
+        // numerator has degree ~3n+6. The 4n coset needs 4n > 3n+6, i.e., n > 6.
         int domainSize = Integer.highestOneBit(numGates);
         if (domainSize < numGates) domainSize <<= 1;
-        if (domainSize < 4) domainSize = 4; // minimum for FFT
+        if (domainSize < 8) domainSize = 8; // minimum for blinding with 4n coset
         int logN = Integer.numberOfTrailingZeros(domainSize);
 
         MontFr254 omega = FieldFFT.rootOfUnity(logN);

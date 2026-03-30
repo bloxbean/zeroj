@@ -77,10 +77,8 @@ class PlonKEndToEndTest {
         BigInteger[] pubInputs = new BigInteger[plonk.numPublicInputs()];
         for (int i = 0; i < pubInputs.length; i++) pubInputs[i] = witness[i + 1];
 
-        // === Step 7: PROVE (pure Java!) ===
-        // Test both — verify unblinded works, then try blinded
-        var proofUB = PlonKProver.proveUnblinded(pk, wireA, wireB, wireC, pubInputs);
-        var proof = proofUB; // use unblinded for verification
+        // === Step 7: PROVE with full blinding ===
+        var proof = PlonKProver.prove(pk, wireA, wireB, wireC, pubInputs);
         assertNotNull(proof);
         assertFalse(proof.commitA().isInfinity(), "A not infinity");
         assertFalse(proof.commitZ().isInfinity(), "Z not infinity");
