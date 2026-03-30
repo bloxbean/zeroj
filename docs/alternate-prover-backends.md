@@ -1,5 +1,15 @@
 # Alternate Prover Backends — gnark FFM, rapidsnark, snarkjs
 
+## Table of Contents
+
+- [Backend Comparison](#backend-comparison)
+- [gnark FFM (Foreign Function & Memory)](#gnark-ffm-foreign-function--memory)
+- [snarkjs CLI](#snarkjs-cli)
+- [circom Integration](#circom-integration)
+- [When to Use Each Backend](#when-to-use-each-backend)
+
+---
+
 ZeroJ's **recommended** prover is the [pure Java prover](pure-java-prover-guide.md) (`zeroj-crypto`), which requires zero native dependencies. This document covers the **alternate native backends** for cases where you need:
 
 - Maximum proving speed (~10-100x faster for large circuits)

@@ -1,5 +1,23 @@
 # Getting Started -- Java DSL to On-Chain Verification
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Step 1: Define the Circuit (Java DSL)](#step-1-define-the-circuit-java-dsl)
+- [Step 2: Compile and Calculate Witness (Pure Java)](#step-2-compile-and-calculate-witness-pure-java)
+- [Step 3: Generate Proof (gnark FFM)](#step-3-generate-proof-gnark-ffm)
+- [Step 4: Verify Off-Chain (Pure Java)](#step-4-verify-off-chain-pure-java)
+- [Step 5: Deploy On-Chain Verifier (Julc / Plutus V3)](#step-5-deploy-on-chain-verifier-julc--plutus-v3)
+- [Step 6: Lock Funds with Public Inputs as Datum](#step-6-lock-funds-with-public-inputs-as-datum)
+- [Step 7: Unlock with ZK Proof as Redeemer](#step-7-unlock-with-zk-proof-as-redeemer)
+- [What Happens On-Chain](#what-happens-on-chain)
+- [End-to-End Flow Summary](#end-to-end-flow-summary)
+- [Running the Examples](#running-the-examples)
+- [Prover Options](#prover-options)
+- [Curves and On-Chain Feasibility](#curves-and-on-chain-feasibility)
+
+---
+
 This guide walks through the complete ZeroJ flow: define a ZK circuit in Java, generate a proof, verify it off-chain, and execute on-chain verification on Cardano via Yaci DevKit.
 
 We'll build a **sealed-bid auction** where a bidder proves their bid exceeds a reserve price without revealing the actual bid amount.

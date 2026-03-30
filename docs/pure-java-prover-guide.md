@@ -2,6 +2,20 @@
 
 Zero external tools. 100% Java 25. Prove ZK circuits and verify on Cardano.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Quick Start — 5 Minutes to Your First Proof](#quick-start--5-minutes-to-your-first-proof)
+- [Complete End-to-End: Circuit → Prove → On-Chain Verify](#complete-end-to-end-circuit--prove--on-chain-verify)
+- [PlonK Prover (Pure Java)](#plonk-prover-pure-java)
+- [Circom Compatibility](#circom-compatibility)
+- [Production vs Development Setup](#production-vs-development-setup)
+- [End-to-End Flow Diagram](#end-to-end-flow-diagram)
+- [Module Dependencies](#module-dependencies)
+- [Running the Examples](#running-the-examples)
+
+---
+
 ## Overview
 
 The zeroj pure Java prover generates Groth16 and PlonK proofs for BLS12-381 without any native dependencies — no gnark, no snarkjs, no circom, no Go, no Node.js, no Rust.

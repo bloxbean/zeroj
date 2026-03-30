@@ -1,5 +1,18 @@
 # ZeroJ Architecture Overview
 
+## Table of Contents
+
+- [Design Philosophy](#design-philosophy)
+- [Module Organization](#module-organization)
+- [Module Dependency Graph](#module-dependency-graph)
+- [Layer Separation](#layer-separation)
+- [Crypto Backend Strategy](#crypto-backend-strategy)
+- [On-Chain Verification](#on-chain-verification)
+- [GraalVM Native Image](#graalvm-native-image)
+- [Key ADRs](#key-adrs)
+
+---
+
 ## Design Philosophy
 
 ZeroJ is a **verifier-first** ZK platform. Circuits can be defined in Java (DSL) or externally (circom, gnark Go). Proofs are generated in-process (gnark FFM) or externally (snarkjs). Verification is pure Java. On-chain verification uses Julc-compiled Plutus V3 validators.

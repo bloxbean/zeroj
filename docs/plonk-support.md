@@ -1,5 +1,18 @@
 # PlonK Support in ZeroJ
 
+## Table of Contents
+
+- [Status](#status-production-off-chain-pure-java-on-chain-via-julc)
+- [What Works Today](#what-works-today)
+- [Quick Start (Off-Chain)](#quick-start-off-chain)
+- [Use Cases](#use-cases)
+- [Limitations](#limitations)
+- [Architecture](#architecture)
+- [Test Vectors](#test-vectors)
+- [Related ADRs](#related-adrs)
+
+---
+
 ## Status: Production (Off-Chain Pure Java, On-Chain via Julc)
 
 ZeroJ supports PlonK proof generation via gnark FFM and **pure Java verification** on BLS12-381 and BN254 curves. On-chain PlonK verification is available via a Julc-compiled Plutus V3 validator.
