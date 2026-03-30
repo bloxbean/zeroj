@@ -1,0 +1,200 @@
+package com.bloxbean.cardano.zeroj.crypto.setup;
+
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
+import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254.AffineG2;
+import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKey;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
+import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFT;
+
+import java.math.BigInteger;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Map;
+
+/**
+ * Groth16 Phase 2 setup — generates a proving key from R1CS constraints + Powers of Tau SRS.
+ *
+ * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b> This is a single-party setup — the toxic
+ * waste (alpha, beta, gamma, delta, tau) is known to one party. For production, use
+ * snarkjs multi-party ceremony: {@code snarkjs groth16 setup circuit.r1cs pot.ptau circuit.zkey}.</p>
+ *
+ * <p>Algorithm (from Groth16 paper, Section 3.2):</p>
+ * <ol>
+ *   <li>Sample random alpha, beta, gamma, delta</li>
+ *   <li>Compute Lagrange basis evaluations L_i(tau) for each constraint row</li>
+ *   <li>For each wire s, compute QAP polynomials u_s(tau), v_s(tau), w_s(tau)</li>
+ *   <li>Compute proving key points via scalar multiplication on G1/G2 generators</li>
+ *   <li>Compute H points as odd-indexed Lagrange basis on double-sized domain / delta</li>
+ * </ol>
+ */
+public final class Groth16Setup {
+
+    private Groth16Setup() {}
+
+    private static final BigInteger FR = MontFr254.modulus();
+
+    /**
+     * Generate a Groth16 proving key from R1CS constraints and known tau.
+     *
+     * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b></p>
+     *
+     * @param constraints R1CS constraints (A*w × B*w = C*w)
+     * @param numWires    total wire count
+     * @param numPublic   number of public inputs (wires 1..numPublic)
+     * @param tau         the toxic waste from PowersOfTau (KNOWN — dev/test only)
+     * @return Groth16 proving key ready for Groth16Prover.prove()
+     */
+    public static Groth16ProvingKey setup(R1CSConstraint[] constraints, int numWires,
+                                           int numPublic, BigInteger tau) {
+        System.err.println("WARNING: Single-party Groth16 Phase 2 setup — "
+                + "for DEVELOPMENT and TESTING only. "
+                + "Use snarkjs multi-party ceremony for production.");
+
+        var rng = new SecureRandom();
+        int nConstraints = constraints.length;
+
+        // Domain size: next power of 2 >= nConstraints
+        int domainSize = Integer.highestOneBit(nConstraints);
+        if (domainSize < nConstraints) domainSize <<= 1;
+        if (domainSize < 4) domainSize = 4;
+        int logN = Integer.numberOfTrailingZeros(domainSize);
+
+        // Sample random toxic waste for Phase 2
+        BigInteger alpha = randomScalar(rng);
+        BigInteger beta = randomScalar(rng);
+        BigInteger gamma = randomScalar(rng);
+        BigInteger delta = randomScalar(rng);
+
+        BigInteger gammaInv = gamma.modInverse(FR);
+        BigInteger deltaInv = delta.modInverse(FR);
+
+        // Compute omega (primitive domainSize-th root of unity)
+        MontFr254 omega = FieldFFT.rootOfUnity(logN);
+
+        // Compute Lagrange basis evaluations at tau: L_i(tau) = (tau^N - 1) / (N * (tau - omega^i))
+        BigInteger tauN = tau.modPow(BigInteger.valueOf(domainSize), FR);
+        BigInteger zh = tauN.subtract(BigInteger.ONE).mod(FR); // tau^N - 1
+        BigInteger nInv = BigInteger.valueOf(domainSize).modInverse(FR);
+
+        BigInteger[] lagrange = new BigInteger[domainSize];
+        BigInteger omegaI = BigInteger.ONE;
+        BigInteger omegaBi = omega.toBigInteger();
+        for (int i = 0; i < domainSize; i++) {
+            // L_i(tau) = zh / (N * (tau - omega^i))
+            BigInteger diff = tau.subtract(omegaI).mod(FR);
+            if (diff.signum() == 0) {
+                // tau = omega^i: L_i(tau) = 1, all others = 0 (degenerate, shouldn't happen with random tau)
+                lagrange[i] = BigInteger.ONE;
+            } else {
+                lagrange[i] = zh.multiply(nInv).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
+            }
+            omegaI = omegaI.multiply(omegaBi).mod(FR);
+        }
+
+        // For each wire s, compute u_s(tau), v_s(tau), w_s(tau)
+        // u_s = sum_c A_c[s] * L_c(tau), etc.
+        BigInteger[] us = new BigInteger[numWires];
+        BigInteger[] vs = new BigInteger[numWires];
+        BigInteger[] ws = new BigInteger[numWires];
+        Arrays.fill(us, BigInteger.ZERO);
+        Arrays.fill(vs, BigInteger.ZERO);
+        Arrays.fill(ws, BigInteger.ZERO);
+
+        for (int c = 0; c < nConstraints && c < domainSize; c++) {
+            var constraint = constraints[c];
+            BigInteger lc = lagrange[c];
+            accumulate(us, constraint.a(), lc);
+            accumulate(vs, constraint.b(), lc);
+            accumulate(ws, constraint.c(), lc);
+        }
+
+        // Compute group elements
+        var g1 = JacobianG1BN254.GENERATOR;
+        var g2 = JacobianG2BN254.GENERATOR;
+
+        AffineG1 alphaG1 = g1.scalarMul(alpha).toAffine();
+        AffineG1 betaG1 = g1.scalarMul(beta).toAffine();
+        AffineG2 betaG2 = g2.scalarMul(beta).toAffine();
+        AffineG1 deltaG1 = g1.scalarMul(delta).toAffine();
+        AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
+
+        // pointsA[s] = u_s(tau) * G1
+        AffineG1[] pointsA = new AffineG1[numWires];
+        for (int s = 0; s < numWires; s++) {
+            pointsA[s] = us[s].signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(us[s]).toAffine();
+        }
+
+        // pointsB1[s] = v_s(tau) * G1
+        AffineG1[] pointsB1 = new AffineG1[numWires];
+        for (int s = 0; s < numWires; s++) {
+            pointsB1[s] = vs[s].signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(vs[s]).toAffine();
+        }
+
+        // pointsB2[s] = v_s(tau) * G2
+        AffineG2[] pointsB2 = new AffineG2[numWires];
+        for (int s = 0; s < numWires; s++) {
+            pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine();
+        }
+
+        // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
+        int numPrivate = numWires - numPublic - 1;
+        AffineG1[] pointsL = new AffineG1[Math.max(0, numPrivate)];
+        for (int j = 0; j < numPrivate; j++) {
+            int s = numPublic + 1 + j;
+            BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
+                    .multiply(deltaInv).mod(FR);
+            pointsL[j] = lVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(lVal).toAffine();
+        }
+
+        // H points: odd-indexed Lagrange basis on double-sized domain / delta
+        // L_{2i+1}^{(2N)}(tau) / delta * G1
+        int domainSize2 = 2 * domainSize;
+        MontFr254 omega2 = FieldFFT.rootOfUnity(logN + 1); // primitive 2N-th root
+        BigInteger omega2Bi = omega2.toBigInteger();
+        BigInteger tauN2 = tau.modPow(BigInteger.valueOf(domainSize2), FR);
+        BigInteger zh2 = tauN2.subtract(BigInteger.ONE).mod(FR);
+        BigInteger nInv2 = BigInteger.valueOf(domainSize2).modInverse(FR);
+
+        AffineG1[] pointsH = new AffineG1[domainSize];
+        for (int i = 0; i < domainSize; i++) {
+            int lagIdx = 2 * i + 1; // odd index
+            BigInteger omegaPow = tau.modPow(BigInteger.ZERO, FR); // dummy
+            // omega2^lagIdx
+            omegaPow = omega2Bi.modPow(BigInteger.valueOf(lagIdx), FR);
+            BigInteger diff = tau.subtract(omegaPow).mod(FR);
+            BigInteger hLagrange;
+            if (diff.signum() == 0) {
+                hLagrange = BigInteger.ONE;
+            } else {
+                hLagrange = zh2.multiply(nInv2).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
+            }
+            BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
+            pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(hVal).toAffine();
+        }
+
+        // Securely discard toxic waste (best-effort — see PowersOfTau.java for caveats)
+        alpha = beta = gamma = delta = BigInteger.ZERO;
+
+        return new Groth16ProvingKey(
+                alphaG1, betaG1, betaG2, deltaG1, deltaG2,
+                pointsA, pointsB1, pointsB2, pointsH, pointsL, numPublic);
+    }
+
+    private static void accumulate(BigInteger[] target, Map<Integer, BigInteger> sparse, BigInteger lagrange) {
+        for (var entry : sparse.entrySet()) {
+            int wire = entry.getKey();
+            if (wire < target.length) {
+                target[wire] = target[wire].add(entry.getValue().multiply(lagrange)).mod(FR);
+            }
+        }
+    }
+
+    private static BigInteger randomScalar(SecureRandom rng) {
+        byte[] bytes = new byte[64];
+        rng.nextBytes(bytes);
+        return new BigInteger(1, bytes).mod(FR);
+    }
+}

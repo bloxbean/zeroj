@@ -79,7 +79,10 @@ public final class PowersOfTau {
         tauG2[0] = g2.toAffine();
         tauG2[1] = g2.scalarMul(tau).toAffine();
 
-        // Discard toxic waste — best-effort in Java.
+        // Store tau for Groth16Setup (development-only — production .ptau files don't expose tau)
+        BigInteger tauForSetup = tau;
+
+        // Discard toxic waste from local variables — best-effort in Java.
         // NOTE: BigInteger is immutable. Reassigning tau = ZERO does NOT overwrite the original
         // object's internal int[] in memory. The original tau value persists until GC collects it.
         // Intermediate tauPow values also litter the heap as unreachable BigInteger objects.
@@ -89,7 +92,7 @@ public final class PowersOfTau {
         tau = BigInteger.ZERO;
         tauPow = BigInteger.ZERO;
 
-        return new PtauImporter.SRS(tauG1, tauG2, power);
+        return new PtauImporter.SRS(tauG1, tauG2, power, tauForSetup);
     }
 
     /**

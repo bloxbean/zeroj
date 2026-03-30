@@ -30,8 +30,14 @@ public final class PtauImporter {
     public record SRS(
             AffineG1[] tauG1,    // [tau^0*G1, tau^1*G1, ..., tau^n*G1]
             AffineG2[] tauG2,    // [tau^0*G2, tau^1*G2]  (only first 2 needed for KZG)
-            int power             // log2 of ceremony size
+            int power,            // log2 of ceremony size
+            BigInteger tauScalar // tau as scalar (only available for dev/test generators, null for imported .ptau)
     ) {
+        /** Construct without tau scalar (for imported .ptau files). */
+        public SRS(AffineG1[] tauG1, AffineG2[] tauG2, int power) {
+            this(tauG1, tauG2, power, null);
+        }
+
         /** The SRS second point in G2: [tau]_2. */
         public AffineG2 x2() { return tauG2[1]; }
     }
