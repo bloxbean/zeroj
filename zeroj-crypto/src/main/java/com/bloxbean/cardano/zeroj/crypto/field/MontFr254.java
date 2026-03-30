@@ -87,12 +87,14 @@ public final class MontFr254 {
     }
 
     /**
-     * Create a field element from a long value.
+     * Create a field element from a non-negative long value.
+     *
+     * @param val non-negative value (negative values are rejected)
      */
     public static MontFr254 fromLong(long val) {
+        if (val < 0) throw new IllegalArgumentException("fromLong requires non-negative value, got " + val);
         if (val == 0) return ZERO;
         if (val == 1) return ONE;
-        // val is in normal form; convert to Montgomery
         return new MontFr254(val, 0, 0, 0).toMontgomery();
     }
 
@@ -261,11 +263,15 @@ public final class MontFr254 {
         return MontUtil.limbsToBigInteger(normal.l0, normal.l1, normal.l2, normal.l3);
     }
 
+    /** Cached modulus as BigInteger (avoids allocation on every call). */
+    private static final BigInteger MODULUS =
+            new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+
     /**
      * The BN254 scalar field modulus as BigInteger.
      */
     public static BigInteger modulus() {
-        return new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+        return MODULUS;
     }
 
     @Override

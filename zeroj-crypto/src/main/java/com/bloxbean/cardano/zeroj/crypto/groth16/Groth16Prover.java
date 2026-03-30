@@ -358,6 +358,10 @@ public final class Groth16Prover {
 
     // --- Helpers ---
 
+    /**
+     * Evaluate a linear combination Σ(coeff_i * witness[wire_i]).
+     * Wires beyond witness length are treated as 0 (supports .zkey virtual wires).
+     */
     private static MontFr254 evalLinComb(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
         MontFr254 sum = MontFr254.ZERO;
         for (var entry : lc.entrySet()) {
@@ -389,6 +393,7 @@ public final class Groth16Prover {
         BigInteger mod = MontFr254.modulus();
         for (int i = 0; i < numConstraints; i++) {
             var c = constraints[i];
+            // Empty constraints (0*0=0) are trivially satisfied — skip
             if (c.a().isEmpty() && c.b().isEmpty() && c.c().isEmpty()) continue;
 
             BigInteger aVal = evalLCBigInt(c.a(), witness, mod);
@@ -407,8 +412,12 @@ public final class Groth16Prover {
     private static BigInteger evalLCBigInt(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
         BigInteger sum = BigInteger.ZERO;
         for (var entry : lc.entrySet()) {
-            if (entry.getKey() < witness.length && entry.getValue().signum() != 0) {
-                sum = sum.add(entry.getValue().multiply(witness[entry.getKey()]));
+            int wireIdx = entry.getKey();
+            if (wireIdx >= witness.length)
+                throw new IllegalArgumentException(
+                        "Constraint references wire " + wireIdx + " but witness has only " + witness.length + " entries");
+            if (entry.getValue().signum() != 0) {
+                sum = sum.add(entry.getValue().multiply(witness[wireIdx]));
             }
         }
         return sum.mod(mod);

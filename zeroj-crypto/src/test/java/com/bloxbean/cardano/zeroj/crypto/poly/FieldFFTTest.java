@@ -225,6 +225,27 @@ class FieldFFTTest {
     }
 
     @Test
+    void polyMul_twoConstants() {
+        // Degree-0 * degree-0: 5 * 7 = 35
+        var a = new MontFr254[]{MontFr254.fromLong(5)};
+        var b = new MontFr254[]{MontFr254.fromLong(7)};
+        var c = FieldFFT.polyMul(a, b);
+        assertEquals(1, c.length);
+        assertEquals(BigInteger.valueOf(35), c[0].toBigInteger());
+    }
+
+    @Test
+    void polyMul_scalarTimesPolynomial() {
+        // 3 * (2 + 5x) = 6 + 15x
+        var a = new MontFr254[]{MontFr254.fromLong(3)};
+        var b = new MontFr254[]{MontFr254.fromLong(2), MontFr254.fromLong(5)};
+        var c = FieldFFT.polyMul(a, b);
+        assertEquals(2, c.length);
+        assertEquals(BigInteger.valueOf(6), c[0].toBigInteger());
+        assertEquals(BigInteger.valueOf(15), c[1].toBigInteger());
+    }
+
+    @Test
     void polyMul_byZero() {
         var a = randomPoly(4);
         var b = new MontFr254[]{MontFr254.ZERO};

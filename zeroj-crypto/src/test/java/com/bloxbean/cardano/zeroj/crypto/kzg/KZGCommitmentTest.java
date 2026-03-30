@@ -50,7 +50,7 @@ class KZGCommitmentTest {
         // f(X) = X^2 - 1, z=1, f(z)=0
         // (X^2 - 1) / (X - 1) = X + 1
         var coeffs = new MontFr254[]{
-                MontFr254.fromLong(-1).add(MontFr254.fromBigInteger(MontFr254.modulus())),  // actually mod r, so -1 = r-1
+                MontFr254.fromBigInteger(BigInteger.ONE.negate()),  // -1 mod r = r-1
                 MontFr254.ZERO,
                 MontFr254.ONE};
         // Manually: f(X) = -1 + 0*X + 1*X^2

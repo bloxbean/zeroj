@@ -66,7 +66,9 @@ public final class MontFp254 {
         return new MontFp254(limb0, limb1, limb2, limb3).toMontgomery();
     }
 
+    /** @param val non-negative value */
     public static MontFp254 fromLong(long val) {
+        if (val < 0) throw new IllegalArgumentException("fromLong requires non-negative value, got " + val);
         if (val == 0) return ZERO;
         if (val == 1) return ONE;
         return new MontFp254(val, 0, 0, 0).toMontgomery();
@@ -175,8 +177,12 @@ public final class MontFp254 {
         return MontUtil.limbsToBigInteger(normal.l0, normal.l1, normal.l2, normal.l3);
     }
 
+    /** Cached modulus as BigInteger. */
+    private static final BigInteger MODULUS =
+            new BigInteger("21888242871839275222246405745257275088696311157297823662689037894645226208583");
+
     public static BigInteger modulus() {
-        return new BigInteger("21888242871839275222246405745257275088696311157297823662689037894645226208583");
+        return MODULUS;
     }
 
     @Override
