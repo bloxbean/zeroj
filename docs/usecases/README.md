@@ -128,6 +128,8 @@ Vote privately while still preventing double-voting.
 - Sybil-resistant — each eligible member votes exactly once
 - Verifiable — anyone can check the election is fair without seeing individual votes
 
+**Deep dive**: [Private Voting — Detailed Design](private-voting.md) — nullifier mechanics, Cardano UTXO patterns, sorted linked list on-chain registry, Julc smart contract code, concurrency analysis.
+
 ---
 
 ## Use Case 3: Sealed-Bid Auction
