@@ -207,6 +207,8 @@ Transfer tokens without linking sender and receiver addresses.
 - Protects business transactions from competitor surveillance
 - Salary payments without revealing amounts to the public
 
+**Deep dive**: [Private Token Transfer — Detailed Design](private-token-transfer.md) — deposit/withdrawal protocol, Cardano UTXO pool patterns, relayer network, fixed vs variable amounts, sorted linked list nullifiers, Julc smart contracts, compliance (Privacy Pools).
+
 ---
 
 ## Use Case 5: Credit Score Proof (DeFi Lending)
