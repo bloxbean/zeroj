@@ -21,6 +21,12 @@ Trustless anonymous voting using zero-knowledge proofs on Cardano's UTXO model.
 - [Cost Analysis](#cost-analysis)
 - [CircuitSpec Implementation](#circuitspec-implementation)
 - [End-to-End Architecture](#end-to-end-architecture)
+- [Alternative Approaches](#alternative-approaches)
+  - [Batch ZK Rollup (Best for Large Elections)](#batch-zk-rollup-best-for-large-elections)
+  - [Hydra L2 Voting (Best for Speed)](#hydra-l2-voting-best-for-speed)
+  - [MACI — Anti-Collusion (Strongest Privacy)](#maci--anti-collusion-strongest-privacy)
+- [Which Approach Is Best?](#which-approach-is-best)
+- [Recommendation](#recommendation)
 
 ---
 
@@ -582,3 +588,195 @@ var compressed = ProverToCardano.compressProof(proof);
 | **Censorship resistant** | Voters submit directly to Cardano |
 | **Verifiable tally** | Commitments are public, anyone can count |
 | **ADA reclaimable** | Cleanup after election returns all locked ADA |
+
+## Alternative Approaches
+
+The sorted linked list is the best **trustless on-chain** solution. But depending on your priorities — cost, speed, or anti-collusion — other architectures may be more appropriate.
+
+Every voting design sits on a tradeoff spectrum:
+
+```
+Fully On-Chain                                         Fully Off-Chain
+(trustless, expensive)                                 (cheap, needs trust)
+     │                                                        │
+     ├── Sorted Linked List                                   │
+     │   (1.5 ADA/vote, no trust)                             │
+     │                                                        │
+     │         ├── Merkle Root On-Chain                        │
+     │         │   (~2 ADA total, indexer needed)              │
+     │         │                                               │
+     │         │              ├── Batch ZK Rollup              │
+     │         │              │   (1 tx total, operator trust) │
+     │         │              │                                │
+     │         │              │              ├── Hydra L2      │
+     │         │              │              │   (free, committee trust)
+```
+
+### Batch ZK Rollup (Best for Large Elections)
+
+Instead of recording each vote on-chain, an operator collects ALL votes off-chain and produces **one ZK proof** that the entire tally is correct.
+
+```
+10,000 voters submit proofs off-chain
+              │
+              ▼
+     ┌─────────────────┐
+     │  Tally Operator   │
+     │                   │
+     │  Collects votes,  │
+     │  checks nullifiers│
+     │  (all off-chain)  │
+     │                   │
+     │  Generates ONE    │
+     │  ZK proof:        │
+     │  "5,847 YES,      │
+     │   4,153 NO,       │
+     │   no duplicates,  │
+     │   all voters      │
+     │   eligible"       │
+     └────────┬──────────┘
+              │
+              ▼
+     ONE Cardano transaction:
+       Proof: 192 bytes
+       Datum: { yes: 5847, no: 4153, nullifierRoot: 0x... }
+       Cost: ~0.3 ADA total (regardless of voter count)
+```
+
+**How it works**: The operator proves a recursive/aggregated statement:
+
+- For each vote i: `vote_i ∈ {0, 1}`, voter is eligible (Merkle proof), nullifier is unique
+- `yesCount = count(vote_i == 1)` and `noCount = count(vote_i == 0)`
+- `nullifierRoot = MerkleRoot(all nullifiers)`
+
+**What the operator CAN'T do**:
+- Can't forge votes (doesn't know anyone's secret key)
+- Can't change votes (ZK proof binds vote to commitment)
+- Can't break privacy (votes are encrypted/hidden in the proof)
+
+**What the operator CAN do**:
+- Censor specific voters (refuse to include their vote)
+
+**Mitigation**: Multiple competing operators, or fallback to direct L1 submission.
+
+| | Sorted Linked List | Batch ZK Rollup |
+|---|---|---|
+| **On-chain cost** | ~1.5 ADA per vote | **~0.3 ADA total** |
+| **Transactions** | 1 per vote | **1 total** |
+| **Trust** | **Trustless** | Operator can censor (not forge) |
+| **Liveness** | Real-time | Batched (wait for operator) |
+| **Best for** | Trustless DAOs | **Large elections (1000+ voters)** |
+
+### Hydra L2 Voting (Best for Speed)
+
+Process all votes inside a Hydra head (Cardano L2). Only the final result hits L1.
+
+```
+┌──────────────────────────────────────────────┐
+│  Hydra Head (L2)                              │
+│                                               │
+│  Participants: Election Committee (3-of-5)    │
+│                                               │
+│  Inside Hydra:                                │
+│    - Instant finality (<1 second)             │
+│    - Zero fees                                │
+│    - Full Plutus V3 support                   │
+│    - Sorted linked list works perfectly       │
+│      (no contention — sequential processing)  │
+│                                               │
+│  Each vote: submit ZK proof → validate → done │
+│  Time: <1 second. Cost: 0 ADA.               │
+│                                               │
+└──────────────────────┬───────────────────────┘
+                       │ Close Hydra head
+                       ▼
+              L1 Settlement:
+                ONE transaction with final state
+                { yes: 5847, no: 4153 }
+                Cost: ~0.5 ADA
+```
+
+**The key advantage**: Inside the Hydra head, the sorted linked list works perfectly with zero contention (sequential processing) and zero cost. All the UTXO contention problems disappear because Hydra processes transactions sequentially within the head.
+
+| | Sorted Linked List (L1) | Hydra L2 |
+|---|---|---|
+| **Cost per vote** | ~1.5 ADA | **0 ADA** |
+| **Latency** | ~20 seconds | **<1 second** |
+| **Contention** | Low | **None** |
+| **Trust** | **Trustless** | Committee (m-of-n) must be online |
+| **Best for** | Any DAO | **Speed-critical, committee-governed DAOs** |
+
+### MACI — Anti-Collusion (Strongest Privacy)
+
+MACI (Minimum Anti-Collusion Infrastructure) solves a problem the other approaches don't: **vote buying**.
+
+**The problem with standard ZK voting**: Even with ZK proofs, a voter can **prove to a briber how they voted** by sharing their proof inputs before submitting:
+
+```
+Briber: "Vote YES and show me proof. I'll pay you 100 ADA."
+Voter: Votes YES, shows the briber the inputs.
+Briber: Verifies and pays.
+```
+
+**How MACI fixes this**: MACI adds an encrypted key-change mechanism. After voting, a voter can **secretly change their vote** — and there's no way to prove they didn't.
+
+```
+Round 1: Alice votes YES (encrypted with coordinator's key)
+Round 2: Alice secretly changes to NO (new encrypted message)
+         Alice CANNOT prove to briber that she didn't change it.
+
+Briber: "Prove you voted YES"
+Alice: Shows round 1 proof (YES)
+Briber: Can't tell Alice secretly changed to NO.
+Alice: Actually voted NO. Briber got scammed.
+```
+
+The coordinator (who has the decryption key) processes all votes and produces a ZK proof of the **final tally** without revealing individual votes or key changes.
+
+**The tradeoff**: The coordinator can **see individual votes** (but can't change them). Public privacy is maintained — only the coordinator sees decrypted votes.
+
+| | Sorted Linked List | MACI |
+|---|---|---|
+| **Vote buying resistance** | No — voter can prove their vote to briber | **Yes — voter can secretly change** |
+| **Trust** | **Trustless** | Coordinator sees votes (can't change them) |
+| **Privacy from public** | **Full** | **Full** |
+| **Privacy from coordinator** | N/A | No (coordinator decrypts) |
+| **Complexity** | Medium | High |
+| **Best for** | Standard DAO governance | **High-stakes votes where buying is a threat** |
+
+## Which Approach Is Best?
+
+| Priority | Best Approach | Why |
+|----------|--------------|-----|
+| **Zero trust, any size** | Sorted Linked List | No off-chain components, fully on-chain |
+| **Minimum cost** | Batch ZK Rollup | One transaction regardless of voter count |
+| **Maximum speed** | Hydra L2 | Sub-second finality, zero fees |
+| **Anti vote-buying** | MACI | Only design that prevents proving how you voted |
+| **Simplicity** | Sorted Linked List | Easiest to implement and audit |
+| **Small DAO (<100)** | Single UTXO | Simplest, fits in one datum |
+
+### All Approaches Compared
+
+| | Single UTXO | Merkle Root | **Sorted List** | Batch Rollup | Hydra L2 | MACI |
+|---|---|---|---|---|---|---|
+| **Trust** | Trustless | Indexer | **Trustless** | Operator | Committee | Coordinator |
+| **Max voters** | ~60 | Unlimited | **Unlimited** | Unlimited | Unlimited | Unlimited |
+| **Cost/vote** | 0 ADA | 0 ADA | **1.5 ADA** | ~0 ADA | 0 ADA | ~0 ADA |
+| **Concurrency** | None | Low | **Natural** | N/A | None needed | N/A |
+| **Anti-bribery** | No | No | No | No | No | **Yes** |
+| **Off-chain** | None | Tree service | **None** | Operator | Committee | Coordinator |
+| **Complexity** | Low | High | **Medium** | High | Medium | Very high |
+
+## Recommendation
+
+For **most Cardano DAOs today**:
+
+1. **Start with sorted linked list.** It's trustless, simple to audit, and works out of the box with the ZeroJ pure Java prover. The 1.5 ADA per vote cost is acceptable for DAOs with treasury, and the ADA is reclaimable after the election.
+
+2. **Graduate to batch ZK rollup** when voter count exceeds 5,000+, or when ADA cost becomes a concern. This requires building an aggregation circuit and running an operator, but reduces on-chain cost to near zero.
+
+3. **Consider MACI** only if vote buying is a concrete threat (large treasury votes, political elections). It's significantly more complex to implement.
+
+4. **Consider Hydra** when it matures further and your DAO already runs committee-based infrastructure.
+
+**The key insight**: The ZK circuit is the same for all approaches. Only the on-chain pattern changes. You can start with the linked list and migrate to batch rollup later **without rewriting the circuit**.
