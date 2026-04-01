@@ -284,6 +284,8 @@ Prove a product passed all required quality checkpoints without revealing the su
 - Anti-counterfeiting for pharmaceuticals, luxury goods, food
 - Consumer trust with producer privacy
 
+**Deep dive**: [Digital Product Passport — Detailed Design](digital-product-passport.md) — EU DPP regulation, ZK-provable claims (carbon, recycled content, inspections, conflict minerals), native tokens as product IDs, UTXO lifecycle state machine, multi-party supply chain proofs, Julc smart contracts, zero contention architecture.
+
 ---
 
 ## Use Case 7: Proof of Reserves (Exchange Solvency)
