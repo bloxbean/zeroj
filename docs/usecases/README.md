@@ -321,6 +321,8 @@ Prove total reserves exceed total liabilities without revealing individual accou
 - User privacy maintained (individual balances hidden)
 - Automated, verifiable, tamper-proof auditing
 
+**Deep dive**: [Proof of Reserves — Detailed Design](proof-of-reserves.md) — Merkle sum trees, 4 approaches compared (simple sum, Merkle sum tree, UTXO summation, recursive aggregation), individual account inclusion proofs, Cardano-specific designs (stake pools, stablecoins, DeFi, bridges), Julc smart contracts, cheating defenses.
+
 ---
 
 ## Use Case 8: Private NFT Ownership Proof
