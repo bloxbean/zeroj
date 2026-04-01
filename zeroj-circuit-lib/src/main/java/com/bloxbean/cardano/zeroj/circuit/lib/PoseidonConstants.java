@@ -6,12 +6,12 @@ import java.math.BigInteger;
  * Poseidon hash constants for BN254 t=3 (from iden3/circomlibjs).
  * Generated from circomlibjs/src/poseidon_constants.json.
  */
-final class PoseidonConstants {
+public final class PoseidonConstants {
 
     private PoseidonConstants() {}
 
     /** Round constants: 195 values (65 rounds x 3 state width). */
-    static final BigInteger[] C = new BigInteger[]{
+    public static final BigInteger[] C = new BigInteger[]{
         new BigInteger("6745197990210204598374042828761989596302876299545964402857411729872131034734"),
         new BigInteger("426281677759936592021316809065178817848084678679510574715894138690250139748"),
         new BigInteger("4014188762916583598888942667424965430287497824629657219807941460227372577781"),
@@ -210,7 +210,7 @@ final class PoseidonConstants {
     };
 
     /** MDS matrix (3x3, flattened row-major: M[i*3+j]). */
-    static final BigInteger[] M = new BigInteger[]{
+    public static final BigInteger[] M = new BigInteger[]{
         new BigInteger("7511745149465107256748700652201246547602992235352608707588321460060273774987"), // M[0][0]
         new BigInteger("10370080108974718697676803824769673834027675643658433702224577712625900127200"), // M[0][1]
         new BigInteger("19705173408229649878903981084052839426532978878058043055305024233888854471533"), // M[0][2]
