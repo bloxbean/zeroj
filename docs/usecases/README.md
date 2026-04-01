@@ -360,6 +360,8 @@ Prove you own the NFT without revealing which wallet holds it.
 - No wallet-to-identity linkage
 - Prevent ticket scalping (nullifier = one-time use)
 
+**Deep dive**: [Private NFT Ownership — Detailed Design](private-nft-ownership.md) — 10 use cases (token-gated access, anonymous DAO, anti-sybil airdrops, whale privacy, creator verification, gaming, warranty, lending), 4 approaches (Merkle snapshot, UTXO registry, privacy-native minting, shielded pool), nullifier patterns, CircuitSpec circuits, Julc smart contracts.
+
 ---
 
 ## Summary
