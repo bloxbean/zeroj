@@ -87,6 +87,8 @@ Prove you meet the requirements without revealing your personal data.
 - Regulatory compliance without privacy sacrifice
 - User can prove eligibility to multiple protocols without re-sharing data
 
+**Deep dive**: [ZK Identity & Credentials — Detailed Design](identity-and-credentials.md) — three credential approaches (Poseidon-signed, EdDSA, BBS+), credential lifecycle, revocation patterns, W3C VC compatibility, Atala PRISM integration, Julc smart contracts. Covers KYC, age verification, accredited investor, DAO membership, and more.
+
 ---
 
 ## Use Case 2: Private Voting
