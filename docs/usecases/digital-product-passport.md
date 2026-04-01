@@ -29,6 +29,13 @@ Prove product compliance without revealing trade secrets. EU-mandated, blockchai
 - [Security and Trust Model](#security-and-trust-model)
 - [Standards Compatibility](#standards-compatibility)
 - [Architecture Recommendation](#architecture-recommendation)
+- [Comparison with Cardano Foundation DPP Blueprint](#comparison-with-cardano-foundation-dpp-blueprint)
+  - [Two Approaches to the Same Problem](#two-approaches-to-the-same-problem)
+  - [Where ZK Enhances the CF Blueprint](#where-zk-enhances-the-cf-blueprint)
+  - [Where the CF Blueprint Has Advantages](#where-the-cf-blueprint-has-advantages)
+  - [When to Use Which Approach](#when-to-use-which-approach)
+  - [Complementary, Not Competing](#complementary-not-competing)
+  - [Implementation Roadmap](#implementation-roadmap)
 
 ---
 
@@ -709,3 +716,218 @@ The auditor signs the measurement data. If they sign false data:
 5. **Reference inputs (CIP-31)** = read auditor registry without contention
 6. **Low fees** = ~2 ADA per product lifecycle (practical at scale)
 7. **No contention** = every product verification is independent
+
+---
+
+## Comparison with Cardano Foundation DPP Blueprint
+
+The [Cardano Foundation DPP Standards](https://github.com/cardano-foundation/cardano-dpp-standards) project defines a blueprint for implementing Digital Product Passports on Cardano. This section compares both approaches and shows how ZK proofs enhance the CF blueprint.
+
+### Two Approaches to the Same Problem
+
+Both approaches target EU ESPR compliance and share foundational design choices (native tokens, CIP-25/CIP-68 metadata, IPFS for off-chain storage). They differ in **how compliance claims are verified**:
+
+```
+CF Blueprint Approach: DATA ANCHORING
+  "Here's a hash of our DPP data. We can selectively reveal specific data branches."
+
+  Manufacturer → hash(full_dpp) → on-chain anchor
+                 Merkle tree of claims → selective disclosure to verifier
+                 Verifier receives: exact value + Merkle proof of inclusion
+
+ZK Approach: PROOF OF COMPLIANCE
+  "Here's a mathematical proof that our data meets all requirements."
+
+  Manufacturer → ZK proof(secret_data, threshold) → on-chain anchor
+                 Verifier receives: 192-byte proof + "compliant: YES"
+                 Verifier NEVER sees: exact values, supplier names, or raw data
+```
+
+### Shared Foundation
+
+Both frameworks agree on these Cardano-native patterns:
+
+| Pattern | CF Blueprint | ZK Approach |
+|---------|-------------|-------------|
+| Product identity | Native token (policy ID = manufacturer) | Same |
+| Metadata standard | CIP-25 / CIP-68 | Same |
+| Off-chain storage | IPFS for full DPP document | Same |
+| EU ESPR alignment | Explicit regulatory mapping | Same |
+| Personas | Manufacturer, consumer, regulator, recycler | Same |
+| QR/NFC linking | GS1 Digital Link | Compatible |
+
+### Where ZK Enhances the CF Blueprint
+
+#### 1. Exact Value Privacy
+
+The fundamental difference: Merkle selective disclosure reveals the exact value to the verifier. ZK proofs don't.
+
+```
+Scenario: "Prove recycled content >= 30%"
+
+CF Blueprint (Merkle Disclosure):
+  Manufacturer discloses: recycled_content = 42.7%
+  Merkle proof confirms: 42.7% is in the DPP data
+  ✓ Regulator verifies: 42.7% >= 30% → compliant
+  ✗ Problem: Competitor now knows exact efficiency (42.7%)
+
+ZK Approach:
+  Manufacturer generates: ZK proof that recycled_content >= 30
+  Proof is 192 bytes. Contains NO data about the actual percentage.
+  ✓ Regulator verifies: proof valid → compliant
+  ✓ Competitor learns: nothing (could be 30.1% or 99.9%)
+```
+
+This matters for **every numeric compliance claim**:
+
+| Claim | CF Reveals | ZK Reveals |
+|-------|-----------|-----------|
+| "Recycled >= 30%" | Exact: 42.7% | Only: "≥ 30%" |
+| "Carbon < 50kg" | Exact: 42.7 kg | Only: "< 50kg" |
+| "Degradation < 20% at 500 cycles" | Exact: 18.3% | Only: "< 20%" |
+| "5 inspections passed" | Inspector names, dates, details | Only: "all 5 passed" |
+
+#### 2. Supplier Anonymity
+
+Merkle tree structure leaks information about the data schema. A Merkle proof path reveals which branches exist.
+
+```
+CF Blueprint:
+  Merkle tree: hash(supplier_A) | hash(supplier_B) | hash(supplier_C)
+  To prove "supplier_A is conflict-free":
+    → Must reveal supplier_A's data + Merkle path
+    → Path reveals tree has 3 suppliers (structural leak)
+
+ZK Approach:
+  Circuit: "ALL suppliers in my list are NOT in the conflict country set"
+  Proof reveals: nothing about how many suppliers, who they are, or where they are
+  Verifier sees: "conflict_free = true" (that's it)
+```
+
+#### 3. Composite Claims
+
+Multiple claims can be proven in a single ZK proof:
+
+```
+CF Blueprint:
+  Claim 1: recycled >= 30%    → Merkle proof 1 (reveals exact %)
+  Claim 2: carbon < 50kg      → Merkle proof 2 (reveals exact kg)
+  Claim 3: 5 inspections      → Merkle proof 3 (reveals inspector data)
+  Total: 3 separate disclosures, each leaking exact values
+
+ZK Approach:
+  Single circuit: "recycled >= 30% AND carbon < 50kg AND 5 inspections passed"
+  Single proof: 192 bytes
+  Reveals: "all_compliant = true" — nothing else
+```
+
+#### 4. Auditor Isolation
+
+In the CF model, the auditor sees raw data and provides a Merkle attestation. If the auditor is compromised or colluding with a competitor, the data is exposed.
+
+```
+CF Blueprint:
+  Auditor receives: full DPP data (carbon=42.7, suppliers=[A,B,C], ...)
+  Auditor produces: signed Merkle root
+  Risk: Auditor leaks data to competitor or regulator overshares
+
+ZK Approach:
+  Auditor receives: full data (same)
+  Auditor signs: hash of the data
+  Manufacturer generates: ZK proof from signed data
+  Key difference: The PROOF doesn't contain the data.
+                  Even if the proof is leaked, no data is exposed.
+                  The auditor's signature proves data authenticity
+                  without the proof revealing what was signed.
+```
+
+### Where the CF Blueprint Has Advantages
+
+| Advantage | CF Blueprint | ZK Approach |
+|-----------|-------------|-------------|
+| **Simplicity** | No circuit development, no prover infrastructure | Requires ZK circuit design + trusted setup |
+| **Cost per product** | ~1-2 ADA | ~2-3 ADA (50% more) |
+| **Verification speed** | Hash check: ~1ms | ZK verify: ~2ms off-chain, ~5ms on-chain |
+| **Standards maturity** | GS1 Digital Link explicitly mapped | Should add GS1 EPCIS mapping |
+| **Developer onboarding** | Hash + IPFS (familiar to most devs) | ZK circuits (specialized knowledge) |
+| **Regulatory clarity** | Clear ESPR-to-metadata field mapping | Needs explicit regulatory mapping doc |
+
+### CF Blueprint Solution Patterns
+
+The CF blueprint defines four solution patterns:
+
+| CF Pattern | How It Works | ZK Enhancement |
+|------------|-------------|----------------|
+| **Static Anchor** | Hash DPP data → store hash in metadata | Add ZK proof hash alongside data hash — proves compliance without revealing data |
+| **Anchored Proof** | Merkle tree of claims → root in metadata | Replace Merkle disclosure with ZK proof — verifier gets "compliant: YES" instead of exact values |
+| **Event Log** | Append-only chain of supply chain events | Each event can carry a ZK proof — "temperature was in range" without revealing exact temp |
+| **High Throughput** | Batch roots for high-volume manufacturing | Batch ZK proofs — prove 1000 products compliant in one aggregate proof |
+
+### When to Use Which Approach
+
+| Scenario | Better Approach | Why |
+|----------|----------------|-----|
+| **Commodity products** (simple compliance, no competitive secrets) | CF Blueprint | Simpler, cheaper, transparency expected |
+| **Electronics/pharma** (competitive manufacturing data) | **ZK Approach** | Exact carbon, efficiency, defect rates are trade secrets |
+| **Luxury goods** (supplier relationships are valuable) | **ZK Approach** | Supplier anonymity critical for brand positioning |
+| **Automotive** (complex multi-tier supply chain) | **ZK Approach** | Each tier proves compliance without revealing to others |
+| **Consumer-facing transparency** (organic food, fair trade) | CF Blueprint | Consumers want full disclosure, not proofs |
+| **Cross-border compliance** (EU + US + China regulations) | **ZK Approach** | One proof satisfies multiple regulators with different thresholds |
+| **High-volume manufacturing** (millions of units) | Either | CF is cheaper per unit; ZK adds privacy but at cost |
+
+### Complementary, Not Competing
+
+The best DPP implementation **combines both approaches**:
+
+```
+Product DPP = Public Data (CF Blueprint) + Confidential Claims (ZK Proofs)
+
+PUBLIC LAYER (CF Blueprint patterns):
+├─ Product ID (native token)
+├─ Manufacturer name and country
+├─ Certification statuses (REACH, RoHS)
+├─ Repairability score (0-10)
+├─ Spare parts availability
+├─ DPP document hash (IPFS)
+└─ GS1 Digital Link (QR code)
+
+CONFIDENTIAL LAYER (ZK Proofs):
+├─ "Carbon footprint < 50kg" (exact hidden)
+├─ "Recycled content >= 30%" (exact hidden)
+├─ "All 5 inspections passed" (details hidden)
+├─ "No conflict minerals" (suppliers hidden)
+└─ "Made in EU" (specific factory hidden)
+```
+
+The public layer uses the CF blueprint's metadata anchoring (simple, cheap, transparent). The confidential layer uses ZK proofs for claims where exact values or supplier details are commercially sensitive.
+
+**Both layers reference the same product native token and use the same CIP-25/CIP-68 metadata standard.** They're additive — a product can have some claims as public data and others as ZK proofs, depending on sensitivity.
+
+### Implementation Roadmap
+
+```
+Phase 1 (Today):
+  Use CF blueprint patterns for public DPP data
+  → Native token + CIP-25 metadata + IPFS document
+  → Simple, compliant, works now
+
+Phase 2 (Add ZK for sensitive claims):
+  Add ZK proofs for competitive data
+  → "Carbon < 50kg" proof alongside public carbon category
+  → "Recycled >= 30%" proof alongside public range
+  → Uses ZeroJ pure Java prover (no external tools)
+
+Phase 3 (Full integration):
+  Multi-party supply chain with ZK proofs per segment
+  → Each supplier proves their claims independently
+  → Product DPP aggregates all proofs
+  → On-chain verification via Plutus V3 (optional)
+```
+
+### References
+
+- [Cardano Foundation DPP Standards](https://github.com/cardano-foundation/cardano-dpp-standards) — Blueprint, personas, and solution patterns
+- [EU ESPR Regulation](https://environment.ec.europa.eu/topics/circular-economy/ecodesign-sustainable-products-regulation_en) — Digital Product Passport mandate
+- [GS1 Digital Link](https://www.gs1.org/standards/gs1-digital-link) — QR/NFC resolver standard
+- [CIP-25](https://cips.cardano.org/cip/CIP-0025) — Cardano NFT metadata standard
+- [CIP-68](https://cips.cardano.org/cip/CIP-0068) — Datum standard NFT metadata
