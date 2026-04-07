@@ -54,6 +54,15 @@ public final class MontFp381 {
         this.l5 = l5;
     }
 
+    // --- Limb accessors (for serialization) ---
+
+    /**
+     * Returns the 6 Montgomery-form limbs as a long array (little-endian: l0 is least significant).
+     */
+    public long[] toLimbs() {
+        return new long[]{l0, l1, l2, l3, l4, l5};
+    }
+
     // --- Constants ---
 
     public static final MontFp381 ZERO = new MontFp381(0, 0, 0, 0, 0, 0);
@@ -83,7 +92,11 @@ public final class MontFp381 {
         return new MontFp381(val, 0, 0, 0, 0, 0).toMontgomery();
     }
 
-    static MontFp381 fromMontLimbs(long l0, long l1, long l2, long l3, long l4, long l5) {
+    /**
+     * Creates a MontFp381 from 6 Montgomery-form limbs (little-endian: l0 is least significant).
+     * The limbs must already be in Montgomery form — no conversion is performed.
+     */
+    public static MontFp381 fromMontLimbs(long l0, long l1, long l2, long l3, long l4, long l5) {
         return new MontFp381(l0, l1, l2, l3, l4, l5);
     }
 
