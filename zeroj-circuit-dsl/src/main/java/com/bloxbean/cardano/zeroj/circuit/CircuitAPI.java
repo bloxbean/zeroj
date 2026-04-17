@@ -97,4 +97,23 @@ public interface CircuitAPI {
 
     /** Look up a declared variable by name. */
     Variable var(String name);
+
+    // --- Field expectation (checked at compile/witness time) ---
+
+    /**
+     * Declare that this circuit depends on constants tied to a specific scalar
+     * field (e.g. Poseidon round constants). Calling this from a gadget records
+     * the dependency on the circuit graph. At {@code compileR1CS(curve)} /
+     * {@code calculateWitness(..., curve)} time, if the compile curve's field
+     * differs from the recorded expectation, compilation throws.
+     *
+     * <p>Calling multiple times with the same {@code field} is fine; with
+     * conflicting fields within one circuit, throws immediately at define time.
+     *
+     * <p>Default implementation is a no-op — legacy gadgets that do not
+     * depend on field-specific constants need not implement it.
+     */
+    default void requireField(FieldConfig field) {
+        // no-op by default
+    }
 }

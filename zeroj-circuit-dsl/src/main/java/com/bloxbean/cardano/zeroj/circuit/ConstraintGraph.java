@@ -16,6 +16,13 @@ import java.util.*;
  *   <li>Wires nPub+1..nPub+nSec: secret input variables</li>
  *   <li>Remaining wires: intermediate variables</li>
  * </ul>
+ *
+ * <p>{@code expectedField} (nullable): if set, any attempt to compile or
+ * calculate a witness for a curve whose field differs from this value
+ * throws. Gadgets that depend on field-specific constants (e.g. Poseidon)
+ * use {@link CircuitAPI#requireField} during {@code define()} to record
+ * this expectation and catch field-vs-curve mismatches at compile time
+ * rather than silently producing non-canonical outputs.
  */
 public record ConstraintGraph(
         String name,
@@ -24,13 +31,21 @@ public record ConstraintGraph(
         List<Variable> publicInputs,
         List<Variable> secretInputs,
         List<Variable> intermediateVars,
-        int numWires
+        int numWires,
+        FieldConfig expectedField
 ) {
     public ConstraintGraph {
         gates = List.copyOf(gates);
         publicInputs = List.copyOf(publicInputs);
         secretInputs = List.copyOf(secretInputs);
         intermediateVars = List.copyOf(intermediateVars);
+    }
+
+    /** Convenience overload for callers that don't set an expected field. */
+    public ConstraintGraph(String name, List<Gate> gates, Variable oneWire,
+                           List<Variable> publicInputs, List<Variable> secretInputs,
+                           List<Variable> intermediateVars, int numWires) {
+        this(name, gates, oneWire, publicInputs, secretInputs, intermediateVars, numWires, null);
     }
 
     /** Total number of input signals (public + secret). */

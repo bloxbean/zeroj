@@ -5,7 +5,15 @@ import java.math.BigInteger;
 /**
  * Poseidon hash constants for BN254 t=3 (from iden3/circomlibjs).
  * Generated from circomlibjs/src/poseidon_constants.json.
+ *
+ * @deprecated as of ADR-0015; prefer
+ *   {@link com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBN254T3#INSTANCE}
+ *   for BN254 and
+ *   {@link com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3#INSTANCE}
+ *   for BLS12-381. Direct reads of this class are legacy and will be removed in a
+ *   future release.
  */
+@Deprecated
 public final class PoseidonConstants {
 
     private PoseidonConstants() {}

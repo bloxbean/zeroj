@@ -98,28 +98,53 @@ public final class CircuitBuilder {
     /** Compile to R1CS constraint system for Groth16. */
     public R1CSConstraintSystem compileR1CS(CurveId curve) {
         requireDefined();
+        checkExpectedField(curve);
         return R1CSCompiler.compile(graph, FieldConfig.forCurve(curve));
     }
 
     /** Compile to PlonK constraint system. */
     public PlonKConstraintSystem compilePlonK(CurveId curve) {
         requireDefined();
+        checkExpectedField(curve);
         return PlonKCompiler.compile(graph, FieldConfig.forCurve(curve));
     }
 
     /** Compile to Halo2 PLONKish circuit system. */
     public Halo2CircuitSystem compileHalo2(CurveId curve) {
         requireDefined();
+        checkExpectedField(curve);
         return Halo2Compiler.compile(graph, FieldConfig.forCurve(curve));
     }
 
     /** Calculate witness for given inputs. */
     public BigInteger[] calculateWitness(Map<String, List<BigInteger>> inputs, CurveId curve) {
         requireDefined();
+        checkExpectedField(curve);
         return WitnessCalculator.calculate(graph, inputs, FieldConfig.forCurve(curve));
     }
 
     private void requireDefined() {
         if (graph == null) throw new IllegalStateException("Circuit not defined yet. Call define() first.");
+    }
+
+    /**
+     * If a gadget called {@link CircuitAPI#requireField} during {@code define()},
+     * assert the compile curve's field matches that expectation. Prevents
+     * silently producing non-canonical outputs when, e.g., Poseidon params for
+     * BLS12-381 are paired with a BN254 compile curve.
+     */
+    private void checkExpectedField(CurveId curve) {
+        FieldConfig expected = graph.expectedField();
+        if (expected == null) return;
+        FieldConfig actual = FieldConfig.forCurve(curve);
+        if (!expected.equals(actual)) {
+            throw new IllegalStateException(
+                    "Field mismatch: circuit declared expected field " + expected.name()
+                            + " (via requireField) but compilation / witness calculation "
+                            + "was requested for " + curve + " (" + actual.name() + "). "
+                            + "Typical cause: a gadget was given PoseidonParams for a field "
+                            + "that does not match the target curve. Either pass matching "
+                            + "params or compile for the matching curve.");
+        }
     }
 }

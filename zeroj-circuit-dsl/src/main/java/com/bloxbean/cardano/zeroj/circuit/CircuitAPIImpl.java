@@ -21,6 +21,7 @@ class CircuitAPIImpl implements CircuitAPI {
     private final List<Variable> intermediateVars = new ArrayList<>();
     private final Variable oneWire;
     private int nextId;
+    private FieldConfig expectedField;
 
     CircuitAPIImpl(List<String> publicVarNames, List<String> secretVarNames) {
         // Wire 0 = constant "1"
@@ -51,7 +52,20 @@ class CircuitAPIImpl implements CircuitAPI {
 
     ConstraintGraph buildGraph(String name) {
         return new ConstraintGraph(name, gates, oneWire, publicInputs, secretInputs,
-                intermediateVars, nextId);
+                intermediateVars, nextId, expectedField);
+    }
+
+    @Override
+    public void requireField(FieldConfig field) {
+        java.util.Objects.requireNonNull(field, "field");
+        if (expectedField == null) {
+            expectedField = field;
+        } else if (!expectedField.equals(field)) {
+            throw new IllegalStateException(
+                    "Conflicting field expectations within one circuit: "
+                            + expectedField.name() + " vs " + field.name()
+                            + ". A circuit may only depend on constants for a single scalar field.");
+        }
     }
 
     // --- Core primitives ---

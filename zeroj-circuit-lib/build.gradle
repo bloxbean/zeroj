@@ -10,6 +10,25 @@ dependencies {
     testImplementation project(':zeroj-test-vectors')
 }
 
+/**
+ * Regenerates the committed Poseidon parameter source files
+ * (PoseidonParamsBN254T3.java, PoseidonParamsBLS12_381T3.java) from the
+ * Grain LFSR reference implementation in PoseidonGrainLFSR. Output is
+ * written directly into src/main/java so the constants are version-controlled
+ * and reviewable.
+ *
+ * Usage: ./gradlew :zeroj-circuit-lib:generatePoseidonParams
+ *
+ * See docs/adr/0015-bls12-381-poseidon-constants.md for the rationale.
+ */
+tasks.register('generatePoseidonParams', JavaExec) {
+    group = 'codegen'
+    description = 'Regenerate Poseidon parameter presets from the Grain LFSR.'
+    mainClass = 'com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsCodegen'
+    classpath = sourceSets.main.runtimeClasspath
+    args projectDir.absolutePath
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
