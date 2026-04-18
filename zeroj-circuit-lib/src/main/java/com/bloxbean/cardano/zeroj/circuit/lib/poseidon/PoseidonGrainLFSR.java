@@ -51,7 +51,10 @@ public final class PoseidonGrainLFSR {
             // BN254 t=3 α=5 RF=8 RP=57 — verified against iden3/circomlibjs constants.
             "254|3|8|57|0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
             // BLS12-381 t=3 α=5 RF=8 RP=57 — verified via Sage script cross-check.
-            "255|3|8|57|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+            "255|3|8|57|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+            // BLS12-381 t=5 α=5 RF=8 RP=60 — ADR-0016 M4 (Pedersen / 4-ary Jubjub Merkle).
+            // Sage script confirmed first-pass Cauchy matrix passes Algorithms 1/2/3 (all True).
+            "255|5|8|60|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
     );
 
     /** Field size in bits (n): 254 for BN254, 255 for BLS12-381. */

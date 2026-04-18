@@ -58,7 +58,11 @@ public final class PoseidonParamsCodegen {
                     FieldConfig.BN254, 254, 3, 5, 8, 57),
             new Preset("PoseidonParamsBLS12_381T3",
                     "BLS12-381 t=3 alpha=5 RF=8 RP=57",
-                    FieldConfig.BLS12_381, 255, 3, 5, 8, 57)
+                    FieldConfig.BLS12_381, 255, 3, 5, 8, 57),
+            // ADR-0016 M4: t=5 for 4-ary Merkle / Pedersen-chunked hashing.
+            new Preset("PoseidonParamsBLS12_381T5",
+                    "BLS12-381 t=5 alpha=5 RF=8 RP=60",
+                    FieldConfig.BLS12_381, 255, 5, 5, 8, 60)
     );
 
     public static void main(String[] args) throws IOException {
