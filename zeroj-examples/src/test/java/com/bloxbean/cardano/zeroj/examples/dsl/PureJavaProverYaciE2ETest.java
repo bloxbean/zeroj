@@ -15,7 +15,7 @@ import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.examples.dsl.multiplier.PrivateMultiplierCircuit;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.ProverToCardano;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.YaciHelper;
 import com.bloxbean.cardano.zeroj.onchain.julc.Groth16BLS12381Verifier;
 import org.junit.jupiter.api.BeforeAll;

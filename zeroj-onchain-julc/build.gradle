@@ -22,9 +22,12 @@ dependencies {
     api "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
     annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
 
-    // ZeroJ — blst for point compression in SnarkjsToCardano
+    // ZeroJ — blst for point compression in SnarkjsToCardano / ProverToCardano
     api project(':zeroj-api')
     implementation project(':zeroj-blst')
+
+    // Pure Java prover types — used by ProverToCardano to compress prover output
+    implementation project(':zeroj-crypto')
 
     // JSON parsing for SnarkjsToCardano
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
@@ -34,8 +37,7 @@ dependencies {
     testImplementation "com.bloxbean.cardano:julc-compiler:${julcVersion}"
     testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
 
-    // Test — pure Java prover for on-chain verification tests
-    testImplementation project(':zeroj-crypto')
+    // Test — circuit DSL for on-chain verification tests
     testImplementation project(':zeroj-circuit-dsl')
 }
 
