@@ -67,20 +67,20 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build halo2 shared library
-        working-directory: zeroj-verifier-halo2/halo2-rust
+        working-directory: incubator/zeroj-verifier-halo2/halo2-rust
         run: cargo build --release
 
       - name: Copy library to resource path
         run: |
-          mkdir -p zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}
-          cp zeroj-verifier-halo2/halo2-rust/target/release/${{ matrix.lib }} \
-             zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/
+          mkdir -p incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}
+          cp incubator/zeroj-verifier-halo2/halo2-rust/target/release/${{ matrix.lib }} \
+             incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/
 
       - name: Upload native library
         uses: actions/upload-artifact@v4
         with:
           name: halo2-native-${{ matrix.os }}
-          path: zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
+          path: incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
           retention-days: 1
 
   # ================================================================
@@ -126,26 +126,26 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: halo2-native-linux-x86_64
-          path: zeroj-verifier-halo2/src/main/resources/native/linux-x86_64/
+          path: incubator/zeroj-verifier-halo2/src/main/resources/native/linux-x86_64/
 
       - name: Download halo2 native (linux-arm64)
         uses: actions/download-artifact@v4
         with:
           name: halo2-native-linux-arm64
-          path: zeroj-verifier-halo2/src/main/resources/native/linux-arm64/
+          path: incubator/zeroj-verifier-halo2/src/main/resources/native/linux-arm64/
 
       - name: Download halo2 native (macos-arm64)
         uses: actions/download-artifact@v4
         with:
           name: halo2-native-macos-arm64
-          path: zeroj-verifier-halo2/src/main/resources/native/macos-arm64/
+          path: incubator/zeroj-verifier-halo2/src/main/resources/native/macos-arm64/
 
       - name: Verify native libraries are in place
         run: |
           echo "=== gnark native libraries ==="
           find zeroj-prover-gnark/src/main/resources/native -type f
           echo "=== halo2 native libraries ==="
-          find zeroj-verifier-halo2/src/main/resources/native -type f
+          find incubator/zeroj-verifier-halo2/src/main/resources/native -type f
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
