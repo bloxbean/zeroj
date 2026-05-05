@@ -13,7 +13,6 @@ import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.examples.dsl.multiplier.PrivateMultiplierCircuit;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.ProverToCardano;
@@ -99,9 +98,7 @@ class PureJavaProverYaciE2ETest {
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
         assertEquals(2, r1cs.numPublicInputs(), "Need exactly 2 public inputs for generic verifier");
 
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         // 2. Witness: a=3, b=11, c=33
         BigInteger[] witness = circuit.calculateWitness(Map.of(

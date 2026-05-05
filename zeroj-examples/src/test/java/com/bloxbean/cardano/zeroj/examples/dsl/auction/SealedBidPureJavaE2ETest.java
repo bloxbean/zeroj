@@ -2,7 +2,6 @@ package com.bloxbean.cardano.zeroj.examples.dsl.auction;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
@@ -43,9 +42,7 @@ class SealedBidPureJavaE2ETest {
         // === Step 1: Circuit definition via Java DSL ===
         var circuit = SealedBidCircuit.build();
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         System.out.println("SealedBid: " + r1cs.numConstraints() + " constraints, "
                 + r1cs.numWires() + " wires");

@@ -2,7 +2,6 @@ package com.bloxbean.cardano.zeroj.examples.dsl.voting;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
@@ -30,9 +29,7 @@ class AnonymousVotingPureJavaE2ETest {
     void devTau_voteYes_proveAndVerify() {
         var circuit = AnonymousVotingCircuit.build();
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         System.out.println("AnonymousVoting: " + r1cs.numConstraints() + " constraints");
 
@@ -70,9 +67,7 @@ class AnonymousVotingPureJavaE2ETest {
     void devTau_voteNo_proveAndVerify() {
         var circuit = AnonymousVotingCircuit.build();
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         BigInteger vote = BigInteger.ZERO; // NO
         BigInteger nullifier = BigInteger.valueOf(67890);
