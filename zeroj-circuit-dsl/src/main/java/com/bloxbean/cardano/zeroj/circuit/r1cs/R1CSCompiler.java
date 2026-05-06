@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.circuit.r1cs;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.circuit.*;
 
 import java.math.BigInteger;
@@ -38,7 +39,7 @@ public final class R1CSCompiler {
             exprMap.put(v.id(), Map.of(v.id(), BigInteger.ONE));
         }
 
-        List<R1CSConstraintSystem.R1CSConstraint> constraints = new ArrayList<>();
+        List<R1CSConstraint> constraints = new ArrayList<>();
 
         for (var gate : graph.gates()) {
             switch (gate) {
@@ -73,7 +74,7 @@ public final class R1CSCompiler {
                     var a = getExpr(exprMap, left.id());
                     var b = getExpr(exprMap, right.id());
                     var c = Map.of(out.id(), BigInteger.ONE);
-                    constraints.add(new R1CSConstraintSystem.R1CSConstraint(a, b, c));
+                    constraints.add(new R1CSConstraint(a, b, c));
                     // Multiplication output is a new base variable
                     exprMap.put(out.id(), Map.of(out.id(), BigInteger.ONE));
                 }
@@ -84,7 +85,7 @@ public final class R1CSCompiler {
                     var rightExpr = getExpr(exprMap, right.id());
                     var diff = subExprs(leftExpr, rightExpr, p);
                     if (!diff.isEmpty()) {
-                        constraints.add(new R1CSConstraintSystem.R1CSConstraint(
+                        constraints.add(new R1CSConstraint(
                                 diff,
                                 Map.of(graph.oneWire().id(), BigInteger.ONE),
                                 Map.of() // = 0

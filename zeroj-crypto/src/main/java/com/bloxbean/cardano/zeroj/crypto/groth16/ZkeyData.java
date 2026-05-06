@@ -1,5 +1,9 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+
+import java.util.List;
+
 /**
  * Complete data from a parsed .zkey file: proving key + R1CS constraints.
  *
@@ -8,7 +12,7 @@ package com.bloxbean.cardano.zeroj.crypto.groth16;
  */
 public record ZkeyData(
         Groth16ProvingKey provingKey,
-        Groth16Prover.R1CSConstraint[] constraints,
+        List<R1CSConstraint> constraints,
         int numConstraints,
         int numWires,
         int domainSize

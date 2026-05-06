@@ -3,7 +3,6 @@ package com.bloxbean.cardano.zeroj.crypto.setup;
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.*;
 import org.junit.jupiter.api.Test;
 
@@ -34,9 +33,7 @@ class Groth16SetupTest {
         var r1cs = circuit.compileR1CS(CurveId.BN254);
 
         // === Step 4: Convert R1CS constraints to prover format ===
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         // === Step 5: Groth16 Phase 2 setup (pure Java!) ===
         var pk = Groth16Setup.setup(constraints, r1cs.numWires(),
@@ -97,9 +94,7 @@ class Groth16SetupTest {
                 .define(api -> api.assertEqual(api.add(api.var("a"), api.var("b")), api.var("sum")));
 
         var r1cs = circuit.compileR1CS(CurveId.BN254);
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         var pk = Groth16Setup.setup(constraints, r1cs.numWires(),
                 r1cs.numPublicInputs(), srs.tauScalar());

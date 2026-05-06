@@ -6,7 +6,7 @@ plugins {
 description = 'ZeroJ end-to-end examples and demos'
 
 ext {
-    julcVersion = '0.1.0-pre10-7c66301-SNAPSHOT'
+    julcVersion = '0.1.0-pre11'
     cclVersion = '0.8.0-pre2'
 }
 

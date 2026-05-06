@@ -6,7 +6,6 @@ import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProofBLS381;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
 import com.bloxbean.cardano.julc.core.PlutusData;
@@ -50,9 +49,7 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
         assertEquals(2, r1cs.numPublicInputs(), "Must have exactly 2 public inputs for generic verifier");
 
-        var constraints = r1cs.constraints().stream()
-                .map(c -> new R1CSConstraint(c.a(), c.b(), c.c()))
-                .toArray(R1CSConstraint[]::new);
+        var constraints = r1cs.constraints();
 
         // Witness: a=3, b=11, c=33
         BigInteger[] witness = circuit.calculateWitness(Map.of(

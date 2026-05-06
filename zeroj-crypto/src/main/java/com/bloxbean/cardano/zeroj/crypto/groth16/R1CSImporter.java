@@ -1,5 +1,7 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -66,12 +68,12 @@ public final class R1CSImporter {
 
         // Section 2: Constraints
         buf.position((int) sections.get(2)[0]);
-        var constraints = new Groth16Prover.R1CSConstraint[nConstraints];
+        List<R1CSConstraint> constraints = new ArrayList<>(nConstraints);
         for (int i = 0; i < nConstraints; i++) {
             var a = readLC(buf, n8);
             var b = readLC(buf, n8);
             var c = readLC(buf, n8);
-            constraints[i] = new Groth16Prover.R1CSConstraint(a, b, c);
+            constraints.add(new R1CSConstraint(a, b, c));
         }
 
         return new R1CSData(prime, nWires, nPubOut + nPubIn, nConstraints, constraints);
@@ -102,6 +104,6 @@ public final class R1CSImporter {
             int numWires,
             int numPublic,
             int numConstraints,
-            Groth16Prover.R1CSConstraint[] constraints
+            List<R1CSConstraint> constraints
     ) {}
 }

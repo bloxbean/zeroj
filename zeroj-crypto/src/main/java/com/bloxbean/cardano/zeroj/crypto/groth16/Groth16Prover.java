@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
@@ -10,6 +11,7 @@ import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFT;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,7 +49,7 @@ public final class Groth16Prover {
     public static Groth16Proof prove(
             Groth16ProvingKey pk,
             BigInteger[] witness,
-            R1CSConstraint[] constraints,
+            List<R1CSConstraint> constraints,
             int numWires) {
         // Domain size = length of H points array in proving key
         int domainSize = pk.pointsH().length;
@@ -57,7 +59,7 @@ public final class Groth16Prover {
     public static Groth16Proof prove(
             Groth16ProvingKey pk,
             BigInteger[] witness,
-            R1CSConstraint[] constraints,
+            List<R1CSConstraint> constraints,
             int numWires,
             int domainSize) {
 
@@ -82,7 +84,7 @@ public final class Groth16Prover {
         if (!pk.deltaG2().isOnCurve())
             throw new IllegalArgumentException("Proving key deltaG2 is not on curve");
 
-        int numConstraints = constraints.length;
+        int numConstraints = constraints.size();
 
         // Note: witness validation is available via validateWitness() for R1CS-standard constraints.
         // Not called here because .zkey Section 4 constraints use a different encoding
@@ -102,8 +104,8 @@ public final class Groth16Prover {
     /** Prove without blinding (r=0, s=0) — for debugging only. */
     static Groth16Proof proveUnblinded(
             Groth16ProvingKey pk, BigInteger[] witness,
-            R1CSConstraint[] constraints, int numWires, int domainSize) {
-        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.length, domainSize);
+            List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
         BigInteger r = BigInteger.ZERO;
         BigInteger s = BigInteger.ZERO;
         return proveInternal(pk, witness, hCoeffs, r, s);
@@ -146,7 +148,7 @@ public final class Groth16Prover {
      * <p>The coset generator is omega_{2n} = the primitive (2*domainSize)-th root of unity,
      * which equals the square root of the domain's omega_n.</p>
      */
-    static BigInteger[] computeH(R1CSConstraint[] constraints, BigInteger[] witness,
+    static BigInteger[] computeH(List<R1CSConstraint> constraints, BigInteger[] witness,
                                   int numConstraints, int domainSize) {
         BigInteger mod = MontFr254.modulus();
         if (domainSize < 2) domainSize = 2;
@@ -156,10 +158,12 @@ public final class Groth16Prover {
         MontFr254[] aEval = new MontFr254[domainSize];
         MontFr254[] bEval = new MontFr254[domainSize];
 
+        int constraintCount = constraints.size();
         for (int i = 0; i < domainSize; i++) {
-            if (i < numConstraints && i < constraints.length) {
-                aEval[i] = evalLinComb(constraints[i].a(), witness, mod);
-                bEval[i] = evalLinComb(constraints[i].b(), witness, mod);
+            if (i < numConstraints && i < constraintCount) {
+                R1CSConstraint constraint = constraints.get(i);
+                aEval[i] = evalLinComb(constraint.a(), witness, mod);
+                bEval[i] = evalLinComb(constraint.b(), witness, mod);
             } else {
                 aEval[i] = MontFr254.ZERO;
                 bEval[i] = MontFr254.ZERO;
@@ -389,10 +393,10 @@ public final class Groth16Prover {
      * <p>Use this with standard R1CS constraints (from .r1cs files), NOT with .zkey
      * Section 4 constraints which use a different encoding where C is implicit.</p>
      */
-    public static void validateWitness(R1CSConstraint[] constraints, BigInteger[] witness, int numConstraints) {
+    public static void validateWitness(List<R1CSConstraint> constraints, BigInteger[] witness, int numConstraints) {
         BigInteger mod = MontFr254.modulus();
         for (int i = 0; i < numConstraints; i++) {
-            var c = constraints[i];
+            var c = constraints.get(i);
             // Empty constraints (0*0=0) are trivially satisfied — skip
             if (c.a().isEmpty() && c.b().isEmpty() && c.c().isEmpty()) continue;
 
@@ -423,10 +427,4 @@ public final class Groth16Prover {
         return sum.mod(mod);
     }
 
-    /** R1CS constraint: A · w × B · w = C · w */
-    public record R1CSConstraint(
-            Map<Integer, BigInteger> a,
-            Map<Integer, BigInteger> b,
-            Map<Integer, BigInteger> c
-    ) {}
 }
