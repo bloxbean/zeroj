@@ -78,3 +78,4 @@ Thumbs.db
 
 ### Development planning (not part of the source) ###
 plan.md
+/.playwright-mcp/

@@ -7,6 +7,7 @@ import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMerkle;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalPoseidon;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * Parameterized Merkle inclusion proof — depth and hash function as template parameters.
@@ -58,10 +59,12 @@ public class NWayMerkleCircuit implements CircuitSpec {
             pathBits[i] = c.privateInput("pathBit_" + i);
         }
 
-        // Hash function selection — resolved at circuit build time (not runtime)
+        // Hash function selection — resolved at circuit build time (not runtime).
+        // Poseidon binds to BLS12-381 params since this example compiles for BLS12-381;
+        // the BN254 default would trip CircuitBuilder's field check at compile time.
         SignalMerkle.HashFn hashFn = switch (hashType) {
             case MIMC -> SignalMiMC::hash;
-            case POSEIDON -> SignalPoseidon::hash;
+            case POSEIDON -> (cb, l, r) -> SignalPoseidon.hash(cb, PoseidonParamsBLS12_381T3.INSTANCE, l, r);
         };
 
         // Verify the Merkle path

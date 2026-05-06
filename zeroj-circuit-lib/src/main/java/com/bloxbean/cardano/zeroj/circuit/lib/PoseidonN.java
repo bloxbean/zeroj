@@ -4,63 +4,64 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitAPI;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
-
-import java.math.BigInteger;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParams;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBN254T3;
 
 /**
- * Variable-arity Poseidon hash — supports 1 to 5 inputs (t = nInputs + 1).
+ * Variable-arity Poseidon hash — left-folds pairs through the two-input
+ * {@link Poseidon} gadget.
  *
- * <p>The standard Poseidon(2) uses t=3 (2 inputs + 1 capacity). This implementation
- * generalizes to any width by varying the state size and corresponding constants.</p>
+ * <p>{@code PoseidonN(a, b, c, d) = Poseidon(Poseidon(Poseidon(a, b), c), d)}
  *
- * <p>For t=3 (2 inputs), this delegates to the existing optimized {@link Poseidon} with
- * pre-loaded constants from circomlibjs. For other arities, it uses a sequential
- * approach: hash pairs using the 2-input Poseidon in a left-fold pattern.</p>
+ * <p>This is the practical approach used by most ZK applications: simple,
+ * widely compatible, and produces ~330 constraints per pair rather than per
+ * element. A true variable-width Poseidon would use separate MDS matrices
+ * and round constants per arity; we do not support that today.
  *
- * <p>This matches the practical approach used by most ZK applications:
- * {@code PoseidonN(a, b, c, d) = Poseidon(Poseidon(Poseidon(a, b), c), d)}</p>
+ * <p>All overloads forward to {@link Poseidon}; see there for param/preset
+ * selection and interop notes.
  *
- * <p>Note: a true variable-width Poseidon would use different MDS matrices and
- * round constants per arity. The folded approach is safe and widely used but
- * produces ~330 constraints per pair (not per element).</p>
- *
- * <p>Circom equivalent: {@code Poseidon(nInputs)} from circomlib.</p>
+ * <p>Circom equivalent: {@code Poseidon(nInputs)} from circomlib (folded).
  */
 public final class PoseidonN {
 
     private PoseidonN() {}
 
     /**
-     * Hash N inputs using Poseidon (folded 2-input approach).
+     * Hash N inputs under the given {@link PoseidonParams} using folded two-input
+     * Poseidon.
      *
-     * @param api    circuit API
-     * @param inputs 1 to N field elements
-     * @return hash output
+     * <p>Single-input semantics: {@code PoseidonN(x) == Poseidon(x, 0)}. This
+     * is a ZeroJ-specific convention (no published Poseidon spec defines a
+     * 1-arity case). If spec interop with an external 1-input Poseidon is
+     * required, hash {@code (x, 0)} explicitly.
      */
-    public static Variable hash(CircuitAPI api, Variable... inputs) {
+    public static Variable hash(CircuitAPI api, PoseidonParams params, Variable... inputs) {
         if (inputs.length == 0) throw new IllegalArgumentException("inputs must not be empty");
         if (inputs.length == 1) {
-            // Single input: hash with zero
-            return Poseidon.hash(api, inputs[0], api.constant(0));
+            return Poseidon.hash(api, params, inputs[0], api.constant(0));
         }
-        if (inputs.length == 2) {
-            // Optimal: direct 2-input Poseidon
-            return Poseidon.hash(api, inputs[0], inputs[1]);
-        }
-        // N > 2: left-fold — Poseidon(Poseidon(...Poseidon(in[0], in[1])..., in[n-2]), in[n-1])
-        Variable acc = Poseidon.hash(api, inputs[0], inputs[1]);
+        Variable acc = Poseidon.hash(api, params, inputs[0], inputs[1]);
         for (int i = 2; i < inputs.length; i++) {
-            acc = Poseidon.hash(api, acc, inputs[i]);
+            acc = Poseidon.hash(api, params, acc, inputs[i]);
         }
         return acc;
     }
 
-    /**
-     * Hash N inputs using Poseidon. Signal API wrapper.
-     */
-    public static Signal hash(SignalBuilder c, Signal... inputs) {
+    /** Signal-API variant. */
+    public static Signal hash(SignalBuilder c, PoseidonParams params, Signal... inputs) {
         Variable[] vars = new Variable[inputs.length];
         for (int i = 0; i < inputs.length; i++) vars[i] = inputs[i].variable();
-        return c.wrap(hash(c.api(), vars));
+        return c.wrap(hash(c.api(), params, vars));
+    }
+
+    /** Hash N inputs under the back-compat default ({@link PoseidonParamsBN254T3#INSTANCE}). */
+    public static Variable hash(CircuitAPI api, Variable... inputs) {
+        return hash(api, PoseidonParamsBN254T3.INSTANCE, inputs);
+    }
+
+    /** Signal-API variant of the back-compat-default hash. */
+    public static Signal hash(SignalBuilder c, Signal... inputs) {
+        return hash(c, PoseidonParamsBN254T3.INSTANCE, inputs);
     }
 }
