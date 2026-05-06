@@ -62,6 +62,7 @@ zeroj-test-vectors/scripts/build-plonk/
 *.r1cs
 *.sym
 *.ptau
+!zeroj-crypto/src/test/resources/test-circuits/plonk-multiplier/pot8_final.ptau
 
 ### Node.js (circom tooling) ###
 node_modules/

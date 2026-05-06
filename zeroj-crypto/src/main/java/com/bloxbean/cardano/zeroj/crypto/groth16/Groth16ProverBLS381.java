@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
@@ -10,6 +11,7 @@ import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,7 +26,7 @@ public final class Groth16ProverBLS381 {
     public static Groth16ProofBLS381 prove(
             Groth16ProvingKeyBLS381 pk,
             BigInteger[] witness,
-            Groth16Prover.R1CSConstraint[] constraints,
+            List<R1CSConstraint> constraints,
             int numWires) {
         int domainSize = pk.pointsH().length;
         return prove(pk, witness, constraints, numWires, domainSize);
@@ -33,7 +35,7 @@ public final class Groth16ProverBLS381 {
     public static Groth16ProofBLS381 prove(
             Groth16ProvingKeyBLS381 pk,
             BigInteger[] witness,
-            Groth16Prover.R1CSConstraint[] constraints,
+            List<R1CSConstraint> constraints,
             int numWires,
             int domainSize) {
 
@@ -56,7 +58,7 @@ public final class Groth16ProverBLS381 {
         if (!pk.deltaG2().isOnCurve())
             throw new IllegalArgumentException("Proving key deltaG2 is not on curve");
 
-        int numConstraints = constraints.length;
+        int numConstraints = constraints.size();
         BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
         var rng = new SecureRandom();
@@ -68,8 +70,8 @@ public final class Groth16ProverBLS381 {
 
     static Groth16ProofBLS381 proveUnblinded(
             Groth16ProvingKeyBLS381 pk, BigInteger[] witness,
-            Groth16Prover.R1CSConstraint[] constraints, int numWires, int domainSize) {
-        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.length, domainSize);
+            List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
         return proveInternal(pk, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
     }
 
@@ -85,7 +87,7 @@ public final class Groth16ProverBLS381 {
         return new Groth16ProofBLS381(piA.toAffine(), piB.toAffine(), piC.toAffine());
     }
 
-    static BigInteger[] computeH(Groth16Prover.R1CSConstraint[] constraints, BigInteger[] witness,
+    static BigInteger[] computeH(List<R1CSConstraint> constraints, BigInteger[] witness,
                                   int numConstraints, int domainSize) {
         BigInteger mod = MontFr381.modulus();
         if (domainSize < 2) domainSize = 2;
@@ -94,10 +96,12 @@ public final class Groth16ProverBLS381 {
         MontFr381[] aEval = new MontFr381[domainSize];
         MontFr381[] bEval = new MontFr381[domainSize];
 
+        int constraintCount = constraints.size();
         for (int i = 0; i < domainSize; i++) {
-            if (i < numConstraints && i < constraints.length) {
-                aEval[i] = evalLinComb(constraints[i].a(), witness, mod);
-                bEval[i] = evalLinComb(constraints[i].b(), witness, mod);
+            if (i < numConstraints && i < constraintCount) {
+                R1CSConstraint constraint = constraints.get(i);
+                aEval[i] = evalLinComb(constraint.a(), witness, mod);
+                bEval[i] = evalLinComb(constraint.b(), witness, mod);
             } else {
                 aEval[i] = MontFr381.ZERO;
                 bEval[i] = MontFr381.ZERO;

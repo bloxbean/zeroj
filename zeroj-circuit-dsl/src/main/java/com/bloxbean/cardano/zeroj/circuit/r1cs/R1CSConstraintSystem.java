@@ -1,10 +1,10 @@
 package com.bloxbean.cardano.zeroj.circuit.r1cs;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 
 import java.math.BigInteger;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A compiled R1CS (Rank-1 Constraint System) for Groth16 proving.
@@ -19,19 +19,6 @@ public record R1CSConstraintSystem(
         int numPrivateInputs,
         List<R1CSConstraint> constraints
 ) {
-    /**
-     * A single R1CS constraint: (A · w) × (B · w) = (C · w).
-     *
-     * @param a sparse vector: wire index → coefficient
-     * @param b sparse vector
-     * @param c sparse vector
-     */
-    public record R1CSConstraint(
-            Map<Integer, BigInteger> a,
-            Map<Integer, BigInteger> b,
-            Map<Integer, BigInteger> c
-    ) {}
-
     public BigInteger prime() { return fieldConfig.prime(); }
     public int numConstraints() { return constraints.size(); }
 }

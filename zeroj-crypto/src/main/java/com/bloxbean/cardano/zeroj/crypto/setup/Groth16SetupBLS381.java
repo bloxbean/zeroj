@@ -1,17 +1,18 @@
 package com.bloxbean.cardano.zeroj.crypto.setup;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Prover.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,14 +48,14 @@ public final class Groth16SetupBLS381 {
      * @param tau         the toxic waste from PowersOfTauBLS381 (KNOWN — dev/test only)
      * @return Groth16 proving key ready for Groth16ProverBLS381.prove()
      */
-    public static SetupResult setup(R1CSConstraint[] constraints, int numWires,
+    public static SetupResult setup(List<R1CSConstraint> constraints, int numWires,
                                      int numPublic, BigInteger tau) {
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
 
         var rng = new SecureRandom();
-        int nConstraints = constraints.length;
+        int nConstraints = constraints.size();
 
         // Domain size: next power of 2 >= nConstraints
         int domainSize = Integer.highestOneBit(nConstraints);
@@ -104,7 +105,7 @@ public final class Groth16SetupBLS381 {
         Arrays.fill(ws, BigInteger.ZERO);
 
         for (int c = 0; c < nConstraints && c < domainSize; c++) {
-            var constraint = constraints[c];
+            var constraint = constraints.get(c);
             BigInteger lc = lagrange[c];
             accumulate(us, constraint.a(), lc);
             accumulate(vs, constraint.b(), lc);

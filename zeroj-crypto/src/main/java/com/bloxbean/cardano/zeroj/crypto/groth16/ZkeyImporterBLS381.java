@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFp381;
@@ -146,9 +147,9 @@ public final class ZkeyImporterBLS381 {
                 actualConstraints = i + 1;
             }
         }
-        var constraints = new Groth16Prover.R1CSConstraint[numConstraints];
+        List<R1CSConstraint> constraints = new ArrayList<>(numConstraints);
         for (int i = 0; i < numConstraints; i++) {
-            constraints[i] = new Groth16Prover.R1CSConstraint(aMap[i], bMap[i], cMap[i]);
+            constraints.add(new R1CSConstraint(aMap[i], bMap[i], cMap[i]));
         }
 
         // Section 5: A points in G1

@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
@@ -8,6 +9,7 @@ import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field.*;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,12 +26,12 @@ class Groth16BLS381EndToEndTest {
     void fullPipeline_multiplier_proveAndPairingVerify() {
         // Circuit: c = a * b (multiplier)
         // R1CS: 1 constraint, 4 wires [1, c, a, b]
-        var constraints = new Groth16Prover.R1CSConstraint[]{
-                new Groth16Prover.R1CSConstraint(
+        var constraints = List.of(
+                new R1CSConstraint(
                         Map.of(2, BigInteger.ONE),    // A: wire 2 (a)
                         Map.of(3, BigInteger.ONE),    // B: wire 3 (b)
                         Map.of(1, BigInteger.ONE))    // C: wire 1 (c)
-        };
+        );
         int numWires = 4;
         int numPublic = 1; // wire 1 = c (public output)
 
