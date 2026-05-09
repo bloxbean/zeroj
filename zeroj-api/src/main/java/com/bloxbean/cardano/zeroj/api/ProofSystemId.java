@@ -7,7 +7,8 @@ public enum ProofSystemId {
     GROTH16("groth16"),
     PLONK("plonk"),
     FFLONK("fflonk"),
-    HALO2("halo2");
+    HALO2("halo2"),
+    BBS("bbs");
 
     private final String value;
 

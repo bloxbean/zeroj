@@ -7,6 +7,7 @@ description = 'ZeroJ PlonK verification — pure Java for BLS12-381 and BN254, n
 dependencies {
     api project(':zeroj-backend-spi')
     implementation project(':zeroj-codec')
+    implementation project(':zeroj-bls12381')
     implementation project(':zeroj-verifier-groth16') // BN254 field arithmetic reuse
 
     testImplementation project(':zeroj-test-vectors')

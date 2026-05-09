@@ -26,8 +26,9 @@ dependencies {
     api project(':zeroj-api')
     implementation project(':zeroj-blst')
 
-    // Pure Java prover types — used by ProverToCardano to compress prover output
-    implementation project(':zeroj-crypto')
+    // Pure Java prover and BLS point types — used by ProverToCardano to compress prover output
+    api project(':zeroj-crypto')
+    api project(':zeroj-bls12381')
 
     // JSON parsing for SnarkjsToCardano
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'

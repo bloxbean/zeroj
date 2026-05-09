@@ -1,7 +1,7 @@
 package com.bloxbean.cardano.zeroj.crypto.msm;
 
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;

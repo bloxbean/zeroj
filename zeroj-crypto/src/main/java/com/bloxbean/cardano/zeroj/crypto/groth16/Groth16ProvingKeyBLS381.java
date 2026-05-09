@@ -1,7 +1,7 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381.AffineG2;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 
 /**
  * Groth16 proving key for BLS12-381.

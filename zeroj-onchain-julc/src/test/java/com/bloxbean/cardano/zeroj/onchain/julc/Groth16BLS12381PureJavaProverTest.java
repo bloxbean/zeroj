@@ -2,8 +2,8 @@ package com.bloxbean.cardano.zeroj.onchain.julc;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProofBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;

@@ -1,9 +1,11 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.ec.*;
+import com.bloxbean.cardano.zeroj.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

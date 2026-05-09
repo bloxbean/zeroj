@@ -3,7 +3,9 @@ package com.bloxbean.cardano.zeroj.verifier.plonk;
 import com.bloxbean.cardano.zeroj.api.*;
 import com.bloxbean.cardano.zeroj.backend.spi.BackendDescriptor;
 import com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.ec.*;
+import com.bloxbean.cardano.zeroj.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
 
 import java.math.BigInteger;
 import java.util.List;

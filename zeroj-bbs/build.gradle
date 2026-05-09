@@ -1,0 +1,27 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ CFRG BBS signatures and selective disclosure'
+
+dependencies {
+    api project(':zeroj-api')
+    api project(':zeroj-backend-spi')
+    api project(':zeroj-bls12381')
+    implementation 'co.nstant.in:cbor:0.9'
+
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    testImplementation project(':zeroj-bls12381-wasm')
+    testImplementation project(':zeroj-blst')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ BBS'
+                description = 'Pure Java CFRG BBS signatures and selective disclosure'
+            }
+        }
+    }
+}

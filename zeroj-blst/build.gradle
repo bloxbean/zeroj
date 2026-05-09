@@ -6,6 +6,7 @@ description = 'ZeroJ BLS12-381 operations via blst native library (FFM/JNI)'
 
 dependencies {
     api project(':zeroj-api')
+    api project(':zeroj-bls12381')
     api 'foundation.icon:blst-java:0.3.2'
 }
 

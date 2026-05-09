@@ -38,6 +38,7 @@ dependencies {
     implementation project(':zeroj-ccl')
     implementation project(':zeroj-patterns')
     implementation project(':zeroj-test-vectors')
+    implementation project(':zeroj-bbs')
 
     // On-chain verifier module (Julc-based Plutus V3 validators)
     implementation project(':zeroj-onchain-julc')

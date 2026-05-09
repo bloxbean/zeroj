@@ -1,0 +1,19 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ shared pure Java BLS12-381 primitives'
+
+dependencies {
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ BLS12-381'
+                description = 'Shared pure Java BLS12-381 field, curve, pairing, and provider primitives'
+            }
+        }
+    }
+}

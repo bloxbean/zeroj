@@ -1,6 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.poly;
 
-import com.bloxbean.cardano.zeroj.crypto.field.MontFr381;
+import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 
 import java.math.BigInteger;
 

@@ -1,8 +1,8 @@
 package com.bloxbean.cardano.zeroj.crypto.kzg;
 
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
-import com.bloxbean.cardano.zeroj.crypto.field.MontFr381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.msm.PippengerBLS381;
 
 import java.math.BigInteger;

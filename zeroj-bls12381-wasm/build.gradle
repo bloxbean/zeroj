@@ -1,0 +1,51 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ BLS12-381 WASM provider — zkcrypto Rust WASM via Chicory'
+
+def bls12381RustDir = project.file('rust')
+def bls12381WasmTarget = bls12381RustDir.toPath()
+        .resolve('target/wasm32-unknown-unknown/release/zeroj_bls12381.wasm')
+        .toFile()
+def generatedWasmDir = layout.buildDirectory.dir('generated-resources/wasm')
+
+dependencies {
+    api project(':zeroj-bls12381')
+
+    implementation 'com.dylibso.chicory:runtime:1.7.5'
+    implementation 'com.dylibso.chicory:wasm:1.7.5'
+}
+
+tasks.register('buildBls12381Wasm', Exec) {
+    description = 'Builds the zkcrypto BLS12-381 Rust crate as wasm32-unknown-unknown'
+    group = 'build'
+    workingDir = bls12381RustDir
+    commandLine 'cargo', 'build', '--release', '--target', 'wasm32-unknown-unknown'
+    inputs.files(fileTree(bls12381RustDir) {
+        include 'Cargo.toml', 'Cargo.lock', 'src/**/*.rs'
+    })
+    outputs.file(bls12381WasmTarget)
+}
+
+tasks.register('copyBls12381Wasm', Copy) {
+    dependsOn tasks.named('buildBls12381Wasm')
+    from(bls12381WasmTarget)
+    into(generatedWasmDir.map { it.dir('zeroj-bls12381') })
+}
+
+processResources {
+    dependsOn tasks.named('copyBls12381Wasm')
+    from(generatedWasmDir)
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ BLS12-381 WASM'
+                description = 'Optional BLS12-381 primitive provider using zkcrypto Rust WASM and Chicory'
+            }
+        }
+    }
+}

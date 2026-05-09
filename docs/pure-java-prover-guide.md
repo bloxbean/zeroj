@@ -75,7 +75,8 @@ public class SecretMultiplierCircuit implements CircuitSpec {
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.crypto.groth16.*;
 import com.bloxbean.cardano.zeroj.crypto.setup.*;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.ec.*;
+import com.bloxbean.cardano.zeroj.bls12381.field.*;
 
 // Compile circuit
 var circuit = SecretMultiplierCircuit.build();

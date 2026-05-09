@@ -2,11 +2,13 @@ package com.bloxbean.cardano.zeroj.crypto.plonk;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381;
-import com.bloxbean.cardano.zeroj.crypto.field.MontFr381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.ec.*;
+import com.bloxbean.cardano.zeroj.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
 import com.bloxbean.cardano.zeroj.verifier.plonk.FiatShamirTranscript;
 import org.junit.jupiter.api.Test;
 

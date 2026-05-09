@@ -2,12 +2,13 @@
 
 BLS12-381 cryptographic operations via the [blst](https://github.com/supranational/blst) native library.
 
-This module wraps the `blst-java` library to provide BLS12-381 pairing operations used by `zeroj-verifier-groth16` for high-performance Groth16 verification. BLS12-381 is the curve used by Cardano's Plutus V3 native BLS primitives.
+This module wraps the `blst-java` library to provide BLS12-381 pairing operations used by `zeroj-verifier-groth16` for high-performance Groth16 verification. It also exposes an explicit `Bls12381Provider` implementation for protocols such as BBS that can opt in to native-backed BLS12-381 operations. BLS12-381 is the curve used by Cardano's Plutus V3 native BLS primitives.
 
 ## Key Types
 
 | Type | Description |
 |------|-------------|
+| `BlstBls12381Provider` | Explicit native-backed `Bls12381Provider` implementation |
 | `BlstPairing` | Wrapper for blst FFM pairing operations (multi-pairing, point validation) |
 
 ## Why blst?
@@ -28,3 +29,12 @@ dependencies {
 ```
 
 Most users don't depend on this module directly — it is pulled in transitively by `zeroj-verifier-groth16`.
+
+Provider selection remains explicit:
+
+```java
+var bls = com.bloxbean.cardano.zeroj.blst.BlstBls12381Provider.createDefault();
+var bbs = com.bloxbean.cardano.zeroj.bbs.BbsService.withBlsProvider(
+        com.bloxbean.cardano.zeroj.bbs.BbsCiphersuite.BLS12381_SHA256,
+        bls);
+```
