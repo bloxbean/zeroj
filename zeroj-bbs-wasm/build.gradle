@@ -2,11 +2,10 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ BBS WASM-backed provider using BLS12-381 Rust WASM primitives'
+description = 'ZeroJ full Rust-WASM CFRG BBS provider (reserved; implementation pending zkryptium POC gates per ADR-0019 §7)'
 
 dependencies {
     api project(':zeroj-bbs')
-    implementation project(':zeroj-bls12381-wasm')
 }
 
 publishing {
@@ -14,7 +13,7 @@ publishing {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ BBS WASM'
-                description = 'Optional CFRG BBS provider using Rust WASM BLS12-381 primitives and Chicory'
+                description = 'Optional CFRG BBS provider with the entire BBS algorithm running inside WebAssembly via Chicory'
             }
         }
     }

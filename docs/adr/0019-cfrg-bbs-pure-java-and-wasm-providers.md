@@ -151,31 +151,43 @@ with Montgomery-form scalar-field inversion. The JVM implementation uses a
 fixed-schedule Jacobian multiplication path; high-value deployments should
 still perform an environment-specific side-channel review.
 
-### 6. Add explicit optional non-default providers
+### 6. BLS-provider swapping happens in `zeroj-bbs`, not in separate modules
 
-`zeroj-bbs-wasm` implements the same `BbsProvider` SPI as an explicit opt-in.
-The first implementation reuses the vector-compatible Java BBS core and swaps
-the BLS12-381 primitive provider to `zeroj-bls12381-wasm`, which is Rust
-compiled to `wasm32-unknown-unknown` and executed through Chicory 1.7.5.
-
-This keeps one audited BBS algorithm path while still allowing WASM-backed
-pairing and scalar multiplication. A future optimization may add a coarse Rust
-BBS ABI if vector compatibility and performance justify the extra implementation
-surface.
-
-Native `blst` is exposed as a BLS12-381 provider from `zeroj-blst`. BBS can use
-it through explicit BLS provider selection without adding a separate
-`zeroj-bbs-blst` module:
+Native `blst` is exposed as a BLS12-381 provider from `zeroj-blst`. The WASM
+BLS12-381 primitives are exposed from `zeroj-bls12381-wasm`. BBS can use either
+through explicit BLS provider selection without adding a separate
+`zeroj-bbs-blst` or `zeroj-bbs-wasm-bls` module:
 
 ```java
+// Java BBS + WASM BLS primitives (hybrid)
+BbsProviders.withBlsProvider(ciphersuite, WasmBls12381Provider.createDefault())
+
+// Java BBS + native blst BLS primitives
 BbsProviders.withBlsProvider(ciphersuite, BlstBls12381Provider.createDefault())
 ```
 
 The main `zeroj-bbs` module must continue to depend only on the shared
-`zeroj-bls12381` API; WASM and blst remain test or user-selected optional
-dependencies.
+`zeroj-bls12381` API; WASM and blst remain user-selected optional dependencies
+that callers add to their classpath when they want them. The BLS provider
+conformance suite in `zeroj-bbs` already parameterizes across `(pure-java BLS,
+WASM BLS, blst BLS) × (SHA-256, SHAKE-256)` to gate any new BLS backend on the
+same draft-10 fixtures.
 
-If a coarse Rust BBS ABI is added later, it should use operations like:
+A separate "hybrid Java BBS + WASM BLS" module would only re-export a one-line
+factory that callers can write themselves via `withBlsProvider`. It would add
+audit surface and packaging cost without adding capability. We therefore do not
+ship such a module.
+
+### 7. `zeroj-bbs-wasm` is reserved for the full Rust-WASM BBS provider
+
+`zeroj-bbs-wasm` implements the same `BbsProvider` SPI as an explicit opt-in,
+but the algorithm itself runs entirely inside WebAssembly. The Rust BBS crate
+is compiled to `wasm32-unknown-unknown` and executed through Chicory; ZeroJ's
+Java code only marshals requests, results, and errors across the WASM boundary.
+This eliminates the cross-boundary calls that the hybrid path incurs per
+pairing or per scalar multiplication.
+
+The coarse Rust ABI is:
 
 - `zeroj_bbs_keygen`
 - `zeroj_bbs_sk_to_pk`
@@ -184,13 +196,16 @@ If a coarse Rust BBS ABI is added later, it should use operations like:
 - `zeroj_bbs_proof_gen`
 - `zeroj_bbs_proof_verify`
 
-The Rust candidate may be `zkryptium` if it compiles cleanly to
-`wasm32-unknown-unknown`, has no unexpected host imports, and passes the pinned
-draft-10 vectors. If it does not meet those gates, implement the Rust provider
-against a lower-level BLS12-381 crate instead. Do not patch the older
-`bbs_plus` crate into a draft-10 shape.
+The first Rust candidate is `zkryptium` because it implements CFRG draft-10
+directly and supports both BLS12-381-SHA-256 and BLS12-381-SHAKE-256
+ciphersuites. It must compile cleanly to `wasm32-unknown-unknown`, must not
+introduce unexpected host imports (no `getrandom`/`wasm-bindgen` shims), and
+must pass the pinned draft-10 vectors byte-for-byte. If it does not meet those
+gates, implement the Rust provider against a lower-level BLS12-381 crate
+instead. Do not patch the older `bbs_plus` crate or `mattrglobal/pairing_crypto`
+(BBS draft-03 / BBS+) into a draft-10 shape.
 
-The WASM ABI should mirror the hardened `zeroj-bls12381-wasm` pattern:
+The WASM ABI must mirror the hardened `zeroj-bls12381-wasm` pattern:
 
 - committed `Cargo.lock`
 - pinned `rust-toolchain.toml`
@@ -199,8 +214,15 @@ The WASM ABI should mirror the hardened `zeroj-bls12381-wasm` pattern:
 - no unexpected host imports
 - typed Java exceptions for malformed responses
 - tests for alloc/dealloc balance on error paths
+- response allocation length captured before length validation, so malformed
+  responses still get freed
 
-### 7. ZeroJ verifier integration
+`zeroj_bbs_proof_gen` must accept caller-supplied random scalars so that the
+CFRG mocked-RNG draft-10 proof vectors reproduce byte-exactly. Production
+callers may omit the random scalars; the Rust crate then uses its internal
+deterministic-from-seed RNG. Host RNG is not permitted.
+
+### 8. ZeroJ verifier integration
 
 `zeroj-bbs` should provide a BBS verifier for ZeroJ's verifier APIs:
 
@@ -318,10 +340,13 @@ pure Java to WASM.
 7. Implement `ProofGen` and `ProofVerify`; pass proof vectors and negative
    tests.
 8. Add `BbsService`, presentation wrappers, and ZeroJ verifier integration.
-9. Create `zeroj-bbs-wasm` with a Rust candidate gated by draft vectors, no
-   host imports, and hardened memory cleanup tests.
-10. Run the shared conformance suite against pure Java, WASM, and blst BLS
-    providers.
+9. Run the shared conformance suite against pure Java, WASM, and blst BLS
+   providers using `BbsService.withBlsProvider(...)` from `zeroj-bbs`.
+10. Create `zeroj-bbs-wasm` as the full Rust-WASM BBS provider: Rust candidate
+    (`zkryptium` first) compiled to `wasm32-unknown-unknown`, coarse `zeroj_bbs_*`
+    ABI, Java client mirroring the hardened `zeroj-bls12381-wasm` pattern,
+    no-host-imports + alloc/dealloc balance + malformed-response leak tests,
+    and extend the conformance suite to gate on the new path.
 11. Add documentation and examples for selective disclosure workflows.
 
 ## Risks
@@ -333,6 +358,7 @@ pure Java to WASM.
 | Incorrect generator/domain/challenge serialization | High | Gate each utility on draft vectors before implementing higher layers |
 | Non-default providers drift from pure Java | Medium | Shared provider conformance suite and exact same CFRG vectors |
 | Rust crate claims draft-10 but differs in details | Medium | Treat Rust crates as candidates only; vectors decide support |
+| Rust crate pulls in a `getrandom`/`wasm-bindgen` host shim | Medium | Reject candidates that need host RNG; require caller-supplied random scalars for the proof generation ABI |
 | Users confuse CFRG core with W3C Data Integrity packaging | Medium | Keep proof format names explicit and document policy/package boundaries |
 
 ## References
@@ -343,3 +369,4 @@ pure Java to WASM.
 - BBS draft datatracker entry: <https://datatracker.ietf.org/doc/draft-irtf-cfrg-bbs-signatures/>
 - RFC 9380 hash-to-curve: <https://www.rfc-editor.org/rfc/rfc9380>
 - ZKryptium Rust crate candidate: <https://docs.rs/zkryptium>
+- `mattrglobal/pairing_crypto` (BBS draft-03, BBS+ flavor — NOT a draft-10 candidate): <https://github.com/mattrglobal/pairing_crypto>
