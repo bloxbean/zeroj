@@ -1,0 +1,9 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "\\Qzeroj-bbs-wasm/zeroj_bbs.wasm\\E"
+      }
+    ]
+  }
+}

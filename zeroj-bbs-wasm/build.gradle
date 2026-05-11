@@ -2,10 +2,43 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ full Rust-WASM CFRG BBS provider (reserved; implementation pending zkryptium POC gates per ADR-0019 §7)'
+description = 'ZeroJ full Rust-WASM CFRG BBS provider via zkryptium and Chicory'
+
+def bbsRustDir = project.file('rust')
+def bbsWasmTarget = bbsRustDir.toPath()
+        .resolve('target/wasm32-unknown-unknown/release/zeroj_bbs.wasm')
+        .toFile()
+def generatedWasmDir = layout.buildDirectory.dir('generated-resources/wasm')
 
 dependencies {
     api project(':zeroj-bbs')
+
+    implementation 'com.dylibso.chicory:runtime:1.7.5'
+    implementation 'com.dylibso.chicory:wasm:1.7.5'
+}
+
+def cargoBinary = System.getenv('CARGO') ?: (System.getProperty('user.home') + '/.cargo/bin/cargo')
+
+tasks.register('buildBbsWasm', Exec) {
+    description = 'Builds the zkryptium CFRG BBS Rust crate as wasm32-unknown-unknown'
+    group = 'build'
+    workingDir = bbsRustDir
+    commandLine cargoBinary, 'build', '--release', '--target', 'wasm32-unknown-unknown'
+    inputs.files(fileTree(bbsRustDir) {
+        include 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'src/**/*.rs'
+    })
+    outputs.file(bbsWasmTarget)
+}
+
+tasks.register('copyBbsWasm', Copy) {
+    dependsOn tasks.named('buildBbsWasm')
+    from(bbsWasmTarget)
+    into(generatedWasmDir.map { it.dir('zeroj-bbs-wasm') })
+}
+
+processResources {
+    dependsOn tasks.named('copyBbsWasm')
+    from(generatedWasmDir)
 }
 
 publishing {
@@ -13,7 +46,7 @@ publishing {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ BBS WASM'
-                description = 'Optional CFRG BBS provider with the entire BBS algorithm running inside WebAssembly via Chicory'
+                description = 'Optional CFRG BBS provider with the entire BBS algorithm running inside WebAssembly via zkryptium and Chicory'
             }
         }
     }

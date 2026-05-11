@@ -211,16 +211,33 @@ The WASM ABI must mirror the hardened `zeroj-bls12381-wasm` pattern:
 - pinned `rust-toolchain.toml`
 - generated `.wasm` built by Gradle, not checked in
 - exported memory plus explicit `alloc` and `dealloc`
-- no unexpected host imports
 - typed Java exceptions for malformed responses
 - tests for alloc/dealloc balance on error paths
 - response allocation length captured before length validation, so malformed
   responses still get freed
 
-`zeroj_bbs_proof_gen` must accept caller-supplied random scalars so that the
-CFRG mocked-RNG draft-10 proof vectors reproduce byte-exactly. Production
-callers may omit the random scalars; the Rust crate then uses its internal
-deterministic-from-seed RNG. Host RNG is not permitted.
+The full Rust-WASM BBS provider requires a real RNG for `proof_gen` (BBS
+proof randomness is essential to the zero-knowledge property — a deterministic
+seed would leak the secret across two presentations of the same signature). The
+zkryptium 0.6.1 candidate does not expose a public API for caller-supplied
+random scalars, so the WASM module exposes exactly **one** named host import:
+
+```
+env.zeroj_host_getrandom(ptr: i32, len: i32) -> i32   // 0 = ok, !=0 = error
+```
+
+The Java side wires this to `java.security.SecureRandom` via Chicory. No other
+host imports are permitted; tests must assert that exactly this one import is
+present and nothing else.
+
+CFRG mocked-RNG proof byte-equality is retained only on the pure-Java provider
+(`PureJavaBbsProvider`), where `BbsBlsProviderConformanceTest` already gates
+all 30 proof × 2 ciphersuite fixtures with deterministic scalars. The
+full-WASM provider verifies proof correctness via roundtrip (`proof_gen` then
+`proof_verify`) plus byte-exact tests on the deterministic operations
+(`keygen`, `sk_to_pk`, `sign`, `verify`, `proof_verify` on a known fixture
+proof). This keeps one byte-exact algorithm gate upstream without doubling
+fixture maintenance.
 
 ### 8. ZeroJ verifier integration
 
