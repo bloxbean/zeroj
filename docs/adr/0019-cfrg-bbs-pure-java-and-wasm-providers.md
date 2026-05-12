@@ -327,12 +327,20 @@ pure Java to WASM.
 
 - Chicory loads the generated WASM artifact.
 - The WASM module exports the expected ABI version and operations.
-- The module has no unexpected host imports.
-- All CFRG vectors match the pure Java provider.
+- The module imports exactly one host function (`env.zeroj_host_getrandom`)
+  and nothing else.
+- Deterministic operations (`KeyGen`, `SkToPk`, `Sign`) match the official
+  CFRG draft-10 fixture bytes byte-for-byte for both ciphersuites.
+- `proof_verify` accepts the official CFRG draft-10 proof bytes for both
+  ciphersuites; tampered/modified fixtures are rejected.
+- `proof_gen` is verified by roundtrip (the generated proof must verify under
+  the same WASM provider) rather than by byte-equality, because the full-WASM
+  path consumes real entropy through the host RNG import.
 - Malformed requests and malformed responses map to typed Java exceptions.
 - Repeated WASM errors do not leak response buffers.
-- The Rust crate does not call host randomness for deterministic operations;
-  Java supplies randomness or mocked random scalar material.
+- The host RNG import is the only crossing where the Rust crate can obtain
+  entropy; the per-call `SecureRandom` supplied to `BbsProvider.proofGen`
+  must drive that crossing for each invocation.
 
 ### Integration tests
 
@@ -375,7 +383,8 @@ pure Java to WASM.
 | Incorrect generator/domain/challenge serialization | High | Gate each utility on draft vectors before implementing higher layers |
 | Non-default providers drift from pure Java | Medium | Shared provider conformance suite and exact same CFRG vectors |
 | Rust crate claims draft-10 but differs in details | Medium | Treat Rust crates as candidates only; vectors decide support |
-| Rust crate pulls in a `getrandom`/`wasm-bindgen` host shim | Medium | Reject candidates that need host RNG; require caller-supplied random scalars for the proof generation ABI |
+| Rust crate pulls in additional host imports beyond `env.zeroj_host_getrandom` | Medium | Single-import assertion in the WASM hardening test rejects any extra import; if a candidate cannot be configured to call only `getrandom` on the host side, drop to a lower-level BLS crate per §7. |
+| Host RNG quality on caller's JVM is weaker than expected | Low | Per-call `SecureRandom` is injectable through the `BbsProvider.proofGen` SPI; production callers can pass a `SecureRandom.getInstanceStrong()` or a hardware-backed instance. |
 | Users confuse CFRG core with W3C Data Integrity packaging | Medium | Keep proof format names explicit and document policy/package boundaries |
 
 ## References

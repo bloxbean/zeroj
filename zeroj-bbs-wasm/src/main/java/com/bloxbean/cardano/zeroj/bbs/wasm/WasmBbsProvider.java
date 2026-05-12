@@ -94,11 +94,9 @@ public final class WasmBbsProvider implements BbsProvider {
             byte[] presentationHeader,
             int[] disclosedIndexes,
             SecureRandom random) {
-        // The supplied SecureRandom is honored only if the caller used a
-        // dedicated WasmBbsProvider constructed with the same random. The
-        // standard `createDefault` factory builds the client with its own
-        // SecureRandom and ignores the per-call argument. This matches the
-        // BbsProvider SPI semantics (the random is advisory).
+        // Per-call SecureRandom drives the host getrandom import for the
+        // duration of this synchronized invocation, matching the contract
+        // honored by PureJavaBbsProvider.
         requireSuite(publicKey);
         requireSuite(signature);
         byte[] proof = client.proofGen(
@@ -108,7 +106,8 @@ public final class WasmBbsProvider implements BbsProvider {
                 header,
                 presentationHeader,
                 messages,
-                disclosedIndexes);
+                disclosedIndexes,
+                Objects.requireNonNull(random, "random required"));
         return new BbsProof(proof, ciphersuite);
     }
 

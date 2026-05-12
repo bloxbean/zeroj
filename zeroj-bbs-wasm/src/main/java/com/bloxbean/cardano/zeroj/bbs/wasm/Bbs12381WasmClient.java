@@ -33,12 +33,34 @@ public final class Bbs12381WasmClient {
     private static final int MAX_RESPONSE_LEN = 16 * 1024 * 1024;
     private static final int MAX_HOST_GETRANDOM_LEN = 16 * 1024;
 
+    /** Maximum number of signed messages or revealed indexes per request (matches the Rust cap). */
+    static final int MAX_MESSAGES = 1024;
+    /** Maximum bytes per individual message. */
+    static final int MAX_MESSAGE_BYTES = 64 * 1024;
+    /** Maximum bytes for header / presentation header. */
+    static final int MAX_HEADER_BYTES = 64 * 1024;
+    /** Maximum bytes for key material / key info. */
+    static final int MAX_KEY_INPUT_BYTES = 64 * 1024;
+    /** Maximum bytes for an opaque proof. */
+    static final int MAX_PROOF_BYTES = 3 * 96 + (4 + MAX_MESSAGES) * 32;
+    /** Maximum total serialized request size. */
+    static final int MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+
     static final byte SUITE_SHA256 = 0;
     static final byte SUITE_SHAKE256 = 1;
 
     private final Instance instance;
     private final Memory memory;
-    private final SecureRandom random;
+    private final SecureRandom defaultRandom;
+
+    /**
+     * Per-call random, set inside the {@code synchronized invoke(...)} block by
+     * {@link #proofGen} and restored on exit. The host {@code getrandom} function
+     * reads this field while running under the same monitor. Marked {@code volatile}
+     * so the Chicory host-function callback observes the most recent write even if
+     * Chicory dispatches via a separate thread. Null means "use {@link #defaultRandom}".
+     */
+    private volatile SecureRandom proofGenRandom;
 
     public Bbs12381WasmClient(byte[] wasmBytes, SecureRandom random) {
         Objects.requireNonNull(wasmBytes, "wasmBytes required");
@@ -46,7 +68,7 @@ public final class Bbs12381WasmClient {
         if (wasmBytes.length == 0) {
             throw new IllegalArgumentException("wasmBytes must not be empty");
         }
-        this.random = random;
+        this.defaultRandom = random;
         try {
             HostFunction hostGetrandom = new HostFunction(
                     "env",
@@ -63,7 +85,8 @@ public final class Bbs12381WasmClient {
                             return new long[]{0L};
                         }
                         byte[] buf = new byte[len];
-                        this.random.nextBytes(buf);
+                        SecureRandom r = (this.proofGenRandom != null) ? this.proofGenRandom : this.defaultRandom;
+                        r.nextBytes(buf);
                         inst.memory().write(ptr, buf);
                         return new long[]{0L};
                     });
@@ -106,10 +129,10 @@ public final class Bbs12381WasmClient {
 
     public byte[] keyGen(BbsCiphersuite ciphersuite, byte[] keyMaterial, byte[] keyInfo) {
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
-        Objects.requireNonNull(keyMaterial, "keyMaterial required");
-        Objects.requireNonNull(keyInfo, "keyInfo required");
-        ByteBuffer req = ByteBuffer.allocate(1 + 4 + keyMaterial.length + 4 + keyInfo.length)
-                .order(ByteOrder.LITTLE_ENDIAN);
+        requireMaxLength(keyMaterial, MAX_KEY_INPUT_BYTES, "keyMaterial");
+        requireMaxLength(keyInfo, MAX_KEY_INPUT_BYTES, "keyInfo");
+        long size = 1L + 4 + keyMaterial.length + 4 + keyInfo.length;
+        ByteBuffer req = allocateRequest(size, "keyGen");
         req.put(suite(ciphersuite));
         putVarBytes(req, keyMaterial);
         putVarBytes(req, keyInfo);
@@ -131,16 +154,14 @@ public final class Bbs12381WasmClient {
     public byte[] sign(BbsCiphersuite ciphersuite, byte[] sk, byte[] pk, byte[] header, List<byte[]> messages) {
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
         Objects.requireNonNull(sk, "sk required");
-        Objects.requireNonNull(pk, "pk required");
-        Objects.requireNonNull(header, "header required");
-        Objects.requireNonNull(messages, "messages required");
         if (sk.length != 32) {
             throw new IllegalArgumentException("BBS secret key must be 32 bytes, got " + sk.length);
         }
-        if (pk.length != 96) {
-            throw new IllegalArgumentException("BBS public key must be 96 bytes, got " + pk.length);
-        }
-        ByteBuffer req = ByteBuffer.allocate(signRequestLen(header, messages)).order(ByteOrder.LITTLE_ENDIAN);
+        requireLength(pk, 96, "BBS public key");
+        requireMaxLength(header, MAX_HEADER_BYTES, "header");
+        long messagesBytes = validateMessageList(messages, "messages");
+        long size = 1L + 32 + 96 + 4 + header.length + 4 + messagesBytes;
+        ByteBuffer req = allocateRequest(size, "sign");
         req.put(suite(ciphersuite));
         req.put(sk);
         req.put(pk);
@@ -152,18 +173,12 @@ public final class Bbs12381WasmClient {
     public boolean verify(
             BbsCiphersuite ciphersuite, byte[] pk, byte[] signature, byte[] header, List<byte[]> messages) {
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
-        Objects.requireNonNull(pk, "pk required");
-        Objects.requireNonNull(signature, "signature required");
-        Objects.requireNonNull(header, "header required");
-        Objects.requireNonNull(messages, "messages required");
-        if (pk.length != 96) {
-            throw new IllegalArgumentException("BBS public key must be 96 bytes, got " + pk.length);
-        }
-        if (signature.length != 80) {
-            throw new IllegalArgumentException("BBS signature must be 80 bytes, got " + signature.length);
-        }
-        ByteBuffer req = ByteBuffer.allocate(1 + 96 + 80 + 4 + header.length + 4 + messagesPayload(messages))
-                .order(ByteOrder.LITTLE_ENDIAN);
+        requireLength(pk, 96, "BBS public key");
+        requireLength(signature, 80, "BBS signature");
+        requireMaxLength(header, MAX_HEADER_BYTES, "header");
+        long messagesBytes = validateMessageList(messages, "messages");
+        long size = 1L + 96 + 80 + 4 + header.length + 4 + messagesBytes;
+        ByteBuffer req = allocateRequest(size, "verify");
         req.put(suite(ciphersuite));
         req.put(pk);
         req.put(signature);
@@ -180,23 +195,19 @@ public final class Bbs12381WasmClient {
             byte[] header,
             byte[] presentationHeader,
             List<byte[]> messages,
-            int[] disclosedIndexes) {
+            int[] disclosedIndexes,
+            SecureRandom random) {
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
-        Objects.requireNonNull(pk, "pk required");
-        Objects.requireNonNull(signature, "signature required");
-        Objects.requireNonNull(header, "header required");
-        Objects.requireNonNull(presentationHeader, "presentationHeader required");
-        Objects.requireNonNull(messages, "messages required");
-        Objects.requireNonNull(disclosedIndexes, "disclosedIndexes required");
-        if (pk.length != 96) {
-            throw new IllegalArgumentException("BBS public key must be 96 bytes, got " + pk.length);
-        }
-        if (signature.length != 80) {
-            throw new IllegalArgumentException("BBS signature must be 80 bytes, got " + signature.length);
-        }
-        int size = 1 + 96 + 80 + 4 + header.length + 4 + presentationHeader.length
-                + 4 + messagesPayload(messages) + 4 + 4 * disclosedIndexes.length;
-        ByteBuffer req = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
+        Objects.requireNonNull(random, "random required");
+        requireLength(pk, 96, "BBS public key");
+        requireLength(signature, 80, "BBS signature");
+        requireMaxLength(header, MAX_HEADER_BYTES, "header");
+        requireMaxLength(presentationHeader, MAX_HEADER_BYTES, "presentationHeader");
+        long messagesBytes = validateMessageList(messages, "messages");
+        validateIndexList(disclosedIndexes, messages.size(), "disclosedIndexes");
+        long size = 1L + 96 + 80 + 4 + header.length + 4 + presentationHeader.length
+                + 4 + messagesBytes + 4L + 4L * disclosedIndexes.length;
+        ByteBuffer req = allocateRequest(size, "proofGen");
         req.put(suite(ciphersuite));
         req.put(pk);
         req.put(signature);
@@ -207,7 +218,7 @@ public final class Bbs12381WasmClient {
         for (int idx : disclosedIndexes) {
             req.putInt(idx);
         }
-        return invoke("zeroj_bbs_proof_gen", req.array());
+        return invokeWithRandom("zeroj_bbs_proof_gen", req.array(), random);
     }
 
     public boolean proofVerify(
@@ -219,18 +230,19 @@ public final class Bbs12381WasmClient {
             List<byte[]> disclosedMessages,
             int[] disclosedIndexes) {
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
-        Objects.requireNonNull(pk, "pk required");
-        Objects.requireNonNull(proof, "proof required");
-        Objects.requireNonNull(header, "header required");
-        Objects.requireNonNull(presentationHeader, "presentationHeader required");
-        Objects.requireNonNull(disclosedMessages, "disclosedMessages required");
+        requireLength(pk, 96, "BBS public key");
+        requireMaxLength(proof, MAX_PROOF_BYTES, "proof");
+        requireMaxLength(header, MAX_HEADER_BYTES, "header");
+        requireMaxLength(presentationHeader, MAX_HEADER_BYTES, "presentationHeader");
+        long messagesBytes = validateMessageList(disclosedMessages, "disclosedMessages");
         Objects.requireNonNull(disclosedIndexes, "disclosedIndexes required");
-        if (pk.length != 96) {
-            throw new IllegalArgumentException("BBS public key must be 96 bytes, got " + pk.length);
+        if (disclosedIndexes.length > MAX_MESSAGES) {
+            throw new IllegalArgumentException(
+                    "disclosedIndexes count " + disclosedIndexes.length + " exceeds " + MAX_MESSAGES);
         }
-        int size = 1 + 96 + 4 + proof.length + 4 + header.length + 4 + presentationHeader.length
-                + 4 + messagesPayload(disclosedMessages) + 4 + 4 * disclosedIndexes.length;
-        ByteBuffer req = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
+        long size = 1L + 96 + 4 + proof.length + 4 + header.length + 4 + presentationHeader.length
+                + 4 + messagesBytes + 4L + 4L * disclosedIndexes.length;
+        ByteBuffer req = allocateRequest(size, "proofVerify");
         req.put(suite(ciphersuite));
         req.put(pk);
         putVarBytes(req, proof);
@@ -260,6 +272,16 @@ public final class Bbs12381WasmClient {
     }
 
     // ----- internal -----
+
+    private synchronized byte[] invokeWithRandom(String exportName, byte[] request, SecureRandom random) {
+        SecureRandom previous = proofGenRandom;
+        proofGenRandom = random;
+        try {
+            return invoke(exportName, request);
+        } finally {
+            proofGenRandom = previous;
+        }
+    }
 
     private synchronized byte[] invoke(String exportName, byte[] request) {
         int requestPtr = 0;
@@ -351,16 +373,63 @@ public final class Bbs12381WasmClient {
         }
     }
 
-    private static int messagesPayload(List<byte[]> messages) {
-        int total = 0;
-        for (byte[] m : messages) {
-            total += 4 + m.length;
+    private static long validateMessageList(List<byte[]> messages, String label) {
+        Objects.requireNonNull(messages, label + " required");
+        if (messages.size() > MAX_MESSAGES) {
+            throw new IllegalArgumentException(
+                    label + " count " + messages.size() + " exceeds " + MAX_MESSAGES);
+        }
+        long total = 0L;
+        for (int i = 0; i < messages.size(); i++) {
+            byte[] m = messages.get(i);
+            if (m == null) {
+                throw new IllegalArgumentException(label + "[" + i + "] must not be null");
+            }
+            if (m.length > MAX_MESSAGE_BYTES) {
+                throw new IllegalArgumentException(
+                        label + "[" + i + "] length " + m.length + " exceeds " + MAX_MESSAGE_BYTES);
+            }
+            total = Math.addExact(total, 4L + m.length);
         }
         return total;
     }
 
-    private static int signRequestLen(byte[] header, List<byte[]> messages) {
-        return 1 + 32 + 96 + 4 + header.length + 4 + messagesPayload(messages);
+    private static void validateIndexList(int[] indexes, int messageCount, String label) {
+        Objects.requireNonNull(indexes, label + " required");
+        if (indexes.length > MAX_MESSAGES) {
+            throw new IllegalArgumentException(
+                    label + " count " + indexes.length + " exceeds " + MAX_MESSAGES);
+        }
+        for (int i = 0; i < indexes.length; i++) {
+            int idx = indexes[i];
+            if (idx < 0 || idx >= messageCount) {
+                throw new IllegalArgumentException(
+                        label + "[" + i + "] = " + idx + " out of range [0, " + messageCount + ")");
+            }
+        }
+    }
+
+    private static void requireLength(byte[] arr, int length, String label) {
+        Objects.requireNonNull(arr, label + " required");
+        if (arr.length != length) {
+            throw new IllegalArgumentException(label + " must be " + length + " bytes, got " + arr.length);
+        }
+    }
+
+    private static void requireMaxLength(byte[] arr, int max, String label) {
+        Objects.requireNonNull(arr, label + " required");
+        if (arr.length > max) {
+            throw new IllegalArgumentException(
+                    label + " length " + arr.length + " exceeds " + max);
+        }
+    }
+
+    private static ByteBuffer allocateRequest(long size, String op) {
+        if (size > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException(
+                    "BBS WASM " + op + " request size " + size + " exceeds " + MAX_REQUEST_BYTES);
+        }
+        return ByteBuffer.allocate(Math.toIntExact(size)).order(ByteOrder.LITTLE_ENDIAN);
     }
 
     private static boolean decodeBool(byte[] response, String exportName) {
@@ -368,6 +437,15 @@ public final class Bbs12381WasmClient {
             throw new Bbs12381WasmException(
                     "Invalid BBS WASM " + exportName + " response length: " + response.length);
         }
-        return response[0] != 0;
+        byte b = response[0];
+        if (b == 0) {
+            return false;
+        }
+        if (b == 1) {
+            return true;
+        }
+        throw new Bbs12381WasmException(
+                "Invalid BBS WASM " + exportName + " boolean response byte: 0x"
+                        + String.format("%02x", b & 0xff));
     }
 }
