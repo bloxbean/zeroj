@@ -63,6 +63,11 @@ class WasmBbsProviderTest {
     // SHAKE-256 proof001.
     private static final byte[] PROOF_SHAKE_PROOF001 = hex("89e4ab0c160880e0c2f12a754b9c051ed7f5fccfee3d5cbbb62e1239709196c737fff4303054660f8fcd08267a5de668a2e395ebe8866bdcb0dff9786d7014fa5e3c8cf7b41f8d7510e27d307f18032f6b788e200b9d6509f40ce1d2f962ceedb023d58ee44d660434e6ba60ed0da1a5d2cde031b483684cd7c5b13295a82f57e209b584e8fe894bcc964117bf3521b43d8e2eb59ce31f34d68b39f05bb2c625e4de5e61e95ff38bfd62ab07105d016414b45b01625c69965ad3c8a933e7b25d93daeb777302b966079827a99178240e6c3f13b7db2fb1f14790940e239d775ab32f539bdf9f9b582b250b05882996832652f7f5d3b6e04744c73ada1702d6791940ccbd75e719537f7ace6ee817298d");
 
+    // SHA-256 proof003: 10-message signature, disclosed {0, 2, 4, 6}, 6 hidden.
+    // Exercises the core BBS selective-disclosure path against an official
+    // CFRG mockedRng-derived proof.
+    private static final byte[] PROOF_SHA256_PROOF003 = hex("a2ed608e8e12ed21abc2bf154e462d744a367c7f1f969bdbf784a2a134c7db2d340394223a5397a3011b1c340ebc415199462ba6f31106d8a6da8b513b37a47afe93c9b3474d0d7a354b2edc1b88818b063332df774c141f7a07c48fe50d452f897739228c88afc797916dca01e8f03bd9c5375c7a7c59996e514bb952a436afd24457658acbaba5ddac2e693ac481356918cd38025d86b28650e909defe9604a7259f44386b861608be742af7775a2e71a6070e5836f5f54dc43c60096834a5b6da295bf8f081f72b7cdf7f3b4347fb3ff19edaa9e74055c8ba46dbcb7594fb2b06633bb5324192eb9be91be0d33e453b4d3127459de59a5e2193c900816f049a02cb9127dac894418105fa1641d5a206ec9c42177af9316f433417441478276ca0303da8f941bf2e0222a43251cf5c2bf6eac1961890aa740534e519c1767e1223392a3a286b0f4d91f7f25217a7862b8fcc1810cdcfddde2a01c80fcc90b632585fec12dc4ae8fea1918e9ddeb9414623a457e88f53f545841f9d5dcb1f8e160d1560770aa79d65e2eca8edeaecb73fb7e995608b820c4a64de6313a370ba05dc25ed7c1d185192084963652f2870341bdaa4b1a37f8c06348f38a4f80c5a2650a21d59f09e8305dcd3fc3ac30e2a");
+
     @Test
     void wasmModule_hasExactlyOneImportAndExpectedExports() throws IOException {
         var module = Parser.parse(loadDefaultWasm());
@@ -155,16 +160,17 @@ class WasmBbsProviderTest {
     }
 
     @Test
-    void proofGen_honorsPerCallSecureRandom() {
-        // The per-call SecureRandom must actually drive the host getrandom
-        // import. We can't assert "same RNG → same proof" within one WASM
-        // instance because zkryptium's ThreadRng has its own internal state
-        // that advances across calls (our host bytes only reseed it
-        // periodically). Instead we observe that the supplied RNG is being
-        // read at all, AND that the constructor's defaultRandom is NOT being
-        // read while the per-call random is present.
+    void proofGen_honorsPerCallSecureRandomOnEveryInvocation() {
+        // zkryptium's internal rand::thread_rng() seeds itself from getrandom
+        // exactly once per thread and then derives bytes from a cached chacha
+        // state. To honor ADR-0019 §7's per-call SecureRandom contract on
+        // every invocation, Bbs12381WasmClient.proofGen builds a *fresh*
+        // Chicory instance per call so ThreadRng has to re-seed each time.
+        //
+        // This test asserts the contract holds across N successive calls, not
+        // just the first one (which was a real Codex finding against the
+        // earlier shared-instance design).
         var defaultCounter = new CountingSecureRandom();
-        var perCallCounter = new CountingSecureRandom();
         var provider = new WasmBbsProvider(
                 BbsCiphersuite.BLS12381_SHA256,
                 Bbs12381WasmClient.createDefault(defaultCounter));
@@ -173,20 +179,24 @@ class WasmBbsProviderTest {
         List<byte[]> messages = List.of(SINGLE_MSG);
         BbsSignature sig = provider.sign(kp.secretKey(), kp.publicKey(), messages, HEADER);
 
-        // KeyGen, SkToPk, Sign are deterministic in CFRG draft-10 — they
-        // must NOT consume any host RNG bytes.
+        // Deterministic ops must NOT touch the host RNG.
         assertEquals(0, defaultCounter.bytesRead, "deterministic ops must not call host getrandom");
 
-        BbsProof proof = provider.proofGen(
-                kp.publicKey(), sig, messages, HEADER, PRESENTATION_HEADER,
-                new int[]{0}, perCallCounter);
-
-        assertTrue(perCallCounter.bytesRead > 0,
-                "per-call SecureRandom must drive host getrandom (read 0 bytes)");
+        int callCount = 5;
+        for (int i = 0; i < callCount; i++) {
+            var perCall = new CountingSecureRandom();
+            BbsProof proof = provider.proofGen(
+                    kp.publicKey(), sig, messages, HEADER, PRESENTATION_HEADER,
+                    new int[]{0}, perCall);
+            assertTrue(perCall.bytesRead > 0,
+                    "per-call SecureRandom must drive host getrandom on call " + i
+                            + " (read " + perCall.bytesRead + " bytes)");
+            assertTrue(provider.proofVerify(
+                    kp.publicKey(), proof, HEADER, PRESENTATION_HEADER, messages, new int[]{0}));
+        }
         assertEquals(0, defaultCounter.bytesRead,
-                "defaultRandom must NOT be read when a per-call SecureRandom is supplied");
-        assertTrue(provider.proofVerify(
-                kp.publicKey(), proof, HEADER, PRESENTATION_HEADER, messages, new int[]{0}));
+                "defaultRandom must NOT be read across "
+                        + callCount + " proofGen calls with per-call SecureRandoms");
     }
 
     /** SecureRandom subclass that records how many bytes have been consumed via nextBytes. */
@@ -327,6 +337,83 @@ class WasmBbsProviderTest {
 
         assertTrue(provider.proofVerify(
                 pk, proof, HEADER, PRESENTATION_HEADER, disclosedMessages, disclosedIndexes));
+    }
+
+    @Test
+    void proofGen_hiddenMessageSelectiveDisclosureRoundtrip() {
+        // Selective disclosure: 10 messages, reveal {0, 2, 4, 6} = 4 disclosed,
+        // 6 hidden. Exercises the core BBS selective-disclosure path through
+        // the WASM provider end-to-end.
+        var provider = WasmBbsProvider.createDefault(BbsCiphersuite.BLS12381_SHA256);
+        BbsKeyPair kp = provider.keyPair(KEY_MATERIAL, KEY_INFO);
+        List<byte[]> allMessages = tenFixtureMessages();
+        BbsSignature sig = provider.sign(kp.secretKey(), kp.publicKey(), allMessages, HEADER);
+
+        int[] disclosed = {0, 2, 4, 6};
+        BbsProof proof = provider.proofGen(
+                kp.publicKey(), sig, allMessages, HEADER, PRESENTATION_HEADER,
+                disclosed, new SecureRandom());
+
+        List<byte[]> disclosedMessages = List.of(
+                allMessages.get(0), allMessages.get(2), allMessages.get(4), allMessages.get(6));
+        assertTrue(provider.proofVerify(
+                kp.publicKey(), proof, HEADER, PRESENTATION_HEADER, disclosedMessages, disclosed));
+
+        // Same proof with disclosed messages from a different signature must reject.
+        List<byte[]> mangled = List.of(
+                allMessages.get(1), allMessages.get(2), allMessages.get(4), allMessages.get(6));
+        assertFalse(provider.proofVerify(
+                kp.publicKey(), proof, HEADER, PRESENTATION_HEADER, mangled, disclosed));
+    }
+
+    @Test
+    void proofVerify_acceptsOfficialDraft10ShaHiddenMessageProof() {
+        // proof003.json: 10-message signature with 4 revealed (disclosedIndexes
+        // [0, 2, 4, 6]) and 6 hidden. The official CFRG mockedRng-derived
+        // proof bytes; proof_verify must accept.
+        var provider = WasmBbsProvider.createDefault(BbsCiphersuite.BLS12381_SHA256);
+        BbsPublicKey pk = new BbsPublicKey(EXPECTED_PK, BbsCiphersuite.BLS12381_SHA256);
+        BbsProof proof = new BbsProof(PROOF_SHA256_PROOF003, BbsCiphersuite.BLS12381_SHA256);
+        List<byte[]> allMessages = tenFixtureMessages();
+        int[] disclosed = {0, 2, 4, 6};
+        List<byte[]> disclosedMessages = List.of(
+                allMessages.get(0), allMessages.get(2), allMessages.get(4), allMessages.get(6));
+
+        assertTrue(provider.proofVerify(
+                pk, proof, HEADER, PRESENTATION_HEADER, disclosedMessages, disclosed));
+    }
+
+    @Test
+    void proofGen_rejectsDuplicateDisclosedIndexes() {
+        var provider = WasmBbsProvider.createDefault(BbsCiphersuite.BLS12381_SHA256);
+        BbsKeyPair kp = provider.keyPair(KEY_MATERIAL, KEY_INFO);
+        List<byte[]> messages = tenFixtureMessages();
+        BbsSignature sig = provider.sign(kp.secretKey(), kp.publicKey(), messages, HEADER);
+
+        IllegalArgumentException dup = assertThrows(IllegalArgumentException.class, () ->
+                provider.proofGen(
+                        kp.publicKey(), sig, messages, HEADER, PRESENTATION_HEADER,
+                        new int[]{0, 0}, new SecureRandom()));
+        assertTrue(dup.getMessage().contains("strictly ascending"), dup.getMessage());
+
+        IllegalArgumentException unsorted = assertThrows(IllegalArgumentException.class, () ->
+                provider.proofGen(
+                        kp.publicKey(), sig, messages, HEADER, PRESENTATION_HEADER,
+                        new int[]{2, 0}, new SecureRandom()));
+        assertTrue(unsorted.getMessage().contains("strictly ascending"), unsorted.getMessage());
+    }
+
+    @Test
+    void proofVerify_rejectsDuplicateDisclosedIndexes() {
+        var provider = WasmBbsProvider.createDefault(BbsCiphersuite.BLS12381_SHA256);
+        BbsPublicKey pk = new BbsPublicKey(EXPECTED_PK, BbsCiphersuite.BLS12381_SHA256);
+        BbsProof proof = new BbsProof(PROOF_SHA256_PROOF001, BbsCiphersuite.BLS12381_SHA256);
+        List<byte[]> dup = List.of(SINGLE_MSG, SINGLE_MSG);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                provider.proofVerify(
+                        pk, proof, HEADER, PRESENTATION_HEADER, dup, new int[]{0, 0}));
+        assertTrue(ex.getMessage().contains("strictly ascending"), ex.getMessage());
     }
 
     @Test

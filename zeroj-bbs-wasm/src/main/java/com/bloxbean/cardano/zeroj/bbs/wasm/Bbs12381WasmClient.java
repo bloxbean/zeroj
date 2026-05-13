@@ -49,18 +49,10 @@ public final class Bbs12381WasmClient {
     static final byte SUITE_SHA256 = 0;
     static final byte SUITE_SHAKE256 = 1;
 
+    private final byte[] wasmBytes;
     private final Instance instance;
     private final Memory memory;
     private final SecureRandom defaultRandom;
-
-    /**
-     * Per-call random, set inside the {@code synchronized invoke(...)} block by
-     * {@link #proofGen} and restored on exit. The host {@code getrandom} function
-     * reads this field while running under the same monitor. Marked {@code volatile}
-     * so the Chicory host-function callback observes the most recent write even if
-     * Chicory dispatches via a separate thread. Null means "use {@link #defaultRandom}".
-     */
-    private volatile SecureRandom proofGenRandom;
 
     public Bbs12381WasmClient(byte[] wasmBytes, SecureRandom random) {
         Objects.requireNonNull(wasmBytes, "wasmBytes required");
@@ -68,32 +60,13 @@ public final class Bbs12381WasmClient {
         if (wasmBytes.length == 0) {
             throw new IllegalArgumentException("wasmBytes must not be empty");
         }
+        this.wasmBytes = wasmBytes.clone();
         this.defaultRandom = random;
         try {
-            HostFunction hostGetrandom = new HostFunction(
-                    "env",
-                    "zeroj_host_getrandom",
-                    List.of(ValueType.I32, ValueType.I32),
-                    List.of(ValueType.I32),
-                    (inst, args) -> {
-                        int ptr = (int) args[0];
-                        int len = (int) args[1];
-                        if (len < 0 || len > MAX_HOST_GETRANDOM_LEN) {
-                            return new long[]{1L};
-                        }
-                        if (len == 0) {
-                            return new long[]{0L};
-                        }
-                        byte[] buf = new byte[len];
-                        SecureRandom r = (this.proofGenRandom != null) ? this.proofGenRandom : this.defaultRandom;
-                        r.nextBytes(buf);
-                        inst.memory().write(ptr, buf);
-                        return new long[]{0L};
-                    });
-            ImportValues imports = ImportValues.builder().addFunction(hostGetrandom).build();
-            this.instance = Instance.builder(Parser.parse(wasmBytes))
-                    .withImportValues(imports)
-                    .build();
+            // Persistent instance for ops that consume no entropy (keygen,
+            // sk_to_pk, sign, verify, proof_verify) — bound to defaultRandom
+            // since they should never reach the host RNG anyway.
+            this.instance = buildInstance(this.wasmBytes, this.defaultRandom);
             this.memory = Objects.requireNonNull(instance.memory(), "BBS WASM module must export memory");
             long version = instance.export("zeroj_bbs_version").apply()[0];
             if (version != 1L) {
@@ -104,6 +77,39 @@ public final class Bbs12381WasmClient {
         } catch (Exception e) {
             throw new Bbs12381WasmException("Failed to initialize BBS WASM module", e);
         }
+    }
+
+    /**
+     * Build a fresh Chicory Instance whose {@code env.zeroj_host_getrandom}
+     * import draws from the given {@link SecureRandom}. A fresh instance is
+     * required for every {@code proof_gen} call because zkryptium's internal
+     * {@code rand::thread_rng()} keeps a cached chacha-state per thread that
+     * only re-seeds from {@code getrandom} on the first use — so without a
+     * fresh instance, calls 2..N silently bypass the per-call SecureRandom and
+     * derive bytes from the cached state seeded by call 1.
+     */
+    private static Instance buildInstance(byte[] wasmBytes, SecureRandom random) {
+        HostFunction hostGetrandom = new HostFunction(
+                "env",
+                "zeroj_host_getrandom",
+                List.of(ValueType.I32, ValueType.I32),
+                List.of(ValueType.I32),
+                (inst, args) -> {
+                    int ptr = (int) args[0];
+                    int len = (int) args[1];
+                    if (len < 0 || len > MAX_HOST_GETRANDOM_LEN) {
+                        return new long[]{1L};
+                    }
+                    if (len == 0) {
+                        return new long[]{0L};
+                    }
+                    byte[] buf = new byte[len];
+                    random.nextBytes(buf);
+                    inst.memory().write(ptr, buf);
+                    return new long[]{0L};
+                });
+        ImportValues imports = ImportValues.builder().addFunction(hostGetrandom).build();
+        return Instance.builder(Parser.parse(wasmBytes)).withImportValues(imports).build();
     }
 
     public static Bbs12381WasmClient fromPath(Path wasmPath) throws IOException {
@@ -218,7 +224,7 @@ public final class Bbs12381WasmClient {
         for (int idx : disclosedIndexes) {
             req.putInt(idx);
         }
-        return invokeWithRandom("zeroj_bbs_proof_gen", req.array(), random);
+        return invokeOnTransientInstance("zeroj_bbs_proof_gen", req.array(), random);
     }
 
     public boolean proofVerify(
@@ -235,10 +241,11 @@ public final class Bbs12381WasmClient {
         requireMaxLength(header, MAX_HEADER_BYTES, "header");
         requireMaxLength(presentationHeader, MAX_HEADER_BYTES, "presentationHeader");
         long messagesBytes = validateMessageList(disclosedMessages, "disclosedMessages");
-        Objects.requireNonNull(disclosedIndexes, "disclosedIndexes required");
-        if (disclosedIndexes.length > MAX_MESSAGES) {
+        validateDisclosedIndexesForVerify(disclosedIndexes, "disclosedIndexes");
+        if (disclosedIndexes.length != disclosedMessages.size()) {
             throw new IllegalArgumentException(
-                    "disclosedIndexes count " + disclosedIndexes.length + " exceeds " + MAX_MESSAGES);
+                    "disclosedIndexes (" + disclosedIndexes.length
+                            + ") and disclosedMessages (" + disclosedMessages.size() + ") must have equal length");
         }
         long size = 1L + 96 + 4 + proof.length + 4 + header.length + 4 + presentationHeader.length
                 + 4 + messagesBytes + 4L + 4L * disclosedIndexes.length;
@@ -273,13 +280,39 @@ public final class Bbs12381WasmClient {
 
     // ----- internal -----
 
-    private synchronized byte[] invokeWithRandom(String exportName, byte[] request, SecureRandom random) {
-        SecureRandom previous = proofGenRandom;
-        proofGenRandom = random;
+    /**
+     * Run {@code exportName} on a freshly-built Chicory instance whose
+     * getrandom import draws from {@code random}. The instance is discarded
+     * after the call. See {@link #buildInstance} for the rationale: this is
+     * what guarantees the per-call SecureRandom drives every proof generation,
+     * not just the first one per shared instance.
+     */
+    private byte[] invokeOnTransientInstance(String exportName, byte[] request, SecureRandom random) {
+        Instance transient_ = buildInstance(wasmBytes, random);
+        Memory transientMemory = Objects.requireNonNull(
+                transient_.memory(), "BBS WASM module must export memory");
+        int requestPtr = 0;
+        int responsePtr = 0;
+        long responseAllocationLen = 0;
         try {
-            return invoke(exportName, request);
+            requestPtr = (int) transient_.export("alloc").apply(request.length)[0];
+            transientMemory.write(requestPtr, request);
+            responsePtr = (int) transient_.export(exportName).apply(requestPtr, request.length)[0];
+            long responseLen = readResponseLenHeader(transientMemory, responsePtr);
+            responseAllocationLen = responseAllocationLen(responseLen);
+            requireValidResponseLen(responseLen);
+            return readResponsePayload(transientMemory, exportName, responsePtr, (int) responseLen);
+        } catch (Bbs12381WasmException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new Bbs12381WasmException("BBS WASM invocation failed: " + exportName, e);
         } finally {
-            proofGenRandom = previous;
+            if (requestPtr != 0) {
+                transient_.export("dealloc").apply(requestPtr, request.length);
+            }
+            if (responsePtr != 0 && responseAllocationLen > 0) {
+                transient_.export("dealloc").apply(responsePtr, responseAllocationLen);
+            }
         }
     }
 
@@ -291,10 +324,10 @@ public final class Bbs12381WasmClient {
             requestPtr = (int) instance.export("alloc").apply(request.length)[0];
             memory.write(requestPtr, request);
             responsePtr = (int) instance.export(exportName).apply(requestPtr, request.length)[0];
-            long responseLen = readResponseLenHeader(responsePtr);
+            long responseLen = readResponseLenHeader(memory, responsePtr);
             responseAllocationLen = responseAllocationLen(responseLen);
             requireValidResponseLen(responseLen);
-            return readResponsePayload(exportName, responsePtr, (int) responseLen);
+            return readResponsePayload(memory, exportName, responsePtr, (int) responseLen);
         } catch (Bbs12381WasmException e) {
             throw e;
         } catch (Exception e) {
@@ -314,10 +347,10 @@ public final class Bbs12381WasmClient {
         long responseAllocationLen = 0;
         try {
             responsePtr = (int) instance.export(exportName).apply()[0];
-            long responseLen = readResponseLenHeader(responsePtr);
+            long responseLen = readResponseLenHeader(memory, responsePtr);
             responseAllocationLen = responseAllocationLen(responseLen);
             requireValidResponseLen(responseLen);
-            return readResponsePayload(exportName, responsePtr, (int) responseLen);
+            return readResponsePayload(memory, exportName, responsePtr, (int) responseLen);
         } catch (Bbs12381WasmException e) {
             throw e;
         } catch (Exception e) {
@@ -329,8 +362,8 @@ public final class Bbs12381WasmClient {
         }
     }
 
-    private long readResponseLenHeader(int responsePtr) {
-        byte[] lenBytes = memory.readBytes(responsePtr, 4);
+    private long readResponseLenHeader(Memory mem, int responsePtr) {
+        byte[] lenBytes = mem.readBytes(responsePtr, 4);
         return Integer.toUnsignedLong(ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getInt());
     }
 
@@ -345,8 +378,8 @@ public final class Bbs12381WasmClient {
         return responseLen <= maxWasmAllocationLen - 4 ? responseLen + 4 : 0;
     }
 
-    private byte[] readResponsePayload(String exportName, int responsePtr, int responseLen) {
-        byte[] response = memory.readBytes(responsePtr + 4, responseLen);
+    private byte[] readResponsePayload(Memory mem, String exportName, int responsePtr, int responseLen) {
+        byte[] response = mem.readBytes(responsePtr + 4, responseLen);
         if (response[0] != 0) {
             String message = new String(response, 1, response.length - 1, StandardCharsets.UTF_8);
             throw new Bbs12381WasmException("BBS WASM error from " + exportName + ": " + message);
@@ -400,12 +433,46 @@ public final class Bbs12381WasmClient {
             throw new IllegalArgumentException(
                     label + " count " + indexes.length + " exceeds " + MAX_MESSAGES);
         }
+        int previous = -1;
         for (int i = 0; i < indexes.length; i++) {
             int idx = indexes[i];
             if (idx < 0 || idx >= messageCount) {
                 throw new IllegalArgumentException(
                         label + "[" + i + "] = " + idx + " out of range [0, " + messageCount + ")");
             }
+            if (idx <= previous) {
+                throw new IllegalArgumentException(
+                        label + " must be strictly ascending; "
+                                + label + "[" + i + "] = " + idx + " is not greater than previous " + previous);
+            }
+            previous = idx;
+        }
+    }
+
+    /**
+     * Like {@link #validateIndexList} but for the proof_verify path where the
+     * total message count is not known to the caller (only the disclosed
+     * subset is). Validates strict-ascending, no-duplicate, non-negative.
+     */
+    private static void validateDisclosedIndexesForVerify(int[] indexes, String label) {
+        Objects.requireNonNull(indexes, label + " required");
+        if (indexes.length > MAX_MESSAGES) {
+            throw new IllegalArgumentException(
+                    label + " count " + indexes.length + " exceeds " + MAX_MESSAGES);
+        }
+        int previous = -1;
+        for (int i = 0; i < indexes.length; i++) {
+            int idx = indexes[i];
+            if (idx < 0) {
+                throw new IllegalArgumentException(
+                        label + "[" + i + "] = " + idx + " must be non-negative");
+            }
+            if (idx <= previous) {
+                throw new IllegalArgumentException(
+                        label + " must be strictly ascending; "
+                                + label + "[" + i + "] = " + idx + " is not greater than previous " + previous);
+            }
+            previous = idx;
         }
     }
 
