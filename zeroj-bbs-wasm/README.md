@@ -11,10 +11,12 @@ for the design rationale.
 
 ## When to use this module
 
-Use the full Rust-WASM provider when you want maximum throughput for BBS
-operations and are OK with shipping a small WebAssembly artifact. The
-algorithm runs end-to-end inside WASM, so signing, verifying, and proof
-generation incur exactly one cross-boundary call per operation.
+Use the full Rust-WASM provider when you want the BBS algorithm to run
+end-to-end inside a Rust-derived WebAssembly module and are OK with shipping
+a small WebAssembly artifact. Signing and verification use coarse WASM calls
+against a long-lived instance. Proof generation also uses a coarse call, but
+ZeroJ intentionally creates a fresh WASM instance for each `proofGen` call so
+the caller-supplied `SecureRandom` is honored for every proof.
 
 ```java
 import com.bloxbean.cardano.zeroj.bbs.BbsCiphersuite;
@@ -80,6 +82,27 @@ The module imports exactly one host function:
 
 A test (`wasmModule_hasExactlyOneImportAndExpectedExports`) asserts that no
 other imports are present.
+
+## Runtime behavior
+
+`keyGen`, `skToPk`, `sign`, `verify`, and `proofVerify` run on a long-lived
+WASM instance owned by the provider. These operations are deterministic and
+should never call the host RNG import.
+
+`proofGen` needs fresh zero-knowledge blinding randomness. The Rust dependency
+uses an internal thread-local RNG, so ZeroJ builds a transient WASM instance
+per `proofGen` call and wires that instance's `env.zeroj_host_getrandom`
+import to the `SecureRandom` supplied to the Java API call. This avoids
+silently reusing or bypassing the per-call random source after the first
+proof.
+
+The tradeoff is performance: `proofGen` includes WASM instantiation overhead
+in addition to the BBS proof computation. This is correctness-first behavior,
+not a protocol limitation. For high-throughput proof issuance, benchmark this
+provider under the target workload and compare it with `zeroj-bbs` using the
+native `zeroj-blst` BLS provider. A future optimization can remove the
+per-proof instantiation cost if the Rust dependency exposes an API that
+accepts caller-provided randomness directly.
 
 ## Building
 
