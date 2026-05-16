@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "name": "com.bloxbean.cardano.zeroj.blst.BlstBls12381Provider",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.blst.BlstPairing",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

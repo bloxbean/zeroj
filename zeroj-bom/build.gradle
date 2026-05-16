@@ -19,6 +19,8 @@ dependencies {
         api project(':zeroj-verifier-core')
         api project(':zeroj-verifier-groth16')
         api project(':zeroj-verifier-plonk')
+        api project(':zeroj-bls12381')
+        api project(':zeroj-bls12381-wasm')
         api project(':zeroj-blst')
         api project(':zeroj-submission')
         api project(':zeroj-ingestion')
@@ -29,6 +31,8 @@ dependencies {
         api project(':zeroj-circuit-lib')
         api project(':zeroj-prover-gnark')
         api project(':zeroj-onchain-julc')
+        api project(':zeroj-bbs')
+        api project(':zeroj-bbs-wasm')
 
         // Incubator modules
         api project(':zeroj-prover-sidecar')

@@ -1,0 +1,13 @@
+[
+  {
+    "name": "com.bloxbean.cardano.zeroj.bbs.BbsCiphersuite",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.bloxbean.cardano.zeroj.bbs.verifier.BbsZkVerifier",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  }
+]

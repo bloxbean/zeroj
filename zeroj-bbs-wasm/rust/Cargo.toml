@@ -1,0 +1,20 @@
+[package]
+name = "zeroj-bbs-wasm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "zeroj_bbs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+zkryptium = { version = "0.6.1", default-features = false, features = ["bbsplus"] }
+getrandom = { version = "0.2", features = ["custom"] }
+elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+codegen-units = 1

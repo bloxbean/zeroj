@@ -7,6 +7,7 @@ include 'zeroj-backend-spi'
 include 'zeroj-verifier-core'
 include 'zeroj-verifier-groth16'
 include 'zeroj-verifier-plonk'
+include 'zeroj-bls12381'
 include 'zeroj-blst'
 include 'zeroj-test-vectors'
 include 'zeroj-submission'
@@ -21,6 +22,10 @@ include 'zeroj-prover-gnark'
 include 'zeroj-onchain-julc'
 include 'zeroj-examples'
 include 'zeroj-bom'
+
+include 'zeroj-bls12381-wasm'
+include 'zeroj-bbs-wasm'
+include 'zeroj-bbs'
 
 // === Incubator modules (experimental, alternative backends) ===
 include 'zeroj-prover-rapidsnark'

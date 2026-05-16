@@ -4,7 +4,9 @@ import com.bloxbean.cardano.zeroj.api.*;
 import com.bloxbean.cardano.zeroj.backend.spi.BackendDescriptor;
 import com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.ec.*;
+import com.bloxbean.cardano.zeroj.bls12381.field.*;
+import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -13,7 +15,7 @@ import java.util.List;
  * Pure Java Groth16 verifier for BLS12-381 — no native dependencies.
  *
  * <p>Uses the pure Java BLS12-381 field arithmetic and pairing from
- * {@link com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.field}.</p>
+ * {@link com.bloxbean.cardano.zeroj.bls12381}.</p>
  *
  * <p>Verification equation: e(A, B) * e(-alpha, beta) * e(-vk_x, gamma) * e(-C, delta) == 1</p>
  *

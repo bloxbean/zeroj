@@ -1,8 +1,8 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BLS381.AffineG1;
-import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BLS381.AffineG2;
-import com.bloxbean.cardano.zeroj.crypto.field.MontFr381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
+import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 
 import java.math.BigInteger;
 

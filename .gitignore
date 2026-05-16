@@ -51,6 +51,9 @@ incubator/zeroj-prover-rapidsnark/src/main/resources/native/*/librapidsnark.*
 
 ### Rust build artifacts (Halo2) ###
 incubator/zeroj-verifier-halo2/halo2-rust/target/
+zeroj-bbs/rust/target/
+zeroj-bls12381-wasm/rust/target/
+zeroj-bbs-wasm/rust/target/
 
 ### Go compiled binaries ###
 zeroj-prover-gnark/gnark-wrapper/gentestvectors
