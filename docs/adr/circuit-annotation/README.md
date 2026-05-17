@@ -1691,6 +1691,13 @@ Exit criteria:
 - privacy-template examples use symbolic adapters instead of raw `Signal`
   plumbing
 
+Implementation status as of Phase 8: completed with symbolic wrappers for
+Jubjub points, Pedersen commitments, and EdDSA-Jubjub verification in
+`zeroj-circuit-lib`, plus an annotated Pedersen commitment example in
+`zeroj-examples`. The advanced adapters enforce BLS12-381 usage for
+Jubjub-based operations, constrain Pedersen scalars to the Jubjub subgroup
+order, and reject identity EdDSA public keys in-circuit.
+
 ### Phase 9: Integration With Proving Flows
 
 Estimated time: 3 to 6 days.

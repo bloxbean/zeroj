@@ -5,11 +5,17 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkArray;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBool;
+import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBits;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkField;
+import com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMerkle;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalPoseidon;
+import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.EdDSAJubjub;
+import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve;
+import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubPoint;
+import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.PedersenCommitment;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBN254T3;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
@@ -25,6 +31,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ZkGadgetAdaptersTest {
+    private static final BigInteger EDDSA_SK = new BigInteger(
+            "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", 16)
+            .mod(JubjubCurve.SUBGROUP_ORDER);
+    private static final BigInteger EDDSA_MSG = new BigInteger(
+            "0101010101010101010101010101010101010101010101010101010101010101", 16)
+            .mod(JubjubCurve.BASE_FIELD_PRIME);
 
     @Test
     void mimcAdapterMatchesSignalAdapter() {
@@ -334,6 +346,237 @@ class ZkGadgetAdaptersTest {
                 }));
     }
 
+    @Test
+    void jubjubPointAdapterAddsConstants() {
+        JubjubPoint p = JubjubPoint.SUBGROUP_GENERATOR.scalarMul(BigInteger.valueOf(13));
+        JubjubPoint q = JubjubPoint.SUBGROUP_GENERATOR.scalarMul(BigInteger.valueOf(27));
+        JubjubPoint expected = p.add(q);
+
+        var circuit = CircuitBuilder.create("zk-jubjub-add")
+                .publicVar("outU")
+                .publicVar("outV")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkJubjubPoint.constant(zk, p)
+                            .add(zk, ZkJubjubPoint.constant(zk, q))
+                            .assertAffineEquals(
+                                    zk,
+                                    ZkField.publicInput(c, "outU"),
+                                    ZkField.publicInput(c, "outV"));
+                });
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "outU", List.of(expected.affineU()),
+                "outV", List.of(expected.affineV())), CurveId.BLS12_381));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "outU", List.of(BigInteger.ONE),
+                "outV", List.of(expected.affineV())), CurveId.BLS12_381));
+    }
+
+    @Test
+    void jubjubPointAdapterHasNoPublicExtendedCoordinateConstructorAndGuardsField() {
+        assertEquals(0, ZkJubjubPoint.class.getConstructors().length);
+
+        var circuit = CircuitBuilder.create("zk-jubjub-affine-field")
+                .publicVar("u")
+                .publicVar("v")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkJubjubPoint.fromTrustedAffine(
+                                    zk,
+                                    ZkField.publicInput(c, "u"),
+                                    ZkField.publicInput(c, "v"))
+                            .assertAffineEquals(
+                                    zk,
+                                    ZkField.publicInput(c, "u"),
+                                    ZkField.publicInput(c, "v"));
+                });
+
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+    }
+
+    @Test
+    void pedersenAdapterMatchesOffCircuitCommitment() {
+        BigInteger value = BigInteger.valueOf(42);
+        BigInteger blinding = BigInteger.valueOf(12345);
+        JubjubPoint expected = PedersenCommitment.commit(value, blinding);
+
+        var circuit = CircuitBuilder.create("zk-pedersen")
+                .publicVar("outU")
+                .publicVar("outV")
+                .secretVar("value")
+                .secretVar("blinding")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPedersen.commit(
+                            zk,
+                            ZkUInt.secret(c, "value", 16),
+                            ZkUInt.secret(c, "blinding", 16),
+                            16)
+                            .assertAffineEquals(
+                                    zk,
+                                    ZkField.publicInput(c, "outU"),
+                                    ZkField.publicInput(c, "outV"));
+                });
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "outU", List.of(expected.affineU()),
+                "outV", List.of(expected.affineV()),
+                "value", List.of(value),
+                "blinding", List.of(blinding)), CurveId.BLS12_381));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "outU", List.of(expected.affineU().add(BigInteger.ONE)),
+                "outV", List.of(expected.affineV()),
+                "value", List.of(value),
+                "blinding", List.of(blinding)), CurveId.BLS12_381));
+    }
+
+    @Test
+    void pedersenAdapterSupportsLsbFirstBitInputs() {
+        BigInteger value = BigInteger.valueOf(5);
+        BigInteger blinding = BigInteger.valueOf(3);
+        JubjubPoint expected = PedersenCommitment.commit(value, blinding);
+
+        var circuit = CircuitBuilder.create("zk-pedersen-bits")
+                .publicVar("outU")
+                .publicVar("outV")
+                .secretVar("valueBit_0")
+                .secretVar("valueBit_1")
+                .secretVar("valueBit_2")
+                .secretVar("valueBit_3")
+                .secretVar("blindingBit_0")
+                .secretVar("blindingBit_1")
+                .secretVar("blindingBit_2")
+                .secretVar("blindingBit_3")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPedersen.commitBits(
+                            zk,
+                            ZkBits.secret(c, "valueBit", 4),
+                            ZkBits.secret(c, "blindingBit", 4))
+                            .assertAffineEquals(
+                                    zk,
+                                    ZkField.publicInput(c, "outU"),
+                                    ZkField.publicInput(c, "outV"));
+                });
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "outU", List.of(expected.affineU()),
+                "outV", List.of(expected.affineV()),
+                "valueBit_0", List.of(BigInteger.ONE),
+                "valueBit_1", List.of(BigInteger.ZERO),
+                "valueBit_2", List.of(BigInteger.ONE),
+                "valueBit_3", List.of(BigInteger.ZERO),
+                "blindingBit_0", List.of(BigInteger.ONE),
+                "blindingBit_1", List.of(BigInteger.ONE),
+                "blindingBit_2", List.of(BigInteger.ZERO),
+                "blindingBit_3", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
+    }
+
+    @Test
+    void pedersenAdapterRejectsInvalidScalarWidthAndWrongCurve() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-pedersen-width")
+                .secretVar("value")
+                .secretVar("blinding")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPedersen.commit(
+                            zk,
+                            ZkUInt.secret(c, "value", 253),
+                            ZkUInt.secret(c, "blinding", 8));
+                }));
+
+        var circuit = CircuitBuilder.create("zk-pedersen-field")
+                .secretVar("value")
+                .secretVar("blinding")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPedersen.commit(
+                            zk,
+                            ZkUInt.secret(c, "value", 8),
+                            ZkUInt.secret(c, "blinding", 8));
+                });
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+    }
+
+    @Test
+    void pedersenAdapterRejectsNonCanonicalScalarWitness() {
+        var circuit = CircuitBuilder.create("zk-pedersen-canonical")
+                .publicVar("outU")
+                .publicVar("outV")
+                .secretVar("value")
+                .secretVar("blinding")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPedersen.commit(
+                            zk,
+                            ZkUInt.secret(c, "value", 252),
+                            ZkUInt.secret(c, "blinding", 252),
+                            252)
+                            .assertAffineEquals(
+                                    zk,
+                                    ZkField.publicInput(c, "outU"),
+                                    ZkField.publicInput(c, "outV"));
+                });
+
+        var zeroCommitment = PedersenCommitment.commit(BigInteger.ZERO, BigInteger.ZERO);
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "outU", List.of(zeroCommitment.affineU()),
+                "outV", List.of(zeroCommitment.affineV()),
+                "value", List.of(JubjubCurve.SUBGROUP_ORDER),
+                "blinding", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
+    }
+
+    @Test
+    void eddsaJubjubAdapterAcceptsValidSignatureAndRejectsTamperedMessage() {
+        EdDSAJubjub.Keypair keypair = EdDSAJubjub.keypairFromSecret(EDDSA_SK);
+        EdDSAJubjub.Signature signature = EdDSAJubjub.sign(EDDSA_SK, EDDSA_MSG);
+        var circuit = buildEddsaVerifyCircuit();
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(
+                eddsaWitness(keypair, signature, EDDSA_MSG), CurveId.BLS12_381));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(
+                eddsaWitness(keypair, signature, EDDSA_MSG.add(BigInteger.ONE)), CurveId.BLS12_381));
+    }
+
+    @Test
+    void eddsaJubjubAdapterRejectsIdentityPublicKey() {
+        BigInteger s = BigInteger.valueOf(5);
+        EdDSAJubjub.Keypair identityKey = new EdDSAJubjub.Keypair(BigInteger.ONE, JubjubPoint.IDENTITY);
+        EdDSAJubjub.Signature forged = new EdDSAJubjub.Signature(
+                JubjubPoint.SUBGROUP_GENERATOR.scalarMul(s), s);
+
+        assertThrows(ArithmeticException.class, () -> buildEddsaVerifyCircuit()
+                .calculateWitness(eddsaWitness(identityKey, forged, EDDSA_MSG), CurveId.BLS12_381));
+    }
+
+    @Test
+    void eddsaJubjubAdapterRejectsOversizedScalarMetadata() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-eddsa-width")
+                .publicVar("pkU").publicVar("pkV")
+                .publicVar("rU").publicVar("rV")
+                .publicVar("msg").publicVar("s")
+                .secretVar("kModL").secretVar("kQuotient")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkEdDSAJubjub.verify(
+                            zk,
+                            ZkJubjubPoint.fromTrustedAffine(
+                                    zk,
+                                    ZkField.publicInput(c, "pkU"),
+                                    ZkField.publicInput(c, "pkV")),
+                            ZkField.publicInput(c, "msg"),
+                            ZkJubjubPoint.fromTrustedAffine(
+                                    zk,
+                                    ZkField.publicInput(c, "rU"),
+                                    ZkField.publicInput(c, "rV")),
+                            ZkUInt.publicInput(c, "s", 253),
+                            ZkUInt.secret(c, "kModL", 252),
+                            ZkUInt.secret(c, "kQuotient", 4));
+                }));
+    }
+
     private BigInteger expectedMiMCMerkleRoot(
             BigInteger leaf,
             BigInteger sibling0,
@@ -376,6 +619,49 @@ class ZkGadgetAdaptersTest {
                 "left", List.of(left),
                 "right", List.of(right)), CurveId.BN254));
         return hash;
+    }
+
+    private CircuitBuilder buildEddsaVerifyCircuit() {
+        return CircuitBuilder.create("zk-eddsa-jubjub")
+                .publicVar("pkU").publicVar("pkV")
+                .publicVar("rU").publicVar("rV")
+                .publicVar("msg").publicVar("s")
+                .secretVar("kModL").secretVar("kQuotient")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    var publicKey = ZkJubjubPoint.fromTrustedAffine(
+                            zk,
+                            ZkField.publicInput(c, "pkU"),
+                            ZkField.publicInput(c, "pkV"));
+                    var rPoint = ZkJubjubPoint.fromTrustedAffine(
+                            zk,
+                            ZkField.publicInput(c, "rU"),
+                            ZkField.publicInput(c, "rV"));
+                    ZkEdDSAJubjub.verify(
+                            zk,
+                            publicKey,
+                            ZkField.publicInput(c, "msg"),
+                            rPoint,
+                            ZkUInt.publicInput(c, "s", 252),
+                            ZkUInt.secret(c, "kModL", 252),
+                            ZkUInt.secret(c, "kQuotient", 4));
+                });
+    }
+
+    private Map<String, List<BigInteger>> eddsaWitness(
+            EdDSAJubjub.Keypair keypair,
+            EdDSAJubjub.Signature signature,
+            BigInteger message) {
+        var kReduction = ZkEdDSAJubjub.witnessComputeKReduction(signature.r(), keypair.pk(), message);
+        return Map.of(
+                "pkU", List.of(keypair.pk().affineU()),
+                "pkV", List.of(keypair.pk().affineV()),
+                "rU", List.of(signature.r().affineU()),
+                "rV", List.of(signature.r().affineV()),
+                "msg", List.of(message),
+                "s", List.of(signature.s()),
+                "kModL", List.of(kReduction.kModL()),
+                "kQuotient", List.of(kReduction.kQuotient()));
     }
 
 }

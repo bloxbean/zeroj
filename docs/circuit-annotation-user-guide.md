@@ -141,6 +141,34 @@ Each `ZkBits` element is constrained as a boolean. Each `ZkBytes` element is
 constrained to 8 bits. Generated input builders accept indexed values and
 `List<BigInteger>` values.
 
+## Advanced Gadget Adapters
+
+`zeroj-circuit-lib` exposes symbolic adapters for the optional circuit-library
+gadgets:
+
+```java
+var commitment = ZkPedersen.commit(zk, value, blinding, 64);
+commitment.assertAffineEquals(zk, expectedU, expectedV);
+```
+
+`ZkPedersen.commitBits(...)` accepts LSB-first `ZkBits` scalar inputs.
+Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
+`< l`; range-limit any application amount separately when it has a smaller
+business-domain bound.
+Jubjub-based adapters use BLS12-381 and preserve the lower-level gadget
+contracts: arbitrary witness points are not implicitly curve- or
+subgroup-checked. Bind public keys and signature points with
+`ZkJubjubPoint.fromTrustedAffine(...)` only after off-circuit curve validity,
+subgroup membership, and non-identity checks. `ZkEdDSAJubjub.verify(...)`
+also rejects the identity public key in-circuit.
+
+`ZkEdDSAJubjub.verify(...)` also needs two reduction witnesses,
+`kModL` and `kQuotient`, so the circuit can prove the Poseidon challenge was
+reduced modulo the Jubjub subgroup order. Compute those host values with
+`ZkEdDSAJubjub.witnessComputeKReduction(signature.r(), publicKey, message)` and
+bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
+`kQuotient`.
+
 ## Current Limits
 
 - Nested `@ZKCircuit` classes are not supported.
@@ -148,5 +176,5 @@ constrained to 8 bits. Generated input builders accept indexed values and
 - Static `@Prove` methods must use parameter-style inputs.
 - `@CircuitParam` belongs on constructor parameters, not proof method
   parameters.
-- Packed byte encodings and byte-oriented cryptographic gadgets are deferred;
-  Phase 7 stores one constrained field element per bit or byte.
+- Packed byte encodings are deferred; Phase 7 stores one constrained field
+  element per bit or byte.

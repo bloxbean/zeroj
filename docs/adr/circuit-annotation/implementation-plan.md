@@ -30,8 +30,8 @@ In progress.
 | 4 | MVP annotation processor | Completed | b033b03 |
 | 5 | Schema and input builders | Completed | c7b24b8 |
 | 6 | Examples and documentation | Completed | d655fee |
-| 7 | Bit and byte symbolic inputs | Completed | Pending final phase commit |
-| 8 | Advanced gadget adapters | Pending | Pending |
+| 7 | Bit and byte symbolic inputs | Completed | 126ef5c |
+| 8 | Advanced gadget adapters | Completed | Pending final commit |
 | 9 | Proving flow integration | Pending | Pending |
 
 ## Defaults

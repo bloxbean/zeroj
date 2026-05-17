@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.examples.annotation;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
+import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.PedersenCommitment;
 import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import org.junit.jupiter.api.Test;
@@ -151,6 +152,31 @@ class AnnotatedCircuitExamplesTest {
                 .pathBits(List.of(pathBit0, pathBit1));
         assertThrows(ArithmeticException.class,
                 () -> circuit.calculateWitness(invalid.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void pedersenCommitmentUsesAdvancedSymbolicAdapter() {
+        var circuit = AnnotatedPedersenCommitmentCircuit.build();
+        var value = BigInteger.valueOf(42);
+        var blinding = BigInteger.valueOf(12345);
+        var commitment = PedersenCommitment.commit(value, blinding);
+
+        var inputs = AnnotatedPedersenCommitmentCircuit.inputs()
+                .value(value)
+                .blinding(blinding)
+                .expectedU(commitment.affineU())
+                .expectedV(commitment.affineV());
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+
+        var invalid = AnnotatedPedersenCommitmentCircuit.inputs()
+                .value(value)
+                .blinding(blinding)
+                .expectedU(commitment.affineU().add(BigInteger.ONE))
+                .expectedV(commitment.affineV());
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(invalid.toWitnessMap(), CurveId.BLS12_381));
     }
 
     private BigInteger merkleRoot(
