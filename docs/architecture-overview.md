@@ -25,7 +25,7 @@ structured proof adapter is added.
 ## Module Organization
 
 Modules are organized into core modules, mainline opt-in modules, and incubator
-modules. `zeroj-bom-core` covers the stable v3 privacy path. `zeroj-bom-all`
+modules. `zeroj-bom-core` covers the v3 core privacy path. `zeroj-bom-all`
 covers core plus opt-in BBS/WASM and incubator modules.
 
 ## Module Dependency Graph
@@ -42,9 +42,6 @@ zeroj-api                  (foundation types)
   |     +-- zeroj-verifier-groth16 (→ zeroj-backend-spi, zeroj-codec, zeroj-bls12381, zeroj-blst)
   |     |
   |     +-- zeroj-verifier-plonk   (→ zeroj-backend-spi, zeroj-codec, zeroj-crypto, zeroj-verifier-groth16 for BN254 arithmetic)
-  |     |
-  |     +-- zeroj-verifier-halo2   (→ zeroj-backend-spi, zeroj-codec, Rust FFM) [incubator]
-  |
   +-- zeroj-bls12381       (pure Java BLS12-381 field/curve/pairing)
   |     |
   |     +-- zeroj-crypto   (→ zeroj-api, zeroj-bls12381)
@@ -81,8 +78,8 @@ zeroj-bom-core / zeroj-bom-all (platform modules, no code)
 ### Layer 1: Core Model (`zeroj-api`)
 Immutable data types shared across all modules:
 - `ZkProofEnvelope` -- the proof container
-- `ProofSystemId` -- GROTH16, PLONK, FFLONK, HALO2
-- `CurveId` -- BN254, BLS12_381, PALLAS
+- `ProofSystemId` -- public docs focus on GROTH16, PLONK, and BBS
+- `CurveId` -- public docs focus on BN254 and BLS12_381
 - `VerificationResult` -- crypto validity + policy validity
 - `VerificationMaterial` -- verification key + metadata
 
@@ -90,7 +87,6 @@ Immutable data types shared across all modules:
 Proof format parsers and serializers:
 - snarkjs JSON format (proof.json, verification_key.json, public.json)
 - gnark PlonK/Groth16 format
-- Halo2 proof format
 - CBOR binary format for network transmission
 - Canonical hashing for deterministic proof identification
 
@@ -105,14 +101,13 @@ Backend abstraction:
 Concrete implementations:
 - `zeroj-verifier-groth16` -- Groth16 for BN254 (pure Java) + BLS12-381 (pure Java / blst)
 - `zeroj-verifier-plonk` -- structured PlonK proof verification for BN254 + BLS12-381 (pure Java)
-- `zeroj-verifier-halo2` -- Halo2 IPA via Rust FFM (incubator)
 - `zeroj-blst` -- Low-level BLS12-381 curve operations
 
 ### Layer 5: Circuit Definition (`zeroj-circuit-dsl`, `zeroj-circuit-lib`)
 Java circuit definition and compilation:
 - `CircuitBuilder` / `CircuitAPI` -- define circuits in Java
 - `SignalBuilder` -- OO Signal-style API
-- Compiles to R1CS (Groth16), PlonK gates, or Halo2 PLONKish
+- Compiles to R1CS (Groth16) or PlonK gates
 - `zeroj-circuit-lib` -- Poseidon, MiMC, Merkle, comparators, binary ops
 
 ### Layer 6: Orchestration (`zeroj-verifier-core`)
@@ -122,7 +117,7 @@ Routes verification requests to the correct backend based on proof system and cu
 Proof generation backends:
 - `zeroj-crypto` -- pure Java Groth16 and PlonK proving where supported
 - `zeroj-prover-spi` -- minimal prover-side request/response contract
-- `zeroj-prover-gnark` -- production native Groth16/PlonK proving via Go FFM
+- `zeroj-prover-gnark` -- optional native Groth16/PlonK proving via Go FFM
 - `zeroj-prover-wasm` -- Circom witness calculation via GraalVM WASM (incubator)
 
 ### Layer 8: High-Level Patterns (`zeroj-patterns`)
@@ -147,15 +142,14 @@ Reusable Plutus V3 spending validators compiled via Julc:
 | Proof System | Curve | Backend | Implementation | Native Deps |
 |-------------|-------|---------|----------------|-------------|
 | Groth16 | BLS12-381 | Pure Java | `zeroj-verifier-groth16` | None |
-| Groth16 | BLS12-381 | blst native (FFM) | `zeroj-verifier-groth16` | blst (~1ms) |
+| Groth16 | BLS12-381 | blst native (FFM) | `zeroj-verifier-groth16` | blst |
 | Groth16 | BN254 | Pure Java | `zeroj-verifier-groth16` | None |
 | PlonK | BLS12-381 | Pure Java | `zeroj-verifier-plonk` | None |
 | PlonK | BN254 | Pure Java | `zeroj-verifier-plonk` | None |
-| Halo2 IPA | Pallas | Rust FFM | `zeroj-verifier-halo2` (incubator) | Rust binary |
 
 - BLS12-381 pure Java verifier uses field arithmetic validated against gnark
 - BN254 uses pure Java field arithmetic, validated against Ethereum EIP-196/197 test vectors
-- blst option available for BLS12-381 when maximum performance is needed (~1ms vs ~100ms)
+- blst option available for BLS12-381 when a native verifier backend is acceptable
 
 ## On-Chain Verification
 
@@ -183,13 +177,10 @@ Best-effort compatibility from the start; hardened in later milestones.
 | ADR | Decision |
 |-----|----------|
 | [0001](adr/0001-verifier-first-architecture.md) | Verifier-first, no prover in core |
-| [0002](adr/0002-external-proof-submission-first-class.md) | External proof submission as primary flow |
 | [0003](adr/0003-pure-java-mvp.md) | Hybrid: blst for BLS12-381, pure Java for BN254 |
-| [0004](adr/0004-off-chain-cardano-anchoring-first.md) | Off-chain Cardano anchoring first |
-| [0005](adr/0005-plugin-provability-contract.md) | Explicit plugin provability contract |
 | [0006](adr/0006-separation-of-crypto-and-policy-verification.md) | Separate crypto and policy verification |
 | [0007](adr/0007-module-structure-and-boundaries.md) | Multi-module structure |
 | [0008](adr/0008-plonk-support-via-gnark.md) | PlonK support via gnark |
-| [0009](adr/0009-halo2-support-strategy.md) | Halo2 support strategy |
 | [0010](adr/0010-java-circuit-dsl.md) | Java Circuit DSL |
+| [0012](adr/0012-pure-java-provers-groth16-plonk.md) | Pure Java Groth16 and PlonK provers |
 | [0020](adr/0020-module-cleanup-and-core-restructure.md) | Module cleanup and core restructure |

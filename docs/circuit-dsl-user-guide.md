@@ -22,15 +22,14 @@
 
 ## Overview
 
-The ZeroJ Circuit DSL lets you define ZK arithmetic circuits in Java and compile them to **three proof systems** from a single definition:
+The ZeroJ Circuit DSL lets you define ZK arithmetic circuits in Java and compile them to the main ZeroJ proof-system shapes from a single definition:
 
 | Backend | Proof System | Prover | Use Case |
 |---------|-------------|--------|----------|
 | R1CS | Groth16 | **Pure Java**, gnark FFM | Smallest proofs, cheapest on-chain verification |
 | PlonK | PlonK | **Pure Java**, gnark FFM | Universal setup, no per-circuit ceremony |
-| Halo2 | Halo2 (IPA/KZG) | Halo2 Rust FFM | No trusted setup (IPA), recursive proofs |
 
-No circom, no Go, no Rust needed. Just Java.
+No circom, Go, or Rust is needed for the Java DSL plus pure-Java proving path.
 
 ## Two Ways to Define Circuits
 
@@ -68,7 +67,7 @@ var circuit = CircuitBuilder.create("multiplier")
     });
 ```
 
-Both produce identical R1CS constraints. **Use CircuitSpec for production code** — it's testable, reusable, and self-documenting.
+Both produce identical R1CS constraints. **Use CircuitSpec for reusable application circuits** — it is testable, reusable, and self-documenting.
 
 ## Quick Start
 
@@ -83,10 +82,9 @@ var witness = circuit.calculateWitness(Map.of(
     "y", List.of(BigInteger.valueOf(11))
 ), CurveId.BLS12_381);
 
-// 3. Compile to any proof system
+// 3. Compile to the supported mainline proof-system shapes
 var r1cs  = circuit.compileR1CS(CurveId.BLS12_381);   // Groth16
 var plonk = circuit.compilePlonK(CurveId.BLS12_381);   // PlonK
-var halo2 = circuit.compileHalo2(CurveId.PALLAS);      // Halo2
 
 // 4. Prove with pure Java prover (see pure-java-prover-guide.md)
 var proof = Groth16ProverBLS381.prove(pk, witness, constraints, numWires);
@@ -127,7 +125,7 @@ api.assertInRange(v, 8);   // 0 ≤ v < 256 (8-bit range)
 
 ## Writing CircuitSpec Circuits (Recommended)
 
-A `CircuitSpec` is a Java class that defines a ZK circuit. This is the **preferred pattern** for production circuits because it's reusable, testable, and self-documenting.
+A `CircuitSpec` is a Java class that defines a ZK circuit. This is the **preferred pattern** for reusable circuits because it is testable, reusable, and self-documenting.
 
 ### Anatomy of a CircuitSpec
 
@@ -302,10 +300,8 @@ System.out.println("Public inputs: " + r1cs.numPublicInputs());
 byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
 Files.write(Path.of("circuit.r1cs"), r1csBytes);
 
-// Calculate and export witness
+// Calculate witness for Java proving
 BigInteger[] witness = circuit.calculateWitness(inputs, CurveId.BLS12_381);
-byte[] wtnsBytes = WitnessExporter.toWtns(witness, r1cs.prime(), r1cs.fieldConfig().n32());
-Files.write(Path.of("witness.wtns"), wtnsBytes);
 ```
 
 ## CircuitAPI Reference
@@ -641,15 +637,13 @@ var r1cs = circuit.compileR1CS(CurveId.BN254);
 byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
 Files.write(Path.of("circuit.r1cs"), r1csBytes);
 
-// Serialize witness to .wtns
-byte[] wtnsBytes = WitnessExporter.toWtns(witness, r1cs.prime(), r1cs.fieldConfig().n32());
+// Witness values are returned as BigInteger[] for Java proving.
 ```
 
 Properties:
 - **Additions are free** — absorbed into linear combinations
 - Only multiplications create constraints
-- Smallest proofs (~128 bytes for BN254)
-- Fastest verification (~3ms)
+- Compact proofs compared with universal-setup systems
 - Requires per-circuit trusted setup
 
 ### PlonK
@@ -664,29 +658,12 @@ Properties:
 - Universal setup (one ceremony for all circuits)
 - Slightly larger proofs than Groth16
 
-### Halo2 (PLONKish)
-
-```java
-var halo2 = circuit.compileHalo2(CurveId.PALLAS);
-
-// Serialize to JSON (intermediate format for Rust FFM prover)
-String json = halo2.toJson(witness);
-```
-
-Properties:
-- Same gate model as PlonK (compatible)
-- 3 advice columns (a, b, c) + 5 fixed selector columns
-- Permutation cycles for copy constraints
-- Supports Pallas/Vesta (IPA, no setup) and BLS12-381 (KZG)
-- Future: custom gates, lookup tables
-
 ## Curves
 
 | Curve | Proof Systems | On-chain? | Note |
 |-------|--------------|-----------|------|
 | BN254 | Groth16, PlonK | No (no Plutus builtins) | circom/snarkjs ecosystem |
 | BLS12-381 | Groth16, PlonK | Groth16: **Yes**; PlonK: prototype | Cardano-native BLS builtins; PlonK KZG pairing check is still deferred on-chain |
-| Pallas | Halo2 IPA | No | No trusted setup, recursive proofs |
 
 ## Witness Calculation
 
@@ -742,8 +719,6 @@ Java CircuitSpec / CircuitBuilder DSL
         ├──▶ compilePlonK() ──▶ PlonKProverBLS381 (pure Java) ──▶ proof
         │                    └──▶ gnark FFM ──▶ proof
         │
-        ├──▶ compileHalo2() ──▶ Halo2 Rust FFM ──▶ proof
-        │
         └──▶ calculateWitness() ──▶ BigInteger[] (pure Java)
 
 Verification (pure Java, zero native deps):
@@ -773,14 +748,19 @@ See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pip
 ## Module Dependencies
 
 ```gradle
+implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
+
 // Circuit DSL (define and compile circuits)
 implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
 
-// Standard library (Poseidon, Merkle, comparators)
+// Standard library (Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck)
 implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
 
-// Provers (choose based on your proof system)
-implementation 'com.bloxbean.cardano:zeroj-prover-gnark'       // gnark (Groth16 + PlonK)
+// Pure Java prover
+implementation 'com.bloxbean.cardano:zeroj-crypto'
+
+// Optional native prover
+// implementation 'com.bloxbean.cardano:zeroj-prover-gnark'    // gnark (Groth16 + PlonK)
 
 // Verifiers (pure Java, zero native deps)
 implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'    // Groth16 (BN254 + BLS12-381)

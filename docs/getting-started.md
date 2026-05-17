@@ -5,7 +5,7 @@
 - [Prerequisites](#prerequisites)
 - [Step 1: Define the Circuit (Java DSL)](#step-1-define-the-circuit-java-dsl)
 - [Step 2: Compile and Calculate Witness (Pure Java)](#step-2-compile-and-calculate-witness-pure-java)
-- [Step 3: Generate Proof (gnark FFM)](#step-3-generate-proof-gnark-ffm)
+- [Step 3: Generate Proof (Pure Java)](#step-3-generate-proof-pure-java)
 - [Step 4: Verify Off-Chain (Pure Java)](#step-4-verify-off-chain-pure-java)
 - [Step 5: Deploy On-Chain Verifier (Julc / Plutus V3)](#step-5-deploy-on-chain-verifier-julc--plutus-v3)
 - [Step 6: Lock Funds with Public Inputs as Datum](#step-6-lock-funds-with-public-inputs-as-datum)
@@ -20,7 +20,7 @@
 
 This guide walks through the complete ZeroJ flow: define a ZK circuit in Java, generate a proof, verify it off-chain, and execute on-chain verification on Cardano via Yaci DevKit.
 
-We'll build a **sealed-bid auction** where a bidder proves their bid exceeds a reserve price without revealing the actual bid amount.
+We'll build a **private multiplier** circuit where the prover shows they know a secret factor `b` such that `a * b = c`, while `a` and `c` remain public. This small circuit matches the reusable Groth16 on-chain verifier, which currently accepts two public inputs.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ We'll build a **sealed-bid auction** where a bidder proves their bid exceeds a r
 
 ### Building the gnark native prover (optional)
 
-The gnark native library is only needed if you want to generate proofs using the in-process gnark FFM prover (Steps 3+). Circuit definition, R1CS compilation, witness calculation, and off-chain verification are all **pure Java** with no native dependencies.
+The gnark native library is only needed if you want to generate proofs using the optional in-process gnark FFM prover. The main flow in this guide uses the pure Java prover.
 
 If you want to use the gnark prover, you need **Go 1.21+** to build the native library once:
 
@@ -46,134 +46,115 @@ yaci-cli:default> create-node -o --start
 
 ## Step 1: Define the Circuit (Java DSL)
 
-The circuit proves: "I know a bid amount and salt such that `MiMC(bidAmount, salt) == commitment` and `bidAmount >= reservePrice`."
+The circuit proves: "I know a secret `b` such that `a * b == c`."
 
 ```java
-// SealedBidCircuit.java
-public class SealedBidCircuit implements CircuitSpec {
-
-    public static CircuitBuilder build() {
-        return CircuitBuilder.create("sealed-bid", new SealedBidCircuit());
+// PrivateMultiplierCircuit.java
+public class PrivateMultiplierCircuit implements CircuitSpec {
+    @Override
+    public void define(SignalBuilder c) {
+        Signal a = c.publicInput("a");
+        Signal b = c.privateInput("b");
+        Signal cOut = c.publicOutput("c");
+        c.assertEqual(a.mul(b), cOut);
     }
 
-    @Override
-    public void define(CircuitBuilder builder) {
-        builder
-            .secretVar("bidAmount")
-            .secretVar("salt")
-            .publicVar("reservePrice")
-            .publicVar("bidCommitment")    // output
-            .publicVar("isAboveReserve")   // output
-            .define(api -> {
-                // 1. Prove knowledge of commitment
-                var hash = MiMC.hash(api, api.var("bidAmount"), api.var("salt"));
-                api.assertEqual(hash, api.var("bidCommitment"));
-
-                // 2. Prove bid >= reserve
-                var result = Comparators.greaterOrEqual(
-                    api, api.var("bidAmount"), api.var("reservePrice"), 64);
-                api.assertEqual(result, api.var("isAboveReserve"));
-            });
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("private-multiplier")
+                .publicVar("a")
+                .publicVar("c")
+                .secretVar("b")
+                .defineSignals(new PrivateMultiplierCircuit());
     }
 }
 ```
 
 Key points:
-- `secretVar` -- only the prover knows these (bid amount, salt)
-- `publicVar` -- visible to the verifier (reserve price, commitment, result)
-- `MiMC.hash` and `Comparators.greaterOrEqual` are from `zeroj-circuit-lib`
+- `secretVar` -- only the prover knows this value (`b`)
+- `publicVar` -- visible to the verifier (`a` and `c`)
+- `CircuitSpec` keeps the circuit reusable and testable
 
 ## Step 2: Compile and Calculate Witness (Pure Java)
 
 ```java
-var circuit = SealedBidCircuit.build();
+var circuit = PrivateMultiplierCircuit.build();
 
 // Compile circuit to R1CS (Groth16 constraint system)
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
-
 // Calculate witness with concrete inputs
-BigInteger bidAmount = BigInteger.valueOf(1000);
-BigInteger salt = BigInteger.valueOf(42);
-BigInteger reservePrice = BigInteger.valueOf(500);
-BigInteger commitment = MiMCHash.hash(bidAmount, salt, BLS12_381_PRIME);
+BigInteger a = BigInteger.valueOf(3);
+BigInteger b = BigInteger.valueOf(11);
+BigInteger c = BigInteger.valueOf(33);
 
 var witness = circuit.calculateWitness(Map.of(
-    "bidAmount",       List.of(bidAmount),
-    "salt",            List.of(salt),
-    "reservePrice",    List.of(reservePrice),
-    "bidCommitment",   List.of(commitment),
-    "isAboveReserve",  List.of(BigInteger.ONE)  // bid 1000 >= reserve 500
+    "a", List.of(a),
+    "b", List.of(b),
+    "c", List.of(c)
 ), CurveId.BLS12_381);
-
-byte[] wtnsBytes = WitnessExporter.toWtns(witness, r1cs.prime(), r1cs.fieldConfig().n32());
 ```
 
 This is all pure Java -- no external tools needed.
 
-## Step 3: Generate Proof (gnark FFM)
+## Step 3: Generate Proof (Pure Java)
 
 ```java
-try (var prover = new GnarkProver()) {
-    var result = prover.groth16FullProve(r1cs, witness, CurveId.BLS12_381);
+var constraints = r1cs.constraints();
 
-    String proofJson  = result.proveResponse().proofJson();
-    String vkJson     = result.vkJson();
-    List<BigInteger> publicSignals = result.proveResponse().publicSignals();
-    String publicJson = publicSignals.stream()
-            .map(v -> "\"" + v + "\"")
-            .collect(java.util.stream.Collectors.joining(",", "[", "]"));
-}
+// Local test setup only: toxic waste is known.
+var srs = PowersOfTauBLS381.generate(4);
+var setupResult = Groth16SetupBLS381.setup(
+        constraints, r1cs.numWires(), r1cs.numPublicInputs(), srs.tauScalar());
+
+var proof = Groth16ProverBLS381.prove(
+        setupResult.provingKey(), witness, constraints, r1cs.numWires());
 ```
 
-This runs gnark **inside the JVM** via Foreign Function & Memory API -- no external CLI, no Node.js.
+For setup beyond local tests, import MPC-generated `.zkey` artifacts instead of using `PowersOfTauBLS381.generate(...)`.
 
 ## Step 4: Verify Off-Chain (Pure Java)
 
 ```java
-// Parse proof artifacts
-var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(
-    proofJson, vkJson, publicJson, new CircuitId("sealed-bid"));
+BigInteger[] publicInputs = new BigInteger[r1cs.numPublicInputs()];
+for (int i = 0; i < publicInputs.length; i++) {
+    publicInputs[i] = witness[i + 1];
+}
 
-// Verify -- pure Java, zero native dependencies
-var verifier = new Groth16BLS12381PureJavaVerifier();
-var material = VerificationMaterial.of(vkBytes,
-    ProofSystemId.GROTH16, CurveId.BLS12_381, new CircuitId("sealed-bid"));
-var result = verifier.verify(envelope, material);
-
-assert result.proofValid();  // cryptographic proof is valid
+boolean ok = verifyGroth16Pairing(proof, setupResult, publicInputs);
+assert ok;
 ```
+
+The complete helper is shown in `PureJavaProverYaciE2ETest`; it computes the Groth16 `vk_x` linear combination and runs the BLS12-381 pairing equation.
 
 ## Step 5: Deploy On-Chain Verifier (Julc / Plutus V3)
 
 ZeroJ includes reusable Plutus V3 validators compiled from Java via Julc. The VK is baked into the script at deploy time:
 
 ```java
-// Parse VK for on-chain parameters
-var vkCompressed = SnarkjsToCardano.parseVk(vkJson);
+// Compress proof + VK for on-chain BLS format
+var compressedVk = ProverToCardano.compressVk(setupResult);
+var compressedProof = ProverToCardano.compressProof(proof);
 
 // Compile Julc validator with VK parameters
 var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
-    new BytesPlutusData(reservePriceBytes),
-    new BytesPlutusData(vkCompressed.alpha()),   // VK alpha (G1, 48 bytes)
-    new BytesPlutusData(vkCompressed.beta()),    // VK beta  (G2, 96 bytes)
-    new BytesPlutusData(vkCompressed.gamma()),   // VK gamma (G2, 96 bytes)
-    new BytesPlutusData(vkCompressed.delta()),   // VK delta (G2, 96 bytes)
-    new BytesPlutusData(vkCompressed.ic(0)),     // IC[0] (G1, 48 bytes)
-    new BytesPlutusData(vkCompressed.ic(1)),     // IC[1] (G1, 48 bytes)
-    new BytesPlutusData(vkCompressed.ic(2))      // IC[2] (G1, 48 bytes)
+    new BytesPlutusData(compressedVk.alpha()),
+    new BytesPlutusData(compressedVk.beta()),
+    new BytesPlutusData(compressedVk.gamma()),
+    new BytesPlutusData(compressedVk.delta()),
+    new BytesPlutusData(compressedVk.ic().get(0)),
+    new BytesPlutusData(compressedVk.ic().get(1)),
+    new BytesPlutusData(compressedVk.ic().get(2))
 );
 
-var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet());
+var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet()).toBech32();
 ```
 
 ## Step 6: Lock Funds with Public Inputs as Datum
 
 ```java
-// Datum = public inputs that the on-chain verifier checks
+// Datum = public inputs that the on-chain verifier checks: [a, c]
 var datum = ListPlutusData.of(
-    BigIntPlutusData.of(bidCommitment),
-    BigIntPlutusData.of(reservePrice)
+    BigIntPlutusData.of(a),
+    BigIntPlutusData.of(c)
 );
 
 // Lock 5 ADA at the script address
@@ -194,9 +175,9 @@ var lockResult = new QuickTxBuilder(backend)
 var redeemer = ConstrPlutusData.builder()
     .alternative(0)
     .data(ListPlutusData.of(
-        new BytesPlutusData(proof.piA()),   // G1 compressed (48 bytes)
-        new BytesPlutusData(proof.piB()),   // G2 compressed (96 bytes)
-        new BytesPlutusData(proof.piC())    // G1 compressed (48 bytes)
+        new BytesPlutusData(compressedProof.piA()),
+        new BytesPlutusData(compressedProof.piB()),
+        new BytesPlutusData(compressedProof.piC())
     ))
     .build();
 
@@ -220,25 +201,24 @@ var unlockResult = new QuickTxBuilder(backend)
 
 The `Groth16BLS12381Verifier` Plutus V3 script executes:
 
-1. **Extract** public inputs from datum: `[bidCommitment, reservePrice]`
-2. **Check** reserve price matches the parameter baked at deploy
-3. **Decompress** proof points (piA, piB, piC) from BLS12-381 compressed bytes
-4. **Compute** `vk_x = ic[0] + pub[0] * ic[1] + pub[1] * ic[2]` (linear combination)
-5. **Verify** pairing equation: `e(piA, piB) == e(alpha, beta) * e(vk_x, gamma) * e(piC, delta)`
-6. Return `True` if pairing check passes -- UTXO unlocked
+1. **Extract** public inputs from datum: `[a, c]`
+2. **Decompress** proof points (piA, piB, piC) from BLS12-381 compressed bytes
+3. **Compute** `vk_x = ic[0] + pub[0] * ic[1] + pub[1] * ic[2]` (linear combination)
+4. **Verify** pairing equation: `e(piA, piB) == e(alpha, beta) * e(vk_x, gamma) * e(piC, delta)`
+5. Return `True` if pairing check passes -- UTXO unlocked
 
 ## End-to-End Flow Summary
 
 ```
-SealedBidCircuit.java     (define in Java DSL)
+PrivateMultiplierCircuit.java (define in Java DSL)
         |
    compileR1CS()          (pure Java → R1CS binary)
         |
    calculateWitness()     (pure Java → BigInteger[])
         |
-   gnark FFM prove        (in-process → proofJson, vkJson)
+   pure Java prove        (Groth16ProverBLS381)
         |
-   Java verify            (pure Java → VerificationResult)
+   Java verify            (pure Java pairing check)
         |
    Julc compile           (VK baked → Plutus V3 script)
         |
@@ -256,7 +236,7 @@ SealedBidCircuit.java     (define in Java DSL)
 The `zeroj-examples` module contains complete working examples:
 
 ```bash
-# Off-chain: DSL circuit → snarkjs/gnark prove → Java verify
+# Off-chain: DSL circuit → prove → Java verify
 ./gradlew :zeroj-examples:test
 
 # On-chain: full flow on Yaci DevKit (requires running Yaci)
@@ -296,22 +276,21 @@ See the [examples README](../zeroj-examples/README.md) for detailed descriptions
 
 ## Prover Options
 
-| Prover | Proof System | Curve | External Deps | Speed |
+| Prover | Proof System | Curve | External Deps | Notes |
 |--------|-------------|-------|---------------|-------|
-| **Pure Java** | Groth16 + PlonK | BLS12-381, BN254 | **None** | Seconds |
-| **gnark FFM** | Groth16 + PlonK | BLS12-381, BN254 | gnark native lib | ~50-300ms |
-| **snarkjs CLI** | Groth16 + PlonK | BLS12-381, BN254 | Node.js + snarkjs | Minutes |
+| **Pure Java** | Groth16 + PlonK | BLS12-381, BN254 | **None** | Recommended default path |
+| **gnark FFM** | Groth16 + PlonK | BLS12-381, BN254 | Go native lib | Optional native backend |
+| **snarkjs CLI** | Groth16 + PlonK | BLS12-381, BN254 | Node.js + snarkjs | External CLI workflow |
 
-**Pure Java** is the recommended prover for Cardano -- zero dependencies, GraalVM-compatible, proven end-to-end on-chain. See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.
+**Pure Java** is the recommended prover for the core Cardano path -- zero native dependencies and covered by end-to-end on-chain tests. See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.
 
-For maximum speed with large circuits, see [Alternate Prover Backends](alternate-prover-backends.md) (gnark FFM).
+For native or CLI alternatives, see [Alternate Prover Backends](alternate-prover-backends.md).
 
 ## Curves and On-Chain Feasibility
 
 | Curve | Off-Chain | On-Chain (Plutus V3) | Notes |
 |-------|-----------|---------------------|-------|
-| BLS12-381 | Full support | Full support | Plutus V3 has native BLS builtins |
-| BN254 | Full support | Not feasible | No Plutus BN254 builtins |
-| Pallas | Halo2 only (incubator) | Not feasible | No Plutus Pallas builtins |
+| BLS12-381 | Groth16 + PlonK | Groth16 supported; PlonK prototype | Plutus V3 has native BLS builtins |
+| BN254 | Groth16 + PlonK | Not feasible | No Plutus BN254 builtins |
 
 For on-chain verification, always use **BLS12-381**.

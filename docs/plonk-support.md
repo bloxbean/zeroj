@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-- [Status](#status-production-off-chain-pure-java-on-chain-via-julc)
+- [Status](#status-off-chain-implemented-experimental-on-chain)
 - [What Works Today](#what-works-today)
 - [Quick Start (Off-Chain)](#quick-start-off-chain)
 - [Use Cases](#use-cases)
@@ -13,10 +13,11 @@
 
 ---
 
-## Status: Production Off-Chain, Experimental On-Chain
+## Status: Off-Chain Implemented, Experimental On-Chain
 
-ZeroJ supports PlonK proof generation via gnark FFM and **pure Java verification**
-for structured snarkjs/ZeroJ PlonK proof JSON on BLS12-381 and BN254 curves.
+ZeroJ supports PlonK proof generation via the pure Java prover and gnark FFM,
+plus **pure Java verification** for structured snarkjs/ZeroJ PlonK proof JSON
+on BLS12-381 and BN254 curves.
 gnark's opaque binary PlonK proof JSON should be verified with gnark native
 verification until a dedicated adapter is added. The Julc on-chain PlonK path is
 an experimental prototype today: transcript and inverse checks are implemented,
@@ -24,7 +25,7 @@ but the KZG batch opening pairing check is still deferred.
 
 ## What Works Today
 
-### Off-Chain PlonK (Production-Ready)
+### Off-Chain PlonK
 - **Setup**: Universal SRS generation (one setup works for any circuit up to the SRS size)
 - **Prove**: Generate PlonK proofs with the pure Java prover or with gnark FFM
 - **Verify**: **Pure Java verification** for structured snarkjs/ZeroJ proof JSON; gnark binary PlonK proof JSON uses gnark native verification until an adapter lands
@@ -48,23 +49,57 @@ but the KZG batch opening pairing check is still deferred.
 ## Quick Start (Off-Chain)
 
 ```java
-try (var prover = new GnarkProver()) {
-    // 1. Setup (one-time per SRS)
-    var setup = prover.plonkSetup("bls12381", Path.of("circuit.scs"));
+var circuit = CircuitBuilder.create("multiplier")
+        .publicVar("c")
+        .secretVar("a")
+        .secretVar("b")
+        .define(api -> api.assertEqual(
+                api.mul(api.var("a"), api.var("b")),
+                api.var("c")));
 
-    // 2. Prove (per-transaction)
-    var response = prover.plonkProveRaw("bls12381",
-        Path.of("circuit.scs"),
-        Path.of(setup.pkPath()),
-        Path.of("witness.bin"));
+var plonk = circuit.compilePlonK(CurveId.BLS12_381);
+var witness = circuit.calculateWitness(Map.of(
+        "c", List.of(BigInteger.valueOf(33)),
+        "a", List.of(BigInteger.valueOf(3)),
+        "b", List.of(BigInteger.valueOf(11))), CurveId.BLS12_381);
 
-    // 3. Verify (any party with VK)
-    boolean valid = prover.plonkVerify("bls12381",
-        Path.of("verification_key.bin"),
-        proofBase64,
-        Path.of("public_witness.bin"));
+var srs = PowersOfTauBLS381.generate(8); // local test setup only
+int numGates = plonk.numGates();
+BigInteger[][] gateSelectors = new BigInteger[numGates][5];
+for (int i = 0; i < numGates; i++) {
+    var row = plonk.gateRows().get(i);
+    gateSelectors[i] = new BigInteger[]{row.qL(), row.qR(), row.qO(), row.qM(), row.qC()};
 }
+
+var pk = PlonKSetupBLS381.setup(numGates, plonk.numPublicInputs(),
+        gateSelectors, plonk.sigmaA(), plonk.sigmaB(), plonk.sigmaC(),
+        plonk.numWires(), srs);
+
+var extendedWitness = plonk.extendWitness(witness);
+int n = pk.domainSize();
+MontFr381[] wireA = new MontFr381[n];
+MontFr381[] wireB = new MontFr381[n];
+MontFr381[] wireC = new MontFr381[n];
+for (int i = 0; i < n; i++) {
+    if (i < numGates) {
+        var row = plonk.gateRows().get(i);
+        wireA[i] = MontFr381.fromBigInteger(extendedWitness[row.wireA()]);
+        wireB[i] = MontFr381.fromBigInteger(extendedWitness[row.wireB()]);
+        wireC[i] = MontFr381.fromBigInteger(extendedWitness[row.wireC()]);
+    } else {
+        wireA[i] = wireB[i] = wireC[i] = MontFr381.ZERO;
+    }
+}
+
+BigInteger[] publicInputs = new BigInteger[plonk.numPublicInputs()];
+for (int i = 0; i < publicInputs.length; i++) {
+    publicInputs[i] = witness[i + 1];
+}
+
+var proof = PlonKProverBLS381.prove(pk, wireA, wireB, wireC, publicInputs);
 ```
+
+See `PlonKBLS381EndToEndTest.java` for the full wire-evaluation and verification code.
 
 ## Use Cases
 
@@ -77,12 +112,12 @@ try (var prover = new GnarkProver()) {
 ### Future (On-Chain)
 - PlonK verification on Cardano Plutus V3 is feasible using BLS12-381 builtins
 - **Limitation**: Plutus V3 lacks SHA-256 (needed for Fiat-Shamir transcript). Workaround: pass pre-computed challenges as redeemer data
-- **CIP-0133 (Multi-Scalar Multiplication)**: Would significantly improve on-chain PlonK verification performance (~7-37x speedup)
+- **CIP-0133 (Multi-Scalar Multiplication)**: Would improve the shape of on-chain PlonK verification if available
 - See [ADR-0008](adr/0008-plonk-support-via-gnark.md) for detailed analysis
 
 ## Limitations
 
-1. **Test SRS**: The setup uses gnark's `unsafekzg.NewSRS()` which is NOT suitable for production. Production deployments must use an MPC-generated SRS.
+1. **Test SRS**: Local test setups are not suitable beyond development. Use MPC-generated SRS artifacts when evaluating non-local deployments.
 2. **gnark format**: Proofs and VKs are in gnark's binary format, not snarkjs format. A codec adapter is planned.
 
 ## Architecture
@@ -90,13 +125,15 @@ try (var prover = new GnarkProver()) {
 ```
 Java Application
     |
-GnarkProver (Java FFM)
+CircuitBuilder.compilePlonK(...)
     |
-libzeroj_gnark.dylib (Go shared library)
+PlonKConstraintSystem
     |
-gnark v0.14.0 (PlonK + KZG)
+PlonKSetupBLS381 / PlonKProverBLS381
     |
-BLS12-381 / BN254 curve
+PlonkBLS12381Verifier / PlonkBN254Verifier
+    |
+Optional: GnarkProver for native proving and native verification of gnark binary artifacts
 ```
 
 ## Test Vectors
@@ -112,4 +149,3 @@ Circuit: `X * Y = Z` (multiplier), Witness: X=3, Y=11, Z=33
 
 ## Related ADRs
 - [ADR-0008: PlonK Support via gnark](adr/0008-plonk-support-via-gnark.md)
-- [ADR-0009: Halo2 Support Strategy](adr/0009-halo2-support-strategy.md)
