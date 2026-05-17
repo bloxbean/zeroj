@@ -1,0 +1,20 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ Circuit Annotation API — annotations and symbolic types for Java circuit authoring'
+
+dependencies {
+    api project(':zeroj-circuit-dsl')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Circuit Annotation API'
+                description = 'Annotations and symbolic type API for generating ZeroJ circuits from Java classes'
+            }
+        }
+    }
+}

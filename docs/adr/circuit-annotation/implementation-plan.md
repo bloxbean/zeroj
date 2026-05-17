@@ -23,8 +23,8 @@ In progress.
 
 | Phase | Name | Status | Commit |
 |-------|------|--------|--------|
-| 0 | Planning baseline | In progress | Pending |
-| 1 | Module scaffolding | Pending | Pending |
+| 0 | Planning baseline | Completed | 823c422 |
+| 1 | Module scaffolding | In progress | Pending |
 | 2 | Symbolic foundation | Pending | Pending |
 | 3 | MVP gadget adapters | Pending | Pending |
 | 4 | MVP annotation processor | Pending | Pending |
