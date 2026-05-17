@@ -6,7 +6,7 @@ import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.*;
-import com.bloxbean.cardano.zeroj.verifier.plonk.FiatShamirTranscript;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

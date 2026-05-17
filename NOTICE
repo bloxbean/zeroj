@@ -41,22 +41,6 @@ Copyright (c) 2022 ICON Foundation
 Licensed under the Apache License, Version 2.0
 https://github.com/icon-project/blst-java
 
---------------------------------------------------------------------------
-rapidsnark — Native Groth16 Prover (incubator/zeroj-prover-rapidsnark)
---------------------------------------------------------------------------
-Copyright (c) 2021 0KIMS Association
-Licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
-https://github.com/iden3/rapidsnark
-
-The zeroj-prover-rapidsnark module downloads pre-compiled rapidsnark
-shared libraries (librapidsnark.so/.dylib) from GitHub releases and
-loads them via Java FFM at runtime. The binaries are NOT distributed
-in this repository. As a dynamically-linked library, your own
-application code is NOT subject to the LGPL. You may replace the
-library with your own modified build. See
-incubator/zeroj-prover-rapidsnark/NOTICE for LGPL-specific obligations.
-
---------------------------------------------------------------------------
 halo2 — Zero-Knowledge Proving System (incubator/zeroj-verifier-halo2)
 --------------------------------------------------------------------------
 Copyright (c) 2020-2024 The Electric Coin Company
@@ -104,11 +88,3 @@ Apache License, Version 2.0
 
 A copy of the Apache License, Version 2.0 is available at:
 https://www.apache.org/licenses/LICENSE-2.0
-
-==========================================================================
-GNU Lesser General Public License v3.0
-==========================================================================
-
-A copy of the LGPL-3.0 is included in:
-incubator/zeroj-prover-rapidsnark/LICENSES/LGPL-3.0.txt
-incubator/zeroj-prover-rapidsnark/LICENSES/GPL-3.0.txt

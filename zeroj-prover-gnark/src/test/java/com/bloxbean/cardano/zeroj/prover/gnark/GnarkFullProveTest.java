@@ -68,8 +68,10 @@ class GnarkFullProveTest {
             assertNotNull(result.vkJson());
             assertEquals("groth16", result.proveResponse().protocol());
             assertEquals("bls12381", result.proveResponse().curve());
-            assertFalse(result.proveResponse().publicSignals().isEmpty(),
-                    "Should have public signals");
+            assertEquals(List.of(BigInteger.valueOf(33)), result.proveResponse().publicSignals());
+            assertTrue(result.proveResponse().proofJson().contains("\"binary\""));
+            assertTrue(result.proveResponse().proofJson().contains("\"curve\":\"bls12381\""));
+            assertFalse(result.proveResponse().proofJson().contains("\"proof\""));
 
             System.out.println("Groth16 full prove SUCCESS (3 * 11 = 33)");
             System.out.println("  Public signals: " + result.proveResponse().publicSignals());
@@ -97,6 +99,10 @@ class GnarkFullProveTest {
             assertNotNull(result.vkJson());
             assertEquals("plonk", result.proveResponse().protocol());
             assertEquals("bls12381", result.proveResponse().curve());
+            assertEquals(List.of(BigInteger.valueOf(33)), result.proveResponse().publicSignals());
+            assertTrue(result.proveResponse().proofJson().contains("\"binary\""));
+            assertTrue(result.proveResponse().proofJson().contains("\"curve\":\"bls12381\""));
+            assertFalse(result.proveResponse().proofJson().contains("\"proof\""));
 
             System.out.println("PlonK full prove SUCCESS (3 * 11 = 33)");
             System.out.println("  Public signals: " + result.proveResponse().publicSignals());

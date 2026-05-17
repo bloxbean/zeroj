@@ -5,7 +5,7 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
-import com.bloxbean.cardano.zeroj.verifier.plonk.FiatShamirTranscript;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
@@ -99,7 +99,7 @@ public final class PlonKProverBLS381 {
         var commitC = KZGCommitmentBLS381.commit(srs, cBlind).toAffine();
 
         // Fiat-Shamir: derive beta, gamma
-        var transcript = new FiatShamirTranscript(FR);
+        var transcript = new FiatShamirTranscript(FR, 32, 48);
         addG1(transcript, pk.qmCommit()); addG1(transcript, pk.qlCommit());
         addG1(transcript, pk.qrCommit()); addG1(transcript, pk.qoCommit());
         addG1(transcript, pk.qcCommit());

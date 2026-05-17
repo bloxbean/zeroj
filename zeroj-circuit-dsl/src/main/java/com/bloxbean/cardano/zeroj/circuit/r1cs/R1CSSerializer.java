@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * Serializes an {@link R1CSConstraintSystem} to the iden3 {@code .r1cs} binary format.
  *
- * <p>This is the standard format consumed by snarkjs and rapidsnark. The format is
+ * <p>This is the standard format consumed by snarkjs-compatible tooling. The format is
  * specified at <a href="https://github.com/iden3/r1csfile/blob/master/doc/r1cs_bin_format.md">iden3/r1csfile</a>.</p>
  */
 public final class R1CSSerializer {

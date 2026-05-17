@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 and PlonK BLS12-381 Plutus V3 validators'
+description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 prototype'
 
 ext {
     julcVersion = '0.1.0-pre10'

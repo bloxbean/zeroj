@@ -5,7 +5,7 @@ import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
 import com.bloxbean.cardano.zeroj.crypto.kzg.KZGCommitment;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFT;
-import com.bloxbean.cardano.zeroj.verifier.plonk.FiatShamirTranscript;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;

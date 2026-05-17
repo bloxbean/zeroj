@@ -8,6 +8,7 @@ import "C"
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -59,6 +60,17 @@ func parseCurve(curveName string) (ecc.ID, error) {
 		return ecc.BN254, nil
 	default:
 		return 0, fmt.Errorf("unsupported curve: %s", curveName)
+	}
+}
+
+func curveWireName(curve ecc.ID) string {
+	switch curve {
+	case ecc.BLS12_381:
+		return "bls12381"
+	case ecc.BN254:
+		return "bn128"
+	default:
+		return curve.String()
 	}
 }
 
@@ -128,7 +140,7 @@ func zeroj_groth16_setup(
 		return PROVER_ERROR
 	}
 
-	return writeSetupResult(pk, vk, "groth16", "zeroj-groth16-pk-*.bin", pkPathOut, vkOut, errorOut)
+	return writeSetupResult(pk, vk, curve, "groth16", "zeroj-groth16-pk-*.bin", pkPathOut, vkOut, errorOut)
 }
 
 // ============================================================
@@ -165,7 +177,7 @@ func zeroj_plonk_setup(
 		return PROVER_ERROR
 	}
 
-	return writeSetupResult(pk, vk, "plonk", "zeroj-plonk-pk-*.bin", pkPathOut, vkOut, errorOut)
+	return writeSetupResult(pk, vk, curve, "plonk", "zeroj-plonk-pk-*.bin", pkPathOut, vkOut, errorOut)
 }
 
 //export zeroj_plonk_prove
@@ -312,7 +324,7 @@ func readWitness(path string, curve ecc.ID) (witness.Witness, error) {
 	return wit, nil
 }
 
-func serializeTo(obj writerTo, protocol string) (string, error) {
+func serializeTo(obj writerTo, protocol string, curve ecc.ID) (string, error) {
 	var buf bytes.Buffer
 	if _, err := obj.WriteTo(&buf); err != nil {
 		return "", fmt.Errorf("failed to serialize: %v", err)
@@ -320,6 +332,7 @@ func serializeTo(obj writerTo, protocol string) (string, error) {
 	result := map[string]interface{}{
 		"binary":   base64.StdEncoding.EncodeToString(buf.Bytes()),
 		"protocol": protocol,
+		"curve":    curveWireName(curve),
 	}
 	jsonBytes, err := json.Marshal(result)
 	if err != nil {
@@ -331,7 +344,7 @@ func serializeTo(obj writerTo, protocol string) (string, error) {
 func writeProveResult(proof writerTo, wit witness.Witness, curve ecc.ID, provingMs int64, protocol string,
 	proofOut **C.char, publicOut **C.char, errorOut **C.char) C.int {
 
-	proofJSON, err := serializeTo(proof, protocol)
+	proofJSON, err := serializeTo(proof, protocol, curve)
 	if err != nil {
 		*errorOut = C.CString(fmt.Sprintf("failed to serialize proof: %v", err))
 		return PROVER_ERROR
@@ -350,7 +363,7 @@ func writeProveResult(proof writerTo, wit witness.Witness, curve ecc.ID, proving
 	return PROVER_OK
 }
 
-func writeSetupResult(pk writerTo, vk writerTo, protocol string, pkPattern string,
+func writeSetupResult(pk writerTo, vk writerTo, curve ecc.ID, protocol string, pkPattern string,
 	pkPathOut **C.char, vkOut **C.char, errorOut **C.char) C.int {
 
 	tmpFile, err := os.CreateTemp("", pkPattern)
@@ -365,7 +378,7 @@ func writeSetupResult(pk writerTo, vk writerTo, protocol string, pkPattern strin
 	}
 	tmpFile.Close()
 
-	vkJSON, err := serializeTo(vk, protocol)
+	vkJSON, err := serializeTo(vk, protocol, curve)
 	if err != nil {
 		*errorOut = C.CString(fmt.Sprintf("failed to serialize vk: %v", err))
 		return PROVER_ERROR
@@ -386,13 +399,15 @@ func serializePublicWitness(wit witness.Witness, curve ecc.ID) (string, error) {
 		return "", fmt.Errorf("failed to marshal public witness: %v", err)
 	}
 	fieldSize := getFieldSize(curve)
-	if len(data) < 8 {
+	if len(data) < 12 {
 		return "[]", nil
 	}
-	elemData := data[8:]
+	nbPublic := int(binary.BigEndian.Uint32(data[8:12]))
+	elemData := data[12:]
 	var values []string
-	for i := 0; i+fieldSize <= len(elemData); i += fieldSize {
-		val := new(big.Int).SetBytes(elemData[i : i+fieldSize])
+	for i := 0; i < nbPublic && (i+1)*fieldSize <= len(elemData); i++ {
+		offset := i * fieldSize
+		val := new(big.Int).SetBytes(elemData[offset : offset+fieldSize])
 		values = append(values, val.String())
 	}
 	jsonBytes, err := json.Marshal(values)
@@ -691,7 +706,7 @@ func writeFullProveResult(proof writerTo, vk writerTo, wit witness.Witness, curv
 	provingMs int64, protocol string,
 	proofOut **C.char, publicOut **C.char, vkOut **C.char, errorOut **C.char) C.int {
 
-	proofJSON, err := serializeTo(proof, protocol)
+	proofJSON, err := serializeTo(proof, protocol, curve)
 	if err != nil {
 		*errorOut = C.CString(fmt.Sprintf("failed to serialize proof: %v", err))
 		return PROVER_ERROR
@@ -703,7 +718,7 @@ func writeFullProveResult(proof writerTo, vk writerTo, wit witness.Witness, curv
 		return PROVER_ERROR
 	}
 
-	vkJSON, err := serializeTo(vk, protocol)
+	vkJSON, err := serializeTo(vk, protocol, curve)
 	if err != nil {
 		*errorOut = C.CString(fmt.Sprintf("failed to serialize vk: %v", err))
 		return PROVER_ERROR

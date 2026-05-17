@@ -210,7 +210,7 @@ class StdlibUsageExamplesTest {
                     api.assertEqual(api.mul(api.var("x"), api.var("y")), api.var("z"));
                 });
 
-        // Same circuit → R1CS (for Groth16 via rapidsnark or gnark)
+        // Same circuit → R1CS (for Groth16 via gnark or the Java prover)
         var r1cs = circuit.compileR1CS(CurveId.BN254);
         assertNotNull(r1cs);
 

@@ -1,0 +1,70 @@
+plugins {
+    id 'java-platform'
+    id 'maven-publish'
+    id 'signing'
+}
+
+description = 'ZeroJ Core Bill of Materials — stable v3 privacy and Cardano verification path'
+
+javaPlatform {
+    allowDependencies()
+}
+
+dependencies {
+    constraints {
+        api project(':zeroj-api')
+        api project(':zeroj-codec')
+        api project(':zeroj-backend-spi')
+        api project(':zeroj-verifier-core')
+        api project(':zeroj-verifier-groth16')
+        api project(':zeroj-verifier-plonk')
+        api project(':zeroj-bls12381')
+        api project(':zeroj-blst')
+        api project(':zeroj-crypto')
+        api project(':zeroj-circuit-dsl')
+        api project(':zeroj-circuit-lib')
+        api project(':zeroj-prover-spi')
+        api project(':zeroj-prover-gnark')
+        api project(':zeroj-onchain-julc')
+        api project(':zeroj-cardano')
+        api project(':zeroj-ccl')
+        api project(':zeroj-patterns')
+    }
+}
+
+publishing {
+    publications {
+        bom(MavenPublication) {
+            from components.javaPlatform
+            pom {
+                name = 'ZeroJ Core BOM'
+                description = 'Core Bill of Materials for ZeroJ v3 privacy and Cardano verification modules'
+                url = 'https://github.com/bloxbean/zeroj'
+                licenses {
+                    license {
+                        name = 'The MIT License'
+                        url = 'https://opensource.org/licenses/mit-license.php'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'satran004'
+                        name = 'Satya'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/bloxbean/zeroj.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/bloxbean/zeroj.git'
+                    url = 'https://github.com/bloxbean/zeroj'
+                }
+            }
+        }
+    }
+}
+
+ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
+if (isReleaseVersion && !project.hasProperty("skipSigning")) {
+    signing {
+        sign publishing.publications
+    }
+}

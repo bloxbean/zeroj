@@ -2,13 +2,9 @@ package com.bloxbean.cardano.zeroj.prover.gnark;
 
 import com.bloxbean.cardano.zeroj.api.CircuitId;
 import com.bloxbean.cardano.zeroj.api.CurveId;
-import com.bloxbean.cardano.zeroj.api.ZkProofEnvelope;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem;
-import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
-import com.bloxbean.cardano.zeroj.prover.sidecar.ProveRequest;
-import com.bloxbean.cardano.zeroj.prover.sidecar.ProveResponse;
-import com.bloxbean.cardano.zeroj.prover.sidecar.ProverException;
-import com.bloxbean.cardano.zeroj.prover.sidecar.ProverService;
+import com.bloxbean.cardano.zeroj.prover.spi.ProveResponse;
+import com.bloxbean.cardano.zeroj.prover.spi.ProverException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,7 +19,7 @@ import java.util.Map;
  * Native in-process Groth16 prover using gnark via FFM.
  *
  * <p>Supports both BLS12-381 (Cardano-native) and BN254 curves.
- * Unlike rapidsnark, gnark requires Go compilation before use.
+ * gnark requires Go compilation before use.
  * Build the native library with:</p>
  * <pre>{@code
  * make -C zeroj-prover-gnark/gnark-wrapper build
@@ -44,7 +40,7 @@ import java.util.Map;
  * <p><b>Note:</b> The gnark shared library includes the Go runtime (~30-50MB).
  * It is shipped as a separate Maven artifact, not bundled in the main JAR.</p>
  */
-public class GnarkProver implements ProverService, AutoCloseable {
+public class GnarkProver implements AutoCloseable {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -242,41 +238,6 @@ public class GnarkProver implements ProverService, AutoCloseable {
             String vkJson
     ) {}
 
-    // --- ProverService interface ---
-
-    /**
-     * Not supported — use {@link #proveRaw(String, Path, Path, String)} instead.
-     *
-     * @throws UnsupportedOperationException always
-     */
-    @Override
-    public ProveResponse prove(ProveRequest request) {
-        throw new UnsupportedOperationException(
-                "Native gnark prover requires R1CS + proving key + witness. "
-                        + "Use proveRaw(curve, r1csPath, pkPath, witnessJson) instead.");
-    }
-
-    /**
-     * Not supported — see {@link #prove(ProveRequest)}.
-     *
-     * @throws UnsupportedOperationException always
-     */
-    @Override
-    public ZkProofEnvelope proveAndWrap(ProveRequest request, String circuitId) {
-        throw new UnsupportedOperationException(
-                "Native gnark prover requires R1CS + proving key + witness.");
-    }
-
-    @Override
-    public boolean isHealthy() {
-        return true;
-    }
-
-    @Override
-    public List<String> listCircuits() {
-        return List.of();
-    }
-
     @Override
     public void close() {
         library.close();
@@ -357,7 +318,7 @@ public class GnarkProver implements ProverService, AutoCloseable {
                 default -> curve;
             };
 
-            var proveResponse = new ProveResponse(result.resultJson(), publicSignals,
+            var proveResponse = new ProveResponse(extractProofJson(result.resultJson(), normalizedCurve, protocol), publicSignals,
                     protocol, normalizedCurve, provingTimeMs);
             return new FullProveResponse(proveResponse, result.vkJson());
         } catch (Exception e) {
@@ -384,10 +345,37 @@ public class GnarkProver implements ProverService, AutoCloseable {
                 default -> curve;
             };
 
-            return new ProveResponse(result.resultJson(), publicSignals, protocol, normalizedCurve, provingTimeMs);
+            return new ProveResponse(extractProofJson(result.resultJson(), normalizedCurve, protocol), publicSignals,
+                    protocol, normalizedCurve, provingTimeMs);
         } catch (Exception e) {
             throw new ProverException(ProverException.ErrorCode.INVALID_RESPONSE,
                     "Failed to parse gnark output: " + e.getMessage(), e);
         }
+    }
+
+    private static String extractProofJson(String resultJson, String curve, String protocol) throws Exception {
+        JsonNode root = MAPPER.readTree(resultJson);
+        String proofJson;
+        if (root.has("proof")) {
+            JsonNode proof = root.get("proof");
+            proofJson = proof.isTextual() ? proof.asText() : proof.toString();
+        } else if (root.has("binary")) {
+            proofJson = resultJson;
+        } else {
+            throw new IllegalArgumentException("gnark result JSON missing proof field");
+        }
+
+        JsonNode proofRoot = MAPPER.readTree(proofJson);
+        if (proofRoot.isObject()) {
+            var proofObject = (com.fasterxml.jackson.databind.node.ObjectNode) proofRoot;
+            if (!proofObject.has("curve")) {
+                proofObject.put("curve", curve);
+            }
+            if (!proofObject.has("protocol")) {
+                proofObject.put("protocol", protocol);
+            }
+            return MAPPER.writeValueAsString(proofObject);
+        }
+        return proofJson;
     }
 }

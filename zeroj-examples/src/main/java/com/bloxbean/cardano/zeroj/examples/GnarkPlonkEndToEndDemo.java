@@ -1,38 +1,27 @@
 package com.bloxbean.cardano.zeroj.examples;
 
+import com.bloxbean.cardano.client.metadata.Metadata;
 import com.bloxbean.cardano.zeroj.api.*;
-import com.bloxbean.cardano.zeroj.backend.spi.InMemoryVerificationKeyRegistry;
+import com.bloxbean.cardano.zeroj.cardano.AnchorMetadataEncoder;
+import com.bloxbean.cardano.zeroj.ccl.ZkTransactionHelper;
 import com.bloxbean.cardano.zeroj.codec.GnarkPlonkCodec;
-import com.bloxbean.cardano.zeroj.ingestion.*;
 import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
-import com.bloxbean.cardano.zeroj.submission.AppProofSubmission;
-import com.bloxbean.cardano.zeroj.submission.Ed25519Signer;
-import com.bloxbean.cardano.zeroj.submission.SubmissionHash;
-import com.bloxbean.cardano.zeroj.submission.SubmissionResult;
-import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
-import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
-import com.bloxbean.cardano.zeroj.verifier.plonk.PlonkBN254Verifier;
-import com.bloxbean.cardano.zeroj.verifier.plonk.PlonkBLS12381Verifier;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyPair;
 import java.security.MessageDigest;
-import java.util.Base64;
-import java.util.List;
 
 /**
  * ZeroJ Gnark PlonK End-to-End Demo
  * ===================================
  *
- * This demo shows the complete ZK flow using ONLY Java (no Node.js, no CLI tools):
+ * This demo shows the complete gnark PlonK artifact flow using Java (no Node.js,
+ * no CLI tools):
  *
- *   1. gnark FFM: setup + prove (in-process, via Go native library)
- *   2. Pure Java: verify (no native deps for verification)
- *   3. Pipeline: 6-stage validation with governance
- *   4. Cardano: anchor on L1
+ *   1. gnark FFM: setup + prove + verify (in-process, via Go native library)
+ *   2. ZeroJ: normalize the proof artifact and hash it
+ *   3. Cardano: anchor the verified result on L1
  *
  * Circuit: Multiplier (X * Y = Z) on BLS12-381
  * Witness: X=3, Y=11, Z=33 (public: Z=33)
@@ -41,15 +30,16 @@ import java.util.List;
  *   - gnark native library built: cd zeroj-prover-gnark/gnark-wrapper && make build
  *   - Test vectors generated: the pre-generated vectors in zeroj-test-vectors are used
  *
- * This demonstrates: gnark proves → pure Java verifies → Cardano anchors.
- * All in one JVM process.
+ * Pure Java PlonK verification currently consumes structured snarkjs/ZeroJ proof
+ * JSON, not gnark's opaque binary PlonK proof JSON. Gnark binary proofs should be
+ * verified with gnark until a dedicated adapter is added.
  */
 public class GnarkPlonkEndToEndDemo {
 
     public static void main(String[] args) throws Exception {
         System.out.println("=".repeat(70));
         System.out.println("  ZeroJ Gnark PlonK End-to-End Demo");
-        System.out.println("  gnark proves → pure Java verifies → Cardano anchors");
+        System.out.println("  gnark proves/verifies → ZeroJ anchors");
         System.out.println("=".repeat(70));
         System.out.println();
 
@@ -71,7 +61,7 @@ public class GnarkPlonkEndToEndDemo {
         String proofBase64;
         String proofJson;
         String vkJson;
-        String publicJson;
+        boolean gnarkVerified;
 
         try (var prover = new GnarkProver()) {
             System.out.println("  gnark version: " + prover.gnarkVersion());
@@ -88,21 +78,14 @@ public class GnarkPlonkEndToEndDemo {
             proofJson = proveResult.proofJson();
             proofBase64 = GnarkPlonkCodec.extractProofBase64(proofJson);
 
-            // Build public.json from the public signals
             var pubSignals = proveResult.publicSignals();
-            var pubJsonBuilder = new StringBuilder("[");
-            for (int i = 0; i < pubSignals.size(); i++) {
-                if (i > 0) pubJsonBuilder.append(",");
-                pubJsonBuilder.append("\"").append(pubSignals.get(i)).append("\"");
-            }
-            publicJson = pubJsonBuilder.append("]").toString();
 
             System.out.println("  Proof generated: " + proofBase64.length() + " chars (base64)");
             System.out.println("  Protocol: " + proveResult.protocol());
             System.out.println("  Public inputs: " + pubSignals);
 
             // Verify with gnark native (sanity check)
-            boolean gnarkVerified = prover.plonkVerify("bls12381",
+            gnarkVerified = prover.plonkVerify("bls12381",
                     vkBinPath, proofBase64, pubWitnessPath);
             System.out.println("  gnark native verify: " + (gnarkVerified ? "PASS" : "FAIL"));
             assert gnarkVerified : "gnark native verification failed!";
@@ -110,92 +93,40 @@ public class GnarkPlonkEndToEndDemo {
         System.out.println();
 
         // ============================================================
-        // STEP 2: Verify with Pure Java (no native library needed)
+        // STEP 2: Normalize the gnark artifact for anchoring
         // ============================================================
-        // The proof was generated by gnark, but we verify it with pure Java.
-        // This demonstrates that the verification side has ZERO native dependencies.
+        // The proof was generated and verified by gnark. ZeroJ keeps the proof
+        // as a typed artifact for hashing and anchoring. Do not route gnark's
+        // opaque binary PlonK JSON into the snarkjs-style pure Java verifier.
 
-        System.out.println("[Step 2] Pure Java verification (zero native deps)...");
-
-        // Register pure Java PlonK verifiers
-        var verifierRegistry = VerifierRegistry.empty();
-        verifierRegistry.register(new PlonkBLS12381Verifier()); // Pure Java
-        verifierRegistry.register(new PlonkBN254Verifier());     // Pure Java
-
-        // Build envelope from gnark proof with witness in metadata
-        byte[] pubWitnessBytes = Files.readAllBytes(pubWitnessPath);
-        var envelope = GnarkPlonkCodec.toEnvelopeWithWitness(
-                proofJson, vkJson, publicJson,
-                new CircuitId("multiplier-bls"), pubWitnessBytes);
-
-        // Register VK
+        System.out.println("[Step 2] ZeroJ proof artifact metadata...");
         byte[] vkBytes = vkJson.getBytes(StandardCharsets.UTF_8);
         byte[] vkHash = sha256(vkBytes);
-        var vkRegistry = new InMemoryVerificationKeyRegistry();
-        var material = VerificationMaterial.of(vkBytes, ProofSystemId.PLONK, CurveId.BLS12_381,
-                new CircuitId("multiplier-bls"), vkHash);
-        vkRegistry.register(material);
-
-        var orchestrator = new VerifierOrchestrator(verifierRegistry, vkRegistry);
-        var result = orchestrator.verify(envelope, material);
 
         System.out.println("  Proof system: PlonK / BLS12-381");
-        System.out.println("  Verifier: pure Java (no gnark, no blst)");
-        System.out.println("  Proof valid: " + result.proofValid());
+        System.out.println("  Proof format: gnark-plonk-json");
+        System.out.println("  Verification: gnark native " + (gnarkVerified ? "PASS" : "FAIL"));
+        System.out.println("  Pure Java verifier: use structured snarkjs/ZeroJ PlonK proof JSON");
         System.out.println("  VK hash: " + hex(vkHash).substring(0, 16) + "...");
         System.out.println();
 
         // ============================================================
-        // STEP 3: Submit through 6-stage governance pipeline
+        // STEP 3: Anchor on Cardano L1
         // ============================================================
-        System.out.println("[Step 3] Submitting through governance pipeline...");
-
-        KeyPair submitterKeys = Ed25519Signer.generateKeyPair();
-        String submitterId = "gnark-prover-node";
-
-        var submitterReg = new InMemorySubmitterRegistry();
-        submitterReg.register(submitterId, submitterKeys.getPublic(), "zk-app");
-
-        var circuitRegistry = new InMemoryCircuitRegistry();
-        circuitRegistry.register(CircuitRegistry.CircuitVersionInfo.active("multiplier-bls", "v1"));
-
-        var stateRootStore = new InMemoryStateRootStore();
-        byte[] genesisRoot = sha256("genesis".getBytes());
-        stateRootStore.initialize("zk-app", genesisRoot);
-
-        var auditLog = new InMemoryAuditLog();
-        var pipeline = new SubmissionIngestionPipeline(
-                orchestrator, vkRegistry, submitterReg, circuitRegistry,
-                stateRootStore, new InMemorySequenceTracker(), new InMemoryNullifierStore(),
-                auditLog);
-
-        // Build submission
-        var publicInputs = GnarkPlonkCodec.parsePublicInputs(publicJson);
         byte[] newStateRoot = sha256("state-after-proof".getBytes());
-        var unsigned = AppProofSubmission.builder()
-                .appId("zk-app").proofSystem(ProofSystemId.PLONK).curve(CurveId.BLS12_381)
-                .circuitId("multiplier-bls").circuitVersion("v1")
-                .prevStateRoot(genesisRoot).newStateRoot(newStateRoot)
-                .publicInputs(publicInputs.values())
-                .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
-                .vkHash(vkHash).submitterId(submitterId)
-                .submitterSignature(new byte[64]).sequence(1).build();
+        byte[] proofHash = sha256(proofJson.getBytes(StandardCharsets.UTF_8));
+        Metadata metadata = ZkTransactionHelper.anchorFullRef(
+                        newStateRoot, proofHash, "multiplier-bls/v1", vkHash)
+                .buildMetadata();
+        byte[] metadataCbor = metadata.serialize();
 
-        byte[] sig = Ed25519Signer.sign(SubmissionHash.compute(unsigned), submitterKeys.getPrivate());
-        var submission = AppProofSubmission.builder()
-                .appId(unsigned.appId()).proofSystem(unsigned.proofSystem())
-                .curve(unsigned.curve()).circuitId(unsigned.circuitId())
-                .circuitVersion(unsigned.circuitVersion())
-                .prevStateRoot(unsigned.prevStateRoot()).newStateRoot(unsigned.newStateRoot())
-                .publicInputs(unsigned.publicInputs())
-                .proofBytes(unsigned.proofBytes()).vkHash(unsigned.vkHash())
-                .submitterId(unsigned.submitterId()).submitterSignature(sig)
-                .sequence(unsigned.sequence()).build();
-
-        SubmissionResult subResult = pipeline.process(submission);
-        System.out.println("  Pipeline: syntactic → signature → circuit → crypto → policy → accept");
-        System.out.println("  Result: " + (subResult.accepted() ? "ACCEPTED" : "REJECTED: " + subResult.reason().orElse(null)));
-        System.out.println("  Audit entries: " + auditLog.count());
+        System.out.println("[Step 3] Anchoring gnark-verified result on Cardano L1...");
+        System.out.println("  Anchor pattern: FULL_VERIFICATION_REF");
+        System.out.println("  State root: " + hex(newStateRoot).substring(0, 16) + "...");
+        System.out.println("  Proof hash: " + hex(proofHash).substring(0, 16) + "...");
+        System.out.println("  VK hash:    " + hex(vkHash).substring(0, 16) + "...");
+        System.out.println("  Metadata CBOR: " + metadataCbor.length + " bytes");
+        System.out.println("  CIP-10 label: " + AnchorMetadataEncoder.DEFAULT_LABEL);
         System.out.println();
 
         // ============================================================
@@ -205,14 +136,13 @@ public class GnarkPlonkEndToEndDemo {
         System.out.println("  Demo complete!");
         System.out.println();
         System.out.println("  What happened (all in one JVM process):");
-        System.out.println("  1. gnark FFM: PlonK setup + prove (Go native, in-process)");
-        System.out.println("  2. Pure Java: PlonK verify (zero native deps)");
-        System.out.println("  3. Pipeline:  6-stage governance validation");
-        System.out.println("  4. Ready:     for Cardano L1 anchoring");
+        System.out.println("  1. gnark FFM: PlonK setup + prove + verify (Go native, in-process)");
+        System.out.println("  2. ZeroJ: typed proof artifact hashed for anchoring");
+        System.out.println("  3. Cardano:   anchor metadata built for L1 settlement");
         System.out.println();
         System.out.println("  External tools needed: NONE at runtime");
-        System.out.println("  Native libs: gnark .dylib/.so (proving only)");
-        System.out.println("  Verification: 100% pure Java");
+        System.out.println("  Native libs: gnark .dylib/.so (proving + gnark binary verification)");
+        System.out.println("  Verification: pure Java path is available for structured PlonK proof JSON");
         System.out.println("=".repeat(70));
     }
 

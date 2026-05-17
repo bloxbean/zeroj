@@ -52,9 +52,11 @@ Used in: `SealedBidE2ETest`, `AnonymousVotingE2ETest`, `BalanceThresholdE2ETest`
 
 ### Path 2: gnark FFM (in-process, no external tools)
 ```
-Java DSL → R1CS (pure Java) → gnark FFM (in-JVM) → Java verify (pure Java)
+Java DSL → R1CS (pure Java) → gnark FFM (in-JVM) → verify
 ```
-Used in: `SealedBidGnarkE2ETest`
+Used in: `SealedBidGnarkE2ETest`. Groth16 artifacts use the pure Java verifier;
+gnark binary PlonK artifacts use gnark native verification until a structured
+proof adapter is added.
 
 ### Path 3: On-chain (Julc / Plutus V3)
 ```
@@ -82,7 +84,7 @@ The on-chain Plutus V3 validators live in [`zeroj-onchain-julc`](../zeroj-onchai
 | Validator | Proof System | Source |
 |-----------|-------------|--------|
 | `Groth16BLS12381Verifier` | Groth16 BLS12-381 | `zeroj-onchain-julc` |
-| `PlonkBLS12381FullVerifier` | PlonK BLS12-381 | `zeroj-onchain-julc` |
+| `PlonkBLS12381FullVerifier` | PlonK BLS12-381 prototype | `zeroj-onchain-julc` |
 
 The example-specific `ZkAuctionVerifier` in this module extends the pattern with auction-specific logic (reserve price check).
 
@@ -90,9 +92,8 @@ The example-specific `ZkAuctionVerifier` in this module extends the pattern with
 
 | Toolchain | Circuit Language | Prove | Verify | External Deps |
 |-----------|-----------------|-------|--------|---------------|
-| **gnark FFM** | Java DSL | In-process FFM | Pure Java | gnark native lib |
+| **gnark FFM** | Java DSL | In-process FFM | Groth16: pure Java; PlonK binary: gnark native | gnark native lib |
 | **snarkjs** | Java DSL / circom | Node.js CLI | Pure Java | circom + Node.js |
-| **rapidsnark FFM** | Java DSL / circom | In-process FFM | Pure Java | rapidsnark native lib |
 
 ## Verification Options (all pure Java, zero native deps)
 
@@ -107,14 +108,14 @@ The example-specific `ZkAuctionVerifier` in this module extends the pattern with
 ## Legacy Demos
 
 ### EndToEndDemo (snarkjs Groth16/BN254)
-Pre-generated snarkjs proof flow: load → verify → submit → anchor → replay attack demo.
+Pre-generated snarkjs proof flow: load -> verify -> anchor.
 
 ```bash
 ./gradlew :zeroj-examples:run
 ```
 
 ### GnarkPlonkEndToEndDemo (gnark PlonK/BLS12-381)
-In-process gnark proving + pure Java verification + ingestion pipeline.
+In-process gnark proving and native verification + Cardano anchor metadata.
 
 ```bash
 cd zeroj-prover-gnark/gnark-wrapper && make build  # one-time

@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 /**
- * Unit test: validates the full PlonK verifier in the Julc VM with gnark test vectors.
+ * Unit test: validates the PlonK Julc prototype with gnark test vectors.
  * Verifies Fiat-Shamir challenge re-derivation matches gnark's exported values.
  */
 class PlonkBLS12381FullVerifierTest extends ContractTest {
@@ -146,7 +146,7 @@ class PlonkBLS12381FullVerifierTest extends ContractTest {
         System.out.println("[test] Budget: " + result.budgetConsumed());
 
         assertSuccess(result);
-        System.out.println("[test] PlonK proof verified ON-CHAIN with trustless Fiat-Shamir!");
+        System.out.println("[test] PlonK Julc prototype accepted transcript and inverse checks.");
     }
 
     private static byte[] hex(String h) {

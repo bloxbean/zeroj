@@ -18,7 +18,7 @@ var inputs = Map.of(
 BigInteger[] witness = calculator.calculateWitness(inputs);
 // witness = [1, 33, 3, 11]  (constant, output, public input, private input)
 
-// Export as .wtns for rapidsnark/snarkjs
+// Export as standard .wtns for downstream provers
 byte[] wtnsBytes = calculator.calculateWtns(inputs);
 ```
 
@@ -33,7 +33,7 @@ circom CLI (build-time only)
     ├── WasmWitnessCalculator (GraalVM, in-process)
     │         │
     │         ▼ witness
-    │    rapidsnark FFM (in-process) → proof
+    │    gnark FFM or Java prover → proof
     │
     └── Pure Java verifier → verified ✓
 

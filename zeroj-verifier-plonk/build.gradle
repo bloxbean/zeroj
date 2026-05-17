@@ -8,8 +8,10 @@ dependencies {
     api project(':zeroj-backend-spi')
     implementation project(':zeroj-codec')
     implementation project(':zeroj-bls12381')
+    implementation project(':zeroj-crypto')
     implementation project(':zeroj-verifier-groth16') // BN254 field arithmetic reuse
 
+    testImplementation project(':zeroj-circuit-dsl')
     testImplementation project(':zeroj-test-vectors')
 }
 
