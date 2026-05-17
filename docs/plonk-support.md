@@ -13,23 +13,29 @@
 
 ---
 
-## Status: Production (Off-Chain Pure Java, On-Chain via Julc)
+## Status: Production Off-Chain, Experimental On-Chain
 
-ZeroJ supports PlonK proof generation via gnark FFM and **pure Java verification** on BLS12-381 and BN254 curves. On-chain PlonK verification is available via a Julc-compiled Plutus V3 validator.
+ZeroJ supports PlonK proof generation via gnark FFM and **pure Java verification**
+for structured snarkjs/ZeroJ PlonK proof JSON on BLS12-381 and BN254 curves.
+gnark's opaque binary PlonK proof JSON should be verified with gnark native
+verification until a dedicated adapter is added. The Julc on-chain PlonK path is
+an experimental prototype today: transcript and inverse checks are implemented,
+but the KZG batch opening pairing check is still deferred.
 
 ## What Works Today
 
 ### Off-Chain PlonK (Production-Ready)
 - **Setup**: Universal SRS generation (one setup works for any circuit up to the SRS size)
-- **Prove**: Generate PlonK proofs from gnark circuits via FFM
-- **Verify**: **Pure Java verification** -- zero native dependencies, byte-for-byte verified against gnark
+- **Prove**: Generate PlonK proofs with the pure Java prover or with gnark FFM
+- **Verify**: **Pure Java verification** for structured snarkjs/ZeroJ proof JSON; gnark binary PlonK proof JSON uses gnark native verification until an adapter lands
 - **Both BN254 and BLS12-381 curves supported**
 
-### On-Chain PlonK (Working)
-- **Full on-chain PlonK verifier** via `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc`
+### On-Chain PlonK (Experimental)
+- Prototype verifier via `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc`
 - Fiat-Shamir challenge re-derivation matching gnark's exact transcript format
+- KZG batch opening pairing check still deferred
 - BLS12-381 only (Plutus V3 builtins)
-- Tested end-to-end on Yaci DevKit
+- Useful for budget and data-shape work, not yet a full trustless on-chain verifier
 
 ### Advantage Over Groth16
 | Feature | Groth16 | PlonK |

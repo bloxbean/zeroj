@@ -1,12 +1,18 @@
 # ADR-0007: Multi-Module Structure and Boundaries
 
 ## Status
-Accepted
+Superseded by [ADR-0020](0020-module-cleanup-and-core-restructure.md)
 
 ## Date
 2026-03-25
 
 ## Context
+
+> Historical note: this ADR describes the original broad module structure.
+> ADR-0020 removes `zeroj-submission`, `zeroj-ingestion`,
+> `zeroj-prover-sidecar`, `zeroj-prover-rapidsnark`,
+> `zeroj-onchain-experimental`, and replaces `zeroj-bom` with
+> `zeroj-bom-core` / `zeroj-bom-all`.
 
 ZeroJ serves three distinct audiences:
 1. **Java developers** who want a standalone ZK verification library (no Cardano dependency)

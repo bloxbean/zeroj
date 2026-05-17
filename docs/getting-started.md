@@ -115,11 +115,14 @@ This is all pure Java -- no external tools needed.
 
 ```java
 try (var prover = new GnarkProver()) {
-    var result = prover.groth16FullProve(r1csBytes, wtnsBytes, "bls12381");
+    var result = prover.groth16FullProve(r1cs, witness, CurveId.BLS12_381);
 
     String proofJson  = result.proveResponse().proofJson();
     String vkJson     = result.vkJson();
-    String publicJson = result.proveResponse().publicInputsJson();
+    List<BigInteger> publicSignals = result.proveResponse().publicSignals();
+    String publicJson = publicSignals.stream()
+            .map(v -> "\"" + v + "\"")
+            .collect(java.util.stream.Collectors.joining(",", "[", "]"));
 }
 ```
 
@@ -298,11 +301,10 @@ See the [examples README](../zeroj-examples/README.md) for detailed descriptions
 | **Pure Java** | Groth16 + PlonK | BLS12-381, BN254 | **None** | Seconds |
 | **gnark FFM** | Groth16 + PlonK | BLS12-381, BN254 | gnark native lib | ~50-300ms |
 | **snarkjs CLI** | Groth16 + PlonK | BLS12-381, BN254 | Node.js + snarkjs | Minutes |
-| **rapidsnark** | Groth16 | BN254 only | rapidsnark native lib | ~10-50ms |
 
 **Pure Java** is the recommended prover for Cardano -- zero dependencies, GraalVM-compatible, proven end-to-end on-chain. See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.
 
-For maximum speed with large circuits, see [Alternate Prover Backends](alternate-prover-backends.md) (gnark FFM, rapidsnark).
+For maximum speed with large circuits, see [Alternate Prover Backends](alternate-prover-backends.md) (gnark FFM).
 
 ## Curves and On-Chain Feasibility
 

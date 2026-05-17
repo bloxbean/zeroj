@@ -1,10 +1,16 @@
 # ADR-0010: Java DSL for ZK Circuit Definition
 
 ## Status
-Proposed
+Updated by ADR-0020
 
 ## Date
 2026-03-28
+
+## 2026-05-17 Update
+
+ADR-0020 removed the RapidSNARK module from ZeroJ. The Java circuit DSL remains
+part of the core direction, but active proving paths are gnark FFM and pure Java
+proving where implemented.
 
 ## Context
 
@@ -23,7 +29,7 @@ This forces Java developers to learn a different language, switch toolchains, an
 | Define circuit | circom / gnark Go | circom / Go |
 | Compile circuit | circom CLI / go build | Rust / Go |
 | Calculate witness | snarkjs (Node.js) OR GraalWasm | JS / WASM |
-| Prove | gnark FFM / rapidsnark FFM | Go / C++ |
+| Prove | gnark FFM / pure Java where implemented | Go / Java |
 | Verify | **Pure Java** (zeroj-verifier-*) | Java |
 
 ### Prior art
@@ -127,12 +133,12 @@ Compiles the constraint graph to R1CS: `(A · w) × (B · w) = (C · w)`.
 Each multiplication gate becomes one R1CS constraint. Addition gates are free (linear combinations absorbed into A, B, C vectors).
 
 Output formats:
-- **iden3 `.r1cs` binary** — standard format consumed by snarkjs, rapidsnark
+- **iden3 `.r1cs` binary** — standard format consumed by snarkjs-compatible tooling and gnark import flows
 - **In-memory R1CS** — for pure Java Groth16 prover (future)
 
 ```java
 var r1cs = circuit.compileR1CS(CurveId.BN254);
-byte[] r1csBytes = r1cs.toIden3Binary();  // feed to rapidsnark
+byte[] r1csBytes = r1cs.toIden3Binary();  // feed to snarkjs-compatible tooling or gnark import flows
 BigInteger[] witness = r1cs.calculateWitness(inputs);
 byte[] wtnsBytes = WitnessExporter.toWtns(witness, r1cs.prime(), r1cs.n32());
 ```
@@ -220,7 +226,6 @@ The compiled constraint system feeds into existing zeroj provers:
 
 | Backend | Output | Prover | Curve support |
 |---------|--------|--------|---------------|
-| R1CS | iden3 `.r1cs` + `.wtns` | rapidsnark FFM | BN254 |
 | R1CS | iden3 `.r1cs` + `.wtns` | gnark FFM (Groth16) | BN254 + BLS12-381 |
 | R1CS | in-memory | Pure Java prover (future) | BN254 + BLS12-381 |
 | PlonK | gnark SparseR1CS | gnark FFM (PlonK) | BN254 + BLS12-381 |
@@ -285,12 +290,13 @@ A future ADR may address **automatic Julc verifier generation** from circuit def
 - `CircuitBuilder`, `CircuitAPI`, `Variable`, `ConstraintGraph`, `Gate`
 - `R1CSCompiler` + `R1CSSerializer` (iden3 format)
 - `WitnessCalculator`
-- Test: multiplier circuit → R1CS → rapidsnark prove → pure Java verify
+- Test: multiplier circuit → R1CS → gnark or pure Java prove → pure Java verify
 
 ### Phase 2: PlonK backend
 - `PlonKCompiler` (gate table + permutation σ)
 - `PlonKSerializer` (gnark SparseR1CS format)
-- Test: same multiplier circuit → PlonK → gnark prove → pure Java verify
+- Test: same multiplier circuit → PlonK → pure Java prove/verify, or gnark
+  prove with gnark native verification until a structured proof adapter is added
 
 ### Phase 3: Standard library (zeroj-circuit-lib)
 - Poseidon hash (ZK-friendly, low constraint count)
