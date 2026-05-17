@@ -1650,6 +1650,10 @@ Exit criteria:
 - docs explain when to use annotations and when to use `CircuitSpec`
 - docs explain how `@CircuitParam` affects circuit identity and VK lifecycle
 
+Implementation status as of Phase 6: completed in `zeroj-examples` with
+field-style, parameter-style, transfer, hash commitment, and parameterized
+Merkle examples. The user-facing guide is `docs/circuit-annotation-user-guide.md`.
+
 ### Phase 7: Deferred Bits and Bytes
 
 Estimated time: 3 to 5 days.

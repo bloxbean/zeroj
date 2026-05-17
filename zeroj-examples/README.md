@@ -14,6 +14,15 @@ End-to-end demonstrations of ZeroJ capabilities -- from Java DSL circuit definit
 
 ## Example Circuits
 
+### 0. Annotation-Based Circuits
+Write circuits as annotated Java classes and use generated companions for
+`build(...)`, `schema(...)`, and witness input builders.
+- **Examples**: range proof, age verification, private transfer, MiMC
+  commitment, parameterized Merkle membership
+- **Source**: [`examples/annotation`](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation)
+- **Tests**: [`AnnotatedCircuitExamplesTest.java`](src/test/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedCircuitExamplesTest.java)
+- **Guide**: [`docs/circuit-annotation-user-guide.md`](../docs/circuit-annotation-user-guide.md)
+
 ### 1. Sealed-Bid Auction
 Prove your bid exceeds a reserve price without revealing the bid amount.
 - **Private**: bidAmount, salt

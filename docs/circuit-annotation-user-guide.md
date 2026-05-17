@@ -1,0 +1,134 @@
+# Circuit Annotation User Guide
+
+Annotation-based circuits are a Java-first authoring layer over the existing
+`CircuitBuilder`, `CircuitSpec`, and `SignalBuilder` stack. They generate normal
+ZeroJ circuits at compile time.
+
+## Minimal Range Proof
+
+```java
+@ZKCircuit(name = "range-proof")
+public class RangeProof {
+    @Secret @UInt(bits = 16)
+    ZkUInt secret;
+
+    @Public @UInt(bits = 16)
+    ZkUInt lo;
+
+    @Public @UInt(bits = 16)
+    ZkUInt hi;
+
+    @Prove
+    ZkBool inRange() {
+        return secret.gte(lo).and(secret.lte(hi));
+    }
+}
+```
+
+The annotation processor generates `RangeProofCircuit` with:
+
+```java
+var circuit = RangeProofCircuit.build();
+var schema = RangeProofCircuit.schema();
+var inputs = RangeProofCircuit.inputs()
+        .secret(42)
+        .lo(18)
+        .hi(99);
+
+circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254);
+inputs.publicValues();
+```
+
+## Authoring Rules
+
+- Use symbolic types in proof code: `ZkField`, `ZkBool`, `ZkUInt`, and
+  `ZkArray<T>`.
+- Do not return Java `boolean` from `@Prove`; return `ZkBool` or use explicit
+  assertion methods.
+- Use `ZkBool.and(...)`, `or(...)`, `not(...)`, and `select(...)` instead of
+  Java `&&`, `||`, `!`, or `if` over secret values.
+- Use `@UInt(bits = N)` for every `ZkUInt` input. The constructor adds range
+  constraints eagerly.
+- Use `@FixedSize(...)` for every `ZkArray`.
+- Put build-time circuit shape values in constructor parameters annotated with
+  `@CircuitParam`.
+- Keep existing DSL and `Signal*` APIs for low-level or unsupported cases.
+
+## Field Style And Parameter Style
+
+Field style is concise for simple circuits:
+
+```java
+@Secret @UInt(bits = 16) ZkUInt secret;
+
+@Prove
+ZkBool prove() {
+    return secret.gte(lo).and(secret.lte(hi));
+}
+```
+
+Parameter style keeps proof dependencies visible in the method signature:
+
+```java
+@Prove
+ZkBool prove(@Secret @UInt(bits = 8) ZkUInt age,
+             @Public @UInt(bits = 8) ZkUInt threshold) {
+    return age.gte(threshold);
+}
+```
+
+## Parameterized Circuits
+
+Parameterized circuits keep Java's template-like circuit generation:
+
+```java
+@ZKCircuit(name = "merkle", nameTemplate = "merkle-d{depth}-{hashType}")
+public class MerkleMembership {
+    private final ZkMerkle.HashType hashType;
+
+    public MerkleMembership(@CircuitParam("depth") int depth,
+                            @CircuitParam("hashType") ZkMerkle.HashType hashType) {
+        this.hashType = hashType;
+    }
+
+    @Prove
+    ZkBool prove(ZkContext zk,
+                 @Secret ZkField leaf,
+                 @Public ZkField root,
+                 @Secret @FixedSize(param = "depth") ZkArray<ZkField> siblings,
+                 @Secret @FixedSize(param = "depth") ZkArray<ZkBool> pathBits) {
+        return ZkMerkle.isMember(zk, leaf, root, siblings, pathBits, hashType);
+    }
+}
+```
+
+```java
+var circuit = MerkleMembershipCircuit.build(32, ZkMerkle.HashType.MIMC);
+var inputs = MerkleMembershipCircuit.inputs(32, ZkMerkle.HashType.MIMC);
+```
+
+Changing a circuit parameter changes the generated circuit identity and should
+be treated as a different proving/verifying key lifecycle.
+
+## Testing Pattern
+
+Every annotated circuit should have tests for:
+
+- generated schema ordering
+- valid witness calculation
+- at least one invalid witness
+- public input extraction through `inputs.publicValues()`
+- backend compilation for the curve and proof system you intend to use
+
+The examples in
+`zeroj-examples/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation`
+show this pattern without requiring external prover tooling.
+
+## Current Limits
+
+- Nested `@ZKCircuit` classes are not supported.
+- Private `@Prove` methods are not supported.
+- Static `@Prove` methods must use parameter-style inputs.
+- `@CircuitParam` belongs on constructor parameters, not proof method
+  parameters.
+- `ZkBits` and `ZkBytes` are intentionally deferred.

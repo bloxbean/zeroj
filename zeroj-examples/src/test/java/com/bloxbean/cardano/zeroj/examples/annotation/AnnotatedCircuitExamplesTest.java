@@ -1,0 +1,169 @@
+package com.bloxbean.cardano.zeroj.examples.annotation;
+
+import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
+import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
+import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigInteger;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class AnnotatedCircuitExamplesTest {
+
+    @Test
+    void fieldStyleRangeProofUsesGeneratedInputBuilder() {
+        var circuit = AnnotatedRangeProofCircuit.build();
+        var schema = AnnotatedRangeProofCircuit.schema();
+
+        assertEquals("annotation-range-proof", schema.name());
+        assertEquals(List.of("lo", "hi"), schema.publicInputs().names());
+        assertEquals(List.of("secret"), schema.secretInputs().names());
+
+        var inputs = AnnotatedRangeProofCircuit.inputs()
+                .secret(42)
+                .lo(18)
+                .hi(99);
+
+        assertEquals(List.of(BigInteger.valueOf(18), BigInteger.valueOf(99)), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+
+        var invalid = AnnotatedRangeProofCircuit.inputs()
+                .secret(7)
+                .lo(18)
+                .hi(99);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(invalid.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void parameterStyleAgeVerificationUsesGeneratedSchema() {
+        var circuit = AnnotatedAgeVerificationCircuit.build();
+        var schema = AnnotatedAgeVerificationCircuit.schema();
+
+        assertEquals(List.of("threshold"), schema.publicInputs().names());
+        assertEquals(List.of("age"), schema.secretInputs().names());
+        assertEquals(8, schema.input("age").bits());
+
+        var inputs = AnnotatedAgeVerificationCircuit.inputs()
+                .age(25)
+                .threshold(18);
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+
+        var underAge = AnnotatedAgeVerificationCircuit.inputs()
+                .age(15)
+                .threshold(18);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(underAge.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void privateTransferChecksConservationAndPublicAmount() {
+        var circuit = AnnotatedPrivateTransferCircuit.build();
+        var inputs = AnnotatedPrivateTransferCircuit.inputs()
+                .balanceBefore(1_000)
+                .transferAmount(125)
+                .publicAmount(125)
+                .balanceAfter(875);
+
+        assertEquals(List.of(BigInteger.valueOf(125), BigInteger.valueOf(875)), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+
+        var wrongPublicAmount = AnnotatedPrivateTransferCircuit.inputs()
+                .balanceBefore(1_000)
+                .transferAmount(125)
+                .publicAmount(124)
+                .balanceAfter(875);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(wrongPublicAmount.toWitnessMap(), CurveId.BN254));
+
+        var underflow = AnnotatedPrivateTransferCircuit.inputs()
+                .balanceBefore(100)
+                .transferAmount(125)
+                .publicAmount(125)
+                .balanceAfter(0);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(underflow.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void hashCommitmentUsesSymbolicGadgetAdapter() {
+        var circuit = AnnotatedHashCommitmentCircuit.build();
+        var value = BigInteger.valueOf(1234);
+        var salt = BigInteger.valueOf(5678);
+        var commitment = MiMCHash.hash(value, salt, FieldConfig.BN254.prime());
+
+        var inputs = AnnotatedHashCommitmentCircuit.inputs()
+                .value(value)
+                .salt(salt)
+                .commitment(commitment);
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+        assertNotNull(circuit.compileR1CS(CurveId.BN254));
+
+        var wrong = AnnotatedHashCommitmentCircuit.inputs()
+                .value(value)
+                .salt(salt)
+                .commitment(BigInteger.ONE);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(wrong.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void parameterizedMerkleMembershipUsesDepthAndHashType() {
+        int depth = 2;
+        var hashType = ZkMerkle.HashType.MIMC;
+        var circuit = AnnotatedMerkleMembershipCircuit.build(depth, hashType);
+        var schema = AnnotatedMerkleMembershipCircuit.schema(depth, hashType);
+
+        assertEquals("annotation-merkle-d2-MIMC", schema.name());
+        assertEquals("2", schema.parameters().get(0).value());
+        assertEquals("MIMC", schema.parameters().get(1).value());
+        assertEquals(List.of("root"), schema.publicInputs().names());
+        assertEquals(List.of("leaf", "sibling_0", "sibling_1", "pathBit_0", "pathBit_1"),
+                schema.secretInputs().names());
+
+        var leaf = BigInteger.valueOf(10);
+        var sibling0 = BigInteger.valueOf(20);
+        var sibling1 = BigInteger.valueOf(30);
+        var pathBit0 = BigInteger.ZERO;
+        var pathBit1 = BigInteger.ONE;
+        var root = merkleRoot(leaf, List.of(sibling0, sibling1), List.of(pathBit0, pathBit1));
+
+        var inputs = AnnotatedMerkleMembershipCircuit.inputs(depth, hashType)
+                .leaf(leaf)
+                .root(root)
+                .siblings(List.of(sibling0, sibling1))
+                .pathBits(List.of(pathBit0, pathBit1));
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+        assertEquals(List.of(root), inputs.publicValues());
+
+        var invalid = AnnotatedMerkleMembershipCircuit.inputs(depth, hashType)
+                .leaf(leaf)
+                .root(BigInteger.ONE)
+                .siblings(List.of(sibling0, sibling1))
+                .pathBits(List.of(pathBit0, pathBit1));
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(invalid.toWitnessMap(), CurveId.BN254));
+    }
+
+    private BigInteger merkleRoot(
+            BigInteger leaf,
+            List<BigInteger> siblings,
+            List<BigInteger> pathBits) {
+        BigInteger current = leaf;
+        for (int i = 0; i < siblings.size(); i++) {
+            BigInteger sibling = siblings.get(i);
+            current = BigInteger.ZERO.equals(pathBits.get(i))
+                    ? MiMCHash.hash(current, sibling, FieldConfig.BN254.prime())
+                    : MiMCHash.hash(sibling, current, FieldConfig.BN254.prime());
+        }
+        return current;
+    }
+}
