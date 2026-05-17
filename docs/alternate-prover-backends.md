@@ -12,17 +12,17 @@
 
 ZeroJ's **recommended** prover is the [pure Java prover](pure-java-prover-guide.md) (`zeroj-crypto`), which requires zero native dependencies. This document covers the **alternate native backends** for cases where you need:
 
-- Maximum proving speed (~10-100x faster for large circuits)
+- Integration with a native proving library
 - Compatibility with existing gnark/snarkjs workflows
-- BN254 curve support (pure Java prover focuses on BLS12-381 for Cardano)
+- External ceremony or proof-generation tooling
 
 ## Backend Comparison
 
-| Backend | Proof Systems | Curves | Speed | Dependencies | Module |
-|---------|-------------|--------|-------|-------------|--------|
-| **Pure Java** | Groth16, PlonK | BN254, BLS12-381 | Baseline | None | `zeroj-crypto` |
-| **gnark FFM** | Groth16, PlonK | BN254, BLS12-381 | ~10-50x faster | Go native lib | `zeroj-prover-gnark` |
-| **snarkjs CLI** | Groth16, PlonK | BN254, BLS12-381 | Slowest | Node.js + snarkjs | (external process) |
+| Backend | Proof Systems | Curves | Dependencies | Module |
+|---------|-------------|--------|--------------|--------|
+| **Pure Java** | Groth16, PlonK | BN254, BLS12-381 | None | `zeroj-crypto` |
+| **gnark FFM** | Groth16, PlonK | BN254, BLS12-381 | Go native lib | `zeroj-prover-gnark` |
+| **snarkjs CLI** | Groth16, PlonK | BN254, BLS12-381 | Node.js + snarkjs | external process |
 
 ## gnark FFM (Foreign Function & Memory)
 
@@ -85,6 +85,7 @@ implemented.
 ### Gradle
 
 ```gradle
+implementation platform('com.bloxbean.cardano:zeroj-bom-all:0.1.0')
 implementation 'com.bloxbean.cardano:zeroj-prover-gnark'
 ```
 
@@ -131,7 +132,7 @@ var proof = Groth16ProverBLS381.prove(zkeyData.provingKey(), witness,
     zkeyData.constraints(), zkeyData.numWires());
 ```
 
-This is the **recommended production pattern**: ceremony via snarkjs, proving via pure Java.
+This is the recommended ceremony/import pattern when evaluating a setup beyond local single-party test keys.
 
 ## circom Integration
 
@@ -166,10 +167,9 @@ var proof = snarkjs.groth16Prove(zkeyPath, wtnsPath, workDir);
 
 | Scenario | Recommended Backend |
 |----------|-------------------|
-| **Cardano on-chain verification** | Pure Java (BLS12-381) |
-| **Development / testing** | Pure Java (zero setup, instant) |
-| **Large circuits (>10K constraints)** | gnark FFM (10-50x faster) |
-| **BN254 proofs (Ethereum)** | gnark FFM |
-| **Existing snarkjs workflow** | snarkjs CLI → import .zkey → pure Java prove |
-| **Mobile / serverless** | Pure Java (no native deps, GraalVM compatible) |
-| **CI/CD pipelines** | Pure Java (no build toolchain needed) |
+| **Cardano on-chain verification** | Pure Java BLS12-381 path |
+| **Development / testing** | Pure Java local setup |
+| **Native proving acceptable** | gnark FFM |
+| **Existing snarkjs workflow** | snarkjs CLI for setup/artifacts, then import `.zkey` |
+| **Mobile / serverless** | Pure Java path |
+| **CI/CD pipelines** | Pure Java path when native build toolchains are undesirable |
