@@ -1,6 +1,9 @@
 package com.bloxbean.cardano.zeroj.circuit.annotation;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.ProofSystemId;
+import com.bloxbean.cardano.zeroj.api.PublicInputs;
+import com.bloxbean.cardano.zeroj.api.VerificationKeyRef;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import org.junit.jupiter.api.Test;
@@ -333,7 +336,42 @@ class ZkSymbolicTypesTest {
 
         assertEquals(List.of(BigInteger.valueOf(10), BigInteger.ZERO, BigInteger.ONE),
                 inputs.publicValues(schema));
+        assertEquals(new PublicInputs(List.of(BigInteger.valueOf(10), BigInteger.ZERO, BigInteger.ONE)),
+                inputs.publicInputs(schema));
         assertEquals(BigInteger.valueOf(30), inputs.toWitnessMap().get("sibling_1").getFirst());
+    }
+
+    @Test
+    void circuitMetadataBuildsEnvelopeMetadataAndBuilder() {
+        var schema = ZkCircuitSchema.of(
+                "metadata-test-d2",
+                List.of(new ZkCircuitSchema.Parameter("depth", "int", "2")),
+                List.of(ZkCircuitSchema.Input.scalar(
+                        "root", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.FIELD, -1)),
+                List.of());
+
+        var metadata = ZkCircuitMetadata.of(schema, 1);
+        assertEquals("metadata-test-d2", metadata.circuitId().value());
+        assertEquals("2", metadata.parameters().get("depth"));
+        assertEquals("metadata-test-d2",
+                metadata.envelopeMetadata().get(ZkCircuitMetadata.CIRCUIT_NAME_KEY));
+        assertEquals("1",
+                metadata.envelopeMetadata().get(ZkCircuitMetadata.CIRCUIT_VERSION_KEY));
+        assertEquals("2",
+                metadata.envelopeMetadata().get(ZkCircuitMetadata.CIRCUIT_PARAM_PREFIX + "depth"));
+
+        var publicInputs = new PublicInputs(List.of(BigInteger.valueOf(99)));
+        var envelope = metadata.proofEnvelopeBuilder(
+                        ProofSystemId.GROTH16,
+                        CurveId.BN254,
+                        new byte[]{1, 2, 3},
+                        publicInputs,
+                        new VerificationKeyRef.ById("vk-metadata-test"))
+                .build();
+
+        assertEquals(metadata.circuitId(), envelope.circuitId());
+        assertEquals(publicInputs, envelope.publicInputs());
+        assertEquals("1", envelope.metadata().get(ZkCircuitMetadata.CIRCUIT_VERSION_KEY));
     }
 
     @Test

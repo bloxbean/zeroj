@@ -1,7 +1,13 @@
 package com.bloxbean.cardano.zeroj.circuit.annotation.processor;
 
+import com.bloxbean.cardano.zeroj.api.CircuitId;
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.ProofSystemId;
+import com.bloxbean.cardano.zeroj.api.PublicInputs;
+import com.bloxbean.cardano.zeroj.api.VerificationKeyRef;
+import com.bloxbean.cardano.zeroj.api.ZkProofEnvelope;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
+import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitMetadata;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitSchema;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBN254T3;
@@ -54,7 +60,7 @@ class CircuitAnnotationProcessorTest {
 
                 import com.bloxbean.cardano.zeroj.circuit.annotation.*;
 
-                @ZKCircuit(name = "range-proof")
+                @ZKCircuit(name = "range-proof", version = 2)
                 public class RangeProof {
                     @Secret @UInt(bits = 8)
                     ZkUInt secret;
@@ -105,6 +111,60 @@ class CircuitAnnotationProcessorTest {
         assertDoesNotThrow(() -> circuit.calculateWitness(witnessMap, CurveId.BN254));
         assertEquals(List.of(BigInteger.valueOf(18), BigInteger.valueOf(99)),
                 inputs.getClass().getMethod("publicValues").invoke(inputs));
+        var typedPublicInputs = new PublicInputs(List.of(BigInteger.valueOf(18), BigInteger.valueOf(99)));
+        assertEquals(typedPublicInputs, inputs.getClass().getMethod("toPublicInputs").invoke(inputs));
+        assertEquals(typedPublicInputs,
+                companion.getMethod("publicInputValues", inputs.getClass()).invoke(null, inputs));
+        BigInteger[] generatedWitness = (BigInteger[]) companion
+                .getMethod("calculateWitness", CircuitBuilder.class, inputs.getClass(), CurveId.class)
+                .invoke(null, circuit, inputs, CurveId.BN254);
+        assertTrue(generatedWitness.length > 0);
+
+        assertEquals(2, companion.getField("CIRCUIT_VERSION").get(null));
+        assertEquals(new CircuitId("range-proof"), companion.getMethod("circuitId").invoke(null));
+        ZkCircuitMetadata metadata = (ZkCircuitMetadata) companion.getMethod("metadata").invoke(null);
+        assertEquals(new CircuitId("range-proof"), metadata.circuitId());
+        assertEquals("2", metadata.envelopeMetadata().get(ZkCircuitMetadata.CIRCUIT_VERSION_KEY));
+        ZkProofEnvelope envelope = ((ZkProofEnvelope.Builder) companion
+                .getMethod("proofEnvelopeBuilder",
+                        CircuitBuilder.class,
+                        ProofSystemId.class,
+                        CurveId.class,
+                        byte[].class,
+                        inputs.getClass(),
+                        VerificationKeyRef.class)
+                .invoke(null,
+                        circuit,
+                        ProofSystemId.GROTH16,
+                        CurveId.BN254,
+                        new byte[]{1, 2, 3},
+                        inputs,
+                        new VerificationKeyRef.ById("vk-range-proof")))
+                .build();
+        assertEquals(new CircuitId("range-proof"), envelope.circuitId());
+        assertEquals(typedPublicInputs, envelope.publicInputs());
+        assertEquals("range-proof", envelope.metadata().get(ZkCircuitMetadata.CIRCUIT_NAME_KEY));
+        assertEquals("2", envelope.metadata().get(ZkCircuitMetadata.CIRCUIT_VERSION_KEY));
+    }
+
+    @Test
+    void rejectsInvalidCircuitVersion() throws Exception {
+        var compilation = compile("test.BadVersion", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(version = 0)
+                public class BadVersion {
+                    @Prove
+                    ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText().contains("@ZKCircuit version must be positive"));
     }
 
     @Test
@@ -364,14 +424,23 @@ class CircuitAnnotationProcessorTest {
         CircuitBuilder circuit = (CircuitBuilder) companion
                 .getMethod("build", int.class, ZkMerkle.HashType.class)
                 .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
-        assertEquals("membership-d1-POSEIDON", circuit.constraintGraph().name());
+        String circuitName = "membership-d1-POSEIDON--depth-1:1--hashType-8:POSEIDON";
+        assertEquals(circuitName, circuit.constraintGraph().name());
         ZkCircuitSchema schema = (ZkCircuitSchema) companion
                 .getMethod("schema", int.class, ZkMerkle.HashType.class)
                 .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
-        assertEquals("membership-d1-POSEIDON", schema.name());
+        assertEquals(circuitName, schema.name());
         assertEquals("depth", schema.parameters().get(0).name());
-        assertEquals("1", schema.parameters().get(0).value());
-        assertEquals("POSEIDON", schema.parameters().get(1).value());
+        assertEquals("1:1", schema.parameters().get(0).value());
+        assertEquals("8:POSEIDON", schema.parameters().get(1).value());
+        assertEquals(new CircuitId(circuitName), companion
+                .getMethod("circuitId", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.POSEIDON));
+        ZkCircuitMetadata metadata = (ZkCircuitMetadata) companion
+                .getMethod("metadata", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
+        assertEquals("1:1", metadata.parameters().get("depth"));
+        assertEquals("8:POSEIDON", metadata.parameters().get("hashType"));
         assertEquals(List.of("root"), schema.publicInputs().names());
         assertEquals(List.of("leaf", "sibling_0", "pathBit_0"), schema.secretInputs().names());
         assertEquals(1, schema.input("sibling").size());
@@ -404,6 +473,32 @@ class CircuitAnnotationProcessorTest {
                 (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
         assertDoesNotThrow(() -> circuit.calculateWitness(generatedWitness, CurveId.BN254));
         assertEquals(List.of(root), companion.getMethod("publicInputs", inputs.getClass()).invoke(null, inputs));
+
+        CircuitBuilder mismatchedCircuit = (CircuitBuilder) companion
+                .getMethod("build", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.MIMC);
+        var mismatchedWitness = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> companion.getMethod("calculateWitness", CircuitBuilder.class, inputs.getClass(), CurveId.class)
+                        .invoke(null, mismatchedCircuit, inputs, CurveId.BN254));
+        assertTrue(mismatchedWitness.getCause() instanceof IllegalArgumentException);
+        assertTrue(mismatchedWitness.getCause().getMessage().contains("does not match generated input schema"));
+
+        var mismatchedEnvelope = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> companion.getMethod("proofEnvelopeBuilder",
+                                CircuitBuilder.class,
+                                ProofSystemId.class,
+                                CurveId.class,
+                                byte[].class,
+                                inputs.getClass(),
+                                VerificationKeyRef.class)
+                        .invoke(null,
+                                mismatchedCircuit,
+                                ProofSystemId.GROTH16,
+                                CurveId.BN254,
+                                new byte[]{1},
+                                inputs,
+                                new VerificationKeyRef.ById("vk-membership")));
+        assertTrue(mismatchedEnvelope.getCause() instanceof IllegalArgumentException);
 
         Object badInputs = companion
                 .getMethod("inputs", int.class, ZkMerkle.HashType.class)
@@ -485,8 +580,86 @@ class CircuitAnnotationProcessorTest {
         CircuitBuilder depth3 = (CircuitBuilder) compilation.load("test.ParamStaticCircuit")
                 .getMethod("build", int.class)
                 .invoke(null, 3);
-        assertEquals("param-static--depth-2", depth2.constraintGraph().name());
-        assertEquals("param-static--depth-3", depth3.constraintGraph().name());
+        assertEquals("param-static--depth-1:2", depth2.constraintGraph().name());
+        assertEquals("param-static--depth-1:3", depth3.constraintGraph().name());
+    }
+
+    @Test
+    void circuitParamValuesUseCanonicalEncodingAndRejectUnsupportedTypes() throws Exception {
+        var stringParam = compile("test.StringParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "string-param")
+                public class StringParam {
+                    public StringParam(@CircuitParam("label") String label) {}
+
+                    @Prove
+                    static ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(stringParam.success(), stringParam.diagnosticsText());
+        Class<?> companion = stringParam.load("test.StringParamCircuit");
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build", String.class)
+                .invoke(null, "a-b");
+        assertEquals("string-param--label-3:a-b", circuit.constraintGraph().name());
+        ZkCircuitSchema schema = (ZkCircuitSchema) companion.getMethod("schema", String.class)
+                .invoke(null, "a-b");
+        assertEquals("3:a-b", schema.parameters().getFirst().value());
+
+        var unsupported = compile("test.UnsupportedParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class UnsupportedParam {
+                    public UnsupportedParam(@CircuitParam("shape") Object shape) {}
+
+                    @Prove
+                    ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(unsupported.success());
+        assertTrue(unsupported.diagnosticsText().contains("@CircuitParam type must be"));
+    }
+
+    @Test
+    void nameTemplateCollisionsAreAvoidedByCanonicalSuffix() throws Exception {
+        var compilation = compile("test.CollidingTemplate", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "colliding", nameTemplate = "colliding-{a}{b}")
+                public class CollidingTemplate {
+                    public CollidingTemplate(
+                            @CircuitParam("a") int a,
+                            @CircuitParam("b") int b) {}
+
+                    @Prove
+                    static ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Class<?> companion = compilation.load("test.CollidingTemplateCircuit");
+        CircuitBuilder oneTwentyThree = (CircuitBuilder) companion.getMethod("build", int.class, int.class)
+                .invoke(null, 1, 23);
+        ZkCircuitSchema twelveThree = (ZkCircuitSchema) companion.getMethod("schema", int.class, int.class)
+                .invoke(null, 12, 3);
+
+        assertEquals("colliding-123--a-1:1--b-2:23", oneTwentyThree.constraintGraph().name());
+        assertEquals("colliding-123--a-2:12--b-1:3", twelveThree.name());
+        assertFalse(oneTwentyThree.constraintGraph().name().equals(twelveThree.name()));
     }
 
     @Test
@@ -815,6 +988,23 @@ class CircuitAnnotationProcessorTest {
                 """);
         assertFalse(reservedConstant.success());
         assertTrue(reservedConstant.diagnosticsText().contains("Duplicate generated input constant name"));
+
+        var reservedVersionConstant = compile("test.ReservedVersionInputConstant", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class ReservedVersionInputConstant {
+                    @Prove
+                    ZkBool prove(@Public(name = "circuitVersion") ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(reservedVersionConstant.success());
+        assertTrue(reservedVersionConstant.diagnosticsText()
+                .contains("Duplicate generated input constant name"));
     }
 
     @Test

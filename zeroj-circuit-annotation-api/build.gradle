@@ -5,6 +5,7 @@ plugins {
 description = 'ZeroJ Circuit Annotation API — annotations and symbolic types for Java circuit authoring'
 
 dependencies {
+    api project(':zeroj-api')
     api project(':zeroj-circuit-dsl')
 }
 

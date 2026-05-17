@@ -1,5 +1,7 @@
 package com.bloxbean.cardano.zeroj.circuit.annotation;
 
+import com.bloxbean.cardano.zeroj.api.PublicInputs;
+
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,5 +53,9 @@ public final class ZkInputMap {
             out.add(value.getFirst());
         }
         return List.copyOf(out);
+    }
+
+    public PublicInputs publicInputs(ZkCircuitSchema schema) {
+        return new PublicInputs(publicValues(schema));
     }
 }

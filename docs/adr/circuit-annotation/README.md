@@ -24,7 +24,7 @@ pipeline.
 The target developer experience is:
 
 ```java
-@ZKCircuit(name = "range-proof")
+@ZKCircuit(name = "range-proof", version = 1)
 public class RangeProof {
     @Secret
     @UInt(bits = 64)
@@ -170,6 +170,14 @@ R1CS / PlonK / Halo2 compilers and witness calculator
 
 No new constraint representation is introduced.
 
+`@ZKCircuit(version = ...)` is author-controlled and defaults to `1`. Generated
+`CircuitId` values are name-based, while the version is carried in
+`ZkCircuitMetadata` and proof-envelope metadata. This keeps key lookup policy
+explicit: deployments may key only by circuit name, or by name plus version.
+Parameterized circuit names always append a canonical parameter suffix, even
+when `nameTemplate` is used as a readable prefix, so different parameter sets do
+not collide under ambiguous template formatting.
+
 ## Module Design
 
 ### `zeroj-circuit-annotation-api`
@@ -196,7 +204,7 @@ Jubjub, or Pedersen.
 
 Contents:
 
-- annotations: `@ZKCircuit`, `@Prove`, `@Public`, `@Secret`,
+- annotations: `@ZKCircuit`, `@ZKCircuit(version = N)`, `@Prove`, `@Public`, `@Secret`,
   `@CircuitParam`, `@UInt`, `@FieldElement`, `@FixedSize`, `@Order`
 - symbolic values: `ZkValue`, `ZkField`, `ZkBool`, `ZkUInt`, `ZkArray`
 - deferred symbolic values: `ZkBits`, `ZkBytes`
@@ -458,15 +466,15 @@ Marks a class as a circuit source.
 public @interface ZKCircuit {
     String name() default "";
     String nameTemplate() default "";
+    int version() default 1;
 }
 ```
 
 If `name` is empty, use the Java class name converted to a stable circuit name.
 For parameterized circuits, `nameTemplate` may include build-time parameters,
-for example `merkle-{depth}-{hashType}`. If `nameTemplate` is empty and the
-circuit has `@CircuitParam` values, generated code must append a canonical
-parameter suffix to avoid reusing one circuit identity for different constraint
-systems.
+for example `merkle-{depth}-{hashType}`. The rendered template is a readable
+prefix only; every parameterized circuit name appends a canonical parameter
+suffix to avoid reusing one circuit identity for different constraint systems.
 
 ### `@Prove`
 
@@ -955,17 +963,21 @@ The final generated class should include:
 - `inputs()`
 - parameterized `inputs(...)` when the source uses `@CircuitParam`
 - `publicInputs(...)` helper if useful
+- typed `PublicInputs` extraction
+- `calculateWitness(...)` helper
+- `circuitId(...)`, `metadata(...)`, and `proofEnvelopeBuilder(...)`
 - constants for generated input names
 
 Phase 4 generates only `build(...)` and constants. Phase 5 adds `schema(...)`,
-`inputs(...)`, and `publicInputs(...)`. Examples at the top of this ADR describe
-the final target surface after Phase 5.
+`inputs(...)`, and `publicInputs(...)`. Phase 9 adds typed public inputs,
+circuit metadata, witness, and proof-envelope helpers.
 
 Example generated public API:
 
 ```java
 public final class RangeProofCircuit {
     public static final String CIRCUIT_NAME = "range-proof";
+    public static final int CIRCUIT_VERSION = 1;
     public static final String SECRET = "secret";
     public static final String LO = "lo";
     public static final String HI = "hi";
@@ -976,12 +988,30 @@ public final class RangeProofCircuit {
 
     public static Inputs inputs();
 
+    public static CircuitId circuitId();
+
+    public static ZkCircuitMetadata metadata();
+
+    public static PublicInputs publicInputValues(Inputs inputs);
+
+    public static BigInteger[] calculateWitness(CircuitBuilder circuit, Inputs inputs, CurveId curve);
+
+    public static ZkProofEnvelope.Builder proofEnvelopeBuilder(
+            CircuitBuilder circuit,
+            ProofSystemId proofSystem,
+            CurveId curve,
+            byte[] proofBytes,
+            Inputs inputs,
+            VerificationKeyRef vkRef);
+
     public static final class Inputs {
         public Inputs secret(BigInteger value);
         public Inputs lo(BigInteger value);
         public Inputs hi(BigInteger value);
         public Map<String, List<BigInteger>> toWitnessMap();
         public List<BigInteger> publicValues();
+        public PublicInputs toPublicInputs();
+        public BigInteger[] calculateWitness(CircuitBuilder circuit, CurveId curve);
     }
 }
 ```
@@ -1712,8 +1742,22 @@ Deliverables:
 
 Exit criteria:
 
-- annotated circuit can go from source code to compile, witness, prove, verify
-  in an example
+- annotated circuit can go from source code to compile, witness calculation,
+  optional witness export, prover handoff, and proof-envelope construction in an
+  example. Native proof generation and verification remain in opt-in E2E tests
+  because they depend on external/native prover setup.
+
+Implementation status as of Phase 9: completed with generated typed public
+inputs, circuit ID/version metadata, witness helpers, and proof-envelope builder
+helpers. `AnnotatedAgeVerificationProofHelper` shows generated annotated
+circuits feeding existing R1CS, witness export, gnark helper, and
+`ZkProofEnvelope` APIs without adding prover-specific dependencies to generated
+companions.
+Generated helpers validate that a supplied `CircuitBuilder` name matches the
+generated `Inputs` schema before witness calculation or envelope construction.
+`@CircuitParam` types are restricted to stable primitives/boxed values, `String`,
+`BigInteger`, and enums; generated names and metadata use canonical
+`length:value` parameter encoding.
 
 ## Suggested Release Slices
 
@@ -1765,6 +1809,7 @@ Includes:
 - generated source stability tests
 - native-image review
 - documentation polish
+- typed public input and proof-envelope helpers
 - end-to-end prover examples
 
 ## Phase 0 Decisions
@@ -1779,9 +1824,9 @@ Includes:
 | Parameter style | Ship in MVP alongside field style. |
 | Field ordering | Public fields first, then secret fields; within each group sort non-negative unique `@Order` values first, then unordered fields by stable javac source order; fail if stable order is unavailable. |
 | Circuit parameters | Support constructor parameters and final fields initialized from those parameters. |
-| Parameterized names | Use `nameTemplate` when provided; otherwise append a canonical parameter suffix. |
+| Parameterized names | Use `nameTemplate` as a readable prefix when provided; always append a canonical parameter suffix. |
 | Processor output | Generate source code only. |
-| First generated API slice | Phase 4 emits `build(...)` and constants; Phase 5 adds `schema(...)`, `inputs(...)`, and `publicInputs(...)`. |
+| First generated API slice | Phase 4 emits `build(...)` and constants; Phase 5 adds `schema(...)`, `inputs(...)`, and `publicInputs(...)`; Phase 9 adds typed public inputs, metadata, witness, and proof-envelope helpers. |
 | First usable gadget adapters | `ZkMiMC`, `ZkPoseidon`, and basic `ZkMerkle`. |
 | BOM scope | Include annotation modules in `zeroj-bom-core` and `zeroj-bom-all` during Phase 1. |
 | UInt arithmetic width | Be conservative; arithmetic methods document range behavior and callers assert output range where overflow matters. |

@@ -7,7 +7,7 @@ ZeroJ circuits at compile time.
 ## Minimal Range Proof
 
 ```java
-@ZKCircuit(name = "range-proof")
+@ZKCircuit(name = "range-proof", version = 1)
 public class RangeProof {
     @Secret @UInt(bits = 16)
     ZkUInt secret;
@@ -37,6 +37,16 @@ var inputs = RangeProofCircuit.inputs()
 
 circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254);
 inputs.publicValues();
+inputs.toPublicInputs();
+
+var envelope = RangeProofCircuit.proofEnvelopeBuilder(
+        circuit,
+        ProofSystemId.GROTH16,
+        CurveId.BN254,
+        proofJson.getBytes(StandardCharsets.UTF_8),
+        inputs,
+        new VerificationKeyRef.ById("range-proof-v1"))
+    .build();
 ```
 
 ## Authoring Rules
@@ -108,7 +118,10 @@ var inputs = MerkleMembershipCircuit.inputs(32, ZkMerkle.HashType.MIMC);
 ```
 
 Changing a circuit parameter changes the generated circuit identity and should
-be treated as a different proving/verifying key lifecycle.
+be treated as a different proving/verifying key lifecycle. For parameterized
+circuits, the rendered `nameTemplate` is a readable prefix; generated names also
+append a canonical parameter suffix to avoid collisions between different
+parameter sets.
 
 ## Testing Pattern
 
@@ -118,11 +131,55 @@ Every annotated circuit should have tests for:
 - valid witness calculation
 - at least one invalid witness
 - public input extraction through `inputs.publicValues()`
+- typed public input extraction through `inputs.toPublicInputs()`
 - backend compilation for the curve and proof system you intend to use
 
 The examples in
 `zeroj-examples/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation`
 show this pattern without requiring external prover tooling.
+
+## Proof Flow Integration
+
+Generated companions expose the same metadata and public inputs needed by the
+existing prover and verifier APIs:
+
+```java
+var circuit = AgeVerificationCircuit.build();
+var inputs = AgeVerificationCircuit.inputs()
+        .age(25)
+        .threshold(18);
+
+BigInteger[] witness = AgeVerificationCircuit.calculateWitness(
+        circuit, inputs, CurveId.BN254);
+PublicInputs publicInputs = inputs.toPublicInputs();
+CircuitId circuitId = AgeVerificationCircuit.circuitId();
+ZkCircuitMetadata metadata = AgeVerificationCircuit.metadata();
+```
+
+`metadata.envelopeMetadata()` includes the circuit name, author-controlled
+`@ZKCircuit(version = ...)`, and `@CircuitParam` values. `CircuitId` is the
+generated circuit name; keep version in metadata for key registries and
+allowlists that need name-plus-version policies. Generated parameterized circuit
+names and metadata use a restricted canonical encoding: supported values are
+converted to stable display strings, then stored as `length:value`.
+Use `proofEnvelopeBuilder(...)` to create a
+`ZkProofEnvelope.Builder` with the generated circuit ID and public-input order:
+
+```java
+var envelope = AgeVerificationCircuit.proofEnvelopeBuilder(
+        circuit,
+        ProofSystemId.GROTH16,
+        CurveId.BN254,
+        proof.proveResponse().proofJson().getBytes(StandardCharsets.UTF_8),
+        inputs,
+        new VerificationKeyRef.ById("age-v1"))
+    .build();
+```
+
+Exporter- or prover-specific code remains outside the generated companions.
+For example, `AnnotatedAgeVerificationProofHelper` converts a generated witness
+to `.wtns` bytes with `WitnessExporter` and passes generated witness maps to the
+existing `GnarkProverHelper`.
 
 ## Bit And Byte Inputs
 

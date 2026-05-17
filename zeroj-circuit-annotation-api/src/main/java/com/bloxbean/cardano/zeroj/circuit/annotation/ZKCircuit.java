@@ -13,4 +13,5 @@ import java.lang.annotation.Target;
 public @interface ZKCircuit {
     String name() default "";
     String nameTemplate() default "";
+    int version() default 1;
 }

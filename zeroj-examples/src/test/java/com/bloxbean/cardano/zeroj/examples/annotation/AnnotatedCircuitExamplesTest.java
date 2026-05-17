@@ -1,10 +1,17 @@
 package com.bloxbean.cardano.zeroj.examples.annotation;
 
+import com.bloxbean.cardano.zeroj.api.CircuitId;
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.ProofSystemId;
+import com.bloxbean.cardano.zeroj.api.PublicInputs;
+import com.bloxbean.cardano.zeroj.api.VerificationKeyRef;
 import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
+import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitMetadata;
 import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.PedersenCommitment;
 import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
+import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
+import com.bloxbean.cardano.zeroj.prover.spi.ProveResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -14,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnnotatedCircuitExamplesTest {
 
@@ -61,6 +69,55 @@ class AnnotatedCircuitExamplesTest {
                 .threshold(18);
         assertThrows(ArithmeticException.class,
                 () -> circuit.calculateWitness(underAge.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void ageVerificationHelperBuildsProverArtifactsAndProofEnvelope() {
+        var helper = new AnnotatedAgeVerificationProofHelper(CurveId.BN254);
+        var inputs = helper.inputs(BigInteger.valueOf(25), BigInteger.valueOf(18));
+        var circuit = AnnotatedAgeVerificationCircuit.build();
+        var publicInputs = new PublicInputs(List.of(BigInteger.valueOf(18)));
+
+        assertEquals(new CircuitId("annotation-age-verification"),
+                AnnotatedAgeVerificationCircuit.circuitId());
+        assertEquals(publicInputs, inputs.toPublicInputs());
+        assertEquals(publicInputs, AnnotatedAgeVerificationCircuit.publicInputValues(inputs));
+        assertTrue(AnnotatedAgeVerificationCircuit
+                .calculateWitness(circuit, inputs, CurveId.BN254).length > 0);
+        assertTrue(helper.generateR1CS().length > 0);
+        assertTrue(helper.generateWitnessBytes(BigInteger.valueOf(25), BigInteger.valueOf(18)).length > 0);
+
+        var metadata = AnnotatedAgeVerificationCircuit.metadata();
+        assertEquals("1", metadata.envelopeMetadata().get(ZkCircuitMetadata.CIRCUIT_VERSION_KEY));
+
+        var response = new GnarkProver.FullProveResponse(
+                new ProveResponse(
+                        "{\"proof\":\"demo\"}",
+                        inputs.publicValues(),
+                        "groth16",
+                        CurveId.BN254.value(),
+                        0),
+                "{}");
+        var envelope = helper.toEnvelope(response, inputs, new VerificationKeyRef.ById("vk-age-v1"));
+
+        assertEquals(ProofSystemId.GROTH16, envelope.proofSystem());
+        assertEquals(CurveId.BN254, envelope.curve());
+        assertEquals(new CircuitId("annotation-age-verification"), envelope.circuitId());
+        assertEquals(publicInputs, envelope.publicInputs());
+        assertEquals("annotation-age-verification",
+                envelope.metadata().get(ZkCircuitMetadata.CIRCUIT_NAME_KEY));
+
+        var mismatched = new GnarkProver.FullProveResponse(
+                new ProveResponse("{}", List.of(BigInteger.ONE), "groth16", CurveId.BN254.value(), 0),
+                "{}");
+        assertThrows(IllegalArgumentException.class,
+                () -> helper.toEnvelope(mismatched, inputs, new VerificationKeyRef.ById("vk-age-v1")));
+
+        var wrongCurve = new GnarkProver.FullProveResponse(
+                new ProveResponse("{}", inputs.publicValues(), "groth16", CurveId.BLS12_381.value(), 0),
+                "{}");
+        assertThrows(IllegalArgumentException.class,
+                () -> helper.toEnvelope(wrongCurve, inputs, new VerificationKeyRef.ById("vk-age-v1")));
     }
 
     @Test
@@ -122,9 +179,9 @@ class AnnotatedCircuitExamplesTest {
         var circuit = AnnotatedMerkleMembershipCircuit.build(depth, hashType);
         var schema = AnnotatedMerkleMembershipCircuit.schema(depth, hashType);
 
-        assertEquals("annotation-merkle-d2-MIMC", schema.name());
-        assertEquals("2", schema.parameters().get(0).value());
-        assertEquals("MIMC", schema.parameters().get(1).value());
+        assertEquals("annotation-merkle-d2-MIMC--depth-1:2--hashType-4:MIMC", schema.name());
+        assertEquals("1:2", schema.parameters().get(0).value());
+        assertEquals("4:MIMC", schema.parameters().get(1).value());
         assertEquals(List.of("root"), schema.publicInputs().names());
         assertEquals(List.of("leaf", "sibling_0", "sibling_1", "pathBit_0", "pathBit_1"),
                 schema.secretInputs().names());

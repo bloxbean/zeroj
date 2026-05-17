@@ -31,8 +31,8 @@ In progress.
 | 5 | Schema and input builders | Completed | c7b24b8 |
 | 6 | Examples and documentation | Completed | d655fee |
 | 7 | Bit and byte symbolic inputs | Completed | 126ef5c |
-| 8 | Advanced gadget adapters | Completed | Pending final commit |
-| 9 | Proving flow integration | Pending | Pending |
+| 8 | Advanced gadget adapters | Completed | 3b873d2 |
+| 9 | Proving flow integration | Completed | Phase 9 commit |
 
 ## Defaults
 
