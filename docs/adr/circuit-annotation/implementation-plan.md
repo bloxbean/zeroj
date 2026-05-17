@@ -27,8 +27,8 @@ In progress.
 | 1 | Module scaffolding | Completed | 86f122c |
 | 2 | Symbolic foundation | Completed | bfe0b65 |
 | 3 | MVP gadget adapters | Completed | 7f49413 |
-| 4 | MVP annotation processor | Completed | Pending hash |
-| 5 | Schema and input builders | Pending | Pending |
+| 4 | MVP annotation processor | Completed | b033b03 |
+| 5 | Schema and input builders | Completed | Pending hash |
 | 6 | Examples and documentation | Pending | Pending |
 | 7 | Deferred bits and bytes | Pending | Pending |
 | 8 | Advanced gadget adapters | Pending | Pending |

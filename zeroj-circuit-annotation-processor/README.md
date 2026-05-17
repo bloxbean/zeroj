@@ -2,11 +2,12 @@
 
 Compile-time annotation processor for annotation-based ZeroJ circuit authoring.
 
-Current Phase 4 status: this module scans `@ZKCircuit` classes and generates
-`*Circuit` companions with `build(...)` methods and input-name constants.
+Current Phase 5 status: this module scans `@ZKCircuit` classes and generates
+`*Circuit` companions with `build(...)`, `schema(...)`, `inputs(...)`,
+`publicInputs(...)`, and input-name constants.
 
 The generated companions build normal `CircuitBuilder` / `CircuitSpec`
-circuits. Schema and input-builder helpers are planned for Phase 5.
+circuits and produce ordinary witness maps for `calculateWitness(...)`.
 
 Supported in Phase 4:
 
@@ -15,6 +16,7 @@ Supported in Phase 4:
 - constructor `@CircuitParam` values
 - `@FixedSize(param = "...")` arrays
 - `@Public`, `@Secret`, `@UInt`, `@FieldElement`, and `@Order`
+- generated schema metadata and input builders
 - compile-time diagnostics for unsupported symbolic types and proof returns
 
 Not supported in Phase 4:

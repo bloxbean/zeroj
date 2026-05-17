@@ -2,8 +2,8 @@
 
 Public API for annotation-based ZeroJ circuit authoring.
 
-Current Phase 2 status: this module exposes the foundational annotations and
-symbolic `Zk*` types used by manual symbolic circuits and later generated
+Current Phase 5 status: this module exposes the foundational annotations,
+symbolic `Zk*` types, and runtime schema/input helpers used by generated
 companions.
 
 This module contains:
@@ -11,8 +11,8 @@ This module contains:
 - circuit annotations such as `@ZKCircuit`, `@Prove`, `@Public`, `@Secret`,
   `@CircuitParam`, `@UInt`, `@FieldElement`, `@FixedSize`, and `@Order`
 - symbolic circuit value types: `ZkField`, `ZkBool`, `ZkUInt`, and `ZkArray`
-
-Schema and input binding support is planned for later phases.
+- generated-circuit metadata and witness helpers: `ZkCircuitSchema` and
+  `ZkInputMap`
 
 The API is intentionally layered on top of `zeroj-circuit-dsl`. It does not
 replace `CircuitSpec`, `SignalBuilder`, or the existing circuit library.
@@ -30,7 +30,20 @@ var circuit = CircuitBuilder.create("range")
         });
 ```
 
-Important Phase 2 API rules:
+Generated companions use the schema/input helpers like this:
+
+```java
+var schema = RangeProofCircuit.schema();
+var inputs = RangeProofCircuit.inputs()
+        .secret(BigInteger.valueOf(42))
+        .lo(BigInteger.valueOf(18))
+        .hi(BigInteger.valueOf(99));
+
+var witness = circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254);
+var publicValues = inputs.publicValues();
+```
+
+Important API rules:
 
 - `ZkBool.publicInput` / `secret` add boolean constraints eagerly.
 - `ZkUInt.publicInput` / `secret` add range constraints eagerly.
@@ -41,9 +54,9 @@ Important Phase 2 API rules:
   `publicBools`, and `publicUInts` encode visibility for built-in element
   types. `ZkArray.bind` is for custom symbolic types.
 - `wrap(...)` rejects signals from a different `SignalBuilder`.
-
-Annotation processing and generated companion classes are deferred to later
-phases; this module only provides the public API foundation.
+- `ZkCircuitSchema.publicInputs().names()` and
+  `ZkCircuitSchema.secretInputs().names()` expose flattened input order.
+- `ZkInputMap.publicValues(schema)` extracts public values in schema order.
 
 See [docs/adr/circuit-annotation/README.md](../docs/adr/circuit-annotation/README.md)
 for the accepted implementation plan.

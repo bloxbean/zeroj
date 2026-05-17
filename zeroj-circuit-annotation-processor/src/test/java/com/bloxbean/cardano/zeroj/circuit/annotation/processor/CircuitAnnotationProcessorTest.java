@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.circuit.annotation.processor;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
+import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitSchema;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBN254T3;
 import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
@@ -78,6 +79,11 @@ class CircuitAnnotationProcessorTest {
         Class<?> companion = compilation.load("test.RangeProofCircuit");
         assertEquals("range-proof", companion.getField("CIRCUIT_NAME").get(null));
         CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build").invoke(null);
+        ZkCircuitSchema schema = (ZkCircuitSchema) companion.getMethod("schema").invoke(null);
+        assertEquals("range-proof", schema.name());
+        assertEquals(List.of("lo", "hi"), schema.publicInputs().names());
+        assertEquals(List.of("secret"), schema.secretInputs().names());
+        assertEquals(8, schema.input("secret").bits());
 
         assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
                 "secret", List.of(BigInteger.valueOf(42)),
@@ -88,6 +94,17 @@ class CircuitAnnotationProcessorTest {
                 "secret", List.of(BigInteger.valueOf(7)),
                 "lo", List.of(BigInteger.valueOf(18)),
                 "hi", List.of(BigInteger.valueOf(99))), CurveId.BN254));
+
+        Object inputs = companion.getMethod("inputs").invoke(null);
+        inputs.getClass().getMethod("secret", BigInteger.class).invoke(inputs, BigInteger.valueOf(42));
+        inputs.getClass().getMethod("lo", long.class).invoke(inputs, 18L);
+        inputs.getClass().getMethod("hi", BigInteger.class).invoke(inputs, BigInteger.valueOf(99));
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> witnessMap =
+                (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
+        assertDoesNotThrow(() -> circuit.calculateWitness(witnessMap, CurveId.BN254));
+        assertEquals(List.of(BigInteger.valueOf(18), BigInteger.valueOf(99)),
+                inputs.getClass().getMethod("publicValues").invoke(inputs));
     }
 
     @Test
@@ -155,6 +172,37 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    void scalarInputNamedWaitDoesNotGenerateFinalObjectWaitOverride() throws Exception {
+        var compilation = compile("test.WaitInput", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "wait-input")
+                public class WaitInput {
+                    @Prove
+                    ZkBool prove(@Public ZkBool wait) {
+                        return wait;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        String generated = compilation.generatedSource("test/WaitInputCircuit.java");
+        assertTrue(generated.contains("public Inputs wait(BigInteger value)"));
+        assertFalse(generated.contains("public Inputs wait(long value)"));
+
+        Class<?> companion = compilation.load("test.WaitInputCircuit");
+        Object inputs = companion.getMethod("inputs").invoke(null);
+        inputs.getClass().getMethod("wait", BigInteger.class).invoke(inputs, BigInteger.ONE);
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build").invoke(null);
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> witness =
+                (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
+        assertDoesNotThrow(() -> circuit.calculateWitness(witness, CurveId.BN254));
+    }
+
+    @Test
     void parameterizedMerkleMembershipGeneratesBuildWithCircuitParams() throws Exception {
         var compilation = compile("test.MerkleMembership", """
                 package test;
@@ -192,6 +240,17 @@ class CircuitAnnotationProcessorTest {
                 .getMethod("build", int.class, ZkMerkle.HashType.class)
                 .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
         assertEquals("membership-d1-POSEIDON", circuit.constraintGraph().name());
+        ZkCircuitSchema schema = (ZkCircuitSchema) companion
+                .getMethod("schema", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
+        assertEquals("membership-d1-POSEIDON", schema.name());
+        assertEquals("depth", schema.parameters().get(0).name());
+        assertEquals("1", schema.parameters().get(0).value());
+        assertEquals("POSEIDON", schema.parameters().get(1).value());
+        assertEquals(List.of("root"), schema.publicInputs().names());
+        assertEquals(List.of("leaf", "sibling_0", "pathBit_0"), schema.secretInputs().names());
+        assertEquals(1, schema.input("sibling").size());
+        assertTrue(schema.input("pathBit_0").array());
 
         BigInteger root = PoseidonHash.hash(
                 PoseidonParamsBN254T3.INSTANCE,
@@ -207,6 +266,65 @@ class CircuitAnnotationProcessorTest {
                 "root", List.of(BigInteger.ONE),
                 "sibling_0", List.of(BigInteger.valueOf(7)),
                 "pathBit_0", List.of(BigInteger.ZERO)), CurveId.BN254));
+
+        Object inputs = companion
+                .getMethod("inputs", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
+        inputs.getClass().getMethod("leaf", BigInteger.class).invoke(inputs, BigInteger.valueOf(5));
+        inputs.getClass().getMethod("root", BigInteger.class).invoke(inputs, root);
+        inputs.getClass().getMethod("siblings", List.class).invoke(inputs, List.of(BigInteger.valueOf(7)));
+        inputs.getClass().getMethod("pathBits", int.class, long.class).invoke(inputs, 0, 0L);
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> generatedWitness =
+                (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
+        assertDoesNotThrow(() -> circuit.calculateWitness(generatedWitness, CurveId.BN254));
+        assertEquals(List.of(root), companion.getMethod("publicInputs", inputs.getClass()).invoke(null, inputs));
+
+        Object badInputs = companion
+                .getMethod("inputs", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
+        var ex = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> badInputs.getClass().getMethod("siblings", List.class)
+                        .invoke(badInputs, List.of(BigInteger.valueOf(7), BigInteger.valueOf(8))));
+        assertTrue(ex.getCause() instanceof IllegalArgumentException);
+    }
+
+    @Test
+    void fixedSizeParamCanReferenceBoxedIntegerCircuitParam() throws Exception {
+        var compilation = compile("test.BoxedDepth", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "boxed-depth")
+                public class BoxedDepth {
+                    public BoxedDepth(@CircuitParam("depth") Integer depth) {}
+
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(param = "depth") ZkArray<ZkField> siblings,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Class<?> companion = compilation.load("test.BoxedDepthCircuit");
+        ZkCircuitSchema schema = (ZkCircuitSchema) companion
+                .getMethod("schema", Integer.class)
+                .invoke(null, 2);
+        assertEquals(List.of("sibling_0", "sibling_1"), schema.secretInputs().names());
+
+        Object inputs = companion.getMethod("inputs", Integer.class).invoke(null, 2);
+        inputs.getClass().getMethod("siblings", List.class)
+                .invoke(inputs, List.of(BigInteger.ONE, BigInteger.TWO));
+        inputs.getClass().getMethod("ok", long.class).invoke(inputs, 1L);
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> witness =
+                (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build", Integer.class).invoke(null, 2);
+        assertDoesNotThrow(() -> circuit.calculateWitness(witness, CurveId.BN254));
     }
 
     @Test
@@ -533,6 +651,49 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    void rejectsArrayBaseNamesThatOverlapFlattenedInputNames() throws Exception {
+        var literal = compile("test.OverlappingArrayBase", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class OverlappingArrayBase {
+                    @Prove
+                    ZkBool prove(
+                            @Secret(name = "item") @FixedSize(2) ZkArray<ZkField> items,
+                            @Secret(name = "item_0") @FixedSize(1) ZkArray<ZkField> itemZero,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(literal.success());
+        assertTrue(literal.diagnosticsText().contains("Input base name overlaps a flattened input name"));
+
+        var parameterized = compile("test.OverlappingParamArrayBase", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class OverlappingParamArrayBase {
+                    public OverlappingParamArrayBase(@CircuitParam("depth") int depth) {}
+
+                    @Prove
+                    ZkBool prove(
+                            @Secret(name = "sibling") @FixedSize(param = "depth") ZkArray<ZkField> siblings,
+                            @Secret(name = "sibling_0") @FixedSize(1) ZkArray<ZkField> siblingZero,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(parameterized.success());
+        assertTrue(parameterized.diagnosticsText().contains("Duplicate flattened input name may be generated"));
+    }
+
+    @Test
     void sanitizesGeneratedInputConstantsThatWouldNotBeJavaIdentifiers() throws Exception {
         var compilation = compile("test.OddInputNames", """
                 package test;
@@ -563,6 +724,34 @@ class CircuitAnnotationProcessorTest {
                 "1", List.of(BigInteger.ONE),
                 "-", List.of(BigInteger.TEN),
                 "ok", List.of(BigInteger.ONE)), CurveId.BN254));
+    }
+
+    @Test
+    void generatedArrayInputBuilderEscapesInputNamesInMessages() throws Exception {
+        var compilation = compile("test.OddArrayNames", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class OddArrayNames {
+                    @Prove
+                    ZkBool prove(
+                            @Secret(name = "item\\\"\\n") @FixedSize(1) ZkArray<ZkField> items,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Object inputs = compilation.load("test.OddArrayNamesCircuit")
+                .getMethod("inputs")
+                .invoke(null);
+        var ex = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> inputs.getClass().getMethod("items", List.class)
+                        .invoke(inputs, List.of(BigInteger.ONE, BigInteger.TWO)));
+        assertTrue(ex.getCause().getMessage().contains("item\"\n expects 1 values"));
     }
 
     @Test

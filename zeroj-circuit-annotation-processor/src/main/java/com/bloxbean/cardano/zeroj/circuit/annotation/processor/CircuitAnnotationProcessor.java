@@ -169,7 +169,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 throw new GenerationException(parameter, "Duplicate @CircuitParam name: " + name);
             }
             params.add(new CircuitParamModel(name, parameter.getSimpleName().toString(),
-                    parameter.asType().toString(), parameter.asType().getKind() == TypeKind.INT));
+                    parameter.asType().toString(), isIntegerCircuitParam(parameter.asType())));
         }
         return params;
     }
@@ -359,34 +359,45 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         }
 
         Set<String> flattenedNames = new HashSet<>();
+        Map<String, InputModel> flattenedOwners = new java.util.HashMap<>();
         for (InputModel input : inputs) {
             if (input.valueKind() == ValueKind.ARRAY) {
                 if (!input.size().fromCircuitParam()) {
                     int size = Integer.parseInt(input.size().expression());
                     for (int i = 0; i < size; i++) {
-                        addFlattenedName(flattenedNames, input.baseName() + "_" + i);
+                        addFlattenedName(flattenedNames, flattenedOwners, input, input.baseName() + "_" + i);
                     }
                 }
             } else {
-                addFlattenedName(flattenedNames, input.baseName());
+                addFlattenedName(flattenedNames, flattenedOwners, input, input.baseName());
+            }
+        }
+
+        for (InputModel input : inputs) {
+            InputModel owner = flattenedOwners.get(input.baseName());
+            if (owner != null && owner != input) {
+                throw new GenerationException(null,
+                        "Input base name overlaps a flattened input name: " + input.baseName());
             }
         }
 
         for (InputModel array : inputs.stream().filter(i -> i.valueKind() == ValueKind.ARRAY).toList()) {
-            for (InputModel scalar : inputs.stream().filter(i -> i.valueKind() != ValueKind.ARRAY).toList()) {
-                if (scalar.baseName().matches(java.util.regex.Pattern.quote(array.baseName()) + "_\\d+")) {
+            for (InputModel other : inputs.stream().filter(i -> i != array).toList()) {
+                if (other.baseName().matches(java.util.regex.Pattern.quote(array.baseName()) + "_\\d+")) {
                     throw new GenerationException(null,
                             "Duplicate flattened input name may be generated from array base "
-                                    + array.baseName() + " and scalar " + scalar.baseName());
+                                    + array.baseName() + " and input " + other.baseName());
                 }
             }
         }
     }
 
-    private void addFlattenedName(Set<String> flattenedNames, String name) {
+    private void addFlattenedName(Set<String> flattenedNames, Map<String, InputModel> flattenedOwners,
+                                  InputModel input, String name) {
         if (!flattenedNames.add(name)) {
             throw new GenerationException(null, "Duplicate flattened input name: " + name);
         }
+        flattenedOwners.put(name, input);
     }
 
     private void validateReturnType(ExecutableElement method) {
@@ -434,9 +445,14 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         out.append("import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkArray;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBool;\n")
+                .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitSchema;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkField;\n")
+                .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkInputMap;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt;\n\n")
+                .append("import java.math.BigInteger;\n")
+                .append("import java.util.List;\n")
+                .append("import java.util.Map;\n\n")
                 .append("public final class ").append(generatedSimpleName).append(" {\n")
                 .append("    private ").append(generatedSimpleName).append("() {}\n\n")
                 .append("    public static final String CIRCUIT_NAME = ")
@@ -496,6 +512,8 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         out.append("        });\n")
                 .append("    }\n");
 
+        renderSchemaAndInputs(out, circuitParams, inputs, parameterized);
+
         if (parameterized) {
             Set<String> circuitNameLocals = new HashSet<>(
                     circuitParams.stream().map(CircuitParamModel::javaName).toList());
@@ -530,6 +548,159 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
         out.append("}\n");
         return out.toString();
+    }
+
+    private void renderSchemaAndInputs(StringBuilder out, List<CircuitParamModel> circuitParams,
+                                       List<InputModel> inputs, boolean parameterized) {
+        out.append("\n    public static ZkCircuitSchema schema(")
+                .append(renderParamSignature(circuitParams))
+                .append(") {\n")
+                .append("        return ZkCircuitSchema.of(")
+                .append(parameterized ? "circuitName(" + renderParamNames(circuitParams) + ")" : "CIRCUIT_NAME")
+                .append(",\n")
+                .append("                ").append(renderParameterSchemaList(circuitParams)).append(",\n")
+                .append("                ").append(renderInputSchemaList(inputs, Visibility.PUBLIC)).append(",\n")
+                .append("                ").append(renderInputSchemaList(inputs, Visibility.SECRET)).append(");\n")
+                .append("    }\n\n")
+                .append("    public static Inputs inputs(")
+                .append(renderParamSignature(circuitParams))
+                .append(") {\n")
+                .append("        return new Inputs(schema(")
+                .append(renderParamNames(circuitParams))
+                .append("));\n")
+                .append("    }\n\n")
+                .append("    public static List<BigInteger> publicInputs(Inputs inputs) {\n")
+                .append("        return inputs.publicValues();\n")
+                .append("    }\n");
+
+        renderInputsClass(out, inputs);
+    }
+
+    private String renderParameterSchemaList(List<CircuitParamModel> circuitParams) {
+        if (circuitParams.isEmpty()) {
+            return "List.of()";
+        }
+        return circuitParams.stream()
+                .map(param -> "new ZkCircuitSchema.Parameter("
+                        + stringLiteral(param.name()) + ", "
+                        + stringLiteral(param.type()) + ", "
+                        + "String.valueOf(" + param.javaName() + "))")
+                .collect(Collectors.joining(",\n                        ", "List.of(", ")"));
+    }
+
+    private String renderInputSchemaList(List<InputModel> inputs, Visibility visibility) {
+        List<InputModel> selected = inputs.stream()
+                .filter(input -> input.visibility() == visibility)
+                .toList();
+        if (selected.isEmpty()) {
+            return "List.of()";
+        }
+        return selected.stream()
+                .map(this::renderInputSchema)
+                .collect(Collectors.joining(",\n                        ", "List.of(", ")"));
+    }
+
+    private String renderInputSchema(InputModel input) {
+        String prefix = input.valueKind() == ValueKind.ARRAY
+                ? "ZkCircuitSchema.Input.array("
+                : "ZkCircuitSchema.Input.scalar(";
+        String size = input.valueKind() == ValueKind.ARRAY ? ", " + input.size().expression() : "";
+        return prefix
+                + input.constantName()
+                + ", ZkCircuitSchema.Visibility." + input.visibility().name()
+                + ", ZkCircuitSchema.Kind." + schemaKind(input)
+                + ", " + schemaBits(input)
+                + size
+                + ")";
+    }
+
+    private void renderInputsClass(StringBuilder out, List<InputModel> inputs) {
+        out.append("\n    public static final class Inputs {\n")
+                .append("        private final ZkCircuitSchema __zerojSchema;\n")
+                .append("        private final ZkInputMap __zerojInputs = new ZkInputMap();\n\n")
+                .append("        private Inputs(ZkCircuitSchema __zerojSchema) {\n")
+                .append("            this.__zerojSchema = __zerojSchema;\n")
+                .append("        }\n\n")
+                .append("        public ZkCircuitSchema schema() {\n")
+                .append("            return __zerojSchema;\n")
+                .append("        }\n\n");
+
+        for (InputModel input : inputs) {
+            if (input.valueKind() == ValueKind.ARRAY) {
+                renderArrayInputMethods(out, input);
+            } else {
+                renderScalarInputMethods(out, input);
+            }
+        }
+
+        out.append("        public Map<String, List<BigInteger>> toWitnessMap() {\n")
+                .append("            return __zerojInputs.toWitnessMap();\n")
+                .append("        }\n\n")
+                .append("        public List<BigInteger> publicValues() {\n")
+                .append("            return __zerojInputs.publicValues(__zerojSchema);\n")
+                .append("        }\n")
+                .append("    }\n");
+    }
+
+    private void renderScalarInputMethods(StringBuilder out, InputModel input) {
+        out.append("        public Inputs ").append(input.javaName()).append("(BigInteger value) {\n")
+                .append("            __zerojInputs.put(").append(input.constantName()).append(", value);\n")
+                .append("            return this;\n")
+                .append("        }\n\n");
+        if (!"wait".equals(input.javaName())) {
+            out.append("        public Inputs ").append(input.javaName()).append("(long value) {\n")
+                    .append("            return ").append(input.javaName()).append("(BigInteger.valueOf(value));\n")
+                    .append("        }\n\n");
+        }
+    }
+
+    private void renderArrayInputMethods(StringBuilder out, InputModel input) {
+        String sizeExpression = "__zerojSchema.input(" + input.constantName() + ").size()";
+        out.append("        public Inputs ").append(input.javaName()).append("(int index, BigInteger value) {\n")
+                .append("            if (index < 0 || index >= ").append(sizeExpression).append(") {\n")
+                .append("                throw new IllegalArgumentException(")
+                .append(stringLiteral("index out of bounds for " + input.baseName())).append(");\n")
+                .append("            }\n")
+                .append("            __zerojInputs.put(").append(input.constantName())
+                .append(" + \"_\" + index, value);\n")
+                .append("            return this;\n")
+                .append("        }\n\n")
+                .append("        public Inputs ").append(input.javaName()).append("(int index, long value) {\n")
+                .append("            return ").append(input.javaName())
+                .append("(index, BigInteger.valueOf(value));\n")
+                .append("        }\n\n")
+                .append("        public Inputs ").append(input.javaName()).append("(List<BigInteger> values) {\n")
+                .append("            if (values.size() != ").append(sizeExpression).append(") {\n")
+                .append("                throw new IllegalArgumentException(")
+                .append(stringLiteral(input.baseName() + " expects ")).append(" + ").append(sizeExpression)
+                .append(" + \" values\");\n")
+                .append("            }\n")
+                .append("            __zerojInputs.putArray(").append(input.constantName()).append(", values);\n")
+                .append("            return this;\n")
+                .append("        }\n\n");
+    }
+
+    private String schemaKind(InputModel input) {
+        if (input.valueKind() == ValueKind.FIELD || input.arrayElementType().equals(ZK_FIELD)) {
+            return "FIELD";
+        }
+        if (input.valueKind() == ValueKind.BOOL || input.arrayElementType().equals(ZK_BOOL)) {
+            return "BOOL";
+        }
+        if (input.valueKind() == ValueKind.UINT || input.arrayElementType().equals(ZK_UINT)) {
+            return "UINT";
+        }
+        throw new GenerationException(null, "Unsupported schema input type: " + input.valueKind());
+    }
+
+    private int schemaBits(InputModel input) {
+        if (input.valueKind() == ValueKind.UINT || input.arrayElementType().equals(ZK_UINT)) {
+            return input.bits();
+        }
+        if (input.valueKind() == ValueKind.BOOL || input.arrayElementType().equals(ZK_BOOL)) {
+            return 1;
+        }
+        return -1;
     }
 
     private void renderVarDeclaration(StringBuilder out, InputModel input, String builderLocal,
@@ -673,6 +844,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         return erasure(type).equals(qualifiedName);
     }
 
+    private boolean isIntegerCircuitParam(TypeMirror type) {
+        return type.getKind() == TypeKind.INT || erasure(type).equals("java.lang.Integer");
+    }
+
     private String erasure(TypeMirror type) {
         return processingEnv.getTypeUtils().erasure(type).toString();
     }
@@ -736,7 +911,21 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private String stringLiteral(String value) {
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        StringBuilder out = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\' -> out.append("\\\\");
+                case '"' -> out.append("\\\"");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                case '\b' -> out.append("\\b");
+                case '\f' -> out.append("\\f");
+                default -> out.append(c);
+            }
+        }
+        return out.append("\"").toString();
     }
 
     private boolean isSimpleName(String value) {

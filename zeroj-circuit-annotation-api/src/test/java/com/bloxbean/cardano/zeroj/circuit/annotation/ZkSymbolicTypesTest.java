@@ -238,6 +238,52 @@ class ZkSymbolicTypesTest {
     }
 
     @Test
+    void schemaExposesStableNamesAndInputMapPublicValues() {
+        var schema = ZkCircuitSchema.of(
+                "schema-test",
+                List.of(new ZkCircuitSchema.Parameter("depth", "int", "2")),
+                List.of(
+                        ZkCircuitSchema.Input.scalar(
+                                "root", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.FIELD, -1),
+                        ZkCircuitSchema.Input.array(
+                                "pathBit", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.BOOL, 1, 2)),
+                List.of(ZkCircuitSchema.Input.array(
+                        "sibling", ZkCircuitSchema.Visibility.SECRET, ZkCircuitSchema.Kind.FIELD, -1, 2)));
+
+        assertEquals("schema-test", schema.name());
+        assertEquals(List.of("root", "pathBit_0", "pathBit_1"), schema.publicInputs().names());
+        assertEquals(List.of("sibling_0", "sibling_1"), schema.secretInputs().names());
+        assertEquals(2, schema.input("sibling").size());
+        assertEquals(ZkCircuitSchema.Kind.FIELD, schema.input("sibling_0").kind());
+        assertEquals("2", schema.parameters().getFirst().value());
+
+        var inputs = new ZkInputMap()
+                .put("root", BigInteger.valueOf(10))
+                .putArray("pathBit", List.of(BigInteger.ZERO, BigInteger.ONE))
+                .putArray("sibling", List.of(BigInteger.valueOf(20), BigInteger.valueOf(30)));
+
+        assertEquals(List.of(BigInteger.valueOf(10), BigInteger.ZERO, BigInteger.ONE),
+                inputs.publicValues(schema));
+        assertEquals(BigInteger.valueOf(30), inputs.toWitnessMap().get("sibling_1").getFirst());
+    }
+
+    @Test
+    void schemaLookupPrefersExactInputNamesBeforeFlattenedNames() {
+        var schema = ZkCircuitSchema.of(
+                "schema-overlap",
+                List.of(),
+                List.of(
+                        ZkCircuitSchema.Input.array(
+                                "a", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.FIELD, -1, 2),
+                        ZkCircuitSchema.Input.array(
+                                "a_0", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.FIELD, -1, 1)),
+                List.of());
+
+        assertEquals("a_0", schema.input("a_0").name());
+        assertEquals(List.of("a_0_0"), schema.input("a_0").signalNames());
+    }
+
+    @Test
     void symbolicCircuitCompilesToAllBackends() {
         var circuit = CircuitBuilder.create("zk-compile")
                 .publicVar("ok")
