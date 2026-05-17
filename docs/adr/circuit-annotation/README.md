@@ -900,6 +900,10 @@ MVP adapters:
 - `ZkPoseidon`
 - `ZkMerkle` for fixed-depth membership proofs
 
+`ZkMiMC` uses the existing MiMC constants and is guarded as BN254-only.
+`ZkPoseidon` should expose both default and explicit-`PoseidonParams` overloads
+so BLS12-381 circuits can select the matching parameter set.
+
 These adapters live in `zeroj-circuit-lib`, not in
 `zeroj-circuit-annotation-api`, so the dependency direction remains:
 

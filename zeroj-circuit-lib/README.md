@@ -17,6 +17,7 @@ or Jubjub-style primitives.
 | Binary gadgets | `Binary`, `SignalBinary`, `AliasCheck` |
 | Selection | `Mux` |
 | Signal helpers | `SignalPoseidon`, `SignalMiMC` |
+| Annotation helpers | `ZkPoseidon`, `ZkMiMC`, `ZkMerkle` |
 | Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
@@ -45,6 +46,18 @@ var circuit = CircuitBuilder.create("membership")
 
 For larger circuits, prefer the `Signal*` helper classes with `SignalBuilder`
 and reusable `CircuitSpec` components.
+
+Annotation-based circuits can use symbolic adapters from
+`com.bloxbean.cardano.zeroj.circuit.lib.zk`:
+
+```java
+var hash = ZkPoseidon.hash(zk, left, right);
+var root = ZkMerkle.computeRoot(zk, leaf, siblings, pathBits, ZkMiMC::hash);
+```
+
+These adapters delegate to the existing `Signal*` gadgets and validate that
+their inputs belong to the supplied `ZkContext`. `ZkMiMC` is guarded as
+BN254-only; use explicit Poseidon parameters when targeting BLS12-381.
 
 ## Gradle
 

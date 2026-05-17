@@ -6,6 +6,7 @@ description = 'ZeroJ Circuit Library — reusable ZK circuit components (Poseido
 
 dependencies {
     api project(':zeroj-circuit-dsl')
+    api project(':zeroj-circuit-annotation-api')
 
     testImplementation project(':zeroj-test-vectors')
 }

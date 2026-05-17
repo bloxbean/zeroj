@@ -25,8 +25,8 @@ In progress.
 |-------|------|--------|--------|
 | 0 | Planning baseline | Completed | 823c422 |
 | 1 | Module scaffolding | Completed | 86f122c |
-| 2 | Symbolic foundation | Completed | Pending |
-| 3 | MVP gadget adapters | Pending | Pending |
+| 2 | Symbolic foundation | Completed | bfe0b65 |
+| 3 | MVP gadget adapters | Completed | Pending |
 | 4 | MVP annotation processor | Pending | Pending |
 | 5 | Schema and input builders | Pending | Pending |
 | 6 | Examples and documentation | Pending | Pending |

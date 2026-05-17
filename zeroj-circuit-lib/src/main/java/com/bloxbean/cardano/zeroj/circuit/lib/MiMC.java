@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.zeroj.circuit.lib;
 
 import com.bloxbean.cardano.zeroj.circuit.CircuitAPI;
+import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
 
 import java.math.BigInteger;
@@ -13,7 +14,7 @@ import java.security.NoSuchAlgorithmException;
  *
  * <p>MiMC uses x^7 S-box with 91 rounds for BN254.
  * Each round: state = (state + round_constant + key)^7.
- * Approximately 273 constraints for one hash.</p>
+ * Approximately 364 multiplication constraints for one hash.</p>
  */
 public final class MiMC {
 
@@ -30,6 +31,8 @@ public final class MiMC {
      * @return hash output
      */
     public static Variable hash(CircuitAPI api, Variable left, Variable right) {
+        api.requireField(FieldConfig.BN254);
+
         // MiMC-7 with key = right
         var state = left;
         var key = right;
