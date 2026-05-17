@@ -415,9 +415,9 @@ ZkArray<ZkUInt> amounts = ZkArray.publicUInts(c, "amount", count, 64);
 visibility comes from the supplied factory, so generated code should prefer the
 visibility-specific helpers whenever the element type is built in.
 
-### Deferred: `ZkBits`
+### `ZkBits`
 
-Represents a fixed-length bit vector backed by `Signal[]`.
+Represents a fixed-length bit vector backed by constrained `ZkBool` values.
 
 Use cases:
 
@@ -426,12 +426,10 @@ Use cases:
 - fixed byte packing
 - cryptographic gadgets that operate on bits
 
-`ZkBits` is useful but not required for the first annotation slice because most
-early privacy templates can absorb field elements directly through Poseidon or
-MiMC. It should be added after range, array, and hash-gadget workflows are
-stable.
+`ZkBits` requires explicit length through `@FixedSize` in generated circuits.
+The Phase 7 implementation uses one constrained boolean signal per bit.
 
-### Deferred: `ZkBytes`
+### `ZkBytes`
 
 Represents a fixed-length byte sequence.
 
@@ -443,9 +441,10 @@ Use cases:
 - serialized signatures
 - off-chain data that must be committed inside a circuit
 
-`ZkBytes` should require explicit length. Unbounded strings or byte arrays
-should not be allowed. The first implementation can prefer one `ZkUInt(8)` per
-byte for clarity, with packed representations added later.
+`ZkBytes` requires explicit length through `@FixedSize` in generated circuits.
+The Phase 7 implementation uses one constrained 8-bit `ZkUInt` per byte for
+clarity, with packed representations deferred until a real proving-flow need
+appears.
 
 ## Annotation Set
 
@@ -588,7 +587,7 @@ This is mostly useful for readability and future validation.
 
 ### `@FixedSize`
 
-Defines fixed length for arrays and byte values.
+Defines fixed length for arrays, bit vectors, and byte values.
 
 ```java
 @Target({FIELD, PARAMETER})
@@ -599,8 +598,8 @@ public @interface FixedSize {
 }
 ```
 
-Required for `ZkBytes` and `ZkArray`. Use `value` for a literal size and
-`param` to reference a build-time `@CircuitParam`.
+Required for `ZkArray`, `ZkBits`, and `ZkBytes`. Use `value` for a literal size
+and `param` to reference a build-time `@CircuitParam`.
 
 Examples:
 
@@ -1654,7 +1653,7 @@ Implementation status as of Phase 6: completed in `zeroj-examples` with
 field-style, parameter-style, transfer, hash commitment, and parameterized
 Merkle examples. The user-facing guide is `docs/circuit-annotation-user-guide.md`.
 
-### Phase 7: Deferred Bits and Bytes
+### Phase 7: Bit and Byte Symbolic Inputs
 
 Estimated time: 3 to 5 days.
 
@@ -1670,6 +1669,10 @@ Exit criteria:
 - fixed-size byte messages can be represented
 - invalid byte values are rejected
 - byte/bit APIs do not complicate the v1 range/hash/Merkle surface
+
+Implementation status as of Phase 7: completed with `ZkBits`, `ZkBytes`,
+generated `@FixedSize` support, schema/input-builder support, and bit/byte
+witness constraint tests.
 
 ### Phase 8: Advanced Circuit Library Symbolic Adapters
 

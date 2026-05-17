@@ -85,6 +85,11 @@ public final class ZkBool implements ZkValue {
                 Math.max(ifTrue.bits(), ifFalse.bits()));
     }
 
+    public ZkBool isEqual(ZkBool other) {
+        requireSameContext(other);
+        return trusted(context, signal.isEqual(other.signal));
+    }
+
     public void assertTrue() {
         context.builder().assertEqual(signal, context.builder().constant(1));
     }

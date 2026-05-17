@@ -41,15 +41,15 @@ inputs.publicValues();
 
 ## Authoring Rules
 
-- Use symbolic types in proof code: `ZkField`, `ZkBool`, `ZkUInt`, and
-  `ZkArray<T>`.
+- Use symbolic types in proof code: `ZkField`, `ZkBool`, `ZkUInt`,
+  `ZkArray<T>`, `ZkBits`, and `ZkBytes`.
 - Do not return Java `boolean` from `@Prove`; return `ZkBool` or use explicit
   assertion methods.
 - Use `ZkBool.and(...)`, `or(...)`, `not(...)`, and `select(...)` instead of
   Java `&&`, `||`, `!`, or `if` over secret values.
 - Use `@UInt(bits = N)` for every `ZkUInt` input. The constructor adds range
   constraints eagerly.
-- Use `@FixedSize(...)` for every `ZkArray`.
+- Use `@FixedSize(...)` for every `ZkArray`, `ZkBits`, and `ZkBytes`.
 - Put build-time circuit shape values in constructor parameters annotated with
   `@CircuitParam`.
 - Keep existing DSL and `Signal*` APIs for low-level or unsupported cases.
@@ -124,6 +124,23 @@ The examples in
 `zeroj-examples/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation`
 show this pattern without requiring external prover tooling.
 
+## Bit And Byte Inputs
+
+Use `ZkBits` for fixed-size bit vectors and `ZkBytes` for fixed-size byte
+messages or serialized fields.
+
+```java
+@Prove
+ZkBool prove(@Secret @FixedSize(32) ZkBytes message,
+             @Public @FixedSize(32) ZkBytes expected) {
+    return message.isEqual(expected);
+}
+```
+
+Each `ZkBits` element is constrained as a boolean. Each `ZkBytes` element is
+constrained to 8 bits. Generated input builders accept indexed values and
+`List<BigInteger>` values.
+
 ## Current Limits
 
 - Nested `@ZKCircuit` classes are not supported.
@@ -131,4 +148,5 @@ show this pattern without requiring external prover tooling.
 - Static `@Prove` methods must use parameter-style inputs.
 - `@CircuitParam` belongs on constructor parameters, not proof method
   parameters.
-- `ZkBits` and `ZkBytes` are intentionally deferred.
+- Packed byte encodings and byte-oriented cryptographic gadgets are deferred;
+  Phase 7 stores one constrained field element per bit or byte.

@@ -2,7 +2,7 @@
 
 Public API for annotation-based ZeroJ circuit authoring.
 
-Current Phase 5 status: this module exposes the foundational annotations,
+Current Phase 7 status: this module exposes the foundational annotations,
 symbolic `Zk*` types, and runtime schema/input helpers used by generated
 companions.
 
@@ -10,7 +10,8 @@ This module contains:
 
 - circuit annotations such as `@ZKCircuit`, `@Prove`, `@Public`, `@Secret`,
   `@CircuitParam`, `@UInt`, `@FieldElement`, `@FixedSize`, and `@Order`
-- symbolic circuit value types: `ZkField`, `ZkBool`, `ZkUInt`, and `ZkArray`
+- symbolic circuit value types: `ZkField`, `ZkBool`, `ZkUInt`, `ZkArray`,
+  `ZkBits`, and `ZkBytes`
 - generated-circuit metadata and witness helpers: `ZkCircuitSchema` and
   `ZkInputMap`
 
@@ -53,6 +54,9 @@ Important API rules:
 - `ZkArray.secretFields`, `secretBools`, `secretUInts`, `publicFields`,
   `publicBools`, and `publicUInts` encode visibility for built-in element
   types. `ZkArray.bind` is for custom symbolic types.
+- `ZkBits` represents fixed-size bit vectors backed by constrained `ZkBool`
+  values.
+- `ZkBytes` represents fixed-size byte vectors backed by 8-bit `ZkUInt` values.
 - `wrap(...)` rejects signals from a different `SignalBuilder`.
 - `ZkCircuitSchema.publicInputs().names()` and
   `ZkCircuitSchema.secretInputs().names()` expose flattened input order.

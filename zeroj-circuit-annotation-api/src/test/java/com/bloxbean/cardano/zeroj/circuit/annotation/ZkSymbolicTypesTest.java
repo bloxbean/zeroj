@@ -238,6 +238,75 @@ class ZkSymbolicTypesTest {
     }
 
     @Test
+    void bitsInputRejectsNonBooleanWitnessAndSupportsEquality() {
+        var circuit = CircuitBuilder.create("zk-bits")
+                .secretVar("message_0")
+                .secretVar("message_1")
+                .publicVar("expected_0")
+                .publicVar("expected_1")
+                .defineSignals(c -> {
+                    var message = ZkBits.secret(c, "message", 2);
+                    var expected = ZkBits.publicInput(c, "expected", 2);
+                    message.assertEqual(expected);
+                });
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "message_0", List.of(BigInteger.ONE),
+                "message_1", List.of(BigInteger.ZERO),
+                "expected_0", List.of(BigInteger.ONE),
+                "expected_1", List.of(BigInteger.ZERO)), CurveId.BN254));
+
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "message_0", List.of(BigInteger.TWO),
+                "message_1", List.of(BigInteger.ZERO),
+                "expected_0", List.of(BigInteger.ONE),
+                "expected_1", List.of(BigInteger.ZERO)), CurveId.BN254));
+    }
+
+    @Test
+    void bytesInputRejectsOutOfRangeWitnessAndSupportsEquality() {
+        var circuit = CircuitBuilder.create("zk-bytes")
+                .secretVar("message_0")
+                .secretVar("message_1")
+                .publicVar("expected_0")
+                .publicVar("expected_1")
+                .defineSignals(c -> {
+                    var message = ZkBytes.secret(c, "message", 2);
+                    var expected = ZkBytes.publicInput(c, "expected", 2);
+                    message.assertEqual(expected);
+                });
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "message_0", List.of(BigInteger.valueOf(255)),
+                "message_1", List.of(BigInteger.ZERO),
+                "expected_0", List.of(BigInteger.valueOf(255)),
+                "expected_1", List.of(BigInteger.ZERO)), CurveId.BN254));
+
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "message_0", List.of(BigInteger.valueOf(256)),
+                "message_1", List.of(BigInteger.ZERO),
+                "expected_0", List.of(BigInteger.valueOf(255)),
+                "expected_1", List.of(BigInteger.ZERO)), CurveId.BN254));
+    }
+
+    @Test
+    void bytesConstructorRejectsNonByteUIntValues() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-bytes-width")
+                .secretVar("message_0")
+                .defineSignals(c -> new ZkBytes(List.of(ZkUInt.secret(c, "message_0", 16)))));
+    }
+
+    @Test
+    void schemaRejectsInvalidBitAndByteMetadata() {
+        assertThrows(IllegalArgumentException.class, () -> ZkCircuitSchema.Input.scalar(
+                "flag", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.BOOL, 0));
+        assertThrows(IllegalArgumentException.class, () -> ZkCircuitSchema.Input.scalar(
+                "bits", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.BITS, 1));
+        assertThrows(IllegalArgumentException.class, () -> ZkCircuitSchema.Input.array(
+                "bytes", ZkCircuitSchema.Visibility.SECRET, ZkCircuitSchema.Kind.BYTES, 16, 2));
+    }
+
+    @Test
     void schemaExposesStableNamesAndInputMapPublicValues() {
         var schema = ZkCircuitSchema.of(
                 "schema-test",

@@ -91,12 +91,13 @@ public record ZkCircuitSchema(
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(visibility, "visibility");
             Objects.requireNonNull(kind, "kind");
-            if (bits < -1) {
+            if (bits < -1 || bits == 0) {
                 throw new IllegalArgumentException("bits must be -1 or positive");
             }
             if (size <= 0) {
                 throw new IllegalArgumentException("size must be positive");
             }
+            validateKind(kind, bits, array);
             signalNames = List.copyOf(Objects.requireNonNull(signalNames, "signalNames"));
             if (signalNames.size() != size) {
                 throw new IllegalArgumentException("signalNames size must match input size");
@@ -114,6 +115,36 @@ public record ZkCircuitSchema(
             }
             return new Input(name, visibility, kind, bits, size, true, names);
         }
+
+        private static void validateKind(Kind kind, int bits, boolean array) {
+            switch (kind) {
+                case FIELD -> {
+                    if (bits != -1) {
+                        throw new IllegalArgumentException("FIELD inputs must use bits = -1");
+                    }
+                }
+                case BOOL -> {
+                    if (bits != 1) {
+                        throw new IllegalArgumentException("BOOL inputs must use bits = 1");
+                    }
+                }
+                case UINT -> {
+                    if (bits <= 0) {
+                        throw new IllegalArgumentException("UINT inputs must use a positive bit width");
+                    }
+                }
+                case BITS -> {
+                    if (!array || bits != 1) {
+                        throw new IllegalArgumentException("BITS inputs must be arrays with bits = 1");
+                    }
+                }
+                case BYTES -> {
+                    if (!array || bits != 8) {
+                        throw new IllegalArgumentException("BYTES inputs must be arrays with bits = 8");
+                    }
+                }
+            }
+        }
     }
 
     public enum Visibility {
@@ -124,6 +155,8 @@ public record ZkCircuitSchema(
     public enum Kind {
         FIELD,
         BOOL,
-        UINT
+        UINT,
+        BITS,
+        BYTES
     }
 }

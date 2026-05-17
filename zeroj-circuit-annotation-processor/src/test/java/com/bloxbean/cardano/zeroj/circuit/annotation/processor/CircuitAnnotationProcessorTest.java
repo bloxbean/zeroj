@@ -139,6 +139,131 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    void bitAndByteInputsGenerateSchemaBuildersAndConstraints() throws Exception {
+        var compilation = compile("test.MessageProof", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "message-proof")
+                public class MessageProof {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(2) ZkBytes message,
+                            @Public @FixedSize(2) ZkBytes expected,
+                            @Secret @FixedSize(3) ZkBits flags,
+                            @Public ZkBool accepted) {
+                        return message.isEqual(expected)
+                                .and(flags.get(0))
+                                .and(flags.get(1).not())
+                                .and(flags.get(2))
+                                .and(accepted);
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Class<?> companion = compilation.load("test.MessageProofCircuit");
+        ZkCircuitSchema schema = (ZkCircuitSchema) companion.getMethod("schema").invoke(null);
+        assertEquals(ZkCircuitSchema.Kind.BYTES, schema.input("message").kind());
+        assertEquals(8, schema.input("message").bits());
+        assertEquals(ZkCircuitSchema.Kind.BITS, schema.input("flags").kind());
+        assertEquals(1, schema.input("flags").bits());
+        assertEquals(List.of("expected_0", "expected_1", "accepted"), schema.publicInputs().names());
+        assertEquals(List.of("message_0", "message_1", "flags_0", "flags_1", "flags_2"),
+                schema.secretInputs().names());
+
+        Object inputs = companion.getMethod("inputs").invoke(null);
+        inputs.getClass().getMethod("message", List.class)
+                .invoke(inputs, List.of(BigInteger.valueOf(1), BigInteger.valueOf(255)));
+        inputs.getClass().getMethod("expected", List.class)
+                .invoke(inputs, List.of(BigInteger.valueOf(1), BigInteger.valueOf(255)));
+        inputs.getClass().getMethod("flags", List.class)
+                .invoke(inputs, List.of(BigInteger.ONE, BigInteger.ZERO, BigInteger.ONE));
+        inputs.getClass().getMethod("accepted", long.class).invoke(inputs, 1L);
+
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build").invoke(null);
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> witness =
+                (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
+        assertDoesNotThrow(() -> circuit.calculateWitness(witness, CurveId.BN254));
+
+        var invalidByte = Map.of(
+                "message_0", List.of(BigInteger.valueOf(256)),
+                "message_1", List.of(BigInteger.valueOf(255)),
+                "expected_0", List.of(BigInteger.ONE),
+                "expected_1", List.of(BigInteger.valueOf(255)),
+                "flags_0", List.of(BigInteger.ONE),
+                "flags_1", List.of(BigInteger.ZERO),
+                "flags_2", List.of(BigInteger.ONE),
+                "accepted", List.of(BigInteger.ONE));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(invalidByte, CurveId.BN254));
+
+        var invalidBit = Map.of(
+                "message_0", List.of(BigInteger.ONE),
+                "message_1", List.of(BigInteger.valueOf(255)),
+                "expected_0", List.of(BigInteger.ONE),
+                "expected_1", List.of(BigInteger.valueOf(255)),
+                "flags_0", List.of(BigInteger.TWO),
+                "flags_1", List.of(BigInteger.ZERO),
+                "flags_2", List.of(BigInteger.ONE),
+                "accepted", List.of(BigInteger.ONE));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(invalidBit, CurveId.BN254));
+    }
+
+    @Test
+    void rejectsInvalidBitAndByteFixedSizeDeclarations() throws Exception {
+        var missingBitsSize = compile("test.MissingBitsSize", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class MissingBitsSize {
+                    @Prove
+                    ZkBool prove(@Secret ZkBits flags, @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(missingBitsSize.success());
+        assertTrue(missingBitsSize.diagnosticsText().contains("ZkBits symbolic inputs require @FixedSize"));
+
+        var invalidByteSize = compile("test.InvalidByteSize", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class InvalidByteSize {
+                    @Prove
+                    ZkBool prove(@Secret @FixedSize(0) ZkBytes message, @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(invalidByteSize.success());
+        assertTrue(invalidByteSize.diagnosticsText().contains("@FixedSize value must be positive"));
+
+        var invalidScalarSize = compile("test.InvalidScalarSize", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class InvalidScalarSize {
+                    @Prove
+                    ZkBool prove(@Secret @FixedSize(1) ZkBool flag) {
+                        return flag;
+                    }
+                }
+                """);
+        assertFalse(invalidScalarSize.success());
+        assertTrue(invalidScalarSize.diagnosticsText()
+                .contains("@FixedSize can only be used with ZkArray, ZkBits, or ZkBytes"));
+    }
+
+    @Test
     void parameterStyleInputNamesDoNotCollideWithGeneratedLocals() throws Exception {
         var compilation = compile("test.ReservedNames", """
                 package test;
@@ -287,6 +412,12 @@ class CircuitAnnotationProcessorTest {
                 () -> badInputs.getClass().getMethod("siblings", List.class)
                         .invoke(badInputs, List.of(BigInteger.valueOf(7), BigInteger.valueOf(8))));
         assertTrue(ex.getCause() instanceof IllegalArgumentException);
+
+        var badBuild = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> companion.getMethod("build", int.class, ZkMerkle.HashType.class)
+                        .invoke(null, 0, ZkMerkle.HashType.POSEIDON));
+        assertTrue(badBuild.getCause() instanceof IllegalArgumentException);
+        assertTrue(badBuild.getCause().getMessage().contains("@FixedSize(param = \"depth\") must be positive"));
     }
 
     @Test
@@ -549,6 +680,26 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    void rejectsVisibilityAnnotationsOnZkContextParameters() throws Exception {
+        var compilation = compile("test.ContextVisibility", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class ContextVisibility {
+                    @Prove
+                    ZkBool prove(@Secret ZkContext zk, @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText().contains("ZkContext parameters cannot be @Public or @Secret"));
+    }
+
+    @Test
     void rejectsDuplicateAndUnsafeCircuitParamNames() throws Exception {
         var duplicate = compile("test.DuplicateCircuitParam", """
                 package test;
@@ -648,6 +799,22 @@ class CircuitAnnotationProcessorTest {
                 """);
         assertFalse(constants.success());
         assertTrue(constants.diagnosticsText().contains("Duplicate generated input constant name"));
+
+        var reservedConstant = compile("test.ReservedInputConstant", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class ReservedInputConstant {
+                    @Prove
+                    ZkBool prove(@Public(name = "circuitName") ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(reservedConstant.success());
+        assertTrue(reservedConstant.diagnosticsText().contains("Duplicate generated input constant name"));
     }
 
     @Test

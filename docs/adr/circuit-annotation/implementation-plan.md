@@ -29,8 +29,8 @@ In progress.
 | 3 | MVP gadget adapters | Completed | 7f49413 |
 | 4 | MVP annotation processor | Completed | b033b03 |
 | 5 | Schema and input builders | Completed | c7b24b8 |
-| 6 | Examples and documentation | Completed | Pending hash |
-| 7 | Deferred bits and bytes | Pending | Pending |
+| 6 | Examples and documentation | Completed | d655fee |
+| 7 | Bit and byte symbolic inputs | Completed | Pending final phase commit |
 | 8 | Advanced gadget adapters | Pending | Pending |
 | 9 | Proving flow integration | Pending | Pending |
 

@@ -45,6 +45,8 @@ import java.util.stream.Collectors;
 public final class CircuitAnnotationProcessor extends AbstractProcessor {
     private static final String ANNOTATION_PKG = "com.bloxbean.cardano.zeroj.circuit.annotation.";
     private static final String ZK_BOOL = ANNOTATION_PKG + "ZkBool";
+    private static final String ZK_BITS = ANNOTATION_PKG + "ZkBits";
+    private static final String ZK_BYTES = ANNOTATION_PKG + "ZkBytes";
     private static final String ZK_FIELD = ANNOTATION_PKG + "ZkField";
     private static final String ZK_UINT = ANNOTATION_PKG + "ZkUInt";
     private static final String ZK_ARRAY = ANNOTATION_PKG + "ZkArray";
@@ -206,6 +208,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                         "@CircuitParam is only supported on constructors in Phase 4");
             }
             if (isType(parameter.asType(), ZK_CONTEXT)) {
+                if (parameter.getAnnotation(Public.class) != null || parameter.getAnnotation(Secret.class) != null) {
+                    throw new GenerationException(parameter, "ZkContext parameters cannot be @Public or @Secret");
+                }
                 continue;
             }
             if (parameter.getAnnotation(Public.class) != null || parameter.getAnnotation(Secret.class) != null) {
@@ -273,13 +278,14 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
         FixedSize fixedSize = element.getAnnotation(FixedSize.class);
         SizeModel size = null;
-        if (valueKind == ValueKind.ARRAY) {
+        if (isFixedVector(valueKind)) {
             if (fixedSize == null) {
-                throw new GenerationException(element, "ZkArray symbolic inputs require @FixedSize");
+                throw new GenerationException(element,
+                        typeLabel(valueKind) + " symbolic inputs require @FixedSize");
             }
             size = sizeModel(element, fixedSize, circuitParams);
         } else if (fixedSize != null) {
-            throw new GenerationException(element, "@FixedSize can only be used with ZkArray");
+            throw new GenerationException(element, "@FixedSize can only be used with ZkArray, ZkBits, or ZkBytes");
         }
 
         Integer order = null;
@@ -316,7 +322,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             if (fixedSize.value() <= 0) {
                 throw new GenerationException(element, "@FixedSize value must be positive");
             }
-            return new SizeModel(Integer.toString(fixedSize.value()), false);
+            return new SizeModel(Integer.toString(fixedSize.value()), false, "");
         }
 
         CircuitParamModel param = circuitParams.get(fixedSize.param());
@@ -325,7 +331,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                     "@FixedSize(param = \"" + fixedSize.param()
                             + "\") must reference an integer @CircuitParam");
         }
-        return new SizeModel(param.javaName(), true);
+        return new SizeModel(param.javaName(), true, param.name());
     }
 
     private List<InputModel> orderInputs(List<InputModel> inputs) {
@@ -348,7 +354,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
     private void validateInputNames(List<InputModel> inputs) {
         Set<String> names = new HashSet<>();
-        Set<String> constantNames = new HashSet<>();
+        Set<String> constantNames = new HashSet<>(Set.of("CIRCUIT_NAME", "CIRCUIT_NAME_TEMPLATE"));
         for (InputModel input : inputs) {
             if (!names.add(input.baseName())) {
                 throw new GenerationException(null, "Duplicate generated input name: " + input.baseName());
@@ -361,7 +367,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         Set<String> flattenedNames = new HashSet<>();
         Map<String, InputModel> flattenedOwners = new java.util.HashMap<>();
         for (InputModel input : inputs) {
-            if (input.valueKind() == ValueKind.ARRAY) {
+            if (isFixedVector(input.valueKind())) {
                 if (!input.size().fromCircuitParam()) {
                     int size = Integer.parseInt(input.size().expression());
                     for (int i = 0; i < size; i++) {
@@ -381,7 +387,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             }
         }
 
-        for (InputModel array : inputs.stream().filter(i -> i.valueKind() == ValueKind.ARRAY).toList()) {
+        for (InputModel array : inputs.stream().filter(i -> isFixedVector(i.valueKind())).toList()) {
             for (InputModel other : inputs.stream().filter(i -> i != array).toList()) {
                 if (other.baseName().matches(java.util.regex.Pattern.quote(array.baseName()) + "_\\d+")) {
                     throw new GenerationException(null,
@@ -444,7 +450,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         }
         out.append("import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkArray;\n")
+                .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBits;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBool;\n")
+                .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBytes;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitSchema;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;\n")
                 .append("import com.bloxbean.cardano.zeroj.circuit.annotation.ZkField;\n")
@@ -472,6 +480,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         out.append("    public static CircuitBuilder build(")
                 .append(renderParamSignature(circuitParams))
                 .append(") {\n");
+        renderFixedSizeParamGuards(out, inputs, "        ");
         if (needsInstance) {
             out.append("        var ").append(instanceLocal).append(" = new ").append(sourceSimpleName).append("(")
                     .append(circuitParams.stream().map(CircuitParamModel::javaName).collect(Collectors.joining(", ")))
@@ -554,8 +563,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                                        List<InputModel> inputs, boolean parameterized) {
         out.append("\n    public static ZkCircuitSchema schema(")
                 .append(renderParamSignature(circuitParams))
-                .append(") {\n")
-                .append("        return ZkCircuitSchema.of(")
+                .append(") {\n");
+        renderFixedSizeParamGuards(out, inputs, "        ");
+        out.append("        return ZkCircuitSchema.of(")
                 .append(parameterized ? "circuitName(" + renderParamNames(circuitParams) + ")" : "CIRCUIT_NAME")
                 .append(",\n")
                 .append("                ").append(renderParameterSchemaList(circuitParams)).append(",\n")
@@ -574,6 +584,22 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("    }\n");
 
         renderInputsClass(out, inputs);
+    }
+
+    private void renderFixedSizeParamGuards(StringBuilder out, List<InputModel> inputs, String indent) {
+        Map<String, String> sizeParams = new java.util.LinkedHashMap<>();
+        for (InputModel input : inputs) {
+            if (input.size() != null && input.size().fromCircuitParam()) {
+                sizeParams.putIfAbsent(input.size().expression(), input.size().paramName());
+            }
+        }
+        for (Map.Entry<String, String> entry : sizeParams.entrySet()) {
+            out.append(indent).append("if (").append(entry.getKey()).append(" <= 0) {\n")
+                    .append(indent).append("    throw new IllegalArgumentException(")
+                    .append(stringLiteral("@FixedSize(param = \"" + entry.getValue() + "\") must be positive"))
+                    .append(");\n")
+                    .append(indent).append("}\n");
+        }
     }
 
     private String renderParameterSchemaList(List<CircuitParamModel> circuitParams) {
@@ -601,10 +627,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private String renderInputSchema(InputModel input) {
-        String prefix = input.valueKind() == ValueKind.ARRAY
+        String prefix = isFixedVector(input.valueKind())
                 ? "ZkCircuitSchema.Input.array("
                 : "ZkCircuitSchema.Input.scalar(";
-        String size = input.valueKind() == ValueKind.ARRAY ? ", " + input.size().expression() : "";
+        String size = isFixedVector(input.valueKind()) ? ", " + input.size().expression() : "";
         return prefix
                 + input.constantName()
                 + ", ZkCircuitSchema.Visibility." + input.visibility().name()
@@ -626,7 +652,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("        }\n\n");
 
         for (InputModel input : inputs) {
-            if (input.valueKind() == ValueKind.ARRAY) {
+            if (isFixedVector(input.valueKind())) {
                 renderArrayInputMethods(out, input);
             } else {
                 renderScalarInputMethods(out, input);
@@ -690,6 +716,12 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         if (input.valueKind() == ValueKind.UINT || input.arrayElementType().equals(ZK_UINT)) {
             return "UINT";
         }
+        if (input.valueKind() == ValueKind.BITS) {
+            return "BITS";
+        }
+        if (input.valueKind() == ValueKind.BYTES) {
+            return "BYTES";
+        }
         throw new GenerationException(null, "Unsupported schema input type: " + input.valueKind());
     }
 
@@ -700,12 +732,18 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         if (input.valueKind() == ValueKind.BOOL || input.arrayElementType().equals(ZK_BOOL)) {
             return 1;
         }
+        if (input.valueKind() == ValueKind.BITS) {
+            return 1;
+        }
+        if (input.valueKind() == ValueKind.BYTES) {
+            return 8;
+        }
         return -1;
     }
 
     private void renderVarDeclaration(StringBuilder out, InputModel input, String builderLocal,
                                       String loopLocal, String method) {
-        if (input.valueKind() == ValueKind.ARRAY) {
+        if (isFixedVector(input.valueKind())) {
             out.append("        for (int ").append(loopLocal).append(" = 0; ")
                     .append(loopLocal).append(" < ").append(input.size().expression()).append("; ")
                     .append(loopLocal).append("++) {\n")
@@ -729,6 +767,14 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         if (input.valueKind() == ValueKind.UINT) {
             return "ZkUInt." + visibilityMethod + "(" + signalContextLocal + ", "
                     + input.constantName() + ", " + input.bits() + ")";
+        }
+        if (input.valueKind() == ValueKind.BITS) {
+            return "ZkBits." + visibilityMethod + "(" + signalContextLocal + ", "
+                    + input.constantName() + ", " + input.size().expression() + ")";
+        }
+        if (input.valueKind() == ValueKind.BYTES) {
+            return "ZkBytes." + visibilityMethod + "(" + signalContextLocal + ", "
+                    + input.constantName() + ", " + input.size().expression() + ")";
         }
         if (input.arrayElementType().equals(ZK_FIELD)) {
             return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicFields" : "secretFields")
@@ -816,11 +862,13 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         TypeMirror type = element.asType();
         if (isType(type, ZK_FIELD)) return ValueKind.FIELD;
         if (isType(type, ZK_BOOL)) return ValueKind.BOOL;
+        if (isType(type, ZK_BITS)) return ValueKind.BITS;
+        if (isType(type, ZK_BYTES)) return ValueKind.BYTES;
         if (isType(type, ZK_UINT)) return ValueKind.UINT;
         if (isType(type, ZK_ARRAY)) return ValueKind.ARRAY;
         if (type.toString().equals("java.math.BigInteger") || type.getKind() == TypeKind.BOOLEAN) {
             throw new GenerationException(element,
-                    "Symbolic inputs must use ZkField, ZkBool, ZkUInt, or ZkArray, not " + type);
+                    "Symbolic inputs must use ZkField, ZkBool, ZkUInt, ZkArray, ZkBits, or ZkBytes, not " + type);
         }
         throw new GenerationException(element, "Unsupported symbolic input type: " + type);
     }
@@ -838,6 +886,19 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
     private boolean isArrayOf(TypeMirror type, String elementType) {
         return isType(type, ZK_ARRAY) && elementType(type).equals(elementType);
+    }
+
+    private boolean isFixedVector(ValueKind valueKind) {
+        return valueKind == ValueKind.ARRAY || valueKind == ValueKind.BITS || valueKind == ValueKind.BYTES;
+    }
+
+    private String typeLabel(ValueKind valueKind) {
+        return switch (valueKind) {
+            case ARRAY -> "ZkArray";
+            case BITS -> "ZkBits";
+            case BYTES -> "ZkBytes";
+            default -> valueKind.name();
+        };
     }
 
     private boolean isType(TypeMirror type, String qualifiedName) {
@@ -975,12 +1036,14 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         FIELD,
         BOOL,
         UINT,
-        ARRAY
+        ARRAY,
+        BITS,
+        BYTES
     }
 
     private record CircuitParamModel(String name, String javaName, String type, boolean intLike) {}
 
-    private record SizeModel(String expression, boolean fromCircuitParam) {}
+    private record SizeModel(String expression, boolean fromCircuitParam, String paramName) {}
 
     private record InputModel(
             String javaName,
