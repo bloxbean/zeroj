@@ -1603,6 +1603,13 @@ Exit criteria:
 - processor rejects unsupported `boolean` and `BigInteger` proof methods
 - processor rejects invalid `@FixedSize(param = "...")` references
 
+Implementation status as of Phase 4: completed. The processor generates
+`build(...)` companions and constants for field-style, parameter-style, and
+constructor-parameterized circuits. Schema and input-builder helpers remain
+Phase 5 work. Phase 4 intentionally rejects unsupported source shapes such as
+private proof methods, nested circuit classes, static proof methods with
+field-style inputs, and `@CircuitParam` on proof parameters.
+
 ### Phase 5: Generated Input Builders and Schema
 
 Estimated time: 3 to 5 days.

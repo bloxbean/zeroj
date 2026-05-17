@@ -2,19 +2,29 @@
 
 Compile-time annotation processor for annotation-based ZeroJ circuit authoring.
 
-Current Phase 1 status: this module contains a registered no-op processor
-placeholder. It does not yet scan annotations or generate source.
+Current Phase 4 status: this module scans `@ZKCircuit` classes and generates
+`*Circuit` companions with `build(...)` methods and input-name constants.
 
-The processor will scan classes annotated with `@ZKCircuit` and generate
-companion classes that build normal `CircuitBuilder` / `CircuitSpec` circuits.
+The generated companions build normal `CircuitBuilder` / `CircuitSpec`
+circuits. Schema and input-builder helpers are planned for Phase 5.
 
-Current phase status:
+Supported in Phase 4:
 
-- the module is scaffolded
-- the processor is registered with Java's service provider mechanism
-- functional processing is intentionally deferred to Phase 4 of the ADR plan
+- field-style and parameter-style `@Prove` methods
+- `ZkContext` proof parameters
+- constructor `@CircuitParam` values
+- `@FixedSize(param = "...")` arrays
+- `@Public`, `@Secret`, `@UInt`, `@FieldElement`, and `@Order`
+- compile-time diagnostics for unsupported symbolic types and proof returns
 
-Consumer usage after the API stabilizes:
+Not supported in Phase 4:
+
+- nested `@ZKCircuit` classes
+- private `@Prove` methods
+- static `@Prove` methods with field-style inputs
+- `@CircuitParam` on `@Prove` parameters
+
+Consumer usage:
 
 ```gradle
 dependencies {

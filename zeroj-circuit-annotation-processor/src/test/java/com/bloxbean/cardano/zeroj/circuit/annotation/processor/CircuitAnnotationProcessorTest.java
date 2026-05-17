@@ -1,13 +1,41 @@
 package com.bloxbean.cardano.zeroj.circuit.annotation.processor;
 
+import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBN254T3;
+import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.processing.Processor;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
+import java.math.BigInteger;
+import java.net.URI;
+import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.ServiceLoader;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CircuitAnnotationProcessorTest {
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void processorIsServiceRegistered() {
@@ -17,4 +45,631 @@ class CircuitAnnotationProcessorTest {
                         .anyMatch(CircuitAnnotationProcessor.class::equals),
                 "CircuitAnnotationProcessor should be discoverable via ServiceLoader");
     }
+
+    @Test
+    void fieldStyleRangeProofGeneratesBuildAndRejectsInvalidWitness() throws Exception {
+        var compilation = compile("test.RangeProof", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "range-proof")
+                public class RangeProof {
+                    @Secret @UInt(bits = 8)
+                    ZkUInt secret;
+
+                    @Public @UInt(bits = 8)
+                    ZkUInt lo;
+
+                    @Public @UInt(bits = 8)
+                    ZkUInt hi;
+
+                    @Prove
+                    ZkBool inRange() {
+                        return secret.gte(lo).and(secret.lte(hi));
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        assertTrue(compilation.generatedSource("test/RangeProofCircuit.java")
+                .contains("public static final String SECRET = \"secret\";"));
+
+        Class<?> companion = compilation.load("test.RangeProofCircuit");
+        assertEquals("range-proof", companion.getField("CIRCUIT_NAME").get(null));
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build").invoke(null);
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "secret", List.of(BigInteger.valueOf(42)),
+                "lo", List.of(BigInteger.valueOf(18)),
+                "hi", List.of(BigInteger.valueOf(99))), CurveId.BN254));
+
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "secret", List.of(BigInteger.valueOf(7)),
+                "lo", List.of(BigInteger.valueOf(18)),
+                "hi", List.of(BigInteger.valueOf(99))), CurveId.BN254));
+    }
+
+    @Test
+    void parameterStyleRangeProofGeneratesBuild() throws Exception {
+        var compilation = compile("test.AgeProof", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "age-proof")
+                public class AgeProof {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @UInt(bits = 8) ZkUInt age,
+                            @Public @UInt(bits = 8) ZkUInt threshold) {
+                        return age.gte(threshold);
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        CircuitBuilder circuit = (CircuitBuilder) compilation.load("test.AgeProofCircuit")
+                .getMethod("build")
+                .invoke(null);
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "age", List.of(BigInteger.valueOf(25)),
+                "threshold", List.of(BigInteger.valueOf(18))), CurveId.BN254));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "age", List.of(BigInteger.valueOf(15)),
+                "threshold", List.of(BigInteger.valueOf(18))), CurveId.BN254));
+    }
+
+    @Test
+    void parameterStyleInputNamesDoNotCollideWithGeneratedLocals() throws Exception {
+        var compilation = compile("test.ReservedNames", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "reserved-names")
+                public class ReservedNames {
+                    public ReservedNames(@CircuitParam("depth") int __zerojBuilder) {}
+
+                    @Prove
+                    ZkBool prove(
+                            @Public ZkBool c,
+                            @Secret ZkBool zk,
+                            @Secret ZkBool builder,
+                            @Secret ZkBool instance) {
+                        return c.and(zk).and(builder).and(instance);
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        CircuitBuilder circuit = (CircuitBuilder) compilation.load("test.ReservedNamesCircuit")
+                .getMethod("build", int.class)
+                .invoke(null, 4);
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "c", List.of(BigInteger.ONE),
+                "zk", List.of(BigInteger.ONE),
+                "builder", List.of(BigInteger.ONE),
+                "instance", List.of(BigInteger.ONE)), CurveId.BN254));
+    }
+
+    @Test
+    void parameterizedMerkleMembershipGeneratesBuildWithCircuitParams() throws Exception {
+        var compilation = compile("test.MerkleMembership", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+                import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
+
+                @ZKCircuit(name = "membership", nameTemplate = "membership-d{depth}-{hashType}")
+                public class MerkleMembership {
+                    private final int depth;
+                    private final ZkMerkle.HashType hashType;
+
+                    public MerkleMembership(
+                            @CircuitParam("depth") int depth,
+                            @CircuitParam("hashType") ZkMerkle.HashType hashType) {
+                        this.depth = depth;
+                        this.hashType = hashType;
+                    }
+
+                    @Prove
+                    ZkBool prove(
+                            ZkContext zk,
+                            @Secret ZkField leaf,
+                            @Public ZkField root,
+                            @Secret @FixedSize(param = "depth") ZkArray<ZkField> siblings,
+                            @Secret @FixedSize(param = "depth") ZkArray<ZkBool> pathBits) {
+                        return ZkMerkle.isMember(zk, leaf, root, siblings, pathBits, hashType);
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Class<?> companion = compilation.load("test.MerkleMembershipCircuit");
+        CircuitBuilder circuit = (CircuitBuilder) companion
+                .getMethod("build", int.class, ZkMerkle.HashType.class)
+                .invoke(null, 1, ZkMerkle.HashType.POSEIDON);
+        assertEquals("membership-d1-POSEIDON", circuit.constraintGraph().name());
+
+        BigInteger root = PoseidonHash.hash(
+                PoseidonParamsBN254T3.INSTANCE,
+                BigInteger.valueOf(5),
+                BigInteger.valueOf(7));
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "leaf", List.of(BigInteger.valueOf(5)),
+                "root", List.of(root),
+                "sibling_0", List.of(BigInteger.valueOf(7)),
+                "pathBit_0", List.of(BigInteger.ZERO)), CurveId.BN254));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "leaf", List.of(BigInteger.valueOf(5)),
+                "root", List.of(BigInteger.ONE),
+                "sibling_0", List.of(BigInteger.valueOf(7)),
+                "pathBit_0", List.of(BigInteger.ZERO)), CurveId.BN254));
+    }
+
+    @Test
+    void parameterizedCircuitWithoutNameTemplateUsesCanonicalSuffix() throws Exception {
+        var compilation = compile("test.ParamStatic", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "param-static")
+                public class ParamStatic {
+                    private ParamStatic() {}
+
+                    public ParamStatic(@CircuitParam("depth") int depth) {}
+
+                    @Prove
+                    static ZkBool prove(@Secret ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        CircuitBuilder depth2 = (CircuitBuilder) compilation.load("test.ParamStaticCircuit")
+                .getMethod("build", int.class)
+                .invoke(null, 2);
+        CircuitBuilder depth3 = (CircuitBuilder) compilation.load("test.ParamStaticCircuit")
+                .getMethod("build", int.class)
+                .invoke(null, 3);
+        assertEquals("param-static--depth-2", depth2.constraintGraph().name());
+        assertEquals("param-static--depth-3", depth3.constraintGraph().name());
+    }
+
+    @Test
+    void staticProveDoesNotRequireVisibleNoArgConstructor() throws Exception {
+        var compilation = compile("test.StaticProof", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "static-proof")
+                public class StaticProof {
+                    private StaticProof() {}
+
+                    @Prove
+                    static ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        CircuitBuilder circuit = (CircuitBuilder) compilation.load("test.StaticProofCircuit")
+                .getMethod("build")
+                .invoke(null);
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of("ok", List.of(BigInteger.ONE)), CurveId.BN254));
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(Map.of("ok", List.of(BigInteger.ZERO)), CurveId.BN254));
+    }
+
+    @Test
+    void rejectsStaticProveWithFieldStyleInputs() throws Exception {
+        var compilation = compile("test.StaticFieldStyle", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class StaticFieldStyle {
+                    @Public
+                    ZkBool ok;
+
+                    @Prove
+                    static ZkBool prove() {
+                        return null;
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText()
+                .contains("Static @Prove methods must use parameter-style symbolic inputs"));
+    }
+
+    @Test
+    void rejectsPrivateProveMethods() throws Exception {
+        var compilation = compile("test.PrivateProof", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class PrivateProof {
+                    @Prove
+                    private ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText().contains("@Prove method must be visible to generated code"));
+    }
+
+    @Test
+    void rejectsNestedCircuitClassesInPhase4() throws Exception {
+        var compilation = compile("test.OuterCircuitHolder", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                public class OuterCircuitHolder {
+                    @ZKCircuit
+                    public static class InnerProof {
+                        @Prove
+                        ZkBool prove(@Public ZkBool ok) {
+                            return ok;
+                        }
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText()
+                .contains("Nested @ZKCircuit classes are not supported in Phase 4"));
+    }
+
+    @Test
+    void rejectsUnsupportedBooleanAndBigIntegerProofMethods() throws Exception {
+        var booleanCompilation = compile("test.BooleanProof", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class BooleanProof {
+                    @Prove
+                    boolean prove() {
+                        return true;
+                    }
+                }
+                """);
+        assertFalse(booleanCompilation.success());
+        assertTrue(booleanCompilation.diagnosticsText().contains("must return ZkBool or void"));
+
+        var bigIntegerCompilation = compile("test.BigIntegerProof", """
+                package test;
+
+                import java.math.BigInteger;
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class BigIntegerProof {
+                    @Prove
+                    BigInteger prove() {
+                        return BigInteger.ONE;
+                    }
+                }
+                """);
+        assertFalse(bigIntegerCompilation.success());
+        assertTrue(bigIntegerCompilation.diagnosticsText().contains("must return ZkBool or void"));
+    }
+
+    @Test
+    void rejectsInvalidFixedSizeParamReferences() throws Exception {
+        var compilation = compile("test.BadMerkle", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class BadMerkle {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(param = "depth") ZkArray<ZkField> siblings,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText().contains("must reference an integer @CircuitParam"));
+    }
+
+    @Test
+    void rejectsCircuitParamOnProveParametersInPhase4() throws Exception {
+        var compilation = compile("test.ProveParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class ProveParam {
+                    @Prove
+                    ZkBool prove(@CircuitParam("depth") int depth, @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText()
+                .contains("@CircuitParam is only supported on constructors in Phase 4"));
+
+        var contextCompilation = compile("test.ProveContextParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class ProveContextParam {
+                    @Prove
+                    ZkBool prove(@CircuitParam("zk") ZkContext zk, @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(contextCompilation.success());
+        assertTrue(contextCompilation.diagnosticsText()
+                .contains("@CircuitParam is only supported on constructors in Phase 4"));
+    }
+
+    @Test
+    void rejectsDuplicateAndUnsafeCircuitParamNames() throws Exception {
+        var duplicate = compile("test.DuplicateCircuitParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class DuplicateCircuitParam {
+                    public DuplicateCircuitParam(
+                            @CircuitParam("depth") int first,
+                            @CircuitParam("depth") int second) {}
+
+                    @Prove
+                    ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(duplicate.success());
+        assertTrue(duplicate.diagnosticsText().contains("Duplicate @CircuitParam name: depth"));
+
+        var unsafe = compile("test.UnsafeCircuitParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class UnsafeCircuitParam {
+                    public UnsafeCircuitParam(@CircuitParam("bad-name") int depth) {}
+
+                    @Prove
+                    ZkBool prove(@Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(unsafe.success());
+        assertTrue(unsafe.diagnosticsText().contains("@CircuitParam name must match [A-Za-z_][A-Za-z0-9_]*"));
+    }
+
+    @Test
+    void rejectsUIntWidthsAboveSymbolicLimit() throws Exception {
+        var compilation = compile("test.BadUInt", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class BadUInt {
+                    @Prove
+                    ZkBool prove(@Secret @UInt(bits = 254) ZkUInt value) {
+                        return value.gte(value);
+                    }
+                }
+                """);
+
+        assertFalse(compilation.success());
+        assertTrue(compilation.diagnosticsText().contains("@UInt bits must be in [1, 253]"));
+    }
+
+    @Test
+    void rejectsDuplicateFlattenedAndConstantNames() throws Exception {
+        var flattened = compile("test.DuplicateFlattened", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class DuplicateFlattened {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(1) ZkArray<ZkField> siblings,
+                            @Secret(name = "sibling_0") ZkField sibling0,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(flattened.success());
+        assertTrue(flattened.diagnosticsText().contains("Duplicate flattened input"));
+
+        var constants = compile("test.DuplicateConstants", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class DuplicateConstants {
+                    @Prove
+                    ZkBool prove(
+                            @Secret(name = "a-b") ZkField a,
+                            @Secret(name = "a_b") ZkField b,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(constants.success());
+        assertTrue(constants.diagnosticsText().contains("Duplicate generated input constant name"));
+    }
+
+    @Test
+    void sanitizesGeneratedInputConstantsThatWouldNotBeJavaIdentifiers() throws Exception {
+        var compilation = compile("test.OddInputNames", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class OddInputNames {
+                    @Prove
+                    ZkBool prove(
+                            @Public(name = "1") ZkField one,
+                            @Secret(name = "-") ZkField dash,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        String generated = compilation.generatedSource("test/OddInputNamesCircuit.java");
+        assertTrue(generated.contains("public static final String INPUT_1 = \"1\";"));
+        assertTrue(generated.contains("public static final String INPUT__ = \"-\";"));
+
+        CircuitBuilder circuit = (CircuitBuilder) compilation.load("test.OddInputNamesCircuit")
+                .getMethod("build")
+                .invoke(null);
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "1", List.of(BigInteger.ONE),
+                "-", List.of(BigInteger.TEN),
+                "ok", List.of(BigInteger.ONE)), CurveId.BN254));
+    }
+
+    @Test
+    void rejectsNameTemplateThatOmitsOrReferencesUnknownParams() throws Exception {
+        var missing = compile("test.MissingTemplateParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(nameTemplate = "missing-{depth}")
+                public class MissingTemplateParam {
+                    public MissingTemplateParam(
+                            @CircuitParam("depth") int depth,
+                            @CircuitParam("hashType") String hashType) {}
+
+                    @Prove
+                    ZkBool prove(@Secret ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(missing.success());
+        assertTrue(missing.diagnosticsText().contains("must include @CircuitParam {hashType}"));
+
+        var unknown = compile("test.UnknownTemplateParam", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(nameTemplate = "unknown-{depth}-{other}")
+                public class UnknownTemplateParam {
+                    public UnknownTemplateParam(@CircuitParam("depth") int depth) {}
+
+                    @Prove
+                    ZkBool prove(@Secret ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(unknown.success());
+        assertTrue(unknown.diagnosticsText().contains("references unknown @CircuitParam: other"));
+    }
+
+    private Compilation compile(String className, String source) throws Exception {
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        assertNotNull(compiler, "Tests require a JDK, not a JRE");
+
+        Path classesDir = Files.createDirectories(tempDir.resolve(className.replace('.', '_') + "_classes"));
+        Path sourcesDir = Files.createDirectories(tempDir.resolve(className.replace('.', '_') + "_generated"));
+
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(
+                diagnostics, null, StandardCharsets.UTF_8)) {
+            List<String> options = List.of(
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-processor", CircuitAnnotationProcessor.class.getName(),
+                    "-d", classesDir.toString(),
+                    "-s", sourcesDir.toString());
+
+            Boolean ok = compiler.getTask(
+                    null,
+                    fileManager,
+                    diagnostics,
+                    options,
+                    null,
+                    List.of(new SourceFile(className, source))).call();
+            return new Compilation(Boolean.TRUE.equals(ok), diagnostics, classesDir, sourcesDir);
+        }
+    }
+
+    private record Compilation(
+            boolean success,
+            DiagnosticCollector<JavaFileObject> diagnostics,
+            Path classesDir,
+            Path sourcesDir) {
+
+        String diagnosticsText() {
+            return diagnostics.getDiagnostics().stream()
+                    .map(d -> d.getKind() + ": " + d.getMessage(null))
+                    .reduce("", (a, b) -> a + b + "\n");
+        }
+
+        String generatedSource(String relativePath) throws Exception {
+            return Files.readString(sourcesDir.resolve(relativePath));
+        }
+
+        Class<?> load(String className) throws Exception {
+            URLClassLoader loader = new URLClassLoader(
+                    new java.net.URL[]{classesDir.toUri().toURL()},
+                    CircuitAnnotationProcessorTest.class.getClassLoader());
+            return Class.forName(className, true, loader);
+        }
+    }
+
+    private static final class SourceFile extends SimpleJavaFileObject {
+        private final String source;
+
+        private SourceFile(String className, String source) {
+            super(URI.create("string:///" + className.replace('.', '/') + JavaFileObject.Kind.SOURCE.extension),
+                    JavaFileObject.Kind.SOURCE);
+            this.source = source;
+        }
+
+        @Override
+        public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+            return source;
+        }
+    }
+
 }

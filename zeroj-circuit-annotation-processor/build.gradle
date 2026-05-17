@@ -6,6 +6,8 @@ description = 'ZeroJ Circuit Annotation Processor — generates CircuitBuilder c
 
 dependencies {
     implementation project(':zeroj-circuit-annotation-api')
+
+    testImplementation project(':zeroj-circuit-lib')
 }
 
 publishing {
