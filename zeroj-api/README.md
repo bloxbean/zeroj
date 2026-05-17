@@ -11,7 +11,7 @@ This module defines the foundational data types shared across all ZeroJ modules.
 | `ZkProofEnvelope` | Immutable container for a ZK proof — proof bytes, public inputs, VK reference, circuit ID, proof system, curve |
 | `VerificationResult` | Separates cryptographic validity from policy validity with typed reason codes |
 | `VerificationMaterial` | VK bytes + proof system/curve/circuit metadata for verification |
-| `ProofSystemId` | Enum: `GROTH16`, `PLONK`, `FFLONK`, `HALO2` |
+| `ProofSystemId` | Enum: `GROTH16`, `PLONK`, `FFLONK`, `HALO2`, `BBS` |
 | `CurveId` | Enum: `BN254`, `BLS12_381`, `PALLAS` |
 | `CircuitId` | Typed wrapper for circuit identifiers (non-blank string) |
 | `PublicInputs` | Immutable list of `BigInteger` field elements |

@@ -6,8 +6,9 @@ This module provides two verification backends:
 
 | Backend | Curve | Implementation | Performance |
 |---------|-------|----------------|-------------|
-| `Groth16BN254Verifier` | BN254 | Pure Java | ~100-300ms |
-| `Groth16BLS12381Verifier` | BLS12-381 | Native via blst | ~1ms |
+| `Groth16BN254Verifier` | BN254 | Pure Java | snarkjs/circom-compatible |
+| `Groth16BLS12381PureJavaVerifier` | BLS12-381 | Pure Java | zero native dependencies |
+| `Groth16BLS12381Verifier` | BLS12-381 | Native via blst | faster opt-in path |
 
 ## BN254 (Pure Java)
 
@@ -19,9 +20,12 @@ The BN254 backend is implemented entirely in Java with no native dependencies. I
 
 The pairing check verifies: `e(A,B) * e(-alpha,beta) * e(-vk_x,gamma) * e(-C,delta) == 1`
 
-## BLS12-381 (Native blst)
+## BLS12-381
 
-The BLS12-381 backend delegates pairing operations to the `blst` native library via `zeroj-blst`. This is the same curve used by Cardano's Plutus V3 BLS primitives.
+The BLS12-381 pure Java backend uses `zeroj-bls12381` and requires no native
+library. The blst-backed backend delegates pairing operations to `zeroj-blst`
+for the faster native path. BLS12-381 is the same curve used by Cardano's
+Plutus V3 BLS primitives.
 
 ## Usage
 
@@ -29,7 +33,8 @@ The BLS12-381 backend delegates pairing operations to the `blst` native library 
 // Register backends
 var registry = VerifierRegistry.empty();
 registry.register(new Groth16BN254Verifier());      // Pure Java
-registry.register(new Groth16BLS12381Verifier());    // Native blst
+registry.register(new Groth16BLS12381PureJavaVerifier()); // Pure Java
+registry.register(new Groth16BLS12381Verifier());         // Native blst
 
 // Parse snarkjs artifacts and verify
 var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(proofJson, vkJson, publicJson,

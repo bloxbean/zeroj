@@ -38,7 +38,7 @@ PlonK verification involves 6 steps:
 
 ```java
 // Via SPI (auto-discovered by VerifierOrchestrator)
-var registry = VerifierRegistry.discover(); // finds PlonkBLS12381Verifier
+var registry = VerifierRegistry.withServiceLoader(); // finds ServiceLoader-registered verifiers
 
 // Or direct
 var verifier = new PlonkBLS12381Verifier();
@@ -65,7 +65,7 @@ The transcript must match the prover's byte layout exactly. The current implemen
 ## Test Vectors
 
 - `zeroj-test-vectors/.../plonk-bn254/` — snarkjs PlonK BN254 (multiplier: 3 × 11 = 33)
-- `zeroj-test-vectors/.../plonk-bls12381/` — gnark PlonK BLS12-381 (same circuit)
+- `zeroj-test-vectors/.../plonk-bls12381/` — gnark PlonK BLS12-381 artifacts used for transcript and compatibility tests
 
 ## Gradle
 
