@@ -1,6 +1,8 @@
 package com.bloxbean.cardano.zeroj.verifier.plonk;
 
 import com.bloxbean.cardano.zeroj.codec.SnarkjsPlonkCodec;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
+import com.bloxbean.cardano.zeroj.crypto.transcript.Keccak256;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Fp;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.G1Point;
 import org.junit.jupiter.api.BeforeEach;

@@ -6,6 +6,7 @@ import com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier;
 import com.bloxbean.cardano.zeroj.bls12381.ec.*;
 import com.bloxbean.cardano.zeroj.bls12381.field.*;
 import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -14,7 +15,7 @@ import java.util.List;
  * Pure Java PlonK verifier for BLS12-381 — no native dependencies.
  *
  * <p>Uses the pure Java BLS12-381 field arithmetic and pairing implementation
- * in {@link com.bloxbean.cardano.zeroj.verifier.plonk.bls12381}.</p>
+ * from {@code zeroj-bls12381}.</p>
  *
  * <p>Implements the snarkjs PlonK verification algorithm:
  * <ol>
@@ -41,6 +42,12 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
         try {
+            if (envelope.proofFormat().filter("gnark-plonk-json"::equals).isPresent()) {
+                return VerificationResult.error(
+                        VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
+                        "gnark binary PlonK JSON is not accepted by the snarkjs/ZeroJ structured PlonK verifier");
+            }
+
             var proofJson = new String(envelope.proofBytes());
             var vkJson = new String(material.vkBytes());
 
@@ -70,124 +77,141 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
             int n = vk.domainSize();
             BigInteger omega = vk.omega();
 
-            // Step 1: Fiat-Shamir challenges
-            var transcript = new FiatShamirTranscript(Fr);
-            appendG1(transcript, proof.cmA());
-            appendG1(transcript, proof.cmB());
-            appendG1(transcript, proof.cmC());
-            BigInteger beta = transcript.squeezeNonZeroChallenge();
-            BigInteger gamma = transcript.squeezeNonZeroChallenge();
+            // Step 1: Fiat-Shamir challenges. This mirrors the BLS12-381 prover
+            // and BN254 verifier transcript round boundaries.
+            G1Point A = toG1(proof.cmA()), B = toG1(proof.cmB()), C = toG1(proof.cmC());
+            G1Point Z = toG1(proof.cmZ());
+            G1Point T1 = toG1(proof.cmT1()), T2 = toG1(proof.cmT2()), T3 = toG1(proof.cmT3());
+            G1Point Wxi = toG1(proof.wZeta()), Wxiw = toG1(proof.wZetaOmega());
 
-            appendG1(transcript, proof.cmZ());
-            BigInteger alpha = transcript.squeezeNonZeroChallenge();
+            G1Point Qm = toG1(vk.qM()), Ql = toG1(vk.qL()), Qr = toG1(vk.qR());
+            G1Point Qo = toG1(vk.qO()), Qc = toG1(vk.qC());
+            G1Point S1 = toG1(vk.s1()), S2 = toG1(vk.s2()), S3 = toG1(vk.s3());
+            G2Point X_2 = toG2(vk.x2());
 
-            appendG1(transcript, proof.cmT1());
-            appendG1(transcript, proof.cmT2());
-            appendG1(transcript, proof.cmT3());
-            BigInteger zeta = transcript.squeezeNonZeroChallenge();
-
-            transcript.appendScalar(proof.evalA());
-            transcript.appendScalar(proof.evalB());
-            transcript.appendScalar(proof.evalC());
-            transcript.appendScalar(proof.evalS1());
-            transcript.appendScalar(proof.evalS2());
-            transcript.appendScalar(proof.evalZOmega());
-            BigInteger v = transcript.squeezeNonZeroChallenge();
-
-            appendG1(transcript, proof.wZeta());
-            appendG1(transcript, proof.wZetaOmega());
-            BigInteger u = transcript.squeezeNonZeroChallenge();
-
-            // Step 2: Z_H(zeta) = zeta^n - 1
-            BigInteger zetaPowN = zeta.modPow(BigInteger.valueOf(n), Fr);
-            BigInteger zh = zetaPowN.subtract(BigInteger.ONE).mod(Fr);
-
-            // Step 3: L1(zeta)
-            BigInteger nInv = BigInteger.valueOf(n).modInverse(Fr);
-            BigInteger l1 = zh.multiply(nInv).mod(Fr)
-                    .multiply(zeta.subtract(BigInteger.ONE).mod(Fr).modInverse(Fr)).mod(Fr);
-
-            // Step 4: PI(zeta)
-            BigInteger pi = BigInteger.ZERO;
+            var transcript = new FiatShamirTranscript(Fr, 32, 48);
+            addG1(transcript, Qm); addG1(transcript, Ql); addG1(transcript, Qr);
+            addG1(transcript, Qo); addG1(transcript, Qc);
+            addG1(transcript, S1); addG1(transcript, S2); addG1(transcript, S3);
             for (int i = 0; i < publicInputs.size(); i++) {
-                BigInteger omegaI = omega.modPow(BigInteger.valueOf(i), Fr);
-                BigInteger li = zh.multiply(nInv).mod(Fr)
-                        .multiply(omegaI).mod(Fr)
-                        .multiply(zeta.subtract(omegaI).mod(Fr).modInverse(Fr)).mod(Fr);
-                pi = pi.add(publicInputs.get(i).multiply(li).mod(Fr)).mod(Fr);
+                transcript.addScalar(publicInputs.get(i));
+            }
+            addG1(transcript, A); addG1(transcript, B); addG1(transcript, C);
+            BigInteger beta = transcript.getChallenge();
+
+            transcript.reset();
+            transcript.addScalar(beta);
+            BigInteger gamma = transcript.getChallenge();
+
+            transcript.reset();
+            transcript.addScalar(beta);
+            transcript.addScalar(gamma);
+            addG1(transcript, Z);
+            BigInteger alpha = transcript.getChallenge();
+
+            transcript.reset();
+            transcript.addScalar(alpha);
+            addG1(transcript, T1); addG1(transcript, T2); addG1(transcript, T3);
+            BigInteger xi = transcript.getChallenge();
+
+            BigInteger eval_a = proof.evalA(), eval_b = proof.evalB(), eval_c = proof.evalC();
+            BigInteger eval_s1 = proof.evalS1(), eval_s2 = proof.evalS2(), eval_zw = proof.evalZOmega();
+
+            transcript.reset();
+            transcript.addScalar(xi);
+            transcript.addScalar(eval_a); transcript.addScalar(eval_b); transcript.addScalar(eval_c);
+            transcript.addScalar(eval_s1); transcript.addScalar(eval_s2); transcript.addScalar(eval_zw);
+            BigInteger v1 = transcript.getChallenge();
+            BigInteger v2 = v1.multiply(v1).mod(Fr);
+            BigInteger v3 = v2.multiply(v1).mod(Fr);
+            BigInteger v4 = v3.multiply(v1).mod(Fr);
+            BigInteger v5 = v4.multiply(v1).mod(Fr);
+
+            transcript.reset();
+            addG1(transcript, Wxi); addG1(transcript, Wxiw);
+            BigInteger u = transcript.getChallenge();
+
+            // Step 2: Z_H(xi) = xi^n - 1
+            int power = Integer.numberOfTrailingZeros(n);
+            BigInteger xin = xi;
+            for (int i = 0; i < power; i++) {
+                xin = xin.multiply(xin).mod(Fr);
+            }
+            BigInteger zh = xin.subtract(BigInteger.ONE).mod(Fr);
+
+            // Step 3: Lagrange evaluations for public input positions.
+            BigInteger nBI = BigInteger.valueOf(n);
+            BigInteger l1 = zh.multiply(nBI.multiply(xi.subtract(BigInteger.ONE).mod(Fr)).mod(Fr).modInverse(Fr)).mod(Fr);
+
+            // Step 4: PI(xi). Public inputs are subtracted, matching the prover's
+            // PI polynomial where PI(omega^i) = -public_i.
+            BigInteger pi = BigInteger.ZERO;
+            BigInteger wPow = BigInteger.ONE;
+            for (int i = 0; i < publicInputs.size(); i++) {
+                BigInteger li = wPow.multiply(zh).mod(Fr)
+                        .multiply(nBI.multiply(xi.subtract(wPow).mod(Fr)).mod(Fr).modInverse(Fr)).mod(Fr);
+                pi = pi.subtract(publicInputs.get(i).multiply(li).mod(Fr)).mod(Fr);
+                wPow = wPow.multiply(omega).mod(Fr);
             }
 
-            // Step 5: r0 (linearized polynomial evaluation)
-            BigInteger a = proof.evalA(), b = proof.evalB(), c = proof.evalC();
-            BigInteger s1Eval = proof.evalS1(), s2Eval = proof.evalS2();
-            BigInteger zOmega = proof.evalZOmega();
+            // Step 5: r0
+            BigInteger alpha2 = alpha.multiply(alpha).mod(Fr);
+            BigInteger e1 = pi;
+            BigInteger e2 = l1.multiply(alpha2).mod(Fr);
+            BigInteger e3a = eval_a.add(beta.multiply(eval_s1).mod(Fr)).add(gamma).mod(Fr);
+            BigInteger e3b = eval_b.add(beta.multiply(eval_s2).mod(Fr)).add(gamma).mod(Fr);
+            BigInteger e3c = eval_c.add(gamma).mod(Fr);
+            BigInteger e3 = e3a.multiply(e3b).mod(Fr).multiply(e3c).mod(Fr)
+                    .multiply(eval_zw).mod(Fr).multiply(alpha).mod(Fr);
+            BigInteger r0 = e1.subtract(e2).mod(Fr).subtract(e3).mod(Fr);
 
-            BigInteger r0 = pi.subtract(l1.multiply(alpha).mod(Fr).multiply(alpha).mod(Fr)).mod(Fr);
-
-            BigInteger perm = a.add(beta.multiply(s1Eval).mod(Fr)).add(gamma).mod(Fr);
-            perm = perm.multiply(b.add(beta.multiply(s2Eval).mod(Fr)).add(gamma).mod(Fr)).mod(Fr);
-            perm = perm.multiply(c.add(gamma).mod(Fr)).mod(Fr);
-            perm = perm.multiply(zOmega).mod(Fr);
-            perm = perm.multiply(alpha).mod(Fr);
-            r0 = r0.subtract(perm).mod(Fr);
-
-            // Step 6: Linearized commitment and pairing — pure Java G1/G2 arithmetic
-            G1Point wZetaPt = toG1(proof.wZeta());
-            G1Point wZetaOmegaPt = toG1(proof.wZetaOmega());
-
-            // LHS = [W_zeta] + u * [W_zeta_omega]
-            G1Point lhsG1 = wZetaPt.add(wZetaOmegaPt.scalarMul(u));
-
-            // RHS base = zeta * [W_zeta] + u*zeta*omega * [W_zeta_omega]
-            BigInteger zetaOmega = zeta.multiply(omega).mod(Fr);
-            G1Point rhsBase = wZetaPt.scalarMul(zeta).add(wZetaOmegaPt.scalarMul(u.multiply(zetaOmega).mod(Fr)));
-
-            // Linearized commitment [F]
+            // Step 6: Linearized commitment and pairing.
             BigInteger k1 = vk.k1(), k2 = vk.k2();
 
-            // Gate: a*[qL] + b*[qR] + c*[qO] + a*b*[qM] + [qC]
-            G1Point fGate = toG1(vk.qL()).scalarMul(a)
-                    .add(toG1(vk.qR()).scalarMul(b))
-                    .add(toG1(vk.qO()).scalarMul(c))
-                    .add(toG1(vk.qM()).scalarMul(a.multiply(b).mod(Fr)))
-                    .add(toG1(vk.qC()));
+            G1Point d1 = Qm.scalarMul(eval_a.multiply(eval_b).mod(Fr))
+                    .add(Ql.scalarMul(eval_a))
+                    .add(Qr.scalarMul(eval_b))
+                    .add(Qo.scalarMul(eval_c))
+                    .add(Qc);
 
-            // Permutation Z coefficient
-            BigInteger permZ = a.add(beta.multiply(zeta).mod(Fr)).add(gamma).mod(Fr);
-            permZ = permZ.multiply(b.add(beta.multiply(k1).mod(Fr).multiply(zeta).mod(Fr)).add(gamma).mod(Fr)).mod(Fr);
-            permZ = permZ.multiply(c.add(beta.multiply(k2).mod(Fr).multiply(zeta).mod(Fr)).add(gamma).mod(Fr)).mod(Fr);
-            permZ = permZ.multiply(alpha).mod(Fr);
-            permZ = permZ.add(alpha.multiply(alpha).mod(Fr).multiply(l1).mod(Fr)).mod(Fr);
-            G1Point fPerm = toG1(proof.cmZ()).scalarMul(permZ);
+            BigInteger betaxi = beta.multiply(xi).mod(Fr);
+            BigInteger d2a = eval_a.add(betaxi).add(gamma).mod(Fr)
+                    .multiply(eval_b.add(betaxi.multiply(k1).mod(Fr)).add(gamma).mod(Fr)).mod(Fr)
+                    .multiply(eval_c.add(betaxi.multiply(k2).mod(Fr)).add(gamma).mod(Fr)).mod(Fr)
+                    .multiply(alpha).mod(Fr);
+            BigInteger d2b = l1.multiply(alpha2).mod(Fr);
+            G1Point d2 = Z.scalarMul(d2a.add(d2b).add(u).mod(Fr));
 
-            // Permutation sigma3 coefficient
-            BigInteger permS3 = a.add(beta.multiply(s1Eval).mod(Fr)).add(gamma).mod(Fr);
-            permS3 = permS3.multiply(b.add(beta.multiply(s2Eval).mod(Fr)).add(gamma).mod(Fr)).mod(Fr);
-            permS3 = permS3.multiply(alpha).mod(Fr).multiply(beta).mod(Fr).multiply(zOmega).mod(Fr);
-            G1Point fS3 = toG1(vk.s3()).scalarMul(permS3);
+            BigInteger d3s = eval_a.add(beta.multiply(eval_s1).mod(Fr)).add(gamma).mod(Fr)
+                    .multiply(eval_b.add(beta.multiply(eval_s2).mod(Fr)).add(gamma).mod(Fr)).mod(Fr)
+                    .multiply(alpha.multiply(beta).mod(Fr).multiply(eval_zw).mod(Fr)).mod(Fr);
+            G1Point d3 = S3.scalarMul(d3s);
 
-            // Quotient: zh * ([t1] + zeta^n*[t2] + zeta^(2n)*[t3])
-            G1Point fQuotient = toG1(proof.cmT1())
-                    .add(toG1(proof.cmT2()).scalarMul(zetaPowN))
-                    .add(toG1(proof.cmT3()).scalarMul(zetaPowN.multiply(zetaPowN).mod(Fr)));
-            fQuotient = fQuotient.scalarMul(zh);
+            G1Point d4 = T1.add(T2.scalarMul(xin)).add(T3.scalarMul(xin.multiply(xin).mod(Fr))).scalarMul(zh);
+            G1Point D = d1.add(d2).add(d3.negate()).add(d4.negate());
 
-            // [F] = fGate + fPerm - fS3 - fQuotient
-            G1Point fCommit = fGate.add(fPerm).add(fS3.negate()).add(fQuotient.negate());
+            G1Point F = D.add(A.scalarMul(v1)).add(B.scalarMul(v2)).add(C.scalarMul(v3))
+                    .add(S1.scalarMul(v4)).add(S2.scalarMul(v5));
 
-            // RHS = rhsBase + [F] - r0 * G1_generator
-            // We need the G1 generator; for BLS12-381 it's a well-known point
-            G1Point g1Gen = BLS12381_G1_GENERATOR;
-            G1Point rhsG1 = rhsBase.add(fCommit).add(g1Gen.scalarMul(r0).negate());
+            BigInteger eScalar = r0.negate().mod(Fr)
+                    .add(v1.multiply(eval_a).mod(Fr))
+                    .add(v2.multiply(eval_b).mod(Fr))
+                    .add(v3.multiply(eval_c).mod(Fr))
+                    .add(v4.multiply(eval_s1).mod(Fr))
+                    .add(v5.multiply(eval_s2).mod(Fr))
+                    .add(u.multiply(eval_zw).mod(Fr))
+                    .mod(Fr);
+            G1Point E = BLS12381_G1_GENERATOR.scalarMul(eScalar);
 
-            // G2 points: [x]_2 from VK, G2 generator
-            G2Point x2Pt = toG2(vk.x2());
-            G2Point g2Gen = BLS12381_G2_GENERATOR;
+            G1Point B1 = F.add(E.negate())
+                    .add(Wxi.scalarMul(xi))
+                    .add(Wxiw.scalarMul(u.multiply(xi).mod(Fr).multiply(omega).mod(Fr)));
+            G1Point A1 = Wxi.add(Wxiw.scalarMul(u));
 
-            // Pairing check: e(lhsG1, x2) * e(-rhsG1, g2Gen) == 1
+            // Pairing check: e(B1, G2) * e(-A1, X_2) == 1
             boolean valid = BLS12381Pairing.pairingCheck(
-                    new G1Point[]{lhsG1, rhsG1.negate()},
-                    new G2Point[]{x2Pt, g2Gen});
+                    new G1Point[]{B1, A1.negate()},
+                    new G2Point[]{BLS12381_G2_GENERATOR, X_2});
 
             return valid ? VerificationResult.cryptoValid()
                     : VerificationResult.proofInvalid("PlonK BLS12-381 pairing check failed");
@@ -221,8 +245,12 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
 
     // --- Helpers ---
 
-    private void appendG1(FiatShamirTranscript transcript, List<BigInteger> point) {
-        if (point.size() >= 2) transcript.appendG1Point(point.get(0), point.get(1));
+    private void addG1(FiatShamirTranscript transcript, G1Point point) {
+        if (point.isInfinity()) {
+            transcript.addPolCommitment(BigInteger.ZERO, BigInteger.ZERO);
+        } else {
+            transcript.addPolCommitment(point.x().value(), point.y().value());
+        }
     }
 
     private G1Point toG1(List<BigInteger> coords) {

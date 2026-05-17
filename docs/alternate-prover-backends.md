@@ -1,4 +1,4 @@
-# Alternate Prover Backends — gnark FFM, rapidsnark, snarkjs
+# Alternate Prover Backends — gnark FFM and snarkjs
 
 ## Table of Contents
 
@@ -22,7 +22,6 @@ ZeroJ's **recommended** prover is the [pure Java prover](pure-java-prover-guide.
 |---------|-------------|--------|-------|-------------|--------|
 | **Pure Java** | Groth16, PlonK | BN254, BLS12-381 | Baseline | None | `zeroj-crypto` |
 | **gnark FFM** | Groth16, PlonK | BN254, BLS12-381 | ~10-50x faster | Go native lib | `zeroj-prover-gnark` |
-| **rapidsnark FFM** | Groth16 only | BN254 only | ~50-100x faster | C++ native lib | `zeroj-prover-rapidsnark` |
 | **snarkjs CLI** | Groth16, PlonK | BN254, BLS12-381 | Slowest | Node.js + snarkjs | (external process) |
 
 ## gnark FFM (Foreign Function & Memory)
@@ -44,16 +43,17 @@ import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
 // Define circuit and compile R1CS (same as pure Java path)
 var circuit = MyCircuit.build();
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
-byte[] wtnsBytes = WitnessExporter.toWtns(witness, r1cs.prime(), r1cs.fieldConfig().n32());
 
 // Prove with gnark (in-process, no external CLI)
 try (var prover = new GnarkProver()) {
-    var result = prover.groth16FullProve(r1csBytes, wtnsBytes, "bls12381");
+    var result = prover.groth16FullProve(r1cs, witness, CurveId.BLS12_381);
 
     String proofJson = result.proveResponse().proofJson();
     String vkJson = result.vkJson();
-    String publicJson = result.proveResponse().publicInputsJson();
+    List<BigInteger> publicSignals = result.proveResponse().publicSignals();
+    String publicJson = publicSignals.stream()
+            .map(v -> "\"" + v + "\"")
+            .collect(java.util.stream.Collectors.joining(",", "[", "]"));
 }
 ```
 
@@ -61,20 +61,26 @@ try (var prover = new GnarkProver()) {
 
 ```java
 try (var prover = new GnarkProver()) {
-    var result = prover.plonkFullProve(r1csBytes, wtnsBytes, "bls12381");
-    // Same JSON format as Groth16
+    var result = prover.plonkFullProve(r1cs, witness, CurveId.BLS12_381);
+    // gnark binary PlonK proof JSON; verify with gnark until an adapter lands
 }
 ```
 
 ### Verification
 
-gnark proofs are verified using the same pure Java verifiers:
+For Groth16, gnark and snarkjs artifacts can be normalized into the same
+envelope model and verified by the pure Java verifiers:
 
 ```java
 var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(proofJson, vkJson, publicJson, circuitId);
 var verifier = new Groth16BLS12381PureJavaVerifier();
 var result = verifier.verify(envelope, material);
 ```
+
+For PlonK, the pure Java verifiers consume structured snarkjs/ZeroJ proof JSON.
+gnark's opaque binary PlonK proof JSON is kept as a typed artifact and should be
+verified with gnark native verification until a dedicated decoder/adapter is
+implemented.
 
 ### Gradle
 
@@ -163,7 +169,7 @@ var proof = snarkjs.groth16Prove(zkeyPath, wtnsPath, workDir);
 | **Cardano on-chain verification** | Pure Java (BLS12-381) |
 | **Development / testing** | Pure Java (zero setup, instant) |
 | **Large circuits (>10K constraints)** | gnark FFM (10-50x faster) |
-| **BN254 proofs (Ethereum)** | gnark FFM or rapidsnark |
+| **BN254 proofs (Ethereum)** | gnark FFM |
 | **Existing snarkjs workflow** | snarkjs CLI → import .zkey → pure Java prove |
 | **Mobile / serverless** | Pure Java (no native deps, GraalVM compatible) |
 | **CI/CD pipelines** | Pure Java (no build toolchain needed) |

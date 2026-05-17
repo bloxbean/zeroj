@@ -9,9 +9,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Exports witness values to standard formats (.wtns for snarkjs/rapidsnark, gnark binary).
+ * Exports witness values to standard formats (.wtns and gnark binary).
  *
- * <p>The .wtns format is the standard circom witness file format used by snarkjs and rapidsnark.</p>
+ * <p>The .wtns format is the standard circom witness file format used by snarkjs-compatible tooling.</p>
  */
 public final class WitnessExporter {
 

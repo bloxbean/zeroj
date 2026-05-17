@@ -13,7 +13,7 @@ import java.nio.file.StandardCopyOption;
  * ({@code /native/{platform}/libzeroj_gnark.{so,dylib}}) to a temp
  * directory and returns the path for FFM loading.</p>
  *
- * <p>Unlike rapidsnark, gnark does not ship pre-built binaries. The shared
+ * <p>The gnark wrapper does not ship pre-built binaries. The shared
  * library must be compiled from the Go wrapper using {@code make -C gnark-wrapper build}
  * before packaging.</p>
  */

@@ -8,15 +8,14 @@ This module provides high-performance in-process proof generation using gnark (G
 
 - Groth16 proving for BLS12-381 and BN254
 - PlonK proving (beta) for BLS12-381 and BN254
-- Implements `ProverService` interface (drop-in replacement for sidecar client)
+- Uses shared `zeroj-prover-spi` response and error types
 - `AutoCloseable` for proper native resource management
 
 ## Key Types
 
 | Type | Description |
 |------|-------------|
-| `GnarkProver` | Native prover — `proveRaw(curveId, r1cs, pkPath, witnessPath)` |
-| `PlonkGnarkVerifier` | PlonK proof verification via gnark (separate from Groth16 verifiers) |
+| `GnarkProver` | Native prover — `proveRaw(curve, r1csPath, pkPath, witnessPath)` |
 | `GnarkLibrary` | FFM bindings to `libzeroj_gnark` |
 | `GnarkNativeLoader` | Library loading and initialization |
 
@@ -38,13 +37,21 @@ This produces `libzeroj_gnark.dylib` (macOS) or `libzeroj_gnark.so` (Linux) in `
 
 The compiled native library must be on the classpath or system library path. The library is large (~30-50MB) because it includes the Go runtime.
 
+The checked-in native resource is built for the current development host. Before
+publishing or testing on another platform, run `make build` on that target so
+`src/main/resources/native/<platform>-<arch>/` contains the matching shared
+library.
+
 ## Usage
 
 ```java
 try (var prover = new GnarkProver()) {
     // Groth16 proving
     ProveResponse response = prover.proveRaw(
-            CurveId.BLS12_381, r1csBytes, pkPath, witnessPath);
+            "bls12381",
+            Path.of("circuit.r1cs"),
+            Path.of("proving_key.bin"),
+            Path.of("witness.bin"));
 
     // Check version
     String version = prover.gnarkVersion();

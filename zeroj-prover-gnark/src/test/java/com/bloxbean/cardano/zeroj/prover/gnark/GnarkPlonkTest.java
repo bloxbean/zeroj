@@ -51,9 +51,10 @@ class GnarkPlonkTest {
             assertEquals("plonk", response.protocol(), "Protocol should be plonk");
             assertEquals("bls12381", response.curve());
             assertTrue(response.provingTimeMs() >= 0);
-            // gnark's PlonK witness binary format may not include public signals in the
-            // same way as Groth16. The proof is valid (verified in E2E test below).
-            // Public signals can also be read from the separately exported public.json.
+            assertEquals(java.util.List.of(java.math.BigInteger.valueOf(33)), response.publicSignals());
+            assertTrue(response.proofJson().contains("\"binary\""));
+            assertTrue(response.proofJson().contains("\"curve\":\"bls12381\""));
+            assertFalse(response.proofJson().contains("\"proof\""));
             System.out.println("PlonK proof generated. Public: " + response.publicSignals()
                     + " | Time: " + response.provingTimeMs() + "ms");
         }
@@ -97,7 +98,7 @@ class GnarkPlonkTest {
             System.out.println("   Public inputs: " + response.publicSignals());
 
             // 3. Extract proof base64 from response
-            // The response.proofJson() contains {"binary":"<base64>","protocol":"plonk"}
+            // The response.proofJson() contains {"binary":"<base64>","protocol":"plonk","curve":"bls12381"}
             // For verify, we need the raw base64 from the proof binary
             // Use the pre-generated proof for verification (same proof, verified in Go)
             boolean valid = prover.plonkVerify(

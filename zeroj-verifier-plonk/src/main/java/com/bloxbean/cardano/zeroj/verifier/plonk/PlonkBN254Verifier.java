@@ -3,6 +3,7 @@ package com.bloxbean.cardano.zeroj.verifier.plonk;
 import com.bloxbean.cardano.zeroj.api.*;
 import com.bloxbean.cardano.zeroj.backend.spi.BackendDescriptor;
 import com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.*;
 
 import java.math.BigInteger;
@@ -27,6 +28,12 @@ public class PlonkBN254Verifier implements ZkVerifier {
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
         try {
+            if (envelope.proofFormat().filter("gnark-plonk-json"::equals).isPresent()) {
+                return VerificationResult.error(
+                        VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
+                        "gnark binary PlonK JSON is not accepted by the snarkjs/ZeroJ structured PlonK verifier");
+            }
+
             var sp = com.bloxbean.cardano.zeroj.codec.SnarkjsPlonkCodec.parseProof(new String(envelope.proofBytes()));
             var sv = com.bloxbean.cardano.zeroj.codec.SnarkjsPlonkCodec.parseVerificationKey(new String(material.vkBytes()));
 

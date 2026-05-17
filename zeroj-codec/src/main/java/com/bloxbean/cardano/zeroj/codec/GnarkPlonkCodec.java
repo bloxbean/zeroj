@@ -150,7 +150,11 @@ public final class GnarkPlonkCodec {
                 String curve = root.get("curve").asText();
                 return CurveId.fromValue(curve);
             }
-        } catch (Exception ignored) {}
-        return CurveId.BLS12_381; // default for gnark PlonK
+            throw new CodecException("gnark PlonK JSON missing required 'curve' field");
+        } catch (CodecException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CodecException("Failed to detect gnark PlonK curve", e);
+        }
     }
 }

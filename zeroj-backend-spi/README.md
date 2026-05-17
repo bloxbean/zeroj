@@ -25,7 +25,7 @@ public class MyVerifier implements ZkVerifier {
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
         // Your verification logic here
-        return VerificationResult.valid();
+        return VerificationResult.ok();
     }
 }
 ```

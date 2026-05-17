@@ -5,10 +5,8 @@ plugins {
 description = 'Pure Java optimized cryptographic primitives — Montgomery field arithmetic, EC operations, FFT, MSM'
 
 dependencies {
+    api project(':zeroj-api')
     api project(':zeroj-bls12381')
-
-    // PlonK prover uses the Fiat-Shamir transcript from the verifier module
-    implementation project(':zeroj-verifier-plonk')
 
     // Test-only: integration test uses the circuit DSL, codec, and verifier to close the loop
     testImplementation project(':zeroj-circuit-dsl')

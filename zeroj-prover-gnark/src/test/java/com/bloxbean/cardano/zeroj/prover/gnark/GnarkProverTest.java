@@ -26,33 +26,6 @@ class GnarkProverTest {
         }
     }
 
-    @Test
-    @EnabledIf("isNativeLibraryAvailable")
-    void isHealthy_returnsTrue() {
-        try (var prover = new GnarkProver()) {
-            assertTrue(prover.isHealthy());
-        }
-    }
-
-    @Test
-    @EnabledIf("isNativeLibraryAvailable")
-    void listCircuits_returnsEmptyList() {
-        try (var prover = new GnarkProver()) {
-            assertTrue(prover.listCircuits().isEmpty());
-        }
-    }
-
-    @Test
-    void prove_throwsUnsupportedOperation() {
-        // prove(ProveRequest) should throw for native prover
-        if (isNativeLibraryAvailable()) {
-            try (var prover = new GnarkProver()) {
-                assertThrows(UnsupportedOperationException.class,
-                        () -> prover.prove(null));
-            }
-        }
-    }
-
     static boolean isNativeLibraryAvailable() {
         return GnarkNativeLoader.isAvailable();
     }

@@ -26,7 +26,7 @@ The ZeroJ Circuit DSL lets you define ZK arithmetic circuits in Java and compile
 
 | Backend | Proof System | Prover | Use Case |
 |---------|-------------|--------|----------|
-| R1CS | Groth16 | **Pure Java**, gnark FFM, rapidsnark FFM | Smallest proofs, cheapest on-chain verification |
+| R1CS | Groth16 | **Pure Java**, gnark FFM | Smallest proofs, cheapest on-chain verification |
 | PlonK | PlonK | **Pure Java**, gnark FFM | Universal setup, no per-circuit ceremony |
 | Halo2 | Halo2 (IPA/KZG) | Halo2 Rust FFM | No trusted setup (IPA), recursive proofs |
 
@@ -637,7 +637,7 @@ var circuit = MultiFieldCommitCircuit.build("name", "age", "address", "balance")
 ```java
 var r1cs = circuit.compileR1CS(CurveId.BN254);
 
-// Serialize to iden3 .r1cs binary (for rapidsnark/snarkjs)
+// Serialize to iden3 .r1cs binary (for snarkjs or gnark import)
 byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
 Files.write(Path.of("circuit.r1cs"), r1csBytes);
 
@@ -685,7 +685,7 @@ Properties:
 | Curve | Proof Systems | On-chain? | Note |
 |-------|--------------|-----------|------|
 | BN254 | Groth16, PlonK | No (no Plutus builtins) | circom/snarkjs ecosystem |
-| BLS12-381 | Groth16, PlonK | **Yes** (Plutus V3) | Cardano on-chain verification |
+| BLS12-381 | Groth16, PlonK | Groth16: **Yes**; PlonK: prototype | Cardano-native BLS builtins; PlonK KZG pairing check is still deferred on-chain |
 | Pallas | Halo2 IPA | No | No trusted setup, recursive proofs |
 
 ## Witness Calculation
@@ -738,7 +738,6 @@ Java CircuitSpec / CircuitBuilder DSL
         │
         ├──▶ compileR1CS()  ──▶ Groth16ProverBLS381 (pure Java) ──▶ proof
         │                    └──▶ gnark FFM ──▶ proof (see alternate-backends.md)
-        │                    └──▶ rapidsnark FFM ──▶ proof
         │
         ├──▶ compilePlonK() ──▶ PlonKProverBLS381 (pure Java) ──▶ proof
         │                    └──▶ gnark FFM ──▶ proof
@@ -752,7 +751,8 @@ Verification (pure Java, zero native deps):
   PlonkBN254Verifier / PlonkBLS12381Verifier
 
 On-Chain (Cardano Plutus V3):
-  Groth16BLS12381Verifier / PlonkBLS12381FullVerifier (Julc)
+  Groth16BLS12381Verifier (Julc)
+  PlonkBLS12381FullVerifier (Julc prototype: transcript/inverse checks only)
 ```
 
 **Recommended path**: CircuitSpec → `compileR1CS(BLS12_381)` → `Groth16ProverBLS381` → on-chain verify.
@@ -781,7 +781,6 @@ implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
 
 // Provers (choose based on your proof system)
 implementation 'com.bloxbean.cardano:zeroj-prover-gnark'       // gnark (Groth16 + PlonK)
-implementation 'com.bloxbean.cardano:zeroj-prover-rapidsnark'   // rapidsnark (Groth16 BN254)
 
 // Verifiers (pure Java, zero native deps)
 implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'    // Groth16 (BN254 + BLS12-381)

@@ -16,7 +16,7 @@ circom circuit → compile → .wasm + .r1cs
               └───────────────────────────────┘
                               │
                               ▼
-              rapidsnark FFM or gnark FFM → proof
+              gnark FFM or pure Java prover → proof
 ```
 
 ## Target State
@@ -31,15 +31,15 @@ circom circuit → compile → .wasm + .r1cs
               └───────────────────────────────┘
                               │
                               ▼
-              rapidsnark FFM or gnark FFM → proof
+              gnark FFM or pure Java prover → proof
 ```
 
 ## Design
 
-### New module: `zeroj-prover-wasm`
+### Incubator module: `zeroj-prover-wasm`
 
 ```
-zeroj-prover-wasm/
+incubator/zeroj-prover-wasm/
   src/main/java/com/bloxbean/cardano/zeroj/prover/wasm/
     WasmWitnessCalculator.java    — main API
     CircomWasmRuntime.java        — GraalWasm context management
@@ -57,7 +57,7 @@ var calculator = new WasmWitnessCalculator(Path.of("multiplier.wasm"));
 Map<String, BigInteger> inputs = Map.of("a", BigInteger.valueOf(3), "b", BigInteger.valueOf(11));
 byte[] witnessWtns = calculator.calculateWitness(inputs);
 
-// Export for rapidsnark
+// Export to .wtns
 Path wtnsPath = WitnessExporter.writeWtns(witnessWtns, tempDir);
 // Or export for gnark
 byte[] gnarkWitness = WitnessExporter.toGnarkBinary(witnessWtns, CurveId.BN254);
@@ -70,10 +70,7 @@ byte[] gnarkWitness = WitnessExporter.toGnarkBinary(witnessWtns, CurveId.BN254);
 var calculator = new WasmWitnessCalculator(circuitWasmPath);
 byte[] witness = calculator.calculateWitness(Map.of("a", "3", "b", "11"));
 
-// 2. Prove (rapidsnark FFM — in-process)
-try (var prover = new RapidsnarkProver()) {
-    var proof = prover.prove(r1csPath, witness);
-}
+// 2. Prove with gnark FFM or the pure Java prover
 
 // 3. Verify (pure Java — zero native deps)
 var verifier = new Groth16BN254Verifier();
@@ -108,15 +105,15 @@ Reference: snarkjs `wtns_calculate.js` and circom `calcwit.cpp`
 ### Phase 3: Wire into prover pipeline
 
 1. `WasmWitnessCalculator` produces witness bytes
-2. `WitnessExporter` converts to `.wtns` (for rapidsnark) or gnark binary format
-3. Prover FFM takes witness + r1cs → proof
+2. `WitnessExporter` converts to `.wtns` or gnark binary format
+3. Prover takes witness + r1cs -> proof
 4. Pure Java verifier checks proof
 
 ### Phase 4: Integration tests
 
 - Multiplier circuit: compute witness for a=3, b=11, verify output c=33
 - Compare witness output with snarkjs `wtns calculate` output (byte-for-byte)
-- End-to-end: wasm witness → rapidsnark prove → pure Java verify
+- End-to-end: wasm witness -> gnark or pure Java prove -> pure Java verify
 
 ## Dependencies
 
@@ -143,6 +140,6 @@ Requires GraalVM JDK (already the project's toolchain: Java 25 GraalVM).
 ## Success Criteria
 
 - `WasmWitnessCalculator` produces identical witness bytes as `snarkjs wtns calculate`
-- End-to-end: circom `.wasm` → GraalWasm witness → rapidsnark proof → pure Java verify
+- End-to-end: circom `.wasm` -> GraalWasm witness -> gnark or pure Java proof -> pure Java verify
 - No Node.js process needed at any point
 - Works with GraalVM native-image

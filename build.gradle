@@ -33,8 +33,8 @@ subprojects {
         version = "${project.version}".replace("-SNAPSHOT", "-${commit_id}-SNAPSHOT")
     }
 
-    // The BOM module uses java-platform, which is incompatible with java-library
-    if (project.name == 'zeroj-bom') {
+    // BOM modules use java-platform, which is incompatible with java-library
+    if (project.name.startsWith('zeroj-bom')) {
         return
     }
 
@@ -80,7 +80,7 @@ subprojects {
     }
 
     // Publishing for publishable modules
-    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples', 'zeroj-prover-rapidsnark']
+    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples']
     if (!nonPublishable.contains(project.name)) {
         apply plugin: 'maven-publish'
         apply plugin: 'signing'

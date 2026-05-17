@@ -9,7 +9,7 @@ import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.*;
 import com.bloxbean.cardano.zeroj.bls12381.field.*;
 import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
-import com.bloxbean.cardano.zeroj.verifier.plonk.FiatShamirTranscript;
+import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -106,7 +106,7 @@ class PlonKBLS381EndToEndTest {
         BigInteger eval_s1 = proof.evalS1(), eval_s2 = proof.evalS2(), eval_zw = proof.evalZw();
 
         // Fiat-Shamir challenges
-        var transcript = new FiatShamirTranscript(FR);
+        var transcript = new FiatShamirTranscript(FR, 32, 48);
         addG1T(transcript, Qm); addG1T(transcript, Ql); addG1T(transcript, Qr);
         addG1T(transcript, Qo); addG1T(transcript, Qc);
         addG1T(transcript, S1); addG1T(transcript, S2); addG1T(transcript, S3);

@@ -41,19 +41,21 @@ try (var prover = new GnarkProver()) {
 }
 ```
 
-### 5. Verify off-chain (pure Java)
+### 5. Verify off-chain
 
 ```java
-// gnark PlonK proofs can be verified with the PlonkBLS12381Verifier
-// The verifier handles Fiat-Shamir challenge re-derivation matching gnark's format
-var verifier = new PlonkBLS12381Verifier();
-var result = verifier.verify(envelope, material);
-assert result.proofValid();
+// gnark binary PlonK proof JSON should be verified with gnark today.
+boolean ok = prover.plonkVerify("bls12381", vkPath, proofBase64, publicWitnessPath);
+assert ok;
 ```
+
+The pure Java `PlonkBLS12381Verifier` consumes structured snarkjs/ZeroJ PlonK
+proof JSON. A dedicated adapter is still needed before gnark's opaque binary
+PlonK JSON can be routed through that verifier.
 
 ### 6. On-chain verification
 
-The `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc` performs full trustless PlonK verification on-chain including Fiat-Shamir challenge re-derivation matching gnark's exact transcript format.
+The `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc` is currently an experimental on-chain prototype. It validates the Fiat-Shamir transcript and inverse checks, but the KZG batch opening pairing check is still deferred, so it is not yet a full trustless on-chain PlonK verifier.
 
 ## Running the Tests
 

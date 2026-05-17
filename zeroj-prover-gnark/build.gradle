@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ gnark prover — native in-process BLS12-381/BN254 Groth16 proving via FFM'
+description = 'ZeroJ gnark prover — native in-process BLS12-381/BN254 Groth16 and PlonK proving via FFM'
 
 test {
     // Set GOMAXPROCS before Go runtime bootstraps inside the shared library.
@@ -16,13 +16,11 @@ test {
 dependencies {
     api project(':zeroj-api')
     api project(':zeroj-codec')
-    api project(':zeroj-backend-spi')
-    api project(':zeroj-prover-sidecar')
+    api project(':zeroj-prover-spi')
     api project(':zeroj-circuit-dsl')
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 
     testImplementation project(':zeroj-test-vectors')
-    testImplementation project(':zeroj-verifier-core')
     testImplementation project(':zeroj-verifier-groth16')
 }
 
@@ -31,7 +29,7 @@ publishing {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ Prover Gnark'
-                description = 'Native in-process BLS12-381/BN254 Groth16 proving via gnark FFM bindings'
+                description = 'Native in-process BLS12-381/BN254 Groth16 and PlonK proving via gnark FFM bindings'
             }
         }
     }

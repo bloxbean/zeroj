@@ -10,9 +10,9 @@ import com.bloxbean.cardano.julc.stdlib.lib.BlsLib;
 import java.math.BigInteger;
 
 /**
- * Full trustless on-chain PlonK BLS12-381 verifier (Plutus V3).
+ * Experimental on-chain PlonK BLS12-381 verifier prototype (Plutus V3).
  *
- * <p>Performs complete verification including Fiat-Shamir challenge re-derivation
+ * <p>Performs Fiat-Shamir challenge re-derivation
  * matching gnark's exact transcript format:</p>
  * <ul>
  *   <li>SHA-256 hash with challenge name prefix and hash chain</li>
@@ -25,7 +25,10 @@ import java.math.BigInteger;
  * that uncompressed bytes correspond to valid G1 points by uncompressing and
  * comparing with the compressed versions.</p>
  *
- * <p>Specialized for 1 public input (multiplier circuit: Z=33).</p>
+ * <p>This version is not a full trustless PlonK verifier yet: the KZG batch
+ * opening pairing check is deferred. It is specialized for 1 public input
+ * (multiplier circuit: Z=33) and currently validates the transcript and
+ * precomputed inverse constraints.</p>
  */
 @SpendingValidator
 public class PlonkBLS12381FullVerifier {
@@ -198,7 +201,9 @@ public class PlonkBLS12381FullVerifier {
         // additional transcript rounds (v, u) from the KZG fold step.
         // This requires more work to implement — saving for next iteration.
 
-        // For this version: verify Fiat-Shamir + inverse checks + return true if all pass
+        // Prototype scope: verify Fiat-Shamir + inverse checks + return true if all pass.
+        // This is not a production PlonK acceptance condition until the KZG
+        // batch opening pairing check above is implemented.
         return inv1Ok && inv2Ok;
     }
 

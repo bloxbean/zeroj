@@ -1,0 +1,20 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ prover SPI — proof generation service contracts'
+
+dependencies {
+    api project(':zeroj-api')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Prover SPI'
+                description = 'Service Provider Interface for ZK proof generation backends'
+            }
+        }
+    }
+}

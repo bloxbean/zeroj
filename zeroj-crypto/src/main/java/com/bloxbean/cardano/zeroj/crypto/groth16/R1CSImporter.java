@@ -12,7 +12,7 @@ import java.util.*;
 /**
  * Imports R1CS constraint systems from iden3 .r1cs binary format.
  *
- * <p>This is the standard format output by circom and consumed by snarkjs/rapidsnark.
+ * <p>This is the standard format output by circom and consumed by snarkjs-compatible tooling.
  * The constraints parsed here are in the exact form used by the trusted setup,
  * ensuring compatibility with the .zkey proving key.</p>
  */

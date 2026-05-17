@@ -1,6 +1,6 @@
 package com.bloxbean.cardano.zeroj.prover.gnark;
 
-import com.bloxbean.cardano.zeroj.prover.sidecar.ProverException;
+import com.bloxbean.cardano.zeroj.prover.spi.ProverException;
 
 import java.io.IOException;
 import java.lang.foreign.*;

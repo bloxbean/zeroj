@@ -2,18 +2,21 @@
 
 PlonK proof verification for BLS12-381 and BN254 curves.
 
-This module provides pure Java PlonK verification, removing the gnark native dependency for the verification path. Proving still uses gnark (via `zeroj-prover-gnark`), but verification is done entirely in Java + blst.
+This module provides pure Java PlonK verification for structured snarkjs/ZeroJ
+proof JSON. gnark's opaque binary PlonK proof JSON is not accepted by these
+verifiers yet; verify that format with gnark native verification until a
+dedicated adapter is added.
 
 | Backend | Curve | Implementation | Status |
 |---------|-------|----------------|--------|
-| `PlonkBLS12381Verifier` | BLS12-381 | Java + blst (pairing) | Full implementation |
+| `PlonkBLS12381Verifier` | BLS12-381 | Pure Java | Full implementation |
 | `PlonkBN254Verifier` | BN254 | Pure Java | Challenge derivation done, pairing TODO |
 
 ## Architecture
 
 PlonK verification involves 6 steps:
 
-1. **Fiat-Shamir challenge derivation** — re-derive beta, gamma, alpha, zeta, v, u from the proof transcript using SHA-256
+1. **Fiat-Shamir challenge derivation** — re-derive beta, gamma, alpha, zeta, v, u from the proof transcript using Keccak-256
 2. **Vanishing polynomial** — evaluate Z_H(zeta) = zeta^n - 1
 3. **Lagrange polynomial** — evaluate L_1(zeta) for the gate identity check
 4. **Public input polynomial** — compute PI(zeta) from the public inputs and Lagrange basis
@@ -24,9 +27,9 @@ PlonK verification involves 6 steps:
 
 | Class | Purpose |
 |-------|---------|
-| `PlonkBLS12381Verifier` | Implements `ZkVerifier` SPI — full PlonK verification via blst pairings |
+| `PlonkBLS12381Verifier` | Implements `ZkVerifier` SPI — full pure Java PlonK verification |
 | `PlonkBN254Verifier` | Implements `ZkVerifier` SPI — BN254 PlonK (scaffold, challenge derivation complete) |
-| `FiatShamirTranscript` | SHA-256 transcript for deterministic challenge generation |
+| `FiatShamirTranscript` | Shared Keccak-256 transcript from `zeroj-crypto` for deterministic snarkjs-compatible challenge generation |
 | `KzgVerifier` | KZG polynomial commitment opening proof verification |
 | `PlonkProof` | Parsed proof record (commitments + evaluations) |
 | `PlonkVerificationKey` | Parsed VK record (selectors, permutations, SRS, domain) |
@@ -35,7 +38,7 @@ PlonK verification involves 6 steps:
 
 ```java
 // Via SPI (auto-discovered by VerifierOrchestrator)
-var registry = VerifierRegistry.discover(); // finds PlonkBLS12381Verifier
+var registry = VerifierRegistry.withServiceLoader(); // finds ServiceLoader-registered verifiers
 
 // Or direct
 var verifier = new PlonkBLS12381Verifier();
@@ -62,7 +65,7 @@ The transcript must match the prover's byte layout exactly. The current implemen
 ## Test Vectors
 
 - `zeroj-test-vectors/.../plonk-bn254/` — snarkjs PlonK BN254 (multiplier: 3 × 11 = 33)
-- `zeroj-test-vectors/.../plonk-bls12381/` — gnark PlonK BLS12-381 (same circuit)
+- `zeroj-test-vectors/.../plonk-bls12381/` — gnark PlonK BLS12-381 artifacts used for transcript and compatibility tests
 
 ## Gradle
 

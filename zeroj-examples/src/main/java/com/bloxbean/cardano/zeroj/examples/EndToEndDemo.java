@@ -4,8 +4,6 @@ import com.bloxbean.cardano.client.metadata.Metadata;
 import com.bloxbean.cardano.zeroj.api.*;
 import com.bloxbean.cardano.zeroj.backend.spi.InMemoryVerificationKeyRegistry;
 import com.bloxbean.cardano.zeroj.cardano.AnchorMetadataEncoder;
-import com.bloxbean.cardano.zeroj.cardano.AnchorPattern;
-import com.bloxbean.cardano.zeroj.cardano.ProofAnchor;
 import com.bloxbean.cardano.zeroj.ccl.ZkTransactionHelper;
 import com.bloxbean.cardano.zeroj.codec.CanonicalHash;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
@@ -13,17 +11,9 @@ import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Groth16BN254Verifier;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier;
-import com.bloxbean.cardano.zeroj.submission.AppProofSubmission;
-import com.bloxbean.cardano.zeroj.submission.Ed25519Signer;
-import com.bloxbean.cardano.zeroj.submission.SubmissionHash;
-import com.bloxbean.cardano.zeroj.submission.SubmissionResult;
-import com.bloxbean.cardano.zeroj.ingestion.*;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyPair;
 import java.security.MessageDigest;
-import java.util.List;
 
 /**
  * ZeroJ End-to-End Demo
@@ -35,8 +25,7 @@ import java.util.List;
  * The scenario: A DeFi protocol uses ZK proofs to verify off-chain balance transfers.
  * - A user computes a balance transfer off-chain
  * - A ZK proof is generated externally (snarkjs/circom)
- * - The proof is submitted to a network of verifier nodes
- * - Each node verifies the proof WITHOUT re-executing the computation
+ * - A verifier checks the proof WITHOUT re-executing the computation
  * - The verified result is anchored on Cardano L1
  *
  * This is the core value proposition of ZeroJ:
@@ -113,92 +102,14 @@ public class EndToEndDemo {
         System.out.println();
 
         // ============================================================
-        // STEP 4: Submit as a proof-backed state transition
-        // ============================================================
-        // The submitter signs the transition and submits to the verifier network.
-        // The 6-stage pipeline validates everything: signature, authorization,
-        // circuit allowlist, cryptographic proof, state root chain, replay protection.
-
-        System.out.println("[Step 4] Submitting proof-backed state transition...");
-
-        // Set up identity
-        KeyPair submitterKeys = Ed25519Signer.generateKeyPair();
-        String submitterId = "alice";
-
-        // Set up policy infrastructure
-        var submitterReg = new InMemorySubmitterRegistry();
-        submitterReg.register(submitterId, submitterKeys.getPublic(), "defi-app");
-
-        var circuitAllowlist = new InMemoryCircuitAllowlist();
-        circuitAllowlist.allow("multiplier", "v1");
-
-        var stateRootStore = new InMemoryStateRootStore();
-        byte[] genesisRoot = sha256("genesis-state".getBytes());
-        stateRootStore.initialize("defi-app", genesisRoot);
-
-        var sequenceTracker = new InMemorySequenceTracker();
-        var nullifierStore = new InMemoryNullifierStore();
-
-        var pipeline = new SubmissionIngestionPipeline(
-                orchestrator, vkRegistry, submitterReg, circuitAllowlist,
-                stateRootStore, sequenceTracker, nullifierStore);
-
-        // Build the submission
-        byte[] newStateRoot = sha256("state-after-transfer".getBytes());
-        var unsigned = AppProofSubmission.builder()
-                .appId("defi-app")
-                .proofSystem(ProofSystemId.GROTH16)
-                .curve(CurveId.BN254)
-                .circuitId("multiplier")
-                .circuitVersion("v1")
-                .prevStateRoot(genesisRoot)
-                .newStateRoot(newStateRoot)
-                .publicInputs(List.of(BigInteger.valueOf(33), BigInteger.valueOf(3)))
-                .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
-                .vkHash(vkHash)
-                .submitterId(submitterId)
-                .submitterSignature(new byte[64])
-                .sequence(1)
-                .build();
-
-        // Sign with Ed25519
-        byte[] submissionHash = SubmissionHash.compute(unsigned);
-        byte[] signature = Ed25519Signer.sign(submissionHash, submitterKeys.getPrivate());
-
-        var submission = AppProofSubmission.builder()
-                .appId(unsigned.appId()).proofSystem(unsigned.proofSystem())
-                .curve(unsigned.curve()).circuitId(unsigned.circuitId())
-                .circuitVersion(unsigned.circuitVersion())
-                .prevStateRoot(unsigned.prevStateRoot())
-                .newStateRoot(unsigned.newStateRoot())
-                .publicInputs(unsigned.publicInputs())
-                .proofBytes(unsigned.proofBytes()).vkHash(unsigned.vkHash())
-                .submitterId(unsigned.submitterId())
-                .submitterSignature(signature)
-                .sequence(unsigned.sequence())
-                .build();
-
-        System.out.println("  Submitter: " + submitterId);
-        System.out.println("  App: " + submission.appId());
-        System.out.println("  Circuit: " + submission.circuitId() + "/" + submission.circuitVersion());
-        System.out.println("  Sequence: " + submission.sequence());
-
-        // Process through 6-stage pipeline
-        SubmissionResult subResult = pipeline.process(submission);
-
-        System.out.println("  Pipeline stages: syntactic -> signature -> circuit -> crypto -> policy -> accept");
-        System.out.println("  Result: " + (subResult.accepted() ? "ACCEPTED" : "REJECTED: " + subResult.reason().orElse(null)));
-        assert subResult.accepted() : "Submission should be accepted!";
-        System.out.println();
-
-        // ============================================================
-        // STEP 5: Anchor on Cardano L1
+        // STEP 4: Anchor on Cardano L1
         // ============================================================
         // After verification, anchor the result on Cardano for settlement.
 
-        System.out.println("[Step 5] Anchoring verified result on Cardano L1...");
+        System.out.println("[Step 4] Anchoring verified result on Cardano L1...");
 
         byte[] proofHash = sha256(proofJson.getBytes(StandardCharsets.UTF_8));
+        byte[] newStateRoot = sha256("state-after-transfer".getBytes(StandardCharsets.UTF_8));
 
         // Build anchor metadata
         Metadata metadata = ZkTransactionHelper.anchorFullRef(
@@ -216,20 +127,6 @@ public class EndToEndDemo {
         System.out.println();
 
         // ============================================================
-        // STEP 6: Demonstrate security — replay attack is rejected
-        // ============================================================
-        System.out.println("[Step 6] Security demo — replay attack...");
-
-        // Try to replay the same submission (same sequence number)
-        SubmissionResult replayResult = pipeline.process(submission);
-        System.out.println("  Replaying same submission...");
-        System.out.println("  Result: " + (replayResult.accepted() ? "ACCEPTED (BAD!)" : "REJECTED"));
-        System.out.println("  Stage: " + replayResult.stage());
-        System.out.println("  Reason: " + replayResult.reason().orElse(null));
-        assert !replayResult.accepted() : "Replay should be rejected!";
-        System.out.println();
-
-        // ============================================================
         // DONE
         // ============================================================
         System.out.println("=".repeat(70));
@@ -238,10 +135,8 @@ public class EndToEndDemo {
         System.out.println("  What happened:");
         System.out.println("  1. Proof generated EXTERNALLY (snarkjs/circom)");
         System.out.println("  2. Verified in JAVA without re-executing the computation");
-        System.out.println("  3. Submitted with Ed25519 signature to verifier network");
-        System.out.println("  4. 6-stage validation: auth + crypto + policy");
-        System.out.println("  5. Anchored on Cardano L1 as CIP-10 metadata");
-        System.out.println("  6. Replay attack automatically rejected");
+        System.out.println("  3. Canonical proof hash computed for deterministic identification");
+        System.out.println("  4. Anchored on Cardano L1 as CIP-10 metadata");
         System.out.println();
         System.out.println("  ZeroJ: Prove once, verify everywhere, settle on Cardano.");
         System.out.println("=".repeat(70));

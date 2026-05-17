@@ -1,12 +1,17 @@
 # ADR-0006: Separation of Cryptographic and Policy Verification
 
 ## Status
-Accepted
+Superseded by [ADR-0020](0020-module-cleanup-and-core-restructure.md)
 
 ## Date
 2026-03-25
 
 ## Context
+
+> Historical note: the crypto-vs-policy separation remains a useful design
+> principle, but the generic `zeroj-ingestion` submission pipeline described
+> here was removed by ADR-0020. Application-specific policy validation now
+> belongs outside the ZeroJ core modules.
 
 A proof can be cryptographically valid but still unacceptable. Consider:
 - A valid Groth16 proof for the wrong circuit
