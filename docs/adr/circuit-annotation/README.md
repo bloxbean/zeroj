@@ -266,6 +266,17 @@ Public and secret factory methods add required well-formedness constraints
 eagerly. `assertWellFormed()` is idempotent and exists as a defensive hook for
 generated code and manually wrapped values.
 
+Factory methods must also preserve input visibility. `ZkField.publicInput`,
+`ZkBool.publicInput`, and `ZkUInt.publicInput` must bind only variables declared
+as public inputs; `secret(...)` must bind only variables declared as secret
+inputs. This is enforced through visibility-aware `SignalBuilder` lookup so
+annotation-generated code cannot accidentally hide public inputs or expose
+secret witnesses by using the wrong factory.
+
+`wrap(...)` methods are for existing `Signal` interop and gadget adapters. They
+must reject signals created from a different `SignalBuilder`; otherwise a
+symbolic wrapper could associate constraints with the wrong circuit graph.
+
 ### `ZkField`
 
 Represents one raw field element backed by one `Signal`.
@@ -300,7 +311,9 @@ ZkBool and(ZkBool other);
 ZkBool or(ZkBool other);
 ZkBool xor(ZkBool other);
 ZkBool not();
-<T extends ZkValue> T select(T ifTrue, T ifFalse);
+ZkField select(ZkField ifTrue, ZkField ifFalse);
+ZkBool select(ZkBool ifTrue, ZkBool ifFalse);
+ZkUInt select(ZkUInt ifTrue, ZkUInt ifFalse);
 void assertTrue();
 void assertFalse();
 void assertEqual(ZkBool other);
@@ -309,7 +322,10 @@ Signal signal();
 ```
 
 `ZkBool` should call `Signal.assertBoolean()` when constructed from public or
-secret input unless the constructor is explicitly internal and trusted.
+secret input unless the constructor is explicitly internal and trusted. Phase 2
+supports `select` for built-in single-signal symbolic values; custom
+multi-signal value selection can be added with the corresponding gadget
+adapters.
 
 ### `ZkUInt`
 
@@ -348,6 +364,17 @@ gadgets. To avoid a foundational dependency on `zeroj-circuit-lib`, the first
 version can use `SignalBuilder.api().lessThan` directly, matching the current
 `SignalComparators` implementation.
 
+The maximum range width is 253 bits, matching the existing safe decomposition
+limit. Comparison is stricter and requires operands below 253 bits because
+`lessThan` decomposes an `nBits + 1` intermediate.
+
+Arithmetic methods preserve the unsigned type invariant. Addition and
+multiplication widen the output bit width when the result still fits within the
+safe field bound; over-wide results fail early and should be expressed as
+`ZkField` arithmetic or split into smaller limbs. Subtraction returns a bounded
+result and therefore constrains the output range, which rejects underflow by
+default.
+
 ### `ZkArray<T extends ZkValue>`
 
 Represents a fixed-size symbolic array.
@@ -375,6 +402,18 @@ ZkArray<ZkBool> pathBits;
 V1 arrays must have fixed size known at circuit-generation time. The size may be
 a literal, or it may reference a build-time `@CircuitParam`. Dynamic arrays
 should be modeled later as `maxSize + length + selectors`.
+
+Built-in visibility-specific helpers should be used for common element types:
+
+```java
+ZkArray<ZkField> siblings = ZkArray.secretFields(c, "sibling", depth);
+ZkArray<ZkBool> pathBits = ZkArray.secretBools(c, "pathBit", depth);
+ZkArray<ZkUInt> amounts = ZkArray.publicUInts(c, "amount", count, 64);
+```
+
+`ZkArray.bind(...)` is reserved for custom symbolic element types. Its
+visibility comes from the supplied factory, so generated code should prefer the
+visibility-specific helpers whenever the element type is built in.
 
 ### Deferred: `ZkBits`
 
@@ -793,8 +832,8 @@ public final class MerkleMembershipCircuit {
                     var zk = new ZkContext(c);
                     var leaf = ZkField.secret(c, "leaf");
                     var root = ZkField.publicInput(c, "root");
-                    var siblings = ZkArray.secret(c, "sibling", depth, ZkField::secret);
-                    var pathBits = ZkArray.secret(c, "pathBit", depth, ZkBool::secret);
+                    var siblings = ZkArray.secretFields(c, "sibling", depth);
+                    var pathBits = ZkArray.secretBools(c, "pathBit", depth);
                     // bind symbolic arrays using the concrete depth
                     instance.prove(zk, leaf, root, siblings, pathBits).assertTrue();
                 });
@@ -1499,7 +1538,7 @@ ZkUInt.secret(c, "secret", 64);
 ZkUInt.publicInput(c, "lo", 64);
 ZkBool.assertTrue();
 ZkUInt.gte(...);
-ZkArray.secret(c, "sibling", depth, ZkField::secret);
+ZkArray.secretFields(c, "sibling", depth);
 ```
 
 Exit criteria:

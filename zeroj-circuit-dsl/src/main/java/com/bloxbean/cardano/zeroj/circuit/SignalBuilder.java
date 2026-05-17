@@ -29,17 +29,17 @@ public final class SignalBuilder {
 
     /** Declare a private (secret) input signal. */
     public Signal privateInput(String name) {
-        return new Signal(api.var(name), api);
+        return new Signal(api.secretInputVar(name), api);
     }
 
     /** Declare a public input signal. */
     public Signal publicInput(String name) {
-        return new Signal(api.var(name), api);
+        return new Signal(api.publicInputVar(name), api);
     }
 
     /** Declare a public output signal (same as publicInput in the constraint system). */
     public Signal publicOutput(String name) {
-        return new Signal(api.var(name), api);
+        return new Signal(api.publicInputVar(name), api);
     }
 
     /** Look up a previously declared signal by name. */
