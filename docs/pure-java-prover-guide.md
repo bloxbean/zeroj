@@ -219,6 +219,9 @@ assert valid;  // Cryptographic verification passed!
 ### Step 6: Verify On-Chain (Cardano Plutus V3)
 
 ```java
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+
 // Compress proof + VK for on-chain BLS format
 var compressedVk = ProverToCardano.compressVk(setup);
 var compressedProof = ProverToCardano.compressProof(proof);

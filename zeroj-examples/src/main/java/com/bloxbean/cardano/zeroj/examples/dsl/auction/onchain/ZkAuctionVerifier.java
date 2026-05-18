@@ -5,7 +5,7 @@ import com.bloxbean.cardano.julc.stdlib.Builtins;
 import com.bloxbean.cardano.julc.stdlib.annotation.Entrypoint;
 import com.bloxbean.cardano.julc.stdlib.annotation.Param;
 import com.bloxbean.cardano.julc.stdlib.annotation.SpendingValidator;
-import com.bloxbean.cardano.zeroj.onchain.julc.Groth16BLS12381;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 
 import java.math.BigInteger;
 
@@ -21,7 +21,7 @@ import java.math.BigInteger;
  * The bidCommitment is stored in the datum (set during bidding phase).
  * The reservePrice is a validator parameter (set by the auctioneer at deploy time).
  * <p>
- * This domain-specific verifier composes the reusable {@link Groth16BLS12381}
+ * This domain-specific verifier composes the reusable {@link Groth16BLS12381Lib}
  * on-chain library with a {@code reservePriceBytes} binding parameter.
  */
 @SpendingValidator
@@ -45,7 +45,7 @@ public class ZkAuctionVerifier {
         BigInteger committedReserve = Builtins.byteStringToInteger(true, reservePriceBytes);
         boolean reserveMatches = pub1.equals(committedReserve);
 
-        boolean proofValid = Groth16BLS12381.verify(datum, proof.piA(), proof.piB(), proof.piC(),
+        boolean proofValid = Groth16BLS12381Lib.verify(datum, proof.piA(), proof.piB(), proof.piC(),
                 vkAlpha, vkBeta, vkGamma, vkDelta, vkIc);
 
         return reserveMatches && proofValid;

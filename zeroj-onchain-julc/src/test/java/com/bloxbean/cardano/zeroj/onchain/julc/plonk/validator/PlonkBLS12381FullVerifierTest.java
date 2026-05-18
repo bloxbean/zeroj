@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.onchain.julc;
+package com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator;
 
 import com.bloxbean.cardano.julc.core.PlutusData;
 import com.bloxbean.cardano.julc.testkit.ContractTest;

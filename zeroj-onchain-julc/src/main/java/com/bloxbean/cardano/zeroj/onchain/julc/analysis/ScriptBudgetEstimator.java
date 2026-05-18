@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.onchain.julc;
+package com.bloxbean.cardano.zeroj.onchain.julc.analysis;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.api.ProofSystemId;

@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.onchain.julc;
+package com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator;
 
 import com.bloxbean.cardano.julc.core.PlutusData;
 import com.bloxbean.cardano.julc.testkit.ContractTest;
@@ -8,6 +8,8 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 

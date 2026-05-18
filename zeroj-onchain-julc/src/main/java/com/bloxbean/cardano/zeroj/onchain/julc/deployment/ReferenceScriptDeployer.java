@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.onchain.julc;
+package com.bloxbean.cardano.zeroj.onchain.julc.deployment;
 
 /**
  * Structured deployment configuration for Cardano CIP-0033 reference scripts.

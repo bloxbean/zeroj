@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.onchain.julc;
+package com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib;
 
 import com.bloxbean.cardano.julc.core.PlutusData;
 import com.bloxbean.cardano.julc.stdlib.Builtins;
@@ -10,7 +10,7 @@ import java.math.BigInteger;
  * Reusable on-chain Groth16 verifier logic for BLS12-381 proofs.
  */
 @OnchainLibrary
-public class Groth16BLS12381 {
+public class Groth16BLS12381Lib {
 
     public static PlutusData publicInputs(BigInteger pub0) {
         return Builtins.listData(Builtins.mkCons(

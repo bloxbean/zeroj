@@ -60,10 +60,10 @@ Annotated symbolic circuit
 
 Relevant source:
 
-- `zeroj-onchain-julc/.../OnChainFeasibility.java`
-- `zeroj-onchain-julc/.../Groth16BLS12381Verifier.java`
-- `zeroj-onchain-julc/.../Groth16BLS12381.java`
-- `zeroj-onchain-julc/.../PlonkBLS12381FullVerifier.java`
+- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
+- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/groth16/validator/Groth16BLS12381Verifier.java`
+- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`
+- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381FullVerifier.java`
 - `zeroj-verifier-groth16/...`
 - `zeroj-verifier-plonk/...`
 - `incubator/zeroj-verifier-halo2/...`
@@ -144,8 +144,9 @@ vk_x = IC[0] + pub[0] * IC[1] + ... + pub[n - 1] * IC[n]
 
 The verifier rejects empty `IC` lists and any mismatch where
 `len(IC) != len(publicInputs) + 1`. Custom validators compose the reusable
-`Groth16BLS12381` `@OnchainLibrary` helper with their own domain checks.
-possible future optimization if budget-critical circuits need lower script cost.
+`Groth16BLS12381Lib` `@OnchainLibrary` helper with their own domain checks.
+Generated fixed-count validators remain a possible future optimization if
+budget-critical circuits need lower script cost.
 
 ### MiMC Is BN254-Only in the Circuit Library
 
@@ -281,7 +282,7 @@ Tasks:
 
 - Added `Groth16BLS12381Verifier`.
 - Removed the old fixed two-input verifier before release.
-- Added `Groth16BLS12381` as the reusable on-chain library helper.
+- Added `Groth16BLS12381Lib` as the reusable on-chain library helper.
 - Preserved stable public-input order by consuming datum values positionally.
 - Added Julc VM budget output for two-input and three-input proofs.
 - Added tests for two inputs, more-than-two inputs, wrong values, too few

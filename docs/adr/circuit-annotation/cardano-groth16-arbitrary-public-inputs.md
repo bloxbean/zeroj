@@ -52,7 +52,7 @@ checking and `vk_x` computation instead of a mutable `while` accumulator.
 Add a new reusable Julc spending validator:
 
 ```java
-Groth16BLS12381Verifier
+com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier
 ```
 
 It will keep the same proof redeemer shape as the current fixed verifier:
@@ -104,8 +104,16 @@ e(A, B) * e(-alpha, beta) == e(vk_x, gamma) * e(C, delta)
 
 Because ZeroJ has not been released yet, the fixed-input compatibility class
 was removed. `Groth16BLS12381Verifier` is the canonical arbitrary-input
-validator, and `Groth16BLS12381` is the reusable `@OnchainLibrary` helper for
+validator, and `Groth16BLS12381Lib` is the reusable `@OnchainLibrary` helper for
 custom validators.
+
+The on-chain Julc module uses package names to separate roles:
+
+- `groth16.validator` for spending validators
+- `groth16.lib` for reusable `@OnchainLibrary` code
+- `groth16.codec` for off-chain proof/VK conversion helpers
+- `plonk.validator` for PlonK validator prototypes
+- `analysis` and `deployment` for planning/configuration helpers
 
 ## Length Contract
 
@@ -194,6 +202,8 @@ var vkIcData = ListPlutusData.of(
 The script is loaded with five parameters:
 
 ```java
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+
 JulcScriptLoader.load(
     Groth16BLS12381Verifier.class,
     new BytesPlutusData(vk.alpha()),
@@ -245,9 +255,11 @@ The final verifier removes the fixed two-input class and makes
 `Groth16BLS12381Verifier` the default. It accepts five script parameters:
 alpha, beta, gamma, delta, and the full `IC` list.
 
-`Groth16BLS12381` is packaged as a JuLC `@OnchainLibrary` and bundled into the
-published JAR under `META-INF/plutus-sources/`. Downstream custom validators
-use their own local redeemer record and call `Groth16BLS12381.verify(...)`.
+`Groth16BLS12381Lib` is packaged as a JuLC `@OnchainLibrary` and bundled into the
+published JAR under
+`META-INF/plutus-sources/com/bloxbean/cardano/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`.
+Downstream custom validators use their own local redeemer record and call
+`Groth16BLS12381Lib.verify(...)`.
 The proof record is intentionally not part of the reusable library surface
 because JuLC record resolution is validator-local today; keeping the record
 beside the validator avoids cross-module nested/top-level record resolution

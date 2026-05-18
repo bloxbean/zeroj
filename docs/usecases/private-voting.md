@@ -296,6 +296,8 @@ Two scripts work together:
 ### Minting Policy — Validates ZK Proof
 
 ```java
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
+
 @MintingValidator
 public class VoteMintingPolicy {
 
@@ -313,7 +315,7 @@ public class VoteMintingPolicy {
     @Entrypoint
     static boolean validate(VoteProof redeemer, PlutusData ctx) {
         // 1. Groth16 BLS12-381 pairing check
-        boolean proofValid = Groth16BLS12381.verify(publicInputs,
+        boolean proofValid = Groth16BLS12381Lib.verify(publicInputs,
             redeemer.piA(), redeemer.piB(), redeemer.piC(),
             vkAlpha, vkBeta, vkGamma, vkDelta, vkIc);
 
