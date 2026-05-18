@@ -85,9 +85,10 @@ Important API rules:
 
 Known limitations:
 
-- Annotated inputs support fixed-size `ZkArray<T>` for built-in element types,
-  but not nested `ZkArray<ZkArray<T>>`; flatten nested structures into parallel
-  arrays when needed.
+- Annotated inputs support fixed-size `ZkArray<T>` for built-in element types
+  and rectangular `ZkArray<ZkArray<T>>` matrices with explicit `@FixedSize`
+  outer and inner sizes. Deeper nesting remains out of scope; flatten those
+  structures into parallel arrays when needed.
 - `ZkPoseidon` exposes two-input hashes. Use `ZkPoseidonN` for folded N-input
   commitments. For Cardano, pass BLS12-381 Poseidon params explicitly; the
   symbolic API intentionally does not provide a no-params `ZkPoseidonN`

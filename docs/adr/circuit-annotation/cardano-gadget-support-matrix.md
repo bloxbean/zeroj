@@ -114,6 +114,7 @@ Relevant source:
 | `ZkMerkle.HashType.MIMC` | Merkle with MiMC | BN254 only | Direct | No for Cardano on-chain | Mark as BN254/off-chain in docs. |
 | `ZkMerkle.HashType.POSEIDON` | Merkle with default Poseidon | BN254 by default today | Direct | No if using default enum path | Use params-aware `ZkMerkle.*Poseidon(...)` for Cardano. |
 | `ZkMerkle` with custom hash lambda | Merkle with caller-provided hash | Depends on lambda | Direct | Yes with a BLS12-381-compatible lambda | Keep as advanced escape hatch. |
+| `ZkMpf` / `zeroj-mpf-poseidon` | Private CCL MPF inclusion and conservative exclusion over a Poseidon-rooted commitment | BLS12-381 Poseidon only | Direct through `ZkMpfProof` flattened arrays and `PoseidonMpfCodec` witness generation | Path exists through Groth16 BLS12-381; MPF-specific proof/Yaci demo is deferred until constraint optimization. Not compatible with native Aiken/Blake2b MPF roots. | Completed at witness level. Terminal fork exclusions are rejected in v1. Use `Groth16BLS12381Lib` in custom validators for root/nullifier/domain checks. |
 | `JubjubPoint` | Off-circuit Jubjub point arithmetic | Jubjub over BLS12-381 scalar field | Used by symbolic wrappers | Yes for BLS12-381 circuits | None. |
 | `InCircuitJubjub` | In-circuit Jubjub arithmetic | Requires BLS12-381 scalar field | Direct through `ZkJubjubPoint` | Yes | Document trusted point binding and subgroup-check contract. |
 | `ZkJubjubPoint` | Symbolic Jubjub point | Requires BLS12-381 scalar field | Direct | Yes | Add in-circuit curve/subgroup checks only if untrusted public points must be accepted directly. |
@@ -383,6 +384,35 @@ Exit criteria:
 - No existing BN254 MiMC circuit changes behavior.
 - BLS12-381 MiMC is only exposed under an explicit name.
 
+### Phase H: Poseidon MPF Gadget
+
+Status: completed. The design and implementation are tracked in
+[`zk-mpf-gadget.md`](zk-mpf-gadget.md).
+
+Goal: support private CCL MPF inclusion and conservative exclusion witnesses
+inside annotated BLS12-381 circuits.
+
+Tasks:
+
+- Added `zeroj-mpf-poseidon` with a CCL `HashFunction`, custom
+  `CommitmentScheme`, in-memory trie helpers, reference verifier, value
+  commitments, and a proof-to-witness codec.
+- Added `ZkMpfProof` and `ZkMpf` symbolic helpers.
+- Added BLS12-381 inclusion/exclusion differential tests against supported
+  CCL-generated proofs, plus rejection for forged terminal-fork exclusion.
+- Added an annotated private-registry inclusion example using the generated
+  circuit surface.
+- Added a standalone `zeroj-usecases` witness-level private registry example.
+- Documented that ZeroJ Poseidon MPF roots are separate from native
+  Blake2b/Aiken MPF roots.
+
+Exit criteria:
+
+- CCL-generated Poseidon MPF inclusion and supported exclusion proofs verify
+  inside ZeroJ circuits.
+- Developers can build witness maps from CCL proof bytes without hand-flattening
+  MPF arrays.
+
 ## Recommended Priority
 
 1. Documentation and defaults. Completed.
@@ -391,7 +421,8 @@ Exit criteria:
 4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count. Completed.
 5. Example migration to BLS12-381 Poseidon. Completed.
 6. Nested `ZkArray<ZkArray<T>>` support. Completed.
-7. Optional BLS12-381 MiMC only if a real integration requires it.
+7. Poseidon MPF gadget. Completed.
+8. Optional BLS12-381 MiMC only if a real integration requires it.
 
 ## Testing Strategy
 

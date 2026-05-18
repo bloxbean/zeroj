@@ -25,6 +25,7 @@ dependencies {
         api project(':zeroj-circuit-lib')
         api project(':zeroj-circuit-annotation-api')
         api project(':zeroj-circuit-annotation-processor')
+        api project(':zeroj-mpf-poseidon')
         api project(':zeroj-prover-spi')
         api project(':zeroj-prover-gnark')
         api project(':zeroj-onchain-julc')

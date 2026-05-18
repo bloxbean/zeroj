@@ -31,6 +31,7 @@ dependencies {
     implementation project(':zeroj-circuit-dsl')
     implementation project(':zeroj-circuit-lib')
     implementation project(':zeroj-circuit-annotation-api')
+    implementation project(':zeroj-mpf-poseidon')
     implementation project(':zeroj-crypto')
     implementation project(':zeroj-blst')
     implementation project(':zeroj-cardano')
@@ -64,6 +65,7 @@ test {
     useJUnitPlatform {
         excludeTags 'e2e'
     }
+    maxHeapSize = '2g'
 }
 
 // E2E integration tests — requires Yaci DevKit running locally

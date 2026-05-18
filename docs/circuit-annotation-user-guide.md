@@ -268,8 +268,10 @@ bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
 ## Current Limits
 
 - Nested `@ZKCircuit` classes are not supported.
-- Nested annotated array inputs such as `ZkArray<ZkArray<T>>` are not
-  supported; flatten to fixed-size parallel arrays.
+- Rectangular nested array inputs such as `ZkArray<ZkArray<T>>` are supported
+  when both dimensions are fixed with `@FixedSize(inner = ...)` or
+  `@FixedSize(innerParam = ...)`. Deeper nesting is not supported; flatten
+  those structures to fixed-size parallel arrays.
 - Private `@Prove` methods are not supported.
 - Private field-style symbolic inputs are not supported; use package-private
   fields or parameter-style inputs.

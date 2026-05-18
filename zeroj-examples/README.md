@@ -39,6 +39,7 @@ Write circuits as annotated Java classes and use generated companions for
 - **Examples**: range proof, age verification, private transfer, MiMC
   commitment, [BLS12-381 PoseidonN multi-input commitment](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMultiInputCommitment.java),
   [BLS12-381 Poseidon Merkle membership](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedBlsPoseidonMerkleMembership.java),
+  [Poseidon MPF private registry membership](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java),
   sealed-bid auction, anonymous voting, parameterized Merkle membership,
   Pedersen commitment, proof-flow helper
 - **Source**: [`examples/annotation`](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation)

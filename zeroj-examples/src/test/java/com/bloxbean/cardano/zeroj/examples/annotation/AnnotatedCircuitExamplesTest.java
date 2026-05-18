@@ -6,6 +6,7 @@ import com.bloxbean.cardano.zeroj.api.ProofSystemId;
 import com.bloxbean.cardano.zeroj.api.PublicInputs;
 import com.bloxbean.cardano.zeroj.api.VerificationKeyRef;
 import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
+import com.bloxbean.cardano.zeroj.circuit.annotation.ZkInputMap;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitMetadata;
 import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.PedersenCommitment;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
@@ -14,9 +15,16 @@ import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
 import com.bloxbean.cardano.zeroj.prover.spi.ProveResponse;
+import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfCodec;
+import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHash;
+import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfTrie;
+import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfValueCommitment;
+import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfWitness;
+import com.bloxbean.cardano.vds.mpf.MpfTrie;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -385,6 +393,35 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
+    void annotatedMpfPrivateRegistryInclusionUsesGeneratedCircuit() {
+        MpfTrie trie = PoseidonMpfTrie.inMemory();
+        byte[] key = bytes("registry:member:1");
+        byte[] value = bytes("active");
+        trie.put(key, value);
+
+        byte[] proof = trie.getProofWire(key).orElseThrow();
+        PoseidonMpfWitness witness = PoseidonMpfCodec.toWitness(key, proof, 1, 2);
+        int[] keyPath = witness.keyPath().stream().mapToInt(BigInteger::intValueExact).toArray();
+        BigInteger root = PoseidonMpfHash.fieldFromDigestBytes(trie.getRootHash());
+        BigInteger keyPathNullifier = PoseidonMpfHash.keyPathNullifier(
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                keyPath);
+
+        var circuit = AnnotatedMpfPrivateRegistryInclusionCircuit.build(1, 2);
+        var schema = AnnotatedMpfPrivateRegistryInclusionCircuit.schema(1, 2);
+        assertEquals(List.of("registryRoot", "keyPathNullifier"), schema.publicInputs().names());
+
+        var inputs = new ZkInputMap()
+                .put("registryRoot", root)
+                .put("keyPathNullifier", keyPathNullifier)
+                .put("value_commitment", PoseidonMpfValueCommitment.field(value));
+        witness.putInto(inputs);
+
+        assertTrue(circuit.constraintGraph().gates().size() > 0);
+        assertEquals(List.of(root, keyPathNullifier), inputs.publicValues(schema));
+    }
+
+    @Test
     void nestedBatchThresholdMatrixUsesRowMajorGeneratedInputs() {
         int rows = 2;
         int cols = 3;
@@ -482,5 +519,9 @@ class AnnotatedCircuitExamplesTest {
                     : PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, sibling, current);
         }
         return current;
+    }
+
+    private byte[] bytes(String value) {
+        return value.getBytes(StandardCharsets.UTF_8);
     }
 }
