@@ -2,9 +2,11 @@
 
 Compile-time annotation processor for annotation-based ZeroJ circuit authoring.
 
-Current Phase 7 status: this module scans `@ZKCircuit` classes and generates
+Current Phase 9 status: this module scans `@ZKCircuit` classes and generates
 `*Circuit` companions with `build(...)`, `schema(...)`, `inputs(...)`,
-`publicInputs(...)`, and input-name constants.
+`publicInputs(...)`, `publicInputValues(...)`, `calculateWitness(...)`,
+`circuitId(...)`, `metadata(...)`, `proofEnvelopeBuilder(...)`, and input-name
+constants.
 
 The generated companions build normal `CircuitBuilder` / `CircuitSpec`
 circuits and produce ordinary witness maps for `calculateWitness(...)`.
@@ -16,15 +18,18 @@ Supported:
 - constructor `@CircuitParam` values
 - `@FixedSize(...)` arrays, bits, and bytes
 - `@Public`, `@Secret`, `@UInt`, `@FieldElement`, and `@Order`
-- generated schema metadata and input builders
+- generated schema metadata, input builders, circuit metadata, and proof
+  envelope helpers
 - compile-time diagnostics for unsupported symbolic types and proof returns
 
 Not supported:
 
 - nested `@ZKCircuit` classes
+- nested annotated array inputs such as `ZkArray<ZkArray<T>>`
 - private `@Prove` methods
 - static `@Prove` methods with field-style inputs
 - `@CircuitParam` on `@Prove` parameters
+- private field-style symbolic inputs
 
 Consumer usage:
 

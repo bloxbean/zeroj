@@ -229,9 +229,17 @@ bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
 ## Current Limits
 
 - Nested `@ZKCircuit` classes are not supported.
+- Nested annotated array inputs such as `ZkArray<ZkArray<T>>` are not
+  supported; flatten to fixed-size parallel arrays.
 - Private `@Prove` methods are not supported.
+- Private field-style symbolic inputs are not supported; use package-private
+  fields or parameter-style inputs.
 - Static `@Prove` methods must use parameter-style inputs.
 - `@CircuitParam` belongs on constructor parameters, not proof method
   parameters.
-- Packed byte encodings are deferred; Phase 7 stores one constrained field
-  element per bit or byte.
+- `ZkPoseidon` exposes two-input hashes; use repeated folding or the lower-level
+  `PoseidonN`/Signal APIs for variable-arity hashing.
+- `ZkMiMC` is BN254-only because the underlying MiMC gadget is BN254-only. Use
+  `ZkPoseidon` with BLS12-381 parameters for BLS12-381 circuits.
+- `ZkBits` and `ZkBytes` store one constrained field element per bit or byte;
+  packed byte encodings are deferred.

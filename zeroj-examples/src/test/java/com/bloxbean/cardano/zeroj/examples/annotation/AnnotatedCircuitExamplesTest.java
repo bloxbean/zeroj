@@ -173,6 +173,103 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
+    void annotatedSealedBidMirrorsReferenceDslCircuit() {
+        var circuit = AnnotatedSealedBidCircuit.build();
+        var schema = AnnotatedSealedBidCircuit.schema();
+
+        assertEquals("annotation-sealed-bid", schema.name());
+        assertEquals(List.of("reservePrice", "bidCommitment", "isAboveReserve"),
+                schema.publicInputs().names());
+        assertEquals(List.of("bidAmount", "salt"), schema.secretInputs().names());
+
+        var bidAmount = BigInteger.valueOf(100);
+        var reservePrice = BigInteger.valueOf(75);
+        var salt = BigInteger.valueOf(88_001);
+        var commitment = MiMCHash.hash(bidAmount, salt, FieldConfig.BN254.prime());
+        var inputs = AnnotatedSealedBidCircuit.inputs()
+                .reservePrice(reservePrice)
+                .bidCommitment(commitment)
+                .isAboveReserve(1)
+                .bidAmount(bidAmount)
+                .salt(salt);
+
+        assertEquals(List.of(reservePrice, commitment, BigInteger.ONE), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+
+        var belowReserveBid = BigInteger.valueOf(50);
+        var belowReserveCommitment = MiMCHash.hash(belowReserveBid, salt, FieldConfig.BN254.prime());
+        var belowReserveInputs = AnnotatedSealedBidCircuit.inputs()
+                .reservePrice(reservePrice)
+                .bidCommitment(belowReserveCommitment)
+                .isAboveReserve(0)
+                .bidAmount(belowReserveBid)
+                .salt(salt);
+        assertDoesNotThrow(() -> circuit.calculateWitness(belowReserveInputs.toWitnessMap(), CurveId.BN254));
+
+        var wrongFlag = AnnotatedSealedBidCircuit.inputs()
+                .reservePrice(reservePrice)
+                .bidCommitment(commitment)
+                .isAboveReserve(0)
+                .bidAmount(bidAmount)
+                .salt(salt);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(wrongFlag.toWitnessMap(), CurveId.BN254));
+
+        var wrongCommitment = AnnotatedSealedBidCircuit.inputs()
+                .reservePrice(reservePrice)
+                .bidCommitment(BigInteger.ONE)
+                .isAboveReserve(1)
+                .bidAmount(bidAmount)
+                .salt(salt);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void annotatedAnonymousVotingMirrorsReferenceDslCircuit() {
+        var circuit = AnnotatedAnonymousVotingCircuit.build();
+        var schema = AnnotatedAnonymousVotingCircuit.schema();
+
+        assertEquals("annotation-anonymous-vote", schema.name());
+        assertEquals(List.of("commitment"), schema.publicInputs().names());
+        assertEquals(List.of("vote", "nullifier"), schema.secretInputs().names());
+
+        var vote = BigInteger.ONE;
+        var nullifier = BigInteger.valueOf(12_345);
+        var commitment = MiMCHash.hash(vote, nullifier, FieldConfig.BN254.prime());
+        var inputs = AnnotatedAnonymousVotingCircuit.inputs()
+                .commitment(commitment)
+                .vote(vote)
+                .nullifier(nullifier);
+
+        assertEquals(List.of(commitment), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+
+        var noVote = BigInteger.ZERO;
+        var noVoteCommitment = MiMCHash.hash(noVote, nullifier, FieldConfig.BN254.prime());
+        var noVoteInputs = AnnotatedAnonymousVotingCircuit.inputs()
+                .commitment(noVoteCommitment)
+                .vote(noVote)
+                .nullifier(nullifier);
+        assertDoesNotThrow(() -> circuit.calculateWitness(noVoteInputs.toWitnessMap(), CurveId.BN254));
+
+        var wrongCommitment = AnnotatedAnonymousVotingCircuit.inputs()
+                .commitment(BigInteger.ONE)
+                .vote(vote)
+                .nullifier(nullifier);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BN254));
+
+        var invalidVote = BigInteger.valueOf(2);
+        var invalidVoteInputs = AnnotatedAnonymousVotingCircuit.inputs()
+                .commitment(MiMCHash.hash(invalidVote, nullifier, FieldConfig.BN254.prime()))
+                .vote(invalidVote)
+                .nullifier(nullifier);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(invalidVoteInputs.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
     void parameterizedMerkleMembershipUsesDepthAndHashType() {
         int depth = 2;
         var hashType = ZkMerkle.HashType.MIMC;
