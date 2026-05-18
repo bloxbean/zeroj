@@ -108,11 +108,11 @@ Relevant source:
 | `MiMC` / `SignalMiMC` | MiMC-7 two-input hash | BN254 only in current circuit lib | Direct through `ZkMiMC` | No for Cardano on-chain, because the circuit requires BN254 | Use Poseidon for Cardano. Consider a separate BLS12-381 MiMC variant only if there is a concrete interop need. |
 | `MiMCSponge` | Variable-length MiMC sponge | BN254 only, because it calls `MiMC` | No direct `ZkMiMCSponge` | No for Cardano on-chain | Add symbolic wrapper only for BN254/off-chain legacy use. |
 | `Poseidon` | Two-input Poseidon T3 hash | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidon` for two inputs | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | Make BLS12-381 params prominent in Cardano examples. |
-| `PoseidonN` | Variable-arity folded Poseidon | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidonN` with explicit params | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | None. Params-aware `ZkMerkle` remains next. |
-| `Merkle` / `SignalMerkle` | Fixed-depth Merkle membership | Hash-dependent | Direct through `ZkMerkle` | Yes when the hash is BLS12-381 compatible | Add params-aware symbolic API for BLS12-381 Poseidon. |
+| `PoseidonN` | Variable-arity folded Poseidon | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidonN` with explicit params | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | None. |
+| `Merkle` / `SignalMerkle` | Fixed-depth Merkle membership | Hash-dependent | Direct through `ZkMerkle`; params-aware Poseidon helpers are available | Yes when `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` is used | None. |
 | `ZkMerkle.HashType.MIMC` | Merkle with MiMC | BN254 only | Direct | No for Cardano on-chain | Mark as BN254/off-chain in docs. |
-| `ZkMerkle.HashType.POSEIDON` | Merkle with default Poseidon | BN254 by default today | Direct | No if using default enum path | Add `POSEIDON_BLS12_381_T3` or a params-aware factory. |
-| `ZkMerkle` with custom hash lambda | Merkle with caller-provided hash | Depends on lambda | Direct | Yes with BLS12-381 Poseidon lambda | Keep as escape hatch; document example. |
+| `ZkMerkle.HashType.POSEIDON` | Merkle with default Poseidon | BN254 by default today | Direct | No if using default enum path | Use params-aware `ZkMerkle.*Poseidon(...)` for Cardano. |
+| `ZkMerkle` with custom hash lambda | Merkle with caller-provided hash | Depends on lambda | Direct | Yes with a BLS12-381-compatible lambda | Keep as advanced escape hatch. |
 | `JubjubPoint` | Off-circuit Jubjub point arithmetic | Jubjub over BLS12-381 scalar field | Used by symbolic wrappers | Yes for BLS12-381 circuits | None. |
 | `InCircuitJubjub` | In-circuit Jubjub arithmetic | Requires BLS12-381 scalar field | Direct through `ZkJubjubPoint` | Yes | Document trusted point binding and subgroup-check contract. |
 | `ZkJubjubPoint` | Symbolic Jubjub point | Requires BLS12-381 scalar field | Direct | Yes | Add in-circuit curve/subgroup checks only if untrusted public points must be accepted directly. |
@@ -243,11 +243,14 @@ Exit criteria:
 
 ### Phase C: Params-Aware `ZkMerkle`
 
+Status: completed. The helper design is tracked in
+[`zk-merkle-poseidon-params-helpers.md`](zk-merkle-poseidon-params-helpers.md).
+
 Goal: make BLS12-381 Merkle circuits ergonomic and hard to misconfigure.
 
 Tasks:
 
-- Add a params-aware helper such as:
+- Added params-aware helpers:
 
 ```java
 ZkMerkle.verifyPoseidon(
@@ -259,16 +262,15 @@ ZkMerkle.verifyPoseidon(
     pathBits);
 ```
 
-- Or add an explicit enum value such as `POSEIDON_BLS12_381_T3`.
-- Keep the custom hash lambda path for advanced users.
-- Add tests that reject mismatched compile fields through `requireField`.
-- Update `AnnotatedMerkleMembership` examples to show the BLS12-381 path.
+- Kept the custom hash lambda path for advanced users.
+- Added tests that reject mismatched compile fields through `requireField`.
+- Added `AnnotatedBlsPoseidonMerkleMembership` for the BLS12-381 path.
 
 Exit criteria:
 
 - A Cardano Merkle membership circuit can be written without a custom lambda.
-- `ZkMerkle.HashType.POSEIDON` ambiguity is documented or removed from
-  Cardano-facing examples.
+- `ZkMerkle.HashType.POSEIDON` ambiguity is documented in Cardano-facing
+  examples.
 
 ### Phase D: Cardano Groth16 Verifier Generation or Generalization
 
@@ -339,7 +341,7 @@ Exit criteria:
 
 1. Documentation and defaults. Completed.
 2. `ZkPoseidonN`. Completed.
-3. Params-aware BLS12-381 `ZkMerkle`.
+3. Params-aware BLS12-381 `ZkMerkle`. Completed.
 4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count.
 5. Example migration to BLS12-381 Poseidon.
 6. Optional BLS12-381 MiMC only if a real integration requires it.

@@ -350,6 +350,158 @@ class ZkGadgetAdaptersTest {
     }
 
     @Test
+    void merklePoseidonParamsHelperMatchesCustomHashLambda() {
+        var helper = CircuitBuilder.create("zk-merkle-poseidon-helper")
+                .publicVar("root")
+                .secretVar("leaf")
+                .secretVar("sibling_0")
+                .secretVar("sibling_1")
+                .secretVar("pathBit_0")
+                .secretVar("pathBit_1")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkMerkle.verifyPoseidon(
+                            zk,
+                            PoseidonParamsBLS12_381T3.INSTANCE,
+                            ZkField.secret(c, "leaf"),
+                            ZkField.publicInput(c, "root"),
+                            ZkArray.secretFields(c, "sibling", 2),
+                            ZkArray.secretBools(c, "pathBit", 2));
+                });
+
+        var customLambda = CircuitBuilder.create("zk-merkle-poseidon-lambda")
+                .publicVar("root")
+                .secretVar("leaf")
+                .secretVar("sibling_0")
+                .secretVar("sibling_1")
+                .secretVar("pathBit_0")
+                .secretVar("pathBit_1")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkMerkle.verify(
+                            zk,
+                            ZkField.secret(c, "leaf"),
+                            ZkField.publicInput(c, "root"),
+                            ZkArray.secretFields(c, "sibling", 2),
+                            ZkArray.secretBools(c, "pathBit", 2),
+                            (context, left, right) -> ZkPoseidon.hash(
+                                    context,
+                                    PoseidonParamsBLS12_381T3.INSTANCE,
+                                    left,
+                                    right));
+                });
+
+        var leaf = BigInteger.valueOf(10);
+        var sibling0 = BigInteger.valueOf(20);
+        var sibling1 = BigInteger.valueOf(30);
+        var pathBit0 = BigInteger.ZERO;
+        var pathBit1 = BigInteger.ONE;
+        var root = expectedPoseidonMerkleRoot(
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                leaf,
+                List.of(sibling0, sibling1),
+                List.of(pathBit0, pathBit1));
+        var valid = Map.of(
+                "root", List.of(root),
+                "leaf", List.of(leaf),
+                "sibling_0", List.of(sibling0),
+                "sibling_1", List.of(sibling1),
+                "pathBit_0", List.of(pathBit0),
+                "pathBit_1", List.of(pathBit1));
+
+        assertEquals(customLambda.constraintGraph().gates().size(), helper.constraintGraph().gates().size());
+        assertArrayEquals(
+                customLambda.calculateWitness(valid, CurveId.BLS12_381),
+                helper.calculateWitness(valid, CurveId.BLS12_381));
+        assertDoesNotThrow(() -> helper.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> helper.compileR1CS(CurveId.BN254));
+        assertThrows(IllegalStateException.class, () -> helper.calculateWitness(valid, CurveId.BN254));
+
+        var invalid = Map.of(
+                "root", List.of(BigInteger.ONE),
+                "leaf", List.of(leaf),
+                "sibling_0", List.of(sibling0),
+                "sibling_1", List.of(sibling1),
+                "pathBit_0", List.of(pathBit0),
+                "pathBit_1", List.of(pathBit1));
+        assertThrows(ArithmeticException.class, () -> helper.calculateWitness(invalid, CurveId.BLS12_381));
+    }
+
+    @Test
+    void merklePoseidonParamsHelperRecordsFieldGuardForEmptyPath() {
+        var circuit = CircuitBuilder.create("zk-merkle-poseidon-empty")
+                .publicVar("root")
+                .secretVar("leaf")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkMerkle.verifyPoseidon(
+                            zk,
+                            PoseidonParamsBLS12_381T3.INSTANCE,
+                            ZkField.secret(c, "leaf"),
+                            ZkField.publicInput(c, "root"),
+                            ZkArray.secretFields(c, "sibling", 0),
+                            ZkArray.secretBools(c, "pathBit", 0));
+                });
+
+        var valid = Map.of(
+                "root", List.of(BigInteger.valueOf(10)),
+                "leaf", List.of(BigInteger.valueOf(10)));
+        assertDoesNotThrow(() -> circuit.calculateWitness(valid, CurveId.BLS12_381));
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+        assertThrows(IllegalStateException.class, () -> circuit.calculateWitness(valid, CurveId.BN254));
+    }
+
+    @Test
+    void merklePoseidonParamsHelpersRejectNullParams() {
+        assertThrows(NullPointerException.class, () -> CircuitBuilder.create("zk-merkle-poseidon-null")
+                .secretVar("leaf")
+                .secretVar("sibling_0")
+                .secretVar("pathBit_0")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkMerkle.computeRootPoseidon(
+                            zk,
+                            null,
+                            ZkField.secret(c, "leaf"),
+                            ZkArray.secretFields(c, "sibling", 1),
+                            ZkArray.secretBools(c, "pathBit", 1));
+                }));
+
+        assertThrows(NullPointerException.class, () -> CircuitBuilder.create("zk-merkle-poseidon-verify-null")
+                .publicVar("root")
+                .secretVar("leaf")
+                .secretVar("sibling_0")
+                .secretVar("pathBit_0")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkMerkle.verifyPoseidon(
+                            zk,
+                            null,
+                            ZkField.secret(c, "leaf"),
+                            ZkField.publicInput(c, "root"),
+                            ZkArray.secretFields(c, "sibling", 1),
+                            ZkArray.secretBools(c, "pathBit", 1));
+                }));
+
+        assertThrows(NullPointerException.class, () -> CircuitBuilder.create("zk-merkle-poseidon-member-null")
+                .publicVar("root")
+                .secretVar("leaf")
+                .secretVar("sibling_0")
+                .secretVar("pathBit_0")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkMerkle.isMemberPoseidon(
+                            zk,
+                            null,
+                            ZkField.secret(c, "leaf"),
+                            ZkField.publicInput(c, "root"),
+                            ZkArray.secretFields(c, "sibling", 1),
+                            ZkArray.secretBools(c, "pathBit", 1));
+                }));
+    }
+
+    @Test
     void hashTypePoseidonAndIsMemberWorkTogether() {
         BigInteger expectedRoot = PoseidonHash.hash(
                 PoseidonParamsBN254T3.INSTANCE,
@@ -731,6 +883,21 @@ class ZkGadgetAdaptersTest {
             return signalMiMCOffCircuit(current, sibling);
         }
         return signalMiMCOffCircuit(sibling, current);
+    }
+
+    private BigInteger expectedPoseidonMerkleRoot(
+            com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParams params,
+            BigInteger leaf,
+            List<BigInteger> siblings,
+            List<BigInteger> pathBits) {
+        BigInteger current = leaf;
+        for (int i = 0; i < siblings.size(); i++) {
+            BigInteger sibling = siblings.get(i);
+            current = BigInteger.ZERO.equals(pathBits.get(i))
+                    ? PoseidonHash.hash(params, current, sibling)
+                    : PoseidonHash.hash(params, sibling, current);
+        }
+        return current;
     }
 
     private BigInteger signalMiMCOffCircuit(BigInteger left, BigInteger right) {

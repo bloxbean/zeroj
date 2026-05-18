@@ -58,6 +58,7 @@ For hashes in Cardano circuits, use explicit BLS12-381 Poseidon parameters:
 ```java
 ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
 ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
+ZkMerkle.isMemberPoseidon(zk, PoseidonParamsBLS12_381T3.INSTANCE, leaf, root, siblings, pathBits);
 ```
 
 Do not rely on no-params Poseidon or MiMC for Cardano defaults. The no-params
@@ -95,9 +96,9 @@ Known limitations:
   `ZkPoseidon` with explicit BLS12-381 parameters for Cardano/BLS12-381
   circuits.
 - `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON` convenience
-  path are BN254-oriented today. For Cardano Merkle circuits, use a custom hash
-  lambda that calls `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE,
-  left, right)` until a params-aware `ZkMerkle` helper is added.
+  path are BN254-oriented today. For Cardano Merkle circuits, use
+  `ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
+  explicit BLS12-381 Poseidon params.
 - Elliptic-curve composite symbolic types are available for the shipped Jubjub
   use cases (`ZkJubjubPoint`, Pedersen, EdDSA-Jubjub). Add a curve-specific
   symbolic wrapper before using another curve family.

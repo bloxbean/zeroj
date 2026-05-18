@@ -6,6 +6,7 @@ import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkField;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMerkle;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParams;
 
 import java.util.Objects;
 
@@ -60,6 +61,21 @@ public final class ZkMerkle {
         return ZkField.wrap(zk, root);
     }
 
+    public static ZkField computeRootPoseidon(
+            ZkContext zk,
+            PoseidonParams params,
+            ZkField leaf,
+            ZkArray<ZkField> siblings,
+            ZkArray<ZkBool> pathBits) {
+        requirePoseidonParams(zk, params);
+        return computeRoot(
+                zk,
+                leaf,
+                siblings,
+                pathBits,
+                (context, left, right) -> ZkPoseidon.hash(context, params, left, right));
+    }
+
     public static void verify(
             ZkContext zk,
             ZkField leaf,
@@ -79,6 +95,27 @@ public final class ZkMerkle {
             ZkArray<ZkBool> pathBits,
             HashType hashType) {
         verify(zk, leaf, root, siblings, pathBits, hashType);
+    }
+
+    public static void verifyPoseidon(
+            ZkContext zk,
+            PoseidonParams params,
+            ZkField leaf,
+            ZkField root,
+            ZkArray<ZkField> siblings,
+            ZkArray<ZkBool> pathBits) {
+        requireRoot(zk, root);
+        computeRootPoseidon(zk, params, leaf, siblings, pathBits).assertEqual(root);
+    }
+
+    public static void verifyProofPoseidon(
+            ZkContext zk,
+            PoseidonParams params,
+            ZkField leaf,
+            ZkField root,
+            ZkArray<ZkField> siblings,
+            ZkArray<ZkBool> pathBits) {
+        verifyPoseidon(zk, params, leaf, root, siblings, pathBits);
     }
 
     public static void verify(
@@ -111,6 +148,17 @@ public final class ZkMerkle {
             HashType hashType) {
         requireRoot(zk, root);
         return computeRoot(zk, leaf, siblings, pathBits, hashType).isEqual(root);
+    }
+
+    public static ZkBool isMemberPoseidon(
+            ZkContext zk,
+            PoseidonParams params,
+            ZkField leaf,
+            ZkField root,
+            ZkArray<ZkField> siblings,
+            ZkArray<ZkBool> pathBits) {
+        requireRoot(zk, root);
+        return computeRootPoseidon(zk, params, leaf, siblings, pathBits).isEqual(root);
     }
 
     public static ZkBool isMember(
@@ -147,6 +195,17 @@ public final class ZkMerkle {
         for (ZkBool pathBit : pathBits.values()) {
             zk.requireSignal(pathBit.signal());
         }
+    }
+
+    private static void requirePoseidonParams(ZkContext zk, PoseidonParams params) {
+        Objects.requireNonNull(zk, "zk");
+        Objects.requireNonNull(params, "params");
+        if (params.t() != 3 || params.alpha() != 5) {
+            throw new IllegalArgumentException(
+                    "Poseidon gadget supports only t=3, alpha=5 (got t=" + params.t()
+                            + ", alpha=" + params.alpha() + ")");
+        }
+        zk.builder().api().requireField(params.field());
     }
 
     private static void requireRoot(ZkContext zk, ZkField root) {

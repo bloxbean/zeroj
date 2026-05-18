@@ -63,8 +63,10 @@ var plonk = circuit.compilePlonK(CurveId.BLS12_381);
 Parameterized circuits should keep the current Java-as-template advantage:
 
 ```java
-var merkle16 = MerkleMembershipCircuit.build(16, HashType.POSEIDON);
-var merkle32 = MerkleMembershipCircuit.build(32, HashType.POSEIDON);
+// BN254/off-chain enum path. Cardano Merkle circuits use explicit
+// PoseidonParams through ZkMerkle.*Poseidon helpers.
+var merkle16 = MerkleMembershipCircuit.build(16, HashType.MIMC);
+var merkle32 = MerkleMembershipCircuit.build(32, HashType.MIMC);
 ```
 
 This feature should not replace `CircuitSpec` or the current DSL. It should
@@ -91,6 +93,7 @@ explicit BLS12-381 parameters:
 ```java
 ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
 ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
+ZkMerkle.isMemberPoseidon(zk, PoseidonParamsBLS12_381T3.INSTANCE, leaf, root, siblings, pathBits);
 ```
 
 The current gadget, curve, symbolic-adapter, and Cardano support matrix is
@@ -583,7 +586,8 @@ V1 supported parameter types:
 Generated companion classes should expose parameterized build methods:
 
 ```java
-var circuit = MerkleMembershipCircuit.build(32, HashType.POSEIDON);
+// BN254/off-chain enum path.
+var circuit = MerkleMembershipCircuit.build(32, HashType.MIMC);
 ```
 
 Each unique parameter set represents a distinct circuit and normally requires a
@@ -923,13 +927,13 @@ ZkField hash = ZkPoseidon.hash(
         PoseidonParamsBLS12_381T3.INSTANCE,
         left,
         right);
-ZkMerkle.verify(
+ZkMerkle.verifyPoseidon(
         zk,
+        PoseidonParamsBLS12_381T3.INSTANCE,
         leaf,
         root,
         siblings,
-        pathBits,
-        (ctx, l, r) -> ZkPoseidon.hash(ctx, PoseidonParamsBLS12_381T3.INSTANCE, l, r));
+        pathBits);
 ```
 
 Proposed package for these adapters:
@@ -1063,9 +1067,10 @@ For parameterized circuits, generated helpers take the same build-time
 parameters and produce schema/input builders for that concrete circuit shape:
 
 ```java
-var circuit = MerkleMembershipCircuit.build(32, HashType.POSEIDON);
-var schema = MerkleMembershipCircuit.schema(32, HashType.POSEIDON);
-var inputs = MerkleMembershipCircuit.inputs(32, HashType.POSEIDON);
+// BN254/off-chain enum path.
+var circuit = MerkleMembershipCircuit.build(32, HashType.MIMC);
+var schema = MerkleMembershipCircuit.schema(32, HashType.MIMC);
+var inputs = MerkleMembershipCircuit.inputs(32, HashType.MIMC);
 ```
 
 ## Input Naming and Ordering

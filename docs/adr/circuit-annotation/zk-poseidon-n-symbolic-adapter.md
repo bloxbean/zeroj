@@ -70,7 +70,8 @@ Out of scope:
 - true width-N Poseidon parameter sets
 - changing the existing `PoseidonN` folding semantics
 - changing the BN254 default on existing non-symbolic APIs
-- params-aware `ZkMerkle`; that remains the next follow-up
+- params-aware `ZkMerkle`; tracked separately in
+  `zk-merkle-poseidon-params-helpers.md`
 
 ## API Shape
 

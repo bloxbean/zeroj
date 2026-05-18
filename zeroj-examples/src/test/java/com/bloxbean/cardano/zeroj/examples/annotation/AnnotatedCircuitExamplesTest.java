@@ -349,6 +349,47 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
+    void blsPoseidonMerkleMembershipUsesParamsAwareHelper() {
+        int depth = 2;
+        var circuit = AnnotatedBlsPoseidonMerkleMembershipCircuit.build(depth);
+        var schema = AnnotatedBlsPoseidonMerkleMembershipCircuit.schema(depth);
+
+        assertEquals("annotation-merkle-bls-poseidon-d2--depth-1:2", schema.name());
+        assertEquals("1:2", schema.parameters().get(0).value());
+        assertEquals(List.of("root"), schema.publicInputs().names());
+        assertEquals(List.of("leaf", "sibling_0", "sibling_1", "pathBit_0", "pathBit_1"),
+                schema.secretInputs().names());
+
+        var leaf = BigInteger.valueOf(10);
+        var sibling0 = BigInteger.valueOf(20);
+        var sibling1 = BigInteger.valueOf(30);
+        var pathBit0 = BigInteger.ZERO;
+        var pathBit1 = BigInteger.ONE;
+        var root = poseidonMerkleRoot(leaf, List.of(sibling0, sibling1), List.of(pathBit0, pathBit1));
+
+        var inputs = AnnotatedBlsPoseidonMerkleMembershipCircuit.inputs(depth)
+                .leaf(leaf)
+                .root(root)
+                .siblings(List.of(sibling0, sibling1))
+                .pathBits(List.of(pathBit0, pathBit1));
+
+        assertEquals(List.of(root), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381));
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+        assertThrows(IllegalStateException.class,
+                () -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+
+        var invalid = AnnotatedBlsPoseidonMerkleMembershipCircuit.inputs(depth)
+                .leaf(leaf)
+                .root(BigInteger.ONE)
+                .siblings(List.of(sibling0, sibling1))
+                .pathBits(List.of(pathBit0, pathBit1));
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(invalid.toWitnessMap(), CurveId.BLS12_381));
+    }
+
+    @Test
     void pedersenCommitmentUsesAdvancedSymbolicAdapter() {
         var circuit = AnnotatedPedersenCommitmentCircuit.build();
         var value = BigInteger.valueOf(42);
@@ -383,6 +424,20 @@ class AnnotatedCircuitExamplesTest {
             current = BigInteger.ZERO.equals(pathBits.get(i))
                     ? MiMCHash.hash(current, sibling, FieldConfig.BN254.prime())
                     : MiMCHash.hash(sibling, current, FieldConfig.BN254.prime());
+        }
+        return current;
+    }
+
+    private BigInteger poseidonMerkleRoot(
+            BigInteger leaf,
+            List<BigInteger> siblings,
+            List<BigInteger> pathBits) {
+        BigInteger current = leaf;
+        for (int i = 0; i < siblings.size(); i++) {
+            BigInteger sibling = siblings.get(i);
+            current = BigInteger.ZERO.equals(pathBits.get(i))
+                    ? PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, current, sibling)
+                    : PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, sibling, current);
         }
         return current;
     }

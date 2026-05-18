@@ -68,6 +68,7 @@ parameters:
 ```java
 ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
 ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
+ZkMerkle.isMemberPoseidon(zk, PoseidonParamsBLS12_381T3.INSTANCE, leaf, root, siblings, pathBits);
 ```
 
 Do not use no-params Poseidon or MiMC as Cardano defaults. The no-params
@@ -132,17 +133,13 @@ public class MerkleMembership {
                  @Public ZkField root,
                  @Secret @FixedSize(param = "depth") ZkArray<ZkField> siblings,
                  @Secret @FixedSize(param = "depth") ZkArray<ZkBool> pathBits) {
-        return ZkMerkle.isMember(
+        return ZkMerkle.isMemberPoseidon(
                 zk,
+                PoseidonParamsBLS12_381T3.INSTANCE,
                 leaf,
                 root,
                 siblings,
-                pathBits,
-                (ctx, left, right) -> ZkPoseidon.hash(
-                        ctx,
-                        PoseidonParamsBLS12_381T3.INSTANCE,
-                        left,
-                        right));
+                pathBits);
     }
 }
 ```
@@ -162,8 +159,8 @@ parameter sets.
 `ZkMerkle.HashType.MIMC` and `ZkMerkle.HashType.POSEIDON` remain useful for
 BN254/off-chain compatibility. Today they are not the Cardano default path:
 `MIMC` is BN254-only, and `POSEIDON` uses the no-params Poseidon overload. Use
-the custom hash lambda shown above until a params-aware `ZkMerkle` convenience
-API is added.
+`ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
+explicit BLS12-381 Poseidon params.
 
 ## Testing Pattern
 
@@ -287,7 +284,7 @@ bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
   Treat MiMC-based annotated circuits as BN254/off-chain unless a separate
   BLS12-381 MiMC variant is added.
 - `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON` path are not
-  Cardano defaults today. Use a custom BLS12-381 Poseidon hash lambda for
-  Cardano Merkle circuits.
+  Cardano defaults today. Use `ZkMerkle.*Poseidon(...)` with explicit
+  BLS12-381 Poseidon params for Cardano Merkle circuits.
 - `ZkBits` and `ZkBytes` store one constrained field element per bit or byte;
   packed byte encodings are deferred.

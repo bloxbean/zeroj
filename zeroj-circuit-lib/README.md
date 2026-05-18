@@ -64,12 +64,12 @@ var commitment = ZkPoseidonN.hash(
         owner,
         assetId,
         nonce);
-var root = ZkMerkle.computeRoot(
+var root = ZkMerkle.computeRootPoseidon(
         zk,
+        PoseidonParamsBLS12_381T3.INSTANCE,
         leaf,
         siblings,
-        pathBits,
-        (ctx, l, r) -> ZkPoseidon.hash(ctx, PoseidonParamsBLS12_381T3.INSTANCE, l, r));
+        pathBits);
 var pedersen = ZkPedersen.commit(zk, value, blinding, 64);
 ```
 
@@ -80,8 +80,10 @@ BLS12-381. `ZkPoseidonN` requires explicit Poseidon params and is the symbolic
 path for folded multi-input commitments. The no-params Poseidon helpers are
 BN254-oriented for backward compatibility, and `ZkMerkle.HashType.MIMC` /
 no-params `HashType.POSEIDON`
-should be treated as BN254/off-chain conveniences until params-aware Merkle
-helpers are added. Jubjub, Pedersen, and EdDSA-Jubjub adapters are BLS12-381-only and
+should be treated as BN254/off-chain conveniences. Use
+`ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
+explicit BLS12-381 Poseidon params for Cardano Merkle circuits. Jubjub,
+Pedersen, and EdDSA-Jubjub adapters are BLS12-381-only and
 inherit the curve/subgroup-check contracts documented on the underlying
 in-circuit gadgets. Use `ZkJubjubPoint.fromTrustedAffine(...)` only for points
 validated off-circuit for curve membership, subgroup membership, and non-identity
