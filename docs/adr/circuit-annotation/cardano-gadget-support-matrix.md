@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted follow-up plan. Priority 1, documentation and defaults, is completed
-in the current docs.
+Accepted follow-up plan. Priorities 1 through 4 are completed in the current
+code and docs.
 
 ## Date
 
@@ -122,7 +122,7 @@ Relevant source:
 | `zeroj-blst` | Native BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
 | `zeroj-bls12381-wasm` | WASM BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
 | `zeroj-bbs` / `zeroj-bbs-wasm` | CFRG BBS signatures and presentations | BLS12-381 | Not an annotated circuit gadget | No current ZeroJ on-chain verifier | Keep separate from annotated circuits for now. |
-| Groth16 pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through R1CS/witness APIs | BLS12-381 proofs can target Cardano | Improve generic on-chain verifier generation for arbitrary public-input counts. |
+| Groth16 pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through R1CS/witness APIs | BLS12-381 proofs can target Cardano through the fixed two-input verifier or the arbitrary-count generic verifier | None for public-input count; consider generated fixed-count validators only for budget-critical circuits. |
 | PlonK pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through existing compile APIs | BLS12-381 on-chain is experimental | Do not make PlonK the Cardano default until on-chain verifier is complete. |
 | Halo2 incubator verifier | Halo2 IPA verification | Pallas | Not a symbolic circuit target for Cardano | No | Keep as incubator/off-chain. |
 
@@ -130,8 +130,12 @@ Relevant source:
 
 ### Generic Groth16 On-Chain Verifier Public-Input Count
 
-The current generic Julc `Groth16BLS12381Verifier` is specialized to two
-public inputs. It has `vkIc0`, `vkIc1`, and `vkIc2` parameters and computes:
+Status: completed. The design and implementation notes are tracked in
+[`cardano-groth16-arbitrary-public-inputs.md`](cardano-groth16-arbitrary-public-inputs.md).
+
+The original reusable Julc `Groth16BLS12381Verifier` is specialized to two
+public inputs. It remains available for backward compatibility. It has `vkIc0`,
+`vkIc1`, and `vkIc2` parameters and computes:
 
 ```text
 vk_x = IC[0] + pub[0] * IC[1] + pub[1] * IC[2]
@@ -139,15 +143,19 @@ vk_x = IC[0] + pub[0] * IC[1] + pub[1] * IC[2]
 
 That is sufficient for small examples, but it is not sufficient as the default
 Cardano path for arbitrary annotated circuits. Annotated circuits can have any
-stable public-input schema. The on-chain verifier needs to either:
+stable public-input schema.
 
-- be generated per circuit with exactly the required `IC` points and public
-  input handling, or
-- use a generalized list-based MSM/fold over public inputs and `IC` points if
-  Julc/Plutus ergonomics and budget allow it.
+`Groth16BLS12381GenericVerifier` now provides the general path. It accepts the
+full `IC` vector as one `PlutusData` list parameter and folds it against the
+datum public-input list:
 
-Until this is solved, some BLS12-381 annotated circuits are off-chain-verifiable
-but require a custom on-chain validator.
+```text
+vk_x = IC[0] + pub[0] * IC[1] + ... + pub[n - 1] * IC[n]
+```
+
+The verifier rejects empty `IC` lists and any mismatch where
+`len(IC) != len(publicInputs) + 1`. Generated fixed-count validators remain a
+possible future optimization if budget-critical circuits need lower script cost.
 
 ### MiMC Is BN254-Only in the Circuit Library
 
@@ -274,23 +282,25 @@ Exit criteria:
 
 ### Phase D: Cardano Groth16 Verifier Generation or Generalization
 
+Status: completed. The implementation is tracked in
+[`cardano-groth16-arbitrary-public-inputs.md`](cardano-groth16-arbitrary-public-inputs.md).
+
 Goal: make arbitrary annotated BLS12-381 Groth16 circuits usable on-chain.
 
 Tasks:
 
-- Design one of the following:
-  - a generated Julc verifier per circuit/public-input count
-  - a generalized Julc verifier that folds public inputs and `IC` points from
-    list parameters
-- Preserve stable public-input order from generated circuit schema.
-- Add budget estimates based on public-input count.
-- Add tests for 0, 1, 2, and more-than-2 public inputs.
-- Add an annotated circuit on-chain example with more than two public inputs.
+- Added `Groth16BLS12381GenericVerifier`.
+- Preserved the fixed two-input verifier for compatibility.
+- Preserved stable public-input order by consuming datum values positionally.
+- Added Julc VM budget output for two-input and three-input proofs.
+- Added tests for two inputs, more-than-two inputs, wrong values, too few
+  values, too many values, and empty `IC` lists.
+- Updated the pure Java Yaci DevKit e2e to use a three-public-input circuit and
+  the generic verifier.
 
 Exit criteria:
 
-- Annotated circuits are not limited by the current 2-public-input generic
-  verifier.
+- Annotated circuits are not limited by the current 2-public-input verifier.
 - The generated schema, proof envelope, and on-chain validator agree on public
   input ordering.
 
@@ -375,7 +385,7 @@ Exit criteria:
 1. Documentation and defaults. Completed.
 2. `ZkPoseidonN`. Completed.
 3. Params-aware BLS12-381 `ZkMerkle`. Completed.
-4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count.
+4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count. Completed.
 5. Example migration to BLS12-381 Poseidon.
 6. Nested `ZkArray<ZkArray<T>>` support.
 7. Optional BLS12-381 MiMC only if a real integration requires it.
