@@ -636,9 +636,7 @@ public class NFTGatedAccess {
     @Param static byte[] vkBeta;
     @Param static byte[] vkGamma;
     @Param static byte[] vkDelta;
-    @Param static byte[] vkIc0;
-    @Param static byte[] vkIc1;
-    @Param static byte[] vkIc2;
+    @Param static PlutusData vkIc;
     @Param static byte[] nullifierRegistryHash;
 
     record AccessProof(
@@ -823,4 +821,4 @@ Only needed if transfer privacy is critical (anonymous art sales, private collec
 
 ### The Circuit Is the Same On-Chain
 
-All approaches use the same `Groth16BLS12381GenericVerifier` Plutus V3 script shape. Only the circuit, verification key, and snapshot mechanism differ. You can start with Approach 1 and upgrade to Approach 3 or 4 later without writing a custom on-chain verifier.
+All approaches use the same `Groth16BLS12381Verifier` Plutus V3 script shape. Only the circuit, verification key, and snapshot mechanism differ. You can start with Approach 1 and upgrade to Approach 3 or 4 later without writing a custom on-chain verifier.

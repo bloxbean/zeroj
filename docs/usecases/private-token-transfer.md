@@ -557,11 +557,11 @@ public class PrivacyPoolDeposit {
 ### Pool Validator (Withdrawal)
 
 ```java
-@SpendingValidator
-public class PrivacyPool {
+    @SpendingValidator
+    public class PrivacyPool {
 
     @Param static byte[] vkAlpha, vkBeta, vkGamma, vkDelta;
-    @Param static byte[] vkIc0, vkIc1, vkIc2, vkIc3;
+    @Param static PlutusData vkIc;
     @Param static byte[] nullifierRegistryHash;
     @Param static long denomination;
 

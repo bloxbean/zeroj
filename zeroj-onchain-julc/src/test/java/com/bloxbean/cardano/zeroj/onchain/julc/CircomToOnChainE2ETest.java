@@ -79,7 +79,7 @@ class CircomToOnChainE2ETest extends ContractTest {
         byte[] piC = g1Compress(proof.c());
 
         // Compile on-chain verifier with circom VK
-        var compiled = compileValidator(Groth16BLS12381GenericVerifier.class);
+        var compiled = compileValidator(Groth16BLS12381Verifier.class);
         var program = compiled.program().applyParams(
                 PlutusData.bytes(vk.alpha()),
                 PlutusData.bytes(vk.beta()),
@@ -117,7 +117,7 @@ class CircomToOnChainE2ETest extends ContractTest {
         byte[] piB = g2Compress(proof.b());
         byte[] piC = g1Compress(proof.c());
 
-        var compiled = compileValidator(Groth16BLS12381GenericVerifier.class);
+        var compiled = compileValidator(Groth16BLS12381Verifier.class);
         var program = compiled.program().applyParams(
                 PlutusData.bytes(vk.alpha()),
                 PlutusData.bytes(vk.beta()),

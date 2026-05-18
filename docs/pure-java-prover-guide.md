@@ -229,7 +229,7 @@ for (byte[] ic : compressedVk.ic()) {
 }
 
 // Load the generic Groth16 BLS12-381 verifier with VK baked in
-var script = JulcScriptLoader.load(Groth16BLS12381GenericVerifier.class,
+var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
     new BytesPlutusData(compressedVk.alpha()),
     new BytesPlutusData(compressedVk.beta()),
     new BytesPlutusData(compressedVk.gamma()),

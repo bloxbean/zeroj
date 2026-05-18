@@ -61,8 +61,8 @@ Annotated symbolic circuit
 Relevant source:
 
 - `zeroj-onchain-julc/.../OnChainFeasibility.java`
-- `zeroj-onchain-julc/.../Groth16BLS12381GenericVerifier.java`
-- `zeroj-onchain-julc/.../Groth16BLS12381Verifier.java` (deprecated fixed two-input compatibility)
+- `zeroj-onchain-julc/.../Groth16BLS12381Verifier.java`
+- `zeroj-onchain-julc/.../Groth16BLS12381.java`
 - `zeroj-onchain-julc/.../PlonkBLS12381FullVerifier.java`
 - `zeroj-verifier-groth16/...`
 - `zeroj-verifier-plonk/...`
@@ -123,30 +123,18 @@ Relevant source:
 | `zeroj-blst` | Native BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
 | `zeroj-bls12381-wasm` | WASM BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
 | `zeroj-bbs` / `zeroj-bbs-wasm` | CFRG BBS signatures and presentations | BLS12-381 | Not an annotated circuit gadget | No current ZeroJ on-chain verifier | Keep separate from annotated circuits for now. |
-| Groth16 pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through R1CS/witness APIs | BLS12-381 proofs can target Cardano through the fixed two-input verifier or the arbitrary-count generic verifier | None for public-input count; consider generated fixed-count validators only for budget-critical circuits. |
+| Groth16 pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through R1CS/witness APIs | BLS12-381 proofs target Cardano through the canonical arbitrary-count verifier | None for public-input count; consider generated fixed-count validators only for budget-critical circuits. |
 | PlonK pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through existing compile APIs | BLS12-381 on-chain is experimental | Do not make PlonK the Cardano default until on-chain verifier is complete. |
 | Halo2 incubator verifier | Halo2 IPA verification | Pallas | Not a symbolic circuit target for Cardano | No | Keep as incubator/off-chain. |
 
 ## Important Current Limitations
 
-### Generic Groth16 On-Chain Verifier Public-Input Count
+### Canonical Groth16 On-Chain Verifier Public-Input Count
 
 Status: completed. The design and implementation notes are tracked in
 [`cardano-groth16-arbitrary-public-inputs.md`](cardano-groth16-arbitrary-public-inputs.md).
 
-The original reusable Julc `Groth16BLS12381Verifier` is specialized to two
-public inputs. It remains available for backward compatibility. It has `vkIc0`,
-`vkIc1`, and `vkIc2` parameters and computes:
-
-```text
-vk_x = IC[0] + pub[0] * IC[1] + pub[1] * IC[2]
-```
-
-That is sufficient for small examples, but it is not sufficient as the default
-Cardano path for arbitrary annotated circuits. Annotated circuits can have any
-stable public-input schema.
-
-`Groth16BLS12381GenericVerifier` now provides the general path. It accepts the
+`Groth16BLS12381Verifier` now provides the general path. It accepts the
 full `IC` vector as one `PlutusData` list parameter and folds it against the
 datum public-input list:
 
@@ -155,7 +143,8 @@ vk_x = IC[0] + pub[0] * IC[1] + ... + pub[n - 1] * IC[n]
 ```
 
 The verifier rejects empty `IC` lists and any mismatch where
-`len(IC) != len(publicInputs) + 1`. Generated fixed-count validators remain a
+`len(IC) != len(publicInputs) + 1`. Custom validators compose the reusable
+`Groth16BLS12381` `@OnchainLibrary` helper with their own domain checks.
 possible future optimization if budget-critical circuits need lower script cost.
 
 ### MiMC Is BN254-Only in the Circuit Library
@@ -290,14 +279,14 @@ Goal: make arbitrary annotated BLS12-381 Groth16 circuits usable on-chain.
 
 Tasks:
 
-- Added `Groth16BLS12381GenericVerifier`.
-- Preserved the fixed two-input verifier for compatibility.
+- Added `Groth16BLS12381Verifier`.
+- Removed the old fixed two-input verifier before release.
+- Added `Groth16BLS12381` as the reusable on-chain library helper.
 - Preserved stable public-input order by consuming datum values positionally.
 - Added Julc VM budget output for two-input and three-input proofs.
 - Added tests for two inputs, more-than-two inputs, wrong values, too few
   values, too many values, and empty `IC` lists.
-- Updated the pure Java Yaci DevKit e2e to use a three-public-input circuit and
-  the generic verifier.
+- Updated the pure Java Yaci DevKit e2e to use the canonical verifier.
 
 Exit criteria:
 

@@ -6,7 +6,7 @@ plugins {
 description = 'ZeroJ end-to-end examples and demos'
 
 ext {
-    julcVersion = '0.1.0-pre11'
+    julcVersion = '0.1.0-pre12'
     cclVersion = '0.8.0-pre2'
 }
 
@@ -41,6 +41,7 @@ dependencies {
 
     // On-chain verifier module (Julc-based Plutus V3 validators)
     implementation project(':zeroj-onchain-julc')
+    annotationProcessor project(':zeroj-onchain-julc')
 
     // Julc for on-chain compilation
     implementation "com.bloxbean.cardano:julc-stdlib:${julcVersion}"

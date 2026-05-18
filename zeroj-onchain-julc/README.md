@@ -12,8 +12,8 @@ V3.
 
 | Validator / Helper | Status | Notes |
 |--------------------|--------|-------|
-| `Groth16BLS12381GenericVerifier` | Working | Default BLS12-381 Groth16 verifier using Plutus V3 BLS builtins; supports arbitrary public-input counts |
-| `Groth16BLS12381Verifier` | Deprecated compatibility | Fixed two-public-input verifier retained for older callers |
+| `Groth16BLS12381Verifier` | Working | Default BLS12-381 Groth16 verifier using Plutus V3 BLS builtins; supports arbitrary public-input counts |
+| `Groth16BLS12381` | Working library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
 | `PlonkBLS12381FullVerifier` | Experimental prototype | Re-derives transcript and checks inverse constraints; KZG batch opening pairing check is deferred |
 | `SnarkjsToCardano` | Working helper | Converts snarkjs Groth16 JSON points to Cardano-compatible compressed bytes |
 | `ProverToCardano` | Working helper | Converts ZeroJ prover artifacts to on-chain data shapes |

@@ -88,7 +88,7 @@ class SealedBidPureJavaE2ETest {
 
         System.out.println("=== SealedBid E2E (dev tau): off-chain COMPLETE ===");
         // On-chain Julc VM verification for arbitrary public-input counts is
-        // covered by Groth16BLS12381GenericVerifier in zeroj-onchain-julc.
+        // covered by Groth16BLS12381Verifier in zeroj-onchain-julc.
     }
 
     // --- Helpers ---

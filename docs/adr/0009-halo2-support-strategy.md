@@ -52,7 +52,7 @@ With Plutus V3 BLS12-381 builtins, Halo2 KZG verification is feasible:
 
 **ZeroJ deliverables:**
 1. Halo2 KZG proof codec (parse Halo2 proof artifacts into `ZkProofEnvelope`)
-2. On-chain verifier in Julc (like existing `Groth16BLS12381GenericVerifier.java`)
+2. On-chain verifier in Julc (like existing `Groth16BLS12381Verifier.java`)
 3. E2E test on Cardano preprod
 
 ### Phase 3: Recursive proof aggregation (Long-term)

@@ -82,10 +82,10 @@ BLS12-381 Groth16:
   -> generated *Circuit companion
   -> compileR1CS(CurveId.BLS12_381)
   -> Groth16 proof
-  -> Groth16BLS12381GenericVerifier on Julc / Plutus V3
+  -> Groth16BLS12381Verifier on Julc / Plutus V3
 ```
 
-`Groth16BLS12381GenericVerifier` accepts the full verification-key `IC` vector
+`Groth16BLS12381Verifier` accepts the full verification-key `IC` vector
 as a list parameter, so Cardano-facing circuits are not limited to two public
 inputs. Public inputs must still be serialized in the exact order returned by
 the generated circuit schema.

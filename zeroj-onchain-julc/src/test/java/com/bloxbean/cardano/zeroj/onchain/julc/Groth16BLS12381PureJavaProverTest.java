@@ -34,7 +34,7 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
     /**
      * 2-public-input circuit: pure Java prove → on-chain Julc VM verify.
      *
-     * <p>Uses {@link Groth16BLS12381GenericVerifier}; the same verifier also
+     * <p>Uses {@link Groth16BLS12381Verifier}; the same verifier also
      * supports circuits with more or fewer public inputs.</p>
      *
      * <p>Circuit: publicA * secretB = publicC (publicA and publicC are public).</p>
@@ -76,7 +76,7 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
         assertEquals(3, compressedVk.ic().size(), "IC should have numPublic+1 = 3 entries");
 
         // Compile on-chain verifier with VK params
-        var compiled = compileValidator(Groth16BLS12381GenericVerifier.class);
+        var compiled = compileValidator(Groth16BLS12381Verifier.class);
         var program = compiled.program().applyParams(
                 PlutusData.bytes(compressedVk.alpha()),
                 PlutusData.bytes(compressedVk.beta()),

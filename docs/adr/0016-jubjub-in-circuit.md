@@ -45,7 +45,7 @@ one constraint per bit of the scalar — a few hundred constraints total.
 That's the whole point of an "embedded curve".
 
 The upshot: **Jubjub is Cardano-native**, BabyJubJub is not. Existing
-Plutus V3 Groth16 verifiers (`zeroj-onchain-julc/Groth16BLS12381GenericVerifier`,
+Plutus V3 Groth16 verifiers (`zeroj-onchain-julc/Groth16BLS12381Verifier`,
 `PlonkBLS12381FullVerifier`) accept Jubjub proofs without modification —
 all the complexity lives inside the SNARK.
 
@@ -201,7 +201,7 @@ end-to-end verification on yaci-devkit as a merge gate.
   proof-of-reserves, sealed-bid auctions, privacy-preserving loyalty.
 - Schnorr / EdDSA wallet-signature-in-circuit enables provable Cardano-
   wallet-ownership gated features.
-- **No onchain changes**: existing `Groth16BLS12381GenericVerifier` and
+- **No onchain changes**: existing `Groth16BLS12381Verifier` and
   `PlonkBLS12381FullVerifier` accept Jubjub-using proofs as-is.
 
 ### Harder

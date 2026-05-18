@@ -742,7 +742,7 @@ Verification (pure Java, zero native deps):
   PlonkBN254Verifier / PlonkBLS12381Verifier
 
 On-Chain (Cardano Plutus V3):
-  Groth16BLS12381GenericVerifier (Julc)
+  Groth16BLS12381Verifier (Julc)
   PlonkBLS12381FullVerifier (Julc prototype: transcript/inverse checks only)
 ```
 

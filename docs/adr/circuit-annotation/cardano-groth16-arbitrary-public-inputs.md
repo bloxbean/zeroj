@@ -10,9 +10,9 @@ Implemented.
 
 ## Context
 
-The current reusable Julc verifier,
-`Groth16BLS12381Verifier`, is specialized to exactly two public inputs. It
-accepts `vkIc0`, `vkIc1`, and `vkIc2` as script parameters and computes:
+The first reusable Julc verifier design was specialized to exactly two public
+inputs. It accepted `vkIc0`, `vkIc1`, and `vkIc2` as script parameters and
+computed:
 
 ```text
 vk_x = IC[0] + public[0] * IC[1] + public[1] * IC[2]
@@ -52,7 +52,7 @@ checking and `vk_x` computation instead of a mutable `while` accumulator.
 Add a new reusable Julc spending validator:
 
 ```java
-Groth16BLS12381GenericVerifier
+Groth16BLS12381Verifier
 ```
 
 It will keep the same proof redeemer shape as the current fixed verifier:
@@ -102,14 +102,15 @@ Then it runs the standard Groth16 pairing check:
 e(A, B) * e(-alpha, beta) == e(vk_x, gamma) * e(C, delta)
 ```
 
-The existing `Groth16BLS12381Verifier` remains in place only as a deprecated
-source and script-parameter compatibility verifier. New code, examples, docs,
-and generated flows should use `Groth16BLS12381GenericVerifier`.
+Because ZeroJ has not been released yet, the fixed-input compatibility class
+was removed. `Groth16BLS12381Verifier` is the canonical arbitrary-input
+validator, and `Groth16BLS12381` is the reusable `@OnchainLibrary` helper for
+custom validators.
 
 ## Length Contract
 
-The generic verifier must reject malformed datum or verification-key parameters
-instead of silently ignoring extra values.
+The canonical list-based verifier must reject malformed datum or
+verification-key parameters instead of silently ignoring extra values.
 
 Accepted:
 
@@ -140,7 +141,7 @@ For annotated circuits, the intended flow is:
 GeneratedCircuit.schema()
   -> GeneratedCircuit.publicInputValues(...)
   -> datum list in the same order
-  -> Groth16BLS12381GenericVerifier
+  -> Groth16BLS12381Verifier
 ```
 
 For DSL or `CircuitSpec` circuits, callers should use witness indices
@@ -194,7 +195,7 @@ The script is loaded with five parameters:
 
 ```java
 JulcScriptLoader.load(
-    Groth16BLS12381GenericVerifier.class,
+    Groth16BLS12381Verifier.class,
     new BytesPlutusData(vk.alpha()),
     new BytesPlutusData(vk.beta()),
     new BytesPlutusData(vk.gamma()),
@@ -206,7 +207,7 @@ JulcScriptLoader.load(
 
 Julc VM tests:
 
-- verify an existing two-public-input fixture with the generic verifier
+- verify an existing two-public-input fixture with the canonical verifier
 - prove and verify a pure Java BLS12-381 circuit with more than two public
   inputs
 - reject wrong public input values
@@ -216,9 +217,9 @@ Julc VM tests:
 
 Yaci DevKit e2e:
 
-- adapt the pure Java prover e2e path to load the generic verifier
+- adapt the pure Java prover e2e path to load the canonical verifier
 - run a lock/unlock transaction with a generated Groth16 BLS12-381 proof
-- keep the existing fixed verifier examples working
+- keep the existing examples working through the canonical verifier
 
 Budget tracking:
 
@@ -228,10 +229,11 @@ Budget tracking:
 
 ## Implementation Steps
 
-1. Add `Groth16BLS12381GenericVerifier`.
+1. Replace the fixed-count `Groth16BLS12381Verifier` with the arbitrary-input
+   verifier.
 2. Add helper methods in tests to encode `vk.ic()` as a Plutus list.
 3. Add a three-public-input pure Java BLS12-381 circuit test.
-4. Update Yaci e2e coverage to exercise the generic verifier.
+4. Update Yaci e2e coverage to exercise the canonical verifier.
 5. Update the Cardano gadget support matrix and implementation plan.
 6. Run module tests and the Yaci e2e test when the local DevKit is available.
 
@@ -239,10 +241,17 @@ Budget tracking:
 
 Status: implemented.
 
-The final verifier deprecates the fixed two-input `Groth16BLS12381Verifier`
-and adds `Groth16BLS12381GenericVerifier` as the default. The generic verifier
-accepts five script parameters: alpha, beta, gamma, delta, and the full `IC`
-list.
+The final verifier removes the fixed two-input class and makes
+`Groth16BLS12381Verifier` the default. It accepts five script parameters:
+alpha, beta, gamma, delta, and the full `IC` list.
+
+`Groth16BLS12381` is packaged as a JuLC `@OnchainLibrary` and bundled into the
+published JAR under `META-INF/plutus-sources/`. Downstream custom validators
+use their own local redeemer record and call `Groth16BLS12381.verify(...)`.
+The proof record is intentionally not part of the reusable library surface
+because JuLC record resolution is validator-local today; keeping the record
+beside the validator avoids cross-module nested/top-level record resolution
+issues while still sharing all proof verification logic.
 
 Julc VM tests cover:
 
@@ -258,15 +267,15 @@ Measured Julc VM budgets in the implementation tests:
 - two public inputs: `cpu=2142040133`, `mem=71535`
 - three public inputs: `cpu=2275351144`, `mem=84444`
 
-The Yaci DevKit e2e test was updated to use a three-public-input pure Java
-circuit and the generic verifier.
+The Yaci DevKit e2e tests were updated to use the canonical verifier.
 
 ## Consequences
 
 Positive:
 
 - annotated circuits are no longer blocked by the old two-public-input verifier
-- existing fixed verifier users remain compatible
+- there is one canonical BLS12-381 Groth16 verifier name before ZeroJ's first
+  release
 - public-input ordering stays explicit and schema-driven
 - one reusable on-chain verifier covers DSL, `CircuitSpec`, and symbolic
   annotation-generated circuits

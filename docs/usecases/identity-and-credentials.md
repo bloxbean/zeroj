@@ -561,10 +561,7 @@ public class CredentialGatedProtocol {
     @Param static byte[] vkBeta;
     @Param static byte[] vkGamma;
     @Param static byte[] vkDelta;
-    @Param static byte[] vkIc0;
-    @Param static byte[] vkIc1;
-    @Param static byte[] vkIc2;
-    @Param static byte[] vkIc3;
+    @Param static PlutusData vkIc;
 
     // Trusted issuer public key (baked at deploy)
     @Param static byte[] trustedIssuerPubKey;
@@ -807,4 +804,4 @@ When BBS+ circuits are available:
 
 ### Upgrade Path
 
-All three approaches use the same on-chain verifier (`Groth16BLS12381GenericVerifier`). The circuit changes, but the Plutus V3 script shape is identical. You can upgrade from Poseidon-signed to EdDSA to BBS+ without writing a custom on-chain verifier; redeployment is only needed when the verification key changes.
+All three approaches use the same on-chain verifier (`Groth16BLS12381Verifier`). The circuit changes, but the Plutus V3 script shape is identical. You can upgrade from Poseidon-signed to EdDSA to BBS+ without writing a custom on-chain verifier; redeployment is only needed when the verification key changes.

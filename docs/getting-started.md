@@ -140,7 +140,7 @@ for (byte[] ic : compressedVk.ic()) {
 }
 
 // Compile Julc validator with VK parameters
-var script = JulcScriptLoader.load(Groth16BLS12381GenericVerifier.class,
+var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
     new BytesPlutusData(compressedVk.alpha()),
     new BytesPlutusData(compressedVk.beta()),
     new BytesPlutusData(compressedVk.gamma()),
@@ -202,7 +202,7 @@ var unlockResult = new QuickTxBuilder(backend)
 
 ## What Happens On-Chain
 
-The `Groth16BLS12381GenericVerifier` Plutus V3 script executes:
+The `Groth16BLS12381Verifier` Plutus V3 script executes:
 
 1. **Extract** public inputs from datum: `[a, c]`
 2. **Decompress** proof points (piA, piB, piC) from BLS12-381 compressed bytes
