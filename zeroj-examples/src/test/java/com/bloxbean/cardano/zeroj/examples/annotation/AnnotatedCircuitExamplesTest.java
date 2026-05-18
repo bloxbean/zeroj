@@ -385,6 +385,53 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
+    void nestedBatchThresholdMatrixUsesRowMajorGeneratedInputs() {
+        int rows = 2;
+        int cols = 3;
+        var circuit = AnnotatedBatchThresholdMatrixCircuit.build(rows, cols);
+        var schema = AnnotatedBatchThresholdMatrixCircuit.schema(rows, cols);
+
+        assertEquals("annotation-batch-threshold-matrix-2x3--rows-1:2--cols-1:3", schema.name());
+        assertEquals(List.of("columnMaximum_0", "columnMaximum_1", "columnMaximum_2"),
+                schema.publicInputs().names());
+        assertEquals(List.of(
+                        "measurement_0_0", "measurement_0_1", "measurement_0_2",
+                        "measurement_1_0", "measurement_1_1", "measurement_1_2"),
+                schema.secretInputs().names());
+        assertEquals(List.of(2, 3), schema.input("measurement").dimensions());
+
+        var inputs = AnnotatedBatchThresholdMatrixCircuit.inputs(rows, cols)
+                .columnMaximums(List.of(
+                        BigInteger.valueOf(10),
+                        BigInteger.valueOf(20),
+                        BigInteger.valueOf(30)))
+                .measurements(List.of(
+                        List.of(BigInteger.valueOf(7), BigInteger.valueOf(18), BigInteger.valueOf(29)),
+                        List.of(BigInteger.valueOf(10), BigInteger.valueOf(20), BigInteger.valueOf(30))));
+
+        assertEquals(List.of(BigInteger.valueOf(10), BigInteger.valueOf(20), BigInteger.valueOf(30)),
+                inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381));
+
+        var outOfBoundsMeasurement = AnnotatedBatchThresholdMatrixCircuit.inputs(rows, cols)
+                .columnMaximums(List.of(
+                        BigInteger.valueOf(10),
+                        BigInteger.valueOf(20),
+                        BigInteger.valueOf(30)))
+                .measurements(List.of(
+                        List.of(BigInteger.valueOf(7), BigInteger.valueOf(21), BigInteger.valueOf(29)),
+                        List.of(BigInteger.valueOf(10), BigInteger.valueOf(20), BigInteger.valueOf(30))));
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(outOfBoundsMeasurement.toWitnessMap(), CurveId.BLS12_381));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> AnnotatedBatchThresholdMatrixCircuit.inputs(rows, cols)
+                        .measurements(List.of(
+                                List.of(BigInteger.ONE),
+                                List.of(BigInteger.TWO, BigInteger.valueOf(3), BigInteger.valueOf(4)))));
+    }
+
+    @Test
     void pedersenCommitmentUsesAdvancedSymbolicAdapter() {
         var circuit = AnnotatedPedersenCommitmentCircuit.build();
         var value = BigInteger.valueOf(42);

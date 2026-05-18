@@ -200,6 +200,43 @@ class ZkSymbolicTypesTest {
     }
 
     @Test
+    void nestedArrayFlattensSignalsRowMajorAndSupportsFactories() {
+        var circuit = CircuitBuilder.create("zk-array-matrix")
+                .publicVar("out")
+                .secretVar("cell_0_0")
+                .secretVar("cell_0_1")
+                .secretVar("cell_1_0")
+                .secretVar("cell_1_1")
+                .defineSignals(c -> {
+                    var cells = ZkArray.secretFieldMatrix(c, "cell", 2, 2);
+                    var out = ZkField.publicInput(c, "out");
+
+                    cells.get(0).get(0)
+                            .add(cells.get(0).get(1))
+                            .add(cells.get(1).get(0))
+                            .add(cells.get(1).get(1))
+                            .assertEqual(out);
+                    if (cells.signals().size() != 4) {
+                        throw new IllegalStateException("matrix should flatten to four signals");
+                    }
+                });
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "out", List.of(BigInteger.valueOf(100)),
+                "cell_0_0", List.of(BigInteger.TEN),
+                "cell_0_1", List.of(BigInteger.valueOf(20)),
+                "cell_1_0", List.of(BigInteger.valueOf(30)),
+                "cell_1_1", List.of(BigInteger.valueOf(40))), CurveId.BN254));
+
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "out", List.of(BigInteger.valueOf(101)),
+                "cell_0_0", List.of(BigInteger.TEN),
+                "cell_0_1", List.of(BigInteger.valueOf(20)),
+                "cell_1_0", List.of(BigInteger.valueOf(30)),
+                "cell_1_1", List.of(BigInteger.valueOf(40))), CurveId.BN254));
+    }
+
+    @Test
     void merkleShapedInputsSupportFieldSiblingsAndBooleanPathBits() {
         var circuit = CircuitBuilder.create("zk-merkle-shape")
                 .publicVar("root")
@@ -339,6 +376,32 @@ class ZkSymbolicTypesTest {
         assertEquals(new PublicInputs(List.of(BigInteger.valueOf(10), BigInteger.ZERO, BigInteger.ONE)),
                 inputs.publicInputs(schema));
         assertEquals(BigInteger.valueOf(30), inputs.toWitnessMap().get("sibling_1").getFirst());
+    }
+
+    @Test
+    void schemaExposesNestedArrayDimensionsAndPublicValues() {
+        var schema = ZkCircuitSchema.of(
+                "schema-matrix",
+                List.of(new ZkCircuitSchema.Parameter("rows", "int", "2"),
+                        new ZkCircuitSchema.Parameter("cols", "int", "2")),
+                List.of(ZkCircuitSchema.Input.array(
+                        "cell", ZkCircuitSchema.Visibility.PUBLIC, ZkCircuitSchema.Kind.UINT, 16, List.of(2, 2))),
+                List.of());
+
+        assertEquals(List.of("cell_0_0", "cell_0_1", "cell_1_0", "cell_1_1"),
+                schema.publicInputs().names());
+        assertEquals(4, schema.input("cell").size());
+        assertEquals(List.of(2, 2), schema.input("cell").dimensions());
+        assertEquals(ZkCircuitSchema.Kind.UINT, schema.input("cell_1_1").kind());
+
+        var inputs = new ZkInputMap()
+                .putNestedArray("cell", List.of(
+                        List.of(BigInteger.ONE, BigInteger.TWO),
+                        List.of(BigInteger.valueOf(3), BigInteger.valueOf(4))));
+
+        assertEquals(List.of(BigInteger.ONE, BigInteger.TWO, BigInteger.valueOf(3), BigInteger.valueOf(4)),
+                inputs.publicValues(schema));
+        assertEquals(BigInteger.valueOf(4), inputs.toWitnessMap().get("cell_1_1").getFirst());
     }
 
     @Test

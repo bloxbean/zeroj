@@ -454,6 +454,24 @@ ZkArray<ZkBool> pathBits = ZkArray.secretBools(c, "pathBit", depth);
 ZkArray<ZkUInt> amounts = ZkArray.publicUInts(c, "amount", count, 64);
 ```
 
+Two-dimensional rectangular arrays are supported for grouped inputs:
+
+```java
+@Secret
+@UInt(bits = 16)
+@FixedSize(param = "rows", innerParam = "cols")
+ZkArray<ZkArray<ZkUInt>> measurements;
+```
+
+Nested arrays flatten row-major in schema and witness maps:
+
+```text
+measurement_0_0, measurement_0_1, measurement_1_0, measurement_1_1
+```
+
+Generated input builders accept rectangular nested lists and reject ragged
+values before witness calculation.
+
 `ZkArray.bind(...)` is reserved for custom symbolic element types. Its
 visibility comes from the supplied factory, so generated code should prefer the
 visibility-specific helpers whenever the element type is built in.
@@ -639,11 +657,14 @@ Defines fixed length for arrays, bit vectors, and byte values.
 public @interface FixedSize {
     int value() default -1;
     String param() default "";
+    int inner() default -1;
+    String innerParam() default "";
 }
 ```
 
 Required for `ZkArray`, `ZkBits`, and `ZkBytes`. Use `value` for a literal size
-and `param` to reference a build-time `@CircuitParam`.
+and `param` to reference a build-time `@CircuitParam`. For
+`ZkArray<ZkArray<T>>`, use `inner` or `innerParam` for the second dimension.
 
 Examples:
 
@@ -655,10 +676,15 @@ ZkArray<ZkField> fixedSiblings;
 @Secret
 @FixedSize(param = "depth")
 ZkArray<ZkField> parametricSiblings;
+
+@Secret
+@FixedSize(param = "rows", innerParam = "cols")
+ZkArray<ZkArray<ZkField>> matrix;
 ```
 
 Exactly one of `value` or `param` must be set. `param` must reference a visible
-integer `@CircuitParam`.
+integer `@CircuitParam`. Nested arrays also require exactly one of `inner` or
+`innerParam`.
 
 ### `@Order`
 

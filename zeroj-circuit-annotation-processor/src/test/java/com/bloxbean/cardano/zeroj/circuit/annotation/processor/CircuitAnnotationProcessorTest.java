@@ -554,6 +554,196 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    void nestedUIntArrayGeneratesRowMajorSchemaBuilderAndWitness() throws Exception {
+        var compilation = compile("test.NestedMatrix", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "nested-matrix", nameTemplate = "nested-matrix-{rows}x{cols}")
+                public class NestedMatrix {
+                    private final int rows;
+                    private final int cols;
+
+                    public NestedMatrix(
+                            @CircuitParam("rows") int rows,
+                            @CircuitParam("cols") int cols) {
+                        this.rows = rows;
+                        this.cols = cols;
+                    }
+
+                    @Prove
+                    void prove(
+                            ZkContext zk,
+                            @Public @FixedSize(param = "rows", innerParam = "cols")
+                            ZkArray<ZkArray<ZkField>> expected,
+                            @Secret @UInt(bits = 8) @FixedSize(param = "rows", innerParam = "cols")
+                            ZkArray<ZkArray<ZkUInt>> values) {
+                        for (int row = 0; row < rows; row++) {
+                            for (int col = 0; col < cols; col++) {
+                                values.get(row).get(col).asField().assertEqual(expected.get(row).get(col));
+                            }
+                        }
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Class<?> companion = compilation.load("test.NestedMatrixCircuit");
+        ZkCircuitSchema schema = (ZkCircuitSchema) companion.getMethod("schema", int.class, int.class)
+                .invoke(null, 2, 2);
+
+        assertEquals("nested-matrix-2x2--rows-1:2--cols-1:2", schema.name());
+        assertEquals(List.of("expected_0_0", "expected_0_1", "expected_1_0", "expected_1_1"),
+                schema.publicInputs().names());
+        assertEquals(List.of("value_0_0", "value_0_1", "value_1_0", "value_1_1"),
+                schema.secretInputs().names());
+        assertEquals(List.of(2, 2), schema.input("value").dimensions());
+        assertEquals(4, schema.input("value").size());
+        assertEquals(8, schema.input("value_1_1").bits());
+
+        Object inputs = companion.getMethod("inputs", int.class, int.class).invoke(null, 2, 2);
+        inputs.getClass().getMethod("expected", List.class).invoke(inputs, List.of(
+                List.of(BigInteger.ONE, BigInteger.TWO),
+                List.of(BigInteger.valueOf(3), BigInteger.valueOf(4))));
+        inputs.getClass().getMethod("values", int.class, int.class, long.class)
+                .invoke(inputs, 0, 0, 1L);
+        inputs.getClass().getMethod("values", List.class).invoke(inputs, List.of(
+                List.of(BigInteger.ONE, BigInteger.TWO),
+                List.of(BigInteger.valueOf(3), BigInteger.valueOf(4))));
+
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> witness =
+                (Map<String, List<BigInteger>>) inputs.getClass().getMethod("toWitnessMap").invoke(inputs);
+        assertEquals(BigInteger.valueOf(4), witness.get("value_1_1").getFirst());
+        assertEquals(List.of(BigInteger.ONE, BigInteger.TWO, BigInteger.valueOf(3), BigInteger.valueOf(4)),
+                companion.getMethod("publicInputs", inputs.getClass()).invoke(null, inputs));
+
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build", int.class, int.class)
+                .invoke(null, 2, 2);
+        assertDoesNotThrow(() -> circuit.calculateWitness(witness, CurveId.BN254));
+
+        Object badInputs = companion.getMethod("inputs", int.class, int.class).invoke(null, 2, 2);
+        var ragged = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> badInputs.getClass().getMethod("values", List.class).invoke(badInputs, List.of(
+                        List.of(BigInteger.ONE),
+                        List.of(BigInteger.TWO, BigInteger.valueOf(3)))));
+        assertTrue(ragged.getCause() instanceof IllegalArgumentException);
+
+        Object wrongInputs = companion.getMethod("inputs", int.class, int.class).invoke(null, 2, 2);
+        wrongInputs.getClass().getMethod("expected", List.class).invoke(wrongInputs, List.of(
+                List.of(BigInteger.ONE, BigInteger.TWO),
+                List.of(BigInteger.valueOf(3), BigInteger.valueOf(4))));
+        wrongInputs.getClass().getMethod("values", List.class).invoke(wrongInputs, List.of(
+                List.of(BigInteger.ONE, BigInteger.TWO),
+                List.of(BigInteger.valueOf(3), BigInteger.valueOf(5))));
+        @SuppressWarnings("unchecked")
+        Map<String, List<BigInteger>> wrongWitness =
+                (Map<String, List<BigInteger>>) wrongInputs.getClass().getMethod("toWitnessMap").invoke(wrongInputs);
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(wrongWitness, CurveId.BN254));
+    }
+
+    @Test
+    void nestedBoolArrayConstrainsEveryElement() throws Exception {
+        var compilation = compile("test.NestedBoolMatrix", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit(name = "nested-bool-matrix")
+                public class NestedBoolMatrix {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(value = 2, inner = 2)
+                            ZkArray<ZkArray<ZkBool>> flags,
+                            @Public ZkBool ok) {
+                        return flags.get(0).get(0)
+                                .and(flags.get(0).get(1))
+                                .and(flags.get(1).get(0))
+                                .and(flags.get(1).get(1))
+                                .and(ok);
+                    }
+                }
+                """);
+
+        assertTrue(compilation.success(), compilation.diagnosticsText());
+        Class<?> companion = compilation.load("test.NestedBoolMatrixCircuit");
+        CircuitBuilder circuit = (CircuitBuilder) companion.getMethod("build").invoke(null);
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
+                "flag_0_0", List.of(BigInteger.ONE),
+                "flag_0_1", List.of(BigInteger.ONE),
+                "flag_1_0", List.of(BigInteger.ONE),
+                "flag_1_1", List.of(BigInteger.ONE),
+                "ok", List.of(BigInteger.ONE)), CurveId.BN254));
+
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "flag_0_0", List.of(BigInteger.ONE),
+                "flag_0_1", List.of(BigInteger.TWO),
+                "flag_1_0", List.of(BigInteger.ONE),
+                "flag_1_1", List.of(BigInteger.ONE),
+                "ok", List.of(BigInteger.ONE)), CurveId.BN254));
+    }
+
+    @Test
+    void rejectsInvalidNestedArrayShapes() throws Exception {
+        var missingInner = compile("test.MissingInner", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class MissingInner {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(2) ZkArray<ZkArray<ZkField>> matrix,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(missingInner.success());
+        assertTrue(missingInner.diagnosticsText().contains("@FixedSize inner dimension"));
+
+        var innerOnFlat = compile("test.InnerOnFlat", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class InnerOnFlat {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(value = 2, inner = 2) ZkArray<ZkField> items,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(innerOnFlat.success());
+        assertTrue(innerOnFlat.diagnosticsText().contains("inner or innerParam can only be used"));
+
+        var deeper = compile("test.DeeperArray", """
+                package test;
+
+                import com.bloxbean.cardano.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class DeeperArray {
+                    @Prove
+                    ZkBool prove(
+                            @Secret @FixedSize(value = 2, inner = 2)
+                            ZkArray<ZkArray<ZkArray<ZkField>>> matrix,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertFalse(deeper.success());
+        assertTrue(deeper.diagnosticsText().contains("Only two-dimensional"));
+    }
+
+    @Test
     void parameterizedCircuitWithoutNameTemplateUsesCanonicalSuffix() throws Exception {
         var compilation = compile("test.ParamStatic", """
                 package test;

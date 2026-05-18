@@ -85,17 +85,36 @@ public record ZkCircuitSchema(
             int bits,
             int size,
             boolean array,
-            List<String> signalNames) {
+            List<String> signalNames,
+            List<Integer> dimensions) {
 
         public Input {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(visibility, "visibility");
             Objects.requireNonNull(kind, "kind");
+            dimensions = List.copyOf(Objects.requireNonNull(dimensions, "dimensions"));
             if (bits < -1 || bits == 0) {
                 throw new IllegalArgumentException("bits must be -1 or positive");
             }
             if (size <= 0) {
                 throw new IllegalArgumentException("size must be positive");
+            }
+            if (array && dimensions.isEmpty()) {
+                throw new IllegalArgumentException("array inputs must declare dimensions");
+            }
+            if (!array && !dimensions.isEmpty()) {
+                throw new IllegalArgumentException("scalar inputs must not declare dimensions");
+            }
+            int flattenedSize = 1;
+            for (Integer dimension : dimensions) {
+                Objects.requireNonNull(dimension, "dimensions element");
+                if (dimension <= 0) {
+                    throw new IllegalArgumentException("dimensions must be positive");
+                }
+                flattenedSize = Math.multiplyExact(flattenedSize, dimension);
+            }
+            if (array && flattenedSize != size) {
+                throw new IllegalArgumentException("size must equal flattened dimensions");
             }
             validateKind(kind, bits, array);
             signalNames = List.copyOf(Objects.requireNonNull(signalNames, "signalNames"));
@@ -104,16 +123,67 @@ public record ZkCircuitSchema(
             }
         }
 
+        public Input(
+                String name,
+                Visibility visibility,
+                Kind kind,
+                int bits,
+                int size,
+                boolean array,
+                List<String> signalNames) {
+            this(name, visibility, kind, bits, size, array, signalNames, array ? List.of(size) : List.of());
+        }
+
         public static Input scalar(String name, Visibility visibility, Kind kind, int bits) {
-            return new Input(name, visibility, kind, bits, 1, false, List.of(name));
+            return new Input(name, visibility, kind, bits, 1, false, List.of(name), List.of());
         }
 
         public static Input array(String name, Visibility visibility, Kind kind, int bits, int size) {
-            var names = new ArrayList<String>(size);
-            for (int i = 0; i < size; i++) {
-                names.add(name + "_" + i);
+            return array(name, visibility, kind, bits, List.of(size));
+        }
+
+        public static Input array(
+                String name,
+                Visibility visibility,
+                Kind kind,
+                int bits,
+                List<Integer> dimensions) {
+            Objects.requireNonNull(dimensions, "dimensions");
+            int flattenedSize = 1;
+            for (Integer dimension : dimensions) {
+                Objects.requireNonNull(dimension, "dimensions element");
+                flattenedSize = Math.multiplyExact(flattenedSize, dimension);
             }
-            return new Input(name, visibility, kind, bits, size, true, names);
+            return new Input(
+                    name,
+                    visibility,
+                    kind,
+                    bits,
+                    flattenedSize,
+                    true,
+                    flattenedNames(name, dimensions),
+                    dimensions);
+        }
+
+        private static List<String> flattenedNames(String name, List<Integer> dimensions) {
+            if (dimensions.isEmpty()) {
+                return List.of(name);
+            }
+            var names = new ArrayList<String>();
+            appendNames(names, name, dimensions, 0);
+            return List.copyOf(names);
+        }
+
+        private static void appendNames(List<String> names, String prefix, List<Integer> dimensions, int depth) {
+            int size = dimensions.get(depth);
+            for (int i = 0; i < size; i++) {
+                String next = prefix + "_" + i;
+                if (depth == dimensions.size() - 1) {
+                    names.add(next);
+                } else {
+                    appendNames(names, next, dimensions, depth + 1);
+                }
+            }
         }
 
         private static void validateKind(Kind kind, int bits, boolean array) {

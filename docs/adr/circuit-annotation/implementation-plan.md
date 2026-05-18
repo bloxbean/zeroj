@@ -70,5 +70,5 @@ recommended follow-up order is:
 | 3 | Params-aware BLS12-381 `ZkMerkle` helpers | Completed |
 | 4 | Generic or generated Cardano Groth16 verifier for arbitrary public-input count | Completed |
 | 5 | Example migration to BLS12-381 Poseidon where examples are Cardano-facing | Completed |
-| 6 | Nested `ZkArray<ZkArray<T>>` symbolic inputs | Pending |
+| 6 | Nested `ZkArray<ZkArray<T>>` symbolic inputs | Completed |
 | 7 | Optional BLS12-381 MiMC decision | Pending |

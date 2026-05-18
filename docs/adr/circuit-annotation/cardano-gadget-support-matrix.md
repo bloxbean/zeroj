@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted follow-up plan. Priorities 1 through 5 are completed in the current
+Accepted follow-up plan. Priorities 1 through 6 are completed in the current
 code and docs.
 
 ## Date
@@ -99,7 +99,7 @@ Relevant source:
 | `ZkField` | Raw field element | Generic | Direct | Yes on BLS12-381 Groth16 | None. |
 | `ZkBool` | Boolean-constrained field bit | Generic | Direct | Yes on BLS12-381 Groth16 | None. |
 | `ZkUInt` | Unsigned integer with bit width and range constraints | Generic, width-limited | Direct | Yes on BLS12-381 Groth16 | Document max width and comparison limits. Current `MAX_BITS` is 253 and comparisons require compare width `< 253`. |
-| `ZkArray<T>` | Fixed-size symbolic arrays | Generic | Direct for one-dimensional arrays | Yes on BLS12-381 Groth16 | Track nested arrays as a lower-priority follow-up for matrix/grouped inputs. |
+| `ZkArray<T>` | Fixed-size symbolic arrays | Generic | Direct for one-dimensional arrays and rectangular `ZkArray<ZkArray<T>>` matrices | Yes on BLS12-381 Groth16 | Deeper nesting remains out of scope until a real circuit needs it. |
 | `ZkBits` | Fixed-size bit vector | Generic | Direct for binding/equality | Yes on BLS12-381 Groth16 | Add ergonomic bitwise operations if bit-heavy circuits appear. |
 | `ZkBytes` | Fixed-size byte vector | Generic | Direct for binding/equality | Yes on BLS12-381 Groth16 | Add packing/unpacking helpers when byte-oriented circuits appear. |
 | `Comparators` / `SignalComparators` | `<`, `<=`, `>`, `>=`, range, min, max | Generic | Mostly direct through `ZkUInt` | Yes on BLS12-381 Groth16 | Optional symbolic helpers for `min` and `max`. |
@@ -324,13 +324,17 @@ Exit criteria:
 
 ### Phase F: Nested `ZkArray<ZkArray<T>>`
 
+Status: completed. The implementation is tracked in
+[`nested-zkarray-symbolic-inputs.md`](nested-zkarray-symbolic-inputs.md).
+
 Goal: support matrix-like and grouped fixed-size symbolic inputs without manual
 flattening.
 
 Rationale:
 
-- Current annotated circuits support one-dimensional `ZkArray<T>`.
-- Complex circuits can work around the gap by flattening inputs, but that
+- Annotated circuits now support one-dimensional `ZkArray<T>` and rectangular
+  two-dimensional `ZkArray<ZkArray<T>>`.
+- Deeper nesting can still be worked around by flattening inputs, but that
   pushes offset math and naming conventions into user code.
 - Nested arrays are not Cardano-specific, but they improve ergonomics for
   circuits with grouped attributes, batched Merkle openings, matrices, or
@@ -338,15 +342,15 @@ Rationale:
 
 Tasks:
 
-- Extend annotation validation so nested `ZkArray<ZkArray<T>>` declarations
+- Extended annotation validation so nested `ZkArray<ZkArray<T>>` declarations
   require explicit outer and inner fixed sizes.
-- Define stable schema flattening such as `matrix_0_0`, `matrix_0_1`,
+- Defined stable schema flattening such as `matrix_0_0`, `matrix_0_1`,
   `matrix_1_0`, and `matrix_1_1`.
-- Generate input builder methods that accept rectangular nested lists.
-- Reject ragged nested input values at input-builder time.
-- Preserve public-input order and witness-map order across generated schema,
+- Generated input builder methods that accept rectangular nested lists.
+- Rejected ragged nested input values at input-builder time.
+- Preserved public-input order and witness-map order across generated schema,
   input builders, and proof-envelope public values.
-- Add tests for public and secret nested arrays of `ZkField`, `ZkBool`, and
+- Added tests for public and secret nested arrays of `ZkField`, `ZkBool`, and
   `ZkUInt`.
 
 Exit criteria:
@@ -386,7 +390,7 @@ Exit criteria:
 3. Params-aware BLS12-381 `ZkMerkle`. Completed.
 4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count. Completed.
 5. Example migration to BLS12-381 Poseidon. Completed.
-6. Nested `ZkArray<ZkArray<T>>` support.
+6. Nested `ZkArray<ZkArray<T>>` support. Completed.
 7. Optional BLS12-381 MiMC only if a real integration requires it.
 
 ## Testing Strategy

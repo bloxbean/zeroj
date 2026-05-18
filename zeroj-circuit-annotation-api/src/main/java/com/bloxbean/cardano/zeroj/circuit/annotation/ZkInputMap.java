@@ -36,6 +36,19 @@ public final class ZkInputMap {
         return this;
     }
 
+    public ZkInputMap putNestedArray(String baseName, List<? extends List<BigInteger>> inputValues) {
+        Objects.requireNonNull(baseName, "baseName");
+        Objects.requireNonNull(inputValues, "inputValues");
+        for (int row = 0; row < inputValues.size(); row++) {
+            List<BigInteger> rowValues = Objects.requireNonNull(inputValues.get(row),
+                    "inputValues[" + row + "]");
+            for (int col = 0; col < rowValues.size(); col++) {
+                put(baseName + "_" + row + "_" + col, rowValues.get(col));
+            }
+        }
+        return this;
+    }
+
     public Map<String, List<BigInteger>> toWitnessMap() {
         var copy = new LinkedHashMap<String, List<BigInteger>>();
         values.forEach((name, value) -> copy.put(name, List.copyOf(value)));

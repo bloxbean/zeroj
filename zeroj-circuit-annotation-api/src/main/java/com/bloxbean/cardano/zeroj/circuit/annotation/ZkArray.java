@@ -42,6 +42,38 @@ public final class ZkArray<T extends ZkValue> implements ZkValue {
         return bindElements(builder, baseName, size, (c, name) -> ZkUInt.secret(c, name, bits));
     }
 
+    public static ZkArray<ZkArray<ZkField>> publicFieldMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize) {
+        return bindMatrix(builder, baseName, outerSize, innerSize, ZkArray::publicFields);
+    }
+
+    public static ZkArray<ZkArray<ZkField>> secretFieldMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize) {
+        return bindMatrix(builder, baseName, outerSize, innerSize, ZkArray::secretFields);
+    }
+
+    public static ZkArray<ZkArray<ZkBool>> publicBoolMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize) {
+        return bindMatrix(builder, baseName, outerSize, innerSize, ZkArray::publicBools);
+    }
+
+    public static ZkArray<ZkArray<ZkBool>> secretBoolMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize) {
+        return bindMatrix(builder, baseName, outerSize, innerSize, ZkArray::secretBools);
+    }
+
+    public static ZkArray<ZkArray<ZkUInt>> publicUIntMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize, int bits) {
+        return bindMatrix(builder, baseName, outerSize, innerSize,
+                (c, name, size) -> ZkArray.publicUInts(c, name, size, bits));
+    }
+
+    public static ZkArray<ZkArray<ZkUInt>> secretUIntMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize, int bits) {
+        return bindMatrix(builder, baseName, outerSize, innerSize,
+                (c, name, size) -> ZkArray.secretUInts(c, name, size, bits));
+    }
+
     /**
      * Bind a custom fixed-size array. Visibility comes from the supplied
      * factory; use the visibility-specific helpers for built-in symbolic types.
@@ -64,6 +96,24 @@ public final class ZkArray<T extends ZkValue> implements ZkValue {
             values.add(factory.create(builder, baseName + "_" + i));
         }
         return new ZkArray<>(values);
+    }
+
+    private static <T extends ZkValue> ZkArray<ZkArray<T>> bindMatrix(
+            SignalBuilder builder, String baseName, int outerSize, int innerSize, MatrixRowFactory<T> factory) {
+        Objects.requireNonNull(builder, "builder");
+        Objects.requireNonNull(baseName, "baseName");
+        Objects.requireNonNull(factory, "factory");
+        if (outerSize < 0) {
+            throw new IllegalArgumentException("outerSize must be >= 0, got " + outerSize);
+        }
+        if (innerSize < 0) {
+            throw new IllegalArgumentException("innerSize must be >= 0, got " + innerSize);
+        }
+        var rows = new ArrayList<ZkArray<T>>(outerSize);
+        for (int i = 0; i < outerSize; i++) {
+            rows.add(factory.create(builder, baseName + "_" + i, innerSize));
+        }
+        return new ZkArray<>(rows);
     }
 
     public int size() {
@@ -97,5 +147,10 @@ public final class ZkArray<T extends ZkValue> implements ZkValue {
     @FunctionalInterface
     public interface ElementFactory<T extends ZkValue> {
         T create(SignalBuilder builder, String name);
+    }
+
+    @FunctionalInterface
+    private interface MatrixRowFactory<T extends ZkValue> {
+        ZkArray<T> create(SignalBuilder builder, String baseName, int size);
     }
 }

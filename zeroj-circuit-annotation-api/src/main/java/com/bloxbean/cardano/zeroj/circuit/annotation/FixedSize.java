@@ -13,4 +13,6 @@ import java.lang.annotation.Target;
 public @interface FixedSize {
     int value() default -1;
     String param() default "";
+    int inner() default -1;
+    String innerParam() default "";
 }

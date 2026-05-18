@@ -266,16 +266,19 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         String explicitName = publicAnnotation != null ? publicAnnotation.name() : secretAnnotation.name();
         String javaName = element.getSimpleName().toString();
         ValueKind valueKind = valueKind(element);
+        boolean nestedArray = isNestedArray(element.asType());
+        String arrayLeafType = valueKind == ValueKind.ARRAY ? arrayLeafType(element.asType()) : "";
         String baseName = explicitName.isBlank()
                 ? (valueKind == ValueKind.ARRAY ? singularize(javaName) : javaName)
                 : explicitName;
 
         UInt uint = element.getAnnotation(UInt.class);
-        if ((valueKind == ValueKind.UINT || isArrayOf(element.asType(), ZK_UINT)) && uint == null) {
+        if ((valueKind == ValueKind.UINT || ZK_UINT.equals(arrayLeafType)) && uint == null) {
             throw new GenerationException(element, "ZkUInt symbolic inputs require @UInt(bits = ...)");
         }
-        if (uint != null && valueKind != ValueKind.UINT && !isArrayOf(element.asType(), ZK_UINT)) {
-            throw new GenerationException(element, "@UInt can only be used with ZkUInt or ZkArray<ZkUInt>");
+        if (uint != null && valueKind != ValueKind.UINT && !ZK_UINT.equals(arrayLeafType)) {
+            throw new GenerationException(element,
+                    "@UInt can only be used with ZkUInt, ZkArray<ZkUInt>, or ZkArray<ZkArray<ZkUInt>>");
         }
         if (element.getAnnotation(FieldElement.class) != null && valueKind != ValueKind.FIELD) {
             throw new GenerationException(element, "@FieldElement can only be used with ZkField");
@@ -283,14 +286,31 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
         FixedSize fixedSize = element.getAnnotation(FixedSize.class);
         SizeModel size = null;
+        SizeModel innerSize = null;
         if (isFixedVector(valueKind)) {
             if (fixedSize == null) {
                 throw new GenerationException(element,
                         typeLabel(valueKind) + " symbolic inputs require @FixedSize");
             }
-            size = sizeModel(element, fixedSize, circuitParams);
+            size = sizeModel(element, fixedSize.value(), fixedSize.param(), "@FixedSize", circuitParams);
+            boolean hasInner = fixedSize.inner() >= 0 || !fixedSize.innerParam().isBlank();
+            if (nestedArray) {
+                innerSize = sizeModel(element, fixedSize.inner(), fixedSize.innerParam(),
+                        "@FixedSize inner dimension", circuitParams);
+            } else if (hasInner) {
+                throw new GenerationException(element,
+                        "@FixedSize inner or innerParam can only be used with ZkArray<ZkArray<T>>");
+            }
         } else if (fixedSize != null) {
             throw new GenerationException(element, "@FixedSize can only be used with ZkArray, ZkBits, or ZkBytes");
+        }
+
+        if (valueKind == ValueKind.ARRAY
+                && !arrayLeafType.equals(ZK_FIELD)
+                && !arrayLeafType.equals(ZK_BOOL)
+                && !arrayLeafType.equals(ZK_UINT)) {
+            throw new GenerationException(element,
+                    "ZkArray inputs must use ZkField, ZkBool, ZkUInt, or one nested ZkArray of those types");
         }
 
         Integer order = null;
@@ -312,29 +332,28 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         }
 
         return new InputModel(javaName, baseName, constName(baseName), visibility, valueKind,
-                elementType(element.asType()), bits, size, order, fieldStyle);
+                arrayLeafType, bits, size, innerSize, order, fieldStyle);
     }
 
-    private SizeModel sizeModel(VariableElement element, FixedSize fixedSize,
+    private SizeModel sizeModel(VariableElement element, int literal, String paramName, String label,
                                 Map<String, CircuitParamModel> circuitParams) {
-        boolean hasLiteral = fixedSize.value() >= 0;
-        boolean hasParam = !fixedSize.param().isBlank();
+        boolean hasLiteral = literal >= 0;
+        boolean hasParam = !paramName.isBlank();
         if (hasLiteral == hasParam) {
             throw new GenerationException(element,
-                    "@FixedSize requires exactly one of value or param");
+                    label + " requires exactly one literal value or @CircuitParam reference");
         }
         if (hasLiteral) {
-            if (fixedSize.value() <= 0) {
-                throw new GenerationException(element, "@FixedSize value must be positive");
+            if (literal <= 0) {
+                throw new GenerationException(element, label + " value must be positive");
             }
-            return new SizeModel(Integer.toString(fixedSize.value()), false, "");
+            return new SizeModel(Integer.toString(literal), false, "");
         }
 
-        CircuitParamModel param = circuitParams.get(fixedSize.param());
+        CircuitParamModel param = circuitParams.get(paramName);
         if (param == null || !param.intLike()) {
             throw new GenerationException(element,
-                    "@FixedSize(param = \"" + fixedSize.param()
-                            + "\") must reference an integer @CircuitParam");
+                    label + " \"" + paramName + "\" must reference an integer @CircuitParam");
         }
         return new SizeModel(param.javaName(), true, param.name());
     }
@@ -374,10 +393,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         Map<String, InputModel> flattenedOwners = new java.util.HashMap<>();
         for (InputModel input : inputs) {
             if (isFixedVector(input.valueKind())) {
-                if (!input.size().fromCircuitParam()) {
-                    int size = Integer.parseInt(input.size().expression());
-                    for (int i = 0; i < size; i++) {
-                        addFlattenedName(flattenedNames, flattenedOwners, input, input.baseName() + "_" + i);
+                if (hasLiteralShape(input)) {
+                    for (String name : literalFlattenedNames(input)) {
+                        addFlattenedName(flattenedNames, flattenedOwners, input, name);
                     }
                 }
             } else {
@@ -395,7 +413,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
         for (InputModel array : inputs.stream().filter(i -> isFixedVector(i.valueKind())).toList()) {
             for (InputModel other : inputs.stream().filter(i -> i != array).toList()) {
-                if (other.baseName().matches(java.util.regex.Pattern.quote(array.baseName()) + "_\\d+")) {
+                if (mayOverlapParameterizedFlattenedName(array, other.baseName())) {
                     throw new GenerationException(null,
                             "Duplicate flattened input name may be generated from array base "
                                     + array.baseName() + " and input " + other.baseName());
@@ -410,6 +428,38 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             throw new GenerationException(null, "Duplicate flattened input name: " + name);
         }
         flattenedOwners.put(name, input);
+    }
+
+    private boolean hasLiteralShape(InputModel input) {
+        return input.size() != null
+                && !input.size().fromCircuitParam()
+                && (input.innerSize() == null || !input.innerSize().fromCircuitParam());
+    }
+
+    private List<String> literalFlattenedNames(InputModel input) {
+        int outerSize = Integer.parseInt(input.size().expression());
+        var names = new ArrayList<String>();
+        if (isNestedArray(input)) {
+            int innerSize = Integer.parseInt(input.innerSize().expression());
+            for (int row = 0; row < outerSize; row++) {
+                for (int col = 0; col < innerSize; col++) {
+                    names.add(input.baseName() + "_" + row + "_" + col);
+                }
+            }
+        } else {
+            for (int i = 0; i < outerSize; i++) {
+                names.add(input.baseName() + "_" + i);
+            }
+        }
+        return names;
+    }
+
+    private boolean mayOverlapParameterizedFlattenedName(InputModel array, String otherBaseName) {
+        String prefix = java.util.regex.Pattern.quote(array.baseName());
+        if (isNestedArray(array)) {
+            return otherBaseName.matches(prefix + "_\\d+.*");
+        }
+        return otherBaseName.matches(prefix + "_\\d+");
     }
 
     private void validateReturnType(ExecutableElement method) {
@@ -449,6 +499,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         String signalContextLocal = uniqueLocalName("__zerojSignals", usedLocalNames);
         String zkLocal = uniqueLocalName("__zeroj", usedLocalNames);
         String loopLocal = uniqueLocalName("__zerojIndex", usedLocalNames);
+        String innerLoopLocal = uniqueLocalName("__zerojInnerIndex", usedLocalNames);
         Map<InputModel, String> inputLocals = new java.util.LinkedHashMap<>();
         for (int i = 0; i < inputs.size(); i++) {
             inputLocals.put(inputs.get(i), uniqueLocalName("__zerojInput" + i, usedLocalNames));
@@ -509,10 +560,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append(");\n");
 
         for (InputModel input : inputs.stream().filter(i -> i.visibility() == Visibility.PUBLIC).toList()) {
-            renderVarDeclaration(out, input, builderLocal, loopLocal, "publicVar");
+            renderVarDeclaration(out, input, builderLocal, loopLocal, innerLoopLocal, "publicVar");
         }
         for (InputModel input : inputs.stream().filter(i -> i.visibility() == Visibility.SECRET).toList()) {
-            renderVarDeclaration(out, input, builderLocal, loopLocal, "secretVar");
+            renderVarDeclaration(out, input, builderLocal, loopLocal, innerLoopLocal, "secretVar");
         }
 
         out.append("        return ").append(builderLocal).append(".defineSignals(")
@@ -672,6 +723,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             if (input.size() != null && input.size().fromCircuitParam()) {
                 sizeParams.putIfAbsent(input.size().expression(), input.size().paramName());
             }
+            if (input.innerSize() != null && input.innerSize().fromCircuitParam()) {
+                sizeParams.putIfAbsent(input.innerSize().expression(), input.innerSize().paramName());
+            }
         }
         for (Map.Entry<String, String> entry : sizeParams.entrySet()) {
             out.append(indent).append("if (").append(entry.getKey()).append(" <= 0) {\n")
@@ -710,7 +764,12 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         String prefix = isFixedVector(input.valueKind())
                 ? "ZkCircuitSchema.Input.array("
                 : "ZkCircuitSchema.Input.scalar(";
-        String size = isFixedVector(input.valueKind()) ? ", " + input.size().expression() : "";
+        String size = "";
+        if (isNestedArray(input)) {
+            size = ", List.of(" + input.size().expression() + ", " + input.innerSize().expression() + ")";
+        } else if (isFixedVector(input.valueKind())) {
+            size = ", " + input.size().expression();
+        }
         return prefix
                 + input.constantName()
                 + ", ZkCircuitSchema.Visibility." + input.visibility().name()
@@ -733,7 +792,11 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
         for (InputModel input : inputs) {
             if (isFixedVector(input.valueKind())) {
-                renderArrayInputMethods(out, input);
+                if (isNestedArray(input)) {
+                    renderNestedArrayInputMethods(out, input);
+                } else {
+                    renderArrayInputMethods(out, input);
+                }
             } else {
                 renderScalarInputMethods(out, input);
             }
@@ -793,6 +856,52 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("        }\n\n");
     }
 
+    private void renderNestedArrayInputMethods(StringBuilder out, InputModel input) {
+        String inputExpression = "__zerojSchema.input(" + input.constantName() + ")";
+        String outerSizeExpression = inputExpression + ".dimensions().get(0)";
+        String innerSizeExpression = inputExpression + ".dimensions().get(1)";
+        out.append("        public Inputs ").append(input.javaName())
+                .append("(int row, int col, BigInteger value) {\n")
+                .append("            if (row < 0 || row >= ").append(outerSizeExpression).append(") {\n")
+                .append("                throw new IllegalArgumentException(")
+                .append(stringLiteral("row out of bounds for " + input.baseName())).append(");\n")
+                .append("            }\n")
+                .append("            if (col < 0 || col >= ").append(innerSizeExpression).append(") {\n")
+                .append("                throw new IllegalArgumentException(")
+                .append(stringLiteral("col out of bounds for " + input.baseName())).append(");\n")
+                .append("            }\n")
+                .append("            __zerojInputs.put(").append(input.constantName())
+                .append(" + \"_\" + row + \"_\" + col, value);\n")
+                .append("            return this;\n")
+                .append("        }\n\n")
+                .append("        public Inputs ").append(input.javaName()).append("(int row, int col, long value) {\n")
+                .append("            return ").append(input.javaName())
+                .append("(row, col, BigInteger.valueOf(value));\n")
+                .append("        }\n\n")
+                .append("        public Inputs ").append(input.javaName())
+                .append("(List<? extends List<BigInteger>> values) {\n")
+                .append("            if (values.size() != ").append(outerSizeExpression).append(") {\n")
+                .append("                throw new IllegalArgumentException(")
+                .append(stringLiteral(input.baseName() + " expects ")).append(" + ").append(outerSizeExpression)
+                .append(" + \" rows\");\n")
+                .append("            }\n")
+                .append("            for (int row = 0; row < values.size(); row++) {\n")
+                .append("                List<BigInteger> rowValues = values.get(row);\n")
+                .append("                if (rowValues == null) {\n")
+                .append("                    throw new NullPointerException(")
+                .append(stringLiteral(input.baseName() + " row must not be null")).append(");\n")
+                .append("                }\n")
+                .append("                if (rowValues.size() != ").append(innerSizeExpression).append(") {\n")
+                .append("                    throw new IllegalArgumentException(")
+                .append(stringLiteral(input.baseName() + " expects ")).append(" + ").append(innerSizeExpression)
+                .append(" + \" values per row\");\n")
+                .append("                }\n")
+                .append("            }\n")
+                .append("            __zerojInputs.putNestedArray(").append(input.constantName()).append(", values);\n")
+                .append("            return this;\n")
+                .append("        }\n\n");
+    }
+
     private String schemaKind(InputModel input) {
         if (input.valueKind() == ValueKind.FIELD || input.arrayElementType().equals(ZK_FIELD)) {
             return "FIELD";
@@ -829,8 +938,20 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private void renderVarDeclaration(StringBuilder out, InputModel input, String builderLocal,
-                                      String loopLocal, String method) {
-        if (isFixedVector(input.valueKind())) {
+                                      String loopLocal, String innerLoopLocal, String method) {
+        if (isNestedArray(input)) {
+            out.append("        for (int ").append(loopLocal).append(" = 0; ")
+                    .append(loopLocal).append(" < ").append(input.size().expression()).append("; ")
+                    .append(loopLocal).append("++) {\n")
+                    .append("            for (int ").append(innerLoopLocal).append(" = 0; ")
+                    .append(innerLoopLocal).append(" < ").append(input.innerSize().expression()).append("; ")
+                    .append(innerLoopLocal).append("++) {\n")
+                    .append("                ").append(builderLocal).append(".").append(method).append("(")
+                    .append(input.constantName()).append(" + \"_\" + ").append(loopLocal)
+                    .append(" + \"_\" + ").append(innerLoopLocal).append(");\n")
+                    .append("            }\n")
+                    .append("        }\n");
+        } else if (isFixedVector(input.valueKind())) {
             out.append("        for (int ").append(loopLocal).append(" = 0; ")
                     .append(loopLocal).append(" < ").append(input.size().expression()).append("; ")
                     .append(loopLocal).append("++) {\n")
@@ -864,16 +985,32 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                     + input.constantName() + ", " + input.size().expression() + ")";
         }
         if (input.arrayElementType().equals(ZK_FIELD)) {
+            if (isNestedArray(input)) {
+                return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicFieldMatrix" : "secretFieldMatrix")
+                        + "(" + signalContextLocal + ", " + input.constantName() + ", "
+                        + input.size().expression() + ", " + input.innerSize().expression() + ")";
+            }
             return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicFields" : "secretFields")
                     + "(" + signalContextLocal + ", " + input.constantName() + ", "
                     + input.size().expression() + ")";
         }
         if (input.arrayElementType().equals(ZK_BOOL)) {
+            if (isNestedArray(input)) {
+                return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicBoolMatrix" : "secretBoolMatrix")
+                        + "(" + signalContextLocal + ", " + input.constantName() + ", "
+                        + input.size().expression() + ", " + input.innerSize().expression() + ")";
+            }
             return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicBools" : "secretBools")
                     + "(" + signalContextLocal + ", " + input.constantName() + ", "
                     + input.size().expression() + ")";
         }
         if (input.arrayElementType().equals(ZK_UINT)) {
+            if (isNestedArray(input)) {
+                return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicUIntMatrix" : "secretUIntMatrix")
+                        + "(" + signalContextLocal + ", " + input.constantName() + ", "
+                        + input.size().expression() + ", " + input.innerSize().expression()
+                        + ", " + input.bits() + ")";
+            }
             return "ZkArray." + (input.visibility() == Visibility.PUBLIC ? "publicUInts" : "secretUInts")
                     + "(" + signalContextLocal + ", " + input.constantName() + ", "
                     + input.size().expression() + ", " + input.bits() + ")";
@@ -971,8 +1108,41 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         return erasure(declared.getTypeArguments().get(0));
     }
 
+    private String arrayLeafType(TypeMirror type) {
+        if (!isType(type, ZK_ARRAY)) {
+            return "";
+        }
+        DeclaredType declared = (DeclaredType) type;
+        if (declared.getTypeArguments().size() != 1) {
+            throw new GenerationException(null, "ZkArray must declare exactly one element type");
+        }
+        TypeMirror element = declared.getTypeArguments().get(0);
+        if (!isType(element, ZK_ARRAY)) {
+            return erasure(element);
+        }
+
+        DeclaredType inner = (DeclaredType) element;
+        if (inner.getTypeArguments().size() != 1) {
+            throw new GenerationException(null, "Nested ZkArray must declare exactly one element type");
+        }
+        TypeMirror leaf = inner.getTypeArguments().get(0);
+        if (isType(leaf, ZK_ARRAY)) {
+            throw new GenerationException(null,
+                    "Only two-dimensional ZkArray<ZkArray<T>> inputs are supported");
+        }
+        return erasure(leaf);
+    }
+
+    private boolean isNestedArray(TypeMirror type) {
+        return isType(type, ZK_ARRAY) && elementType(type).equals(ZK_ARRAY);
+    }
+
+    private boolean isNestedArray(InputModel input) {
+        return input.valueKind() == ValueKind.ARRAY && input.innerSize() != null;
+    }
+
     private boolean isArrayOf(TypeMirror type, String elementType) {
-        return isType(type, ZK_ARRAY) && elementType(type).equals(elementType);
+        return isType(type, ZK_ARRAY) && arrayLeafType(type).equals(elementType);
     }
 
     private boolean isFixedVector(ValueKind valueKind) {
@@ -1163,6 +1333,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             String arrayElementType,
             int bits,
             SizeModel size,
+            SizeModel innerSize,
             Integer order,
             boolean fieldStyle) {}
 
