@@ -1212,7 +1212,11 @@ public class VoteCommitment {
             @Secret ZkField nullifier,
             @Public ZkField commitment) {
 
-        return ZkMiMC.hash(zk, vote.asField(), nullifier).isEqual(commitment);
+        return ZkPoseidon.hash(
+                zk,
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                vote.asField(),
+                nullifier).isEqual(commitment);
     }
 }
 ```

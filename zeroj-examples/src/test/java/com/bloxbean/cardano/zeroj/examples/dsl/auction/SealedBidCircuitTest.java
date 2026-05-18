@@ -1,8 +1,8 @@
 package com.bloxbean.cardano.zeroj.examples.dsl.auction;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
-import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -17,68 +17,46 @@ import static org.junit.jupiter.api.Assertions.*;
 class SealedBidCircuitTest {
 
     @Test
-    void validBid_aboveReserve_bn254() {
+    void validBid_aboveReserve_bls12381Poseidon() {
         var circuit = SealedBidCircuit.build();
-        var prime = FieldConfig.BN254.prime();
 
         var bidAmount = BigInteger.valueOf(1000);
         var salt = BigInteger.valueOf(42);
         var reservePrice = BigInteger.valueOf(500);
-        var commitment = MiMCHash.hash(bidAmount, salt, prime);
+        var commitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, bidAmount, salt);
 
         var witness = circuit.calculateWitness(Map.of(
                 "bidAmount", List.of(bidAmount),
                 "salt", List.of(salt),
                 "bidCommitment", List.of(commitment),
-                "reservePrice", List.of(reservePrice),
-                "isAboveReserve", List.of(BigInteger.ONE)
-        ), CurveId.BN254);
+                "reservePrice", List.of(reservePrice)
+        ), CurveId.BLS12_381);
 
         assertNotNull(witness);
         assertEquals(BigInteger.ONE, witness[0]); // constant wire
     }
 
     @Test
-    void validBid_aboveReserve_bls12381() {
+    void bn254CompileRejectedForCardanoPoseidonParams() {
         var circuit = SealedBidCircuit.build();
-        var prime = FieldConfig.BLS12_381.prime();
-
-        var bidAmount = BigInteger.valueOf(1000);
-        var salt = BigInteger.valueOf(42);
-        var reservePrice = BigInteger.valueOf(500);
-        var commitment = MiMCHash.hash(bidAmount, salt, prime);
-
-        var witness = circuit.calculateWitness(Map.of(
-                "bidAmount", List.of(bidAmount),
-                "salt", List.of(salt),
-                "bidCommitment", List.of(commitment),
-                "reservePrice", List.of(reservePrice),
-                "isAboveReserve", List.of(BigInteger.ONE)
-        ), CurveId.BLS12_381);
-
-        assertNotNull(witness);
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
     }
 
     @Test
-    void validBid_belowReserve() {
+    void bidBelowReserve_failsWitness() {
         var circuit = SealedBidCircuit.build();
-        var prime = FieldConfig.BN254.prime();
 
         var bidAmount = BigInteger.valueOf(200);
         var salt = BigInteger.valueOf(99);
         var reservePrice = BigInteger.valueOf(500);
-        var commitment = MiMCHash.hash(bidAmount, salt, prime);
+        var commitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, bidAmount, salt);
 
-        // bidAmount < reservePrice → isAboveReserve=0
-        var witness = circuit.calculateWitness(Map.of(
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
                 "bidAmount", List.of(bidAmount),
                 "salt", List.of(salt),
                 "bidCommitment", List.of(commitment),
-                "reservePrice", List.of(reservePrice),
-                "isAboveReserve", List.of(BigInteger.ZERO)
-        ), CurveId.BN254);
-
-        assertNotNull(witness);
+                "reservePrice", List.of(reservePrice)
+        ), CurveId.BLS12_381));
     }
 
     @Test
@@ -90,39 +68,8 @@ class SealedBidCircuitTest {
                 "bidAmount", List.of(BigInteger.valueOf(1000)),
                 "salt", List.of(BigInteger.valueOf(42)),
                 "bidCommitment", List.of(BigInteger.valueOf(999)), // wrong!
-                "reservePrice", List.of(BigInteger.valueOf(500)),
-                "isAboveReserve", List.of(BigInteger.ONE)
-        ), CurveId.BN254));
-    }
-
-    @Test
-    void wrongIsAboveReserve_fails() {
-        var circuit = SealedBidCircuit.build();
-        var prime = FieldConfig.BN254.prime();
-
-        var bidAmount = BigInteger.valueOf(200);
-        var salt = BigInteger.valueOf(99);
-        var reservePrice = BigInteger.valueOf(500);
-        var commitment = MiMCHash.hash(bidAmount, salt, prime);
-
-        // bidAmount(200) < reservePrice(500), but claiming isAboveReserve=1
-        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
-                "bidAmount", List.of(bidAmount),
-                "salt", List.of(salt),
-                "bidCommitment", List.of(commitment),
-                "reservePrice", List.of(reservePrice),
-                "isAboveReserve", List.of(BigInteger.ONE) // wrong!
-        ), CurveId.BN254));
-    }
-
-    @Test
-    void compilesToR1CS() {
-        var circuit = SealedBidCircuit.build();
-        var r1cs = circuit.compileR1CS(CurveId.BN254);
-        assertNotNull(r1cs);
-        assertTrue(r1cs.numConstraints() > 0, "Should have constraints");
-        assertEquals(3, r1cs.numPublicInputs(), "3 public vars: reservePrice, bidCommitment, isAboveReserve");
-        assertEquals(2, r1cs.numPrivateInputs(), "2 private vars: bidAmount, salt");
+                "reservePrice", List.of(BigInteger.valueOf(500))
+        ), CurveId.BLS12_381));
     }
 
     @Test
@@ -131,7 +78,9 @@ class SealedBidCircuitTest {
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
         assertNotNull(r1cs);
         assertTrue(r1cs.numConstraints() > 0);
-        assertEquals(FieldConfig.BLS12_381.prime(), r1cs.prime());
+        assertEquals(PoseidonParamsBLS12_381T3.INSTANCE.field().prime(), r1cs.prime());
+        assertEquals(2, r1cs.numPublicInputs(), "2 public vars: bidCommitment, reservePrice");
+        assertEquals(2, r1cs.numPrivateInputs(), "2 private vars: bidAmount, salt");
     }
 
     @Test

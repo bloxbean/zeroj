@@ -4,7 +4,8 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.CircuitSpec;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
-import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
+import com.bloxbean.cardano.zeroj.circuit.lib.SignalPoseidon;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * Parameterized hash chain circuit — demonstrates Java-as-template-system.
@@ -21,7 +22,7 @@ import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
  *     signal intermediate[depth + 1];
  *     intermediate[0] <== secret;
  *     for (var i = 0; i < depth; i++) {
- *         intermediate[i+1] <== MiMC(intermediate[i], 0);
+ *         intermediate[i+1] <== PoseidonBLS12_381(intermediate[i], 0);
  *     }
  *     digest <== intermediate[depth];
  * }
@@ -46,11 +47,11 @@ public class HashChainCircuit implements CircuitSpec {
         Signal secret = c.privateInput("secret");
         Signal digest = c.publicOutput("digest");
 
-        // Hash chain: h_0 = secret, h_{i+1} = MiMC(h_i, 0)
+        // Hash chain: h_0 = secret, h_{i+1} = PoseidonBLS12_381(h_i, 0)
         Signal current = secret;
         Signal zero = c.constant(0);
         for (int i = 0; i < depth; i++) {
-            current = SignalMiMC.hash(c, current, zero);
+            current = SignalPoseidon.hash(c, PoseidonParamsBLS12_381T3.INSTANCE, current, zero);
         }
 
         c.assertEqual(current, digest);

@@ -197,8 +197,13 @@ public class HashCommitmentCircuit implements CircuitSpec {
         Signal salt = c.privateInput("salt");
         Signal commitment = c.publicOutput("commitment");
 
-        // MiMC hash: commitment = MiMC(secret, salt)
-        c.assertEqual(SignalMiMC.hash(c, secret, salt), commitment);
+        // Cardano-facing hash: Poseidon over the BLS12-381 scalar field.
+        var hash = SignalPoseidon.hash(
+                c,
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                secret,
+                salt);
+        c.assertEqual(hash, commitment);
     }
 
     public static CircuitBuilder build() {
@@ -229,7 +234,11 @@ public class HashChainCircuit implements CircuitSpec {
         Signal current = secret;
         Signal zero = c.constant(0);
         for (int i = 0; i < depth; i++) {
-            current = SignalMiMC.hash(c, current, zero);
+            current = SignalPoseidon.hash(
+                    c,
+                    PoseidonParamsBLS12_381T3.INSTANCE,
+                    current,
+                    zero);
         }
         c.assertEqual(current, digest);
     }
@@ -280,7 +289,13 @@ public class MerkleProofCircuit implements CircuitSpec {
         for (int i = 0; i < depth; i++) {
             builder = builder.secretVar("sibling_" + i).secretVar("pathBit_" + i);
         }
-        return builder.defineSignals(new MerkleProofCircuit(depth, SignalMiMC::hash));
+        return builder.defineSignals(new MerkleProofCircuit(
+                depth,
+                (sb, left, right) -> SignalPoseidon.hash(
+                        sb,
+                        PoseidonParamsBLS12_381T3.INSTANCE,
+                        left,
+                        right)));
     }
 }
 ```
@@ -493,7 +508,12 @@ public class VotingCircuit implements CircuitSpec {
         Signal commitment = c.publicOutput("commitment");  // hash output (public)
 
         vote.assertBoolean();  // vote must be 0 or 1
-        c.assertEqual(SignalMiMC.hash(c, vote, nullifier), commitment);
+        var hash = SignalPoseidon.hash(
+                c,
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                vote,
+                nullifier);
+        c.assertEqual(hash, commitment);
     }
 
     public static CircuitBuilder build() {
@@ -526,8 +546,17 @@ public class MerkleMembershipCircuit implements CircuitSpec {
             pathBits[i] = c.privateInput("path_" + i);
         }
 
-        // Verify Merkle path using MiMC hash (or swap to SignalPoseidon::hash)
-        SignalMerkle.verifyProof(c, leaf, root, siblings, pathBits, SignalMiMC::hash);
+        SignalMerkle.verifyProof(
+                c,
+                leaf,
+                root,
+                siblings,
+                pathBits,
+                (sb, left, right) -> SignalPoseidon.hash(
+                        sb,
+                        PoseidonParamsBLS12_381T3.INSTANCE,
+                        left,
+                        right));
     }
 
     public static CircuitBuilder build(int depth) {
@@ -623,11 +652,10 @@ public class MultiFieldCommitCircuit implements CircuitSpec {
         }
         Signal commitment = c.publicOutput("commitment");
 
-        // Chain: MiMC(MiMC(in[0], in[1]), in[2]) ...
-        Signal acc = SignalMiMC.hash(c, inputs[0], inputs[1]);
-        for (int i = 2; i < inputs.length; i++) {
-            acc = SignalMiMC.hash(c, acc, inputs[i]);
-        }
+        Signal acc = PoseidonN.hash(
+                c,
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                inputs);
         c.assertEqual(acc, commitment);
     }
 

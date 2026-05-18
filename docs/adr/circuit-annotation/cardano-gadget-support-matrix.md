@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted follow-up plan. Priorities 1 through 4 are completed in the current
+Accepted follow-up plan. Priorities 1 through 5 are completed in the current
 code and docs.
 
 ## Date
@@ -297,16 +297,24 @@ Exit criteria:
 
 ### Phase E: Example Migration
 
+Status: completed. The implementation is tracked in
+[`example-migration-bls-poseidon.md`](example-migration-bls-poseidon.md).
+
 Goal: align reference examples with the Cardano support model.
 
 Tasks:
 
-- Add BLS12-381 Poseidon variants for sealed bid, anonymous voting, hash chain,
-  multi-input commitment, and Merkle membership where they are meant to be
-  Cardano examples.
-- Leave BN254 MiMC examples in place only when they are explicitly labeled
+- Migrated sealed bid, anonymous voting, hash chain, and multi-input
+  commitment examples to explicit BLS12-381 Poseidon.
+- Kept Merkle `HashType.MIMC` only as an explicitly BN254/off-chain template
+  path and use params-aware BLS12-381 Poseidon for Cardano Merkle tests.
+- Migrated annotated sealed bid and annotated anonymous voting to explicit
+  BLS12-381 `ZkPoseidon`.
+- Migrated the `zeroj-usecases` annotated private voting, proof-of-reserves,
+  and compliance credential examples to explicit BLS12-381 Poseidon.
+- Left BN254 MiMC examples in place only when they are explicitly labeled
   off-chain/BN254.
-- Make tests use `FieldConfig.BN254` only for MiMC examples and
+- Made tests use `FieldConfig.BN254` only for MiMC examples and
   `FieldConfig.BLS12_381` for Cardano examples.
 
 Exit criteria:
@@ -377,7 +385,7 @@ Exit criteria:
 2. `ZkPoseidonN`. Completed.
 3. Params-aware BLS12-381 `ZkMerkle`. Completed.
 4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count. Completed.
-5. Example migration to BLS12-381 Poseidon.
+5. Example migration to BLS12-381 Poseidon. Completed.
 6. Nested `ZkArray<ZkArray<T>>` support.
 7. Optional BLS12-381 MiMC only if a real integration requires it.
 
@@ -418,16 +426,9 @@ Negative:
 
 - Documentation must distinguish between "usable in annotated circuits" and
   "usable for Cardano on-chain verification."
-- Some existing MiMC examples need migration or clearer labels.
 - A generalized/generated on-chain verifier adds a new implementation slice.
 
 ## Open Questions
 
-- Should the existing no-params two-input `ZkPoseidon` overload remain visible
-  in Cardano-facing docs, or should all Cardano docs require explicit params?
-- Should `ZkMerkle.HashType.POSEIDON` be deprecated in favor of explicit
-  parameterized factories?
-- Should the on-chain Groth16 verifier be generated per circuit, or should a
-  generic list-based verifier be implemented first?
 - Do any target partner ecosystems require MiMC over BLS12-381, or is Poseidon
   sufficient for all near-term Cardano use cases?

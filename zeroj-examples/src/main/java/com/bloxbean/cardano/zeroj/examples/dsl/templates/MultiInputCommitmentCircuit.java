@@ -4,12 +4,13 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.CircuitSpec;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
-import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
+import com.bloxbean.cardano.zeroj.circuit.lib.PoseidonN;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * Parameterized N-input commitment circuit — hash N secret values into one public digest.
  *
- * <p>Proves knowledge of N secret inputs whose sequential MiMC hash produces a
+ * <p>Proves knowledge of N secret inputs whose sequential BLS12-381 Poseidon hash produces a
  * known public commitment. Useful for committing to structured data (e.g., a record
  * with multiple fields) without revealing any field.</p>
  *
@@ -20,7 +21,7 @@ import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
  *     signal output commitment;
  *     var acc = values[0];
  *     for (var i = 1; i < n; i++) {
- *         acc = MiMC(acc, values[i]);
+ *         acc = PoseidonBLS12_381(acc, values[i]);
  *     }
  *     commitment <== acc;
  * }
@@ -57,11 +58,7 @@ public class MultiInputCommitmentCircuit implements CircuitSpec {
         }
         Signal commitment = c.publicOutput("commitment");
 
-        // Sequential hashing: acc = MiMC(MiMC(...MiMC(in[0], in[1])..., in[n-2]), in[n-1])
-        Signal acc = SignalMiMC.hash(c, inputs[0], inputs[1]);
-        for (int i = 2; i < numInputs; i++) {
-            acc = SignalMiMC.hash(c, acc, inputs[i]);
-        }
+        Signal acc = PoseidonN.hash(c, PoseidonParamsBLS12_381T3.INSTANCE, inputs);
 
         c.assertEqual(acc, commitment);
     }

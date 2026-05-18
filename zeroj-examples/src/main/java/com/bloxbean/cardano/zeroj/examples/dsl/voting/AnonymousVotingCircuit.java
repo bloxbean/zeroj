@@ -4,12 +4,14 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.CircuitSpec;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
-import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
+import com.bloxbean.cardano.zeroj.circuit.lib.SignalPoseidon;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * Anonymous voting circuit — proves a vote is valid without revealing the choice.
  *
- * <p>The voter commits to their vote: {@code commitment = MiMC(vote, nullifier)}.
+ * <p>The voter commits to their vote:
+ * {@code commitment = PoseidonBLS12_381(vote, nullifier)}.
  * The nullifier prevents double-voting (revealed on-chain), while the vote remains private.</p>
  *
  * <p>Signals:</p>
@@ -32,8 +34,10 @@ public class AnonymousVotingCircuit implements CircuitSpec {
         // Constraint 1: vote must be boolean (0 or 1)
         vote.assertBoolean();
 
-        // Constraint 2: commitment == MiMC(vote, nullifier)
-        c.assertEqual(SignalMiMC.hash(c, vote, nullifier), commitment);
+        // Constraint 2: commitment == PoseidonBLS12_381(vote, nullifier)
+        c.assertEqual(
+                SignalPoseidon.hash(c, PoseidonParamsBLS12_381T3.INSTANCE, vote, nullifier),
+                commitment);
     }
 
     /**

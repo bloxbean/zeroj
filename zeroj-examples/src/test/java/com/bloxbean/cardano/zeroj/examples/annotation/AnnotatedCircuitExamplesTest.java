@@ -152,7 +152,7 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
-    void hashCommitmentUsesSymbolicGadgetAdapter() {
+    void hashCommitmentUsesBn254MiMCSymbolicGadgetAdapter() {
         var circuit = AnnotatedHashCommitmentCircuit.build();
         var value = BigInteger.valueOf(1234);
         var salt = BigInteger.valueOf(5678);
@@ -165,6 +165,7 @@ class AnnotatedCircuitExamplesTest {
 
         assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
         assertNotNull(circuit.compileR1CS(CurveId.BN254));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BLS12_381));
 
         var wrong = AnnotatedHashCommitmentCircuit.inputs()
                 .value(value)
@@ -218,51 +219,42 @@ class AnnotatedCircuitExamplesTest {
         var schema = AnnotatedSealedBidCircuit.schema();
 
         assertEquals("annotation-sealed-bid", schema.name());
-        assertEquals(List.of("reservePrice", "bidCommitment", "isAboveReserve"),
+        assertEquals(List.of("bidCommitment", "reservePrice"),
                 schema.publicInputs().names());
         assertEquals(List.of("bidAmount", "salt"), schema.secretInputs().names());
 
         var bidAmount = BigInteger.valueOf(100);
         var reservePrice = BigInteger.valueOf(75);
         var salt = BigInteger.valueOf(88_001);
-        var commitment = MiMCHash.hash(bidAmount, salt, FieldConfig.BN254.prime());
+        var commitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, bidAmount, salt);
         var inputs = AnnotatedSealedBidCircuit.inputs()
-                .reservePrice(reservePrice)
                 .bidCommitment(commitment)
-                .isAboveReserve(1)
+                .reservePrice(reservePrice)
                 .bidAmount(bidAmount)
                 .salt(salt);
 
-        assertEquals(List.of(reservePrice, commitment, BigInteger.ONE), inputs.publicValues());
-        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+        assertEquals(List.of(commitment, reservePrice), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381));
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
 
         var belowReserveBid = BigInteger.valueOf(50);
-        var belowReserveCommitment = MiMCHash.hash(belowReserveBid, salt, FieldConfig.BN254.prime());
+        var belowReserveCommitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, belowReserveBid, salt);
         var belowReserveInputs = AnnotatedSealedBidCircuit.inputs()
-                .reservePrice(reservePrice)
                 .bidCommitment(belowReserveCommitment)
-                .isAboveReserve(0)
+                .reservePrice(reservePrice)
                 .bidAmount(belowReserveBid)
                 .salt(salt);
-        assertDoesNotThrow(() -> circuit.calculateWitness(belowReserveInputs.toWitnessMap(), CurveId.BN254));
-
-        var wrongFlag = AnnotatedSealedBidCircuit.inputs()
-                .reservePrice(reservePrice)
-                .bidCommitment(commitment)
-                .isAboveReserve(0)
-                .bidAmount(bidAmount)
-                .salt(salt);
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(wrongFlag.toWitnessMap(), CurveId.BN254));
+                () -> circuit.calculateWitness(belowReserveInputs.toWitnessMap(), CurveId.BLS12_381));
 
         var wrongCommitment = AnnotatedSealedBidCircuit.inputs()
-                .reservePrice(reservePrice)
                 .bidCommitment(BigInteger.ONE)
-                .isAboveReserve(1)
+                .reservePrice(reservePrice)
                 .bidAmount(bidAmount)
                 .salt(salt);
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BN254));
+                () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BLS12_381));
     }
 
     @Test
@@ -276,41 +268,43 @@ class AnnotatedCircuitExamplesTest {
 
         var vote = BigInteger.ONE;
         var nullifier = BigInteger.valueOf(12_345);
-        var commitment = MiMCHash.hash(vote, nullifier, FieldConfig.BN254.prime());
+        var commitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, vote, nullifier);
         var inputs = AnnotatedAnonymousVotingCircuit.inputs()
                 .commitment(commitment)
                 .vote(vote)
                 .nullifier(nullifier);
 
         assertEquals(List.of(commitment), inputs.publicValues());
-        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381));
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
 
         var noVote = BigInteger.ZERO;
-        var noVoteCommitment = MiMCHash.hash(noVote, nullifier, FieldConfig.BN254.prime());
+        var noVoteCommitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, noVote, nullifier);
         var noVoteInputs = AnnotatedAnonymousVotingCircuit.inputs()
                 .commitment(noVoteCommitment)
                 .vote(noVote)
                 .nullifier(nullifier);
-        assertDoesNotThrow(() -> circuit.calculateWitness(noVoteInputs.toWitnessMap(), CurveId.BN254));
+        assertDoesNotThrow(() -> circuit.calculateWitness(noVoteInputs.toWitnessMap(), CurveId.BLS12_381));
 
         var wrongCommitment = AnnotatedAnonymousVotingCircuit.inputs()
                 .commitment(BigInteger.ONE)
                 .vote(vote)
                 .nullifier(nullifier);
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BN254));
+                () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BLS12_381));
 
         var invalidVote = BigInteger.valueOf(2);
         var invalidVoteInputs = AnnotatedAnonymousVotingCircuit.inputs()
-                .commitment(MiMCHash.hash(invalidVote, nullifier, FieldConfig.BN254.prime()))
+                .commitment(PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, invalidVote, nullifier))
                 .vote(invalidVote)
                 .nullifier(nullifier);
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(invalidVoteInputs.toWitnessMap(), CurveId.BN254));
+                () -> circuit.calculateWitness(invalidVoteInputs.toWitnessMap(), CurveId.BLS12_381));
     }
 
     @Test
-    void parameterizedMerkleMembershipUsesDepthAndHashType() {
+    void parameterizedMerkleMembershipUsesBn254MiMCDepthAndHashType() {
         int depth = 2;
         var hashType = ZkMerkle.HashType.MIMC;
         var circuit = AnnotatedMerkleMembershipCircuit.build(depth, hashType);
@@ -337,6 +331,7 @@ class AnnotatedCircuitExamplesTest {
                 .pathBits(List.of(pathBit0, pathBit1));
 
         assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BLS12_381));
         assertEquals(List.of(root), inputs.publicValues());
 
         var invalid = AnnotatedMerkleMembershipCircuit.inputs(depth, hashType)

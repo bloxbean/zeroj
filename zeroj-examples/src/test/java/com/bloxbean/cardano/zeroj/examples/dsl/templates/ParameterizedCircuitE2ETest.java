@@ -2,11 +2,11 @@ package com.bloxbean.cardano.zeroj.examples.dsl.templates;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
-import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.bls12381.ec.*;
 import com.bloxbean.cardano.zeroj.bls12381.field.*;
 import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
@@ -30,8 +30,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * Circom's for-loop unrolling.</p>
  */
 class ParameterizedCircuitE2ETest {
-
-    private static final BigInteger PRIME = FieldConfig.BLS12_381.prime();
 
     // ===================================================================
     // HashChainCircuit — parameterized by depth
@@ -68,8 +66,8 @@ class ParameterizedCircuitE2ETest {
 
         assertTrue(c3 > c1, "depth=3 should have more constraints than depth=1");
         assertTrue(c5 > c3, "depth=5 should have more constraints than depth=3");
-        // Each additional hash adds ~273 constraints (MiMC-7)
-        assertTrue(c3 - c1 > 200, "Each depth level adds ~273 MiMC constraints");
+        // Each additional hash adds one BLS12-381 Poseidon invocation.
+        assertTrue(c3 - c1 > 200, "Each depth level should add one Poseidon hash worth of constraints");
 
         System.out.println("Constraint scaling: depth=1→" + c1 + ", depth=3→" + c3 + ", depth=5→" + c5);
     }
@@ -105,9 +103,8 @@ class ParameterizedCircuitE2ETest {
         BigInteger age = BigInteger.valueOf(30);
         BigInteger balance = BigInteger.valueOf(1000000);
 
-        // Compute expected commitment: MiMC(MiMC(name, age), balance)
-        BigInteger step1 = MiMCHash.hash(name, age, PRIME);
-        BigInteger commitment = MiMCHash.hash(step1, balance, PRIME);
+        // Compute expected commitment: PoseidonN(name, age, balance)
+        BigInteger commitment = PoseidonHash.hashN(PoseidonParamsBLS12_381T3.INSTANCE, name, age, balance);
 
         var witness = circuit.calculateWitness(Map.of(
                 "name", List.of(name),
@@ -125,28 +122,33 @@ class ParameterizedCircuitE2ETest {
     // ===================================================================
 
     @Test
-    void merkle_depth2_mimc_proveAndVerify() {
-        var result = proveMerkle(2, NWayMerkleCircuit.HashType.MIMC);
-        assertTrue(result.verified, "depth=2 MiMC Merkle must verify");
-        System.out.println("Merkle(depth=2, MiMC): " + result.constraints + " constraints — VERIFIED");
+    void merkle_depth2_poseidon_proveAndVerify() {
+        var result = proveMerkle(2, NWayMerkleCircuit.HashType.POSEIDON);
+        assertTrue(result.verified, "depth=2 Poseidon Merkle must verify");
+        System.out.println("Merkle(depth=2, Poseidon): " + result.constraints + " constraints — VERIFIED");
     }
 
     @Test
-    void merkle_depth3_mimc_proveAndVerify() {
-        var result = proveMerkle(3, NWayMerkleCircuit.HashType.MIMC);
-        assertTrue(result.verified, "depth=3 MiMC Merkle must verify");
-        System.out.println("Merkle(depth=3, MiMC): " + result.constraints + " constraints — VERIFIED");
+    void merkle_depth3_poseidon_proveAndVerify() {
+        var result = proveMerkle(3, NWayMerkleCircuit.HashType.POSEIDON);
+        assertTrue(result.verified, "depth=3 Poseidon Merkle must verify");
+        System.out.println("Merkle(depth=3, Poseidon): " + result.constraints + " constraints — VERIFIED");
     }
 
     @Test
-    void merkle_sameDepth_differentHash_differentConstraints() {
+    void merkle_mimcIsBn254Only_poseidonIsBlsCardanoPath() {
         int mimcC = NWayMerkleCircuit.build(2, NWayMerkleCircuit.HashType.MIMC)
-                .compileR1CS(CurveId.BLS12_381).numConstraints();
+                .compileR1CS(CurveId.BN254).numConstraints();
         int poseidonC = NWayMerkleCircuit.build(2, NWayMerkleCircuit.HashType.POSEIDON)
                 .compileR1CS(CurveId.BLS12_381).numConstraints();
 
-        // Poseidon (~330/hash) vs MiMC (~273/hash) — different constraint counts for same depth
         assertNotEquals(mimcC, poseidonC, "Different hash functions should produce different constraint counts");
+        assertThrows(IllegalStateException.class,
+                () -> NWayMerkleCircuit.build(2, NWayMerkleCircuit.HashType.MIMC)
+                        .compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class,
+                () -> NWayMerkleCircuit.build(2, NWayMerkleCircuit.HashType.POSEIDON)
+                        .compileR1CS(CurveId.BN254));
         System.out.println("Merkle(depth=2): MiMC=" + mimcC + " vs Poseidon=" + poseidonC + " constraints");
     }
 
@@ -160,10 +162,10 @@ class ParameterizedCircuitE2ETest {
         var circuit = HashChainCircuit.build(depth);
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 
-        // Compute expected digest by applying MiMC `depth` times
+        // Compute expected digest by applying Poseidon `depth` times
         BigInteger current = secret;
         for (int i = 0; i < depth; i++) {
-            current = MiMCHash.hash(current, BigInteger.ZERO, PRIME);
+            current = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, current, BigInteger.ZERO);
         }
 
         var witness = circuit.calculateWitness(Map.of(
@@ -178,11 +180,7 @@ class ParameterizedCircuitE2ETest {
         var circuit = MultiInputCommitmentCircuit.build(n);
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 
-        // Compute expected commitment
-        BigInteger acc = MiMCHash.hash(values[0], values[1], PRIME);
-        for (int i = 2; i < n; i++) {
-            acc = MiMCHash.hash(acc, values[i], PRIME);
-        }
+        BigInteger acc = PoseidonHash.hashN(PoseidonParamsBLS12_381T3.INSTANCE, values);
 
         Map<String, List<BigInteger>> inputs = new HashMap<>();
         for (int i = 0; i < n; i++) {
@@ -210,7 +208,7 @@ class ParameterizedCircuitE2ETest {
         for (int i = 0; i < depth; i++) {
             siblings[i] = BigInteger.valueOf(100 + i); // arbitrary sibling
             pathBits[i] = BigInteger.ZERO;              // leaf on left side
-            current = MiMCHash.hash(current, siblings[i], PRIME);
+            current = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, current, siblings[i]);
         }
         BigInteger root = current;
 
