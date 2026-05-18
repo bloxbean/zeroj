@@ -8,6 +8,8 @@ import com.bloxbean.cardano.zeroj.api.VerificationKeyRef;
 import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkCircuitMetadata;
 import com.bloxbean.cardano.zeroj.circuit.lib.jubjub.PedersenCommitment;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
@@ -170,6 +172,44 @@ class AnnotatedCircuitExamplesTest {
                 .commitment(BigInteger.ONE);
         assertThrows(ArithmeticException.class,
                 () -> circuit.calculateWitness(wrong.toWitnessMap(), CurveId.BN254));
+    }
+
+    @Test
+    void multiInputCommitmentUsesBlsPoseidonNAdapter() {
+        var circuit = AnnotatedMultiInputCommitmentCircuit.build();
+        var schema = AnnotatedMultiInputCommitmentCircuit.schema();
+
+        assertEquals("annotation-multi-input-commitment", schema.name());
+        assertEquals(List.of("commitment"), schema.publicInputs().names());
+        assertEquals(List.of("owner", "assetId", "nonce"), schema.secretInputs().names());
+
+        var owner = BigInteger.valueOf(101);
+        var assetId = BigInteger.valueOf(202);
+        var nonce = BigInteger.valueOf(303);
+        var commitment = PoseidonHash.hashN(
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                owner,
+                assetId,
+                nonce);
+
+        var inputs = AnnotatedMultiInputCommitmentCircuit.inputs()
+                .owner(owner)
+                .assetId(assetId)
+                .nonce(nonce)
+                .commitment(commitment);
+
+        assertEquals(List.of(commitment), inputs.publicValues());
+        assertDoesNotThrow(() -> circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381));
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+
+        var wrong = AnnotatedMultiInputCommitmentCircuit.inputs()
+                .owner(owner)
+                .assetId(assetId)
+                .nonce(nonce)
+                .commitment(BigInteger.ONE);
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(wrong.toWitnessMap(), CurveId.BLS12_381));
     }
 
     @Test

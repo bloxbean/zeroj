@@ -17,7 +17,7 @@ or Jubjub-style primitives.
 | Binary gadgets | `Binary`, `SignalBinary`, `AliasCheck` |
 | Selection | `Mux` |
 | Signal helpers | `SignalPoseidon`, `SignalMiMC` |
-| Annotation helpers | `ZkPoseidon`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub` |
+| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub` |
 | Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
@@ -58,20 +58,28 @@ var hash = ZkPoseidon.hash(
         PoseidonParamsBLS12_381T3.INSTANCE,
         left,
         right);
+var commitment = ZkPoseidonN.hash(
+        zk,
+        PoseidonParamsBLS12_381T3.INSTANCE,
+        owner,
+        assetId,
+        nonce);
 var root = ZkMerkle.computeRoot(
         zk,
         leaf,
         siblings,
         pathBits,
         (ctx, l, r) -> ZkPoseidon.hash(ctx, PoseidonParamsBLS12_381T3.INSTANCE, l, r));
-var commitment = ZkPedersen.commit(zk, value, blinding, 64);
+var pedersen = ZkPedersen.commit(zk, value, blinding, 64);
 ```
 
 These adapters delegate to the existing `Signal*` and in-circuit gadgets and
 validate that their inputs belong to the supplied `ZkContext`. `ZkMiMC` is
 guarded as BN254-only; use explicit Poseidon parameters when targeting
-BLS12-381. The no-params Poseidon helpers are BN254-oriented for backward
-compatibility, and `ZkMerkle.HashType.MIMC` / no-params `HashType.POSEIDON`
+BLS12-381. `ZkPoseidonN` requires explicit Poseidon params and is the symbolic
+path for folded multi-input commitments. The no-params Poseidon helpers are
+BN254-oriented for backward compatibility, and `ZkMerkle.HashType.MIMC` /
+no-params `HashType.POSEIDON`
 should be treated as BN254/off-chain conveniences until params-aware Merkle
 helpers are added. Jubjub, Pedersen, and EdDSA-Jubjub adapters are BLS12-381-only and
 inherit the curve/subgroup-check contracts documented on the underlying

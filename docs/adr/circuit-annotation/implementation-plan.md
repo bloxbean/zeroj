@@ -66,7 +66,7 @@ recommended follow-up order is:
 | Priority | Work | Status |
 |----------|------|--------|
 | 1 | Documentation and defaults | Completed |
-| 2 | `ZkPoseidonN` symbolic adapter | Pending |
+| 2 | `ZkPoseidonN` symbolic adapter | Completed |
 | 3 | Params-aware BLS12-381 `ZkMerkle` helpers | Pending |
 | 4 | Generic or generated Cardano Groth16 verifier for arbitrary public-input count | Pending |
 | 5 | Example migration to BLS12-381 Poseidon where examples are Cardano-facing | Pending |

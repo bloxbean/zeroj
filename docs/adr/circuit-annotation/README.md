@@ -90,6 +90,7 @@ explicit BLS12-381 parameters:
 
 ```java
 ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
+ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
 ```
 
 The current gadget, curve, symbolic-adapter, and Cardano support matrix is

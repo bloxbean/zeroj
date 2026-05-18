@@ -108,7 +108,7 @@ Relevant source:
 | `MiMC` / `SignalMiMC` | MiMC-7 two-input hash | BN254 only in current circuit lib | Direct through `ZkMiMC` | No for Cardano on-chain, because the circuit requires BN254 | Use Poseidon for Cardano. Consider a separate BLS12-381 MiMC variant only if there is a concrete interop need. |
 | `MiMCSponge` | Variable-length MiMC sponge | BN254 only, because it calls `MiMC` | No direct `ZkMiMCSponge` | No for Cardano on-chain | Add symbolic wrapper only for BN254/off-chain legacy use. |
 | `Poseidon` | Two-input Poseidon T3 hash | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidon` for two inputs | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | Make BLS12-381 params prominent in Cardano examples. |
-| `PoseidonN` | Variable-arity folded Poseidon | BN254 default; BLS12-381 supported with explicit params | Not directly exposed as `ZkPoseidonN` | Yes via manual fold or signal escape hatch | Add `ZkPoseidonN.hash(zk, params, ZkField...)`. |
+| `PoseidonN` | Variable-arity folded Poseidon | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidonN` with explicit params | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | None. Params-aware `ZkMerkle` remains next. |
 | `Merkle` / `SignalMerkle` | Fixed-depth Merkle membership | Hash-dependent | Direct through `ZkMerkle` | Yes when the hash is BLS12-381 compatible | Add params-aware symbolic API for BLS12-381 Poseidon. |
 | `ZkMerkle.HashType.MIMC` | Merkle with MiMC | BN254 only | Direct | No for Cardano on-chain | Mark as BN254/off-chain in docs. |
 | `ZkMerkle.HashType.POSEIDON` | Merkle with default Poseidon | BN254 by default today | Direct | No if using default enum path | Add `POSEIDON_BLS12_381_T3` or a params-aware factory. |
@@ -223,16 +223,18 @@ Exit criteria:
 
 ### Phase B: `ZkPoseidonN`
 
+Status: completed. The symbolic adapter is tracked in
+[`zk-poseidon-n-symbolic-adapter.md`](zk-poseidon-n-symbolic-adapter.md).
+
 Goal: expose variable-arity Poseidon cleanly in symbolic annotated circuits.
 
 Tasks:
 
-- Add `ZkPoseidonN.hash(ZkContext, PoseidonParams, ZkField...)`.
-- Add `ZkPoseidonN.hash(ZkContext, ZkField...)` only if it is clearly
-  documented as BN254 default, or skip the no-params overload to avoid
-  Cardano mistakes.
-- Add tests comparing `ZkPoseidonN` to `PoseidonN` for BN254 and BLS12-381.
-- Add at least one annotated example using BLS12-381 `ZkPoseidonN`.
+- Added `ZkPoseidonN.hash(ZkContext, PoseidonParams, ZkField...)`.
+- Skipped the no-params overload to avoid Cardano mistakes.
+- Added BN254 differential tests against `PoseidonN` and BLS12-381 tests
+  against `PoseidonHash.hashN(...)` plus compile-curve guards.
+- Added an annotated example using BLS12-381 `ZkPoseidonN`.
 
 Exit criteria:
 
@@ -335,8 +337,8 @@ Exit criteria:
 
 ## Recommended Priority
 
-1. Documentation and defaults.
-2. `ZkPoseidonN`.
+1. Documentation and defaults. Completed.
+2. `ZkPoseidonN`. Completed.
 3. Params-aware BLS12-381 `ZkMerkle`.
 4. Generic/generated Cardano Groth16 verifier for arbitrary public-input count.
 5. Example migration to BLS12-381 Poseidon.
@@ -384,8 +386,8 @@ Negative:
 
 ## Open Questions
 
-- Should no-params symbolic Poseidon remain available in Cardano-facing docs,
-  or should all docs require explicit params?
+- Should the existing no-params two-input `ZkPoseidon` overload remain visible
+  in Cardano-facing docs, or should all Cardano docs require explicit params?
 - Should `ZkMerkle.HashType.POSEIDON` be deprecated in favor of explicit
   parameterized factories?
 - Should the on-chain Groth16 verifier be generated per circuit, or should a

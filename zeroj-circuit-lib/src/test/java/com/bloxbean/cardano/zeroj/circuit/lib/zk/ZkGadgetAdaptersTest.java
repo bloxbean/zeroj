@@ -9,6 +9,7 @@ import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBits;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkField;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt;
+import com.bloxbean.cardano.zeroj.circuit.lib.PoseidonN;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMerkle;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalMiMC;
 import com.bloxbean.cardano.zeroj.circuit.lib.SignalPoseidon;
@@ -86,6 +87,142 @@ class ZkGadgetAdaptersTest {
         assertArrayEquals(
                 signal.calculateWitness(inputs, CurveId.BN254),
                 symbolic.calculateWitness(inputs, CurveId.BN254));
+    }
+
+    @Test
+    void poseidonNAdapterMatchesSignalAdapterForBn254() {
+        var symbolic = CircuitBuilder.create("zk-poseidon-n")
+                .secretVar("a")
+                .secretVar("b")
+                .secretVar("c")
+                .secretVar("d")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPoseidonN.hash(
+                            zk,
+                            PoseidonParamsBN254T3.INSTANCE,
+                            ZkField.secret(c, "a"),
+                            ZkField.secret(c, "b"),
+                            ZkField.secret(c, "c"),
+                            ZkField.secret(c, "d"));
+                });
+
+        var signal = CircuitBuilder.create("signal-poseidon-n")
+                .secretVar("a")
+                .secretVar("b")
+                .secretVar("c")
+                .secretVar("d")
+                .defineSignals(c -> PoseidonN.hash(
+                        c,
+                        PoseidonParamsBN254T3.INSTANCE,
+                        c.privateInput("a"),
+                        c.privateInput("b"),
+                        c.privateInput("c"),
+                        c.privateInput("d")));
+
+        var inputs = Map.of(
+                "a", List.of(BigInteger.valueOf(5)),
+                "b", List.of(BigInteger.valueOf(9)),
+                "c", List.of(BigInteger.valueOf(13)),
+                "d", List.of(BigInteger.valueOf(17)));
+
+        assertEquals(signal.constraintGraph().gates().size(), symbolic.constraintGraph().gates().size());
+        assertArrayEquals(
+                signal.calculateWitness(inputs, CurveId.BN254),
+                symbolic.calculateWitness(inputs, CurveId.BN254));
+    }
+
+    @Test
+    void poseidonNExplicitParamsSupportBls12381() {
+        BigInteger a = BigInteger.valueOf(5);
+        BigInteger b = BigInteger.valueOf(9);
+        BigInteger cValue = BigInteger.valueOf(13);
+        BigInteger expected = PoseidonHash.hashN(
+                PoseidonParamsBLS12_381T3.INSTANCE,
+                a,
+                b,
+                cValue);
+
+        var circuit = CircuitBuilder.create("zk-poseidon-n-bls")
+                .secretVar("a")
+                .secretVar("b")
+                .secretVar("c")
+                .publicVar("out")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPoseidonN.hash(
+                                    zk,
+                                    PoseidonParamsBLS12_381T3.INSTANCE,
+                                    ZkField.secret(c, "a"),
+                                    ZkField.secret(c, "b"),
+                                    ZkField.secret(c, "c"))
+                            .assertEqual(ZkField.publicInput(c, "out"));
+                });
+
+        var valid = Map.of(
+                "a", List.of(a),
+                "b", List.of(b),
+                "c", List.of(cValue),
+                "out", List.of(expected));
+        assertDoesNotThrow(() -> circuit.calculateWitness(valid, CurveId.BLS12_381));
+        assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381));
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
+
+        var invalid = Map.of(
+                "a", List.of(a),
+                "b", List.of(b),
+                "c", List.of(cValue),
+                "out", List.of(BigInteger.ONE));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(invalid, CurveId.BLS12_381));
+    }
+
+    @Test
+    void poseidonNRejectsEmptyInputsAndForeignBuilderSignals() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-poseidon-n-empty")
+                .defineSignals(c -> ZkPoseidonN.hash(
+                        new ZkContext(c),
+                        PoseidonParamsBLS12_381T3.INSTANCE)));
+
+        ZkField[] fieldFromOtherBuilder = new ZkField[1];
+        CircuitBuilder.create("zk-poseidon-n-other")
+                .secretVar("a")
+                .defineSignals(c -> fieldFromOtherBuilder[0] = ZkField.secret(c, "a"));
+
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-poseidon-n-local")
+                .secretVar("b")
+                .defineSignals(c -> ZkPoseidonN.hash(
+                        new ZkContext(c),
+                        PoseidonParamsBLS12_381T3.INSTANCE,
+                        fieldFromOtherBuilder[0],
+                        ZkField.secret(c, "b"))));
+    }
+
+    @Test
+    void poseidonNRejectsNullArguments() {
+        CircuitBuilder.create("zk-poseidon-n-null")
+                .secretVar("a")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    var input = ZkField.secret(c, "a");
+
+                    assertThrows(NullPointerException.class, () -> ZkPoseidonN.hash(
+                            null,
+                            PoseidonParamsBLS12_381T3.INSTANCE,
+                            input));
+                    assertThrows(NullPointerException.class, () -> ZkPoseidonN.hash(
+                            zk,
+                            null,
+                            input));
+                    assertThrows(NullPointerException.class, () -> ZkPoseidonN.hash(
+                            zk,
+                            PoseidonParamsBLS12_381T3.INSTANCE,
+                            (ZkField[]) null));
+                    assertThrows(NullPointerException.class, () -> ZkPoseidonN.hash(
+                            zk,
+                            PoseidonParamsBLS12_381T3.INSTANCE,
+                            input,
+                            null));
+                });
     }
 
     @Test

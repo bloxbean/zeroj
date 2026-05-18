@@ -67,6 +67,7 @@ parameters:
 
 ```java
 ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
+ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
 ```
 
 Do not use no-params Poseidon or MiMC as Cardano defaults. The no-params
@@ -278,10 +279,10 @@ bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
 - Static `@Prove` methods must use parameter-style inputs.
 - `@CircuitParam` belongs on constructor parameters, not proof method
   parameters.
-- `ZkPoseidon` exposes two-input hashes. Use repeated folding or the
-  lower-level `PoseidonN`/Signal APIs for variable-arity hashing until
-  `ZkPoseidonN` is added. For Cardano, pass
-  `PoseidonParamsBLS12_381T3.INSTANCE` explicitly.
+- `ZkPoseidon` exposes two-input hashes. Use `ZkPoseidonN` for folded
+  variable-arity hashing. For Cardano, pass
+  `PoseidonParamsBLS12_381T3.INSTANCE` explicitly; there is intentionally no
+  no-params symbolic overload.
 - `ZkMiMC` is BN254-only because the underlying MiMC gadget is BN254-only.
   Treat MiMC-based annotated circuits as BN254/off-chain unless a separate
   BLS12-381 MiMC variant is added.

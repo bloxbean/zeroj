@@ -37,13 +37,15 @@ See the circuit annotation support matrix:
 Write circuits as annotated Java classes and use generated companions for
 `build(...)`, `schema(...)`, and witness input builders.
 - **Examples**: range proof, age verification, private transfer, MiMC
-  commitment, sealed-bid auction, anonymous voting, parameterized Merkle
-  membership, Pedersen commitment, proof-flow helper
+  commitment, [BLS12-381 PoseidonN multi-input commitment](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMultiInputCommitment.java),
+  sealed-bid auction, anonymous voting, parameterized Merkle membership,
+  Pedersen commitment, proof-flow helper
 - **Source**: [`examples/annotation`](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation)
 - **Tests**: [`AnnotatedCircuitExamplesTest.java`](src/test/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedCircuitExamplesTest.java)
 - **Guide**: [`docs/circuit-annotation-user-guide.md`](../docs/circuit-annotation-user-guide.md)
 - **Note**: MiMC-based annotation examples target BN254/off-chain. For
-  Cardano/BLS12-381 circuits, use Poseidon with explicit BLS12-381 parameters.
+  Cardano/BLS12-381 circuits, use `ZkPoseidon` or `ZkPoseidonN` with explicit
+  BLS12-381 parameters.
 
 ### 1. Sealed-Bid Auction
 Prove your bid exceeds a reserve price without revealing the bid amount.

@@ -57,6 +57,7 @@ For hashes in Cardano circuits, use explicit BLS12-381 Poseidon parameters:
 
 ```java
 ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
+ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
 ```
 
 Do not rely on no-params Poseidon or MiMC for Cardano defaults. The no-params
@@ -86,10 +87,10 @@ Known limitations:
 - Annotated inputs support fixed-size `ZkArray<T>` for built-in element types,
   but not nested `ZkArray<ZkArray<T>>`; flatten nested structures into parallel
   arrays when needed.
-- `ZkPoseidon` currently exposes two-input hashes. For N-input commitments, fold
-  inputs through repeated two-input hashes or use the lower-level
-  `PoseidonN`/Signal APIs until a dedicated `ZkPoseidonN` helper is added. For
-  Cardano, pass BLS12-381 Poseidon params explicitly.
+- `ZkPoseidon` exposes two-input hashes. Use `ZkPoseidonN` for folded N-input
+  commitments. For Cardano, pass BLS12-381 Poseidon params explicitly; the
+  symbolic API intentionally does not provide a no-params `ZkPoseidonN`
+  overload.
 - `ZkMiMC` is BN254-only because it delegates to the existing MiMC gadget. Use
   `ZkPoseidon` with explicit BLS12-381 parameters for Cardano/BLS12-381
   circuits.
