@@ -357,19 +357,34 @@ BigInteger[] witness = circuit.calculateWitness(inputs, CurveId.BLS12_381);
 
 ## Standard Library (zeroj-circuit-lib)
 
-Import: `com.bloxbean.cardano.zeroj.circuit.lib.*`
+Import: `com.bloxbean.cardano.zeroj.circuit.lib.*`. For explicit BLS12-381
+Poseidon parameters, also import
+`com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3`.
 
 ### Hash Functions
 
+MiMC is BN254-only in the current circuit library. For Cardano/BLS12-381
+circuits, use Poseidon with explicit BLS12-381 parameters.
+
 ```java
-// MiMC-7 hash (2 inputs → 1 output, ~364 constraints)
+// MiMC-7 hash (2 inputs -> 1 output, ~364 constraints, BN254-only)
 var hash = MiMC.hash(api, api.var("left"), api.var("right"));
 
-// Poseidon hash (2 inputs → 1 output, ~330 constraints)
-var hash = Poseidon.hash(api, api.var("in0"), api.var("in1"));
+// Poseidon hash (2 inputs -> 1 output, ~330 constraints, Cardano/BLS12-381)
+var hash = Poseidon.hash(
+        api,
+        PoseidonParamsBLS12_381T3.INSTANCE,
+        api.var("in0"),
+        api.var("in1"));
 
 // Variable-arity Poseidon (N inputs via left-fold)
-var hash = PoseidonN.hash(api, api.var("a"), api.var("b"), api.var("c"), api.var("d"));
+var hash = PoseidonN.hash(
+        api,
+        PoseidonParamsBLS12_381T3.INSTANCE,
+        api.var("a"),
+        api.var("b"),
+        api.var("c"),
+        api.var("d"));
 
 // MiMC Sponge (variable-length input, single or multi-output)
 var hash = MiMCSponge.hash(api, new Variable[]{api.var("in0"), api.var("in1"), api.var("in2")});
@@ -379,8 +394,8 @@ var outputs = MiMCSponge.hashMulti(api, inputs, 2);  // 2 outputs
 Signal API equivalents:
 ```java
 Signal hash = SignalMiMC.hash(c, left, right);
-Signal hash = SignalPoseidon.hash(c, in0, in1);
-Signal hash = PoseidonN.hash(c, a, b, c, d);
+Signal hash = SignalPoseidon.hash(c, PoseidonParamsBLS12_381T3.INSTANCE, in0, in1);
+Signal hash = PoseidonN.hash(c, PoseidonParamsBLS12_381T3.INSTANCE, a, b, inputC, inputD);
 Signal hash = MiMCSponge.hash(c, new Signal[]{in0, in1, in2});
 ```
 
@@ -397,7 +412,8 @@ var smallest = Comparators.min(api, a, b, 8);
 ```java
 // Verify a Merkle proof with any hash function
 Merkle.verifyProof(api, leaf, root, siblings, pathBits, MiMC::hash);
-Merkle.verifyProof(api, leaf, root, siblings, pathBits, Poseidon::hash);  // or Poseidon
+Merkle.verifyProof(api, leaf, root, siblings, pathBits,
+        (ctx, l, r) -> Poseidon.hash(ctx, PoseidonParamsBLS12_381T3.INSTANCE, l, r));
 ```
 
 For a depth-20 tree: 20 × 364 ≈ 7,280 constraints with MiMC, or 20 × 330 ≈ 6,600 with Poseidon.
@@ -743,7 +759,7 @@ See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pip
 
 4. **Prefer `select` over branching** — ZK circuits can't branch. Use `api.select(cond, a, b)` for conditional logic.
 
-5. **Use ZK-friendly hashes** — Poseidon (~300 constraints) and MiMC (~364 constraints) are much cheaper than SHA-256 (~25,000 constraints) inside circuits.
+5. **Use ZK-friendly hashes** — Poseidon (~300 constraints) and MiMC (~364 constraints) are much cheaper than SHA-256 (~25,000 constraints) inside circuits. For Cardano/BLS12-381 circuits, use Poseidon with explicit BLS12-381 parameters; MiMC is BN254-only in the current circuit library.
 
 ## Module Dependencies
 

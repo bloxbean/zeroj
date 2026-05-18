@@ -35,19 +35,44 @@ var inputs = RangeProofCircuit.inputs()
         .lo(18)
         .hi(99);
 
-circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254);
+circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381);
 inputs.publicValues();
 inputs.toPublicInputs();
 
 var envelope = RangeProofCircuit.proofEnvelopeBuilder(
         circuit,
         ProofSystemId.GROTH16,
-        CurveId.BN254,
+        CurveId.BLS12_381,
         proofJson.getBytes(StandardCharsets.UTF_8),
         inputs,
         new VerificationKeyRef.ById("range-proof-v1"))
     .build();
 ```
+
+## Cardano Default Path
+
+For circuits intended to be verified on Cardano, use BLS12-381 Groth16 as the
+default target:
+
+```text
+@ZKCircuit
+  -> generated *Circuit companion
+  -> compileR1CS(CurveId.BLS12_381)
+  -> Groth16 proof
+  -> Julc / Plutus V3 BLS12-381 verifier
+```
+
+When a circuit needs a hash, prefer Poseidon with explicit BLS12-381
+parameters:
+
+```java
+ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
+```
+
+Do not use no-params Poseidon or MiMC as Cardano defaults. The no-params
+Poseidon overload is retained for BN254 compatibility, and `ZkMiMC` delegates
+to the BN254-only MiMC gadget. The full gadget and curve support matrix is in
+[`docs/adr/circuit-annotation/cardano-gadget-support-matrix.md`](adr/circuit-annotation/cardano-gadget-support-matrix.md).
 
 ## Authoring Rules
 
@@ -91,14 +116,13 @@ ZkBool prove(@Secret @UInt(bits = 8) ZkUInt age,
 
 Parameterized circuits keep Java's template-like circuit generation:
 
-```java
-@ZKCircuit(name = "merkle", nameTemplate = "merkle-d{depth}-{hashType}")
-public class MerkleMembership {
-    private final ZkMerkle.HashType hashType;
+For Cardano-oriented Merkle circuits, bind the hash to BLS12-381 Poseidon
+explicitly:
 
-    public MerkleMembership(@CircuitParam("depth") int depth,
-                            @CircuitParam("hashType") ZkMerkle.HashType hashType) {
-        this.hashType = hashType;
+```java
+@ZKCircuit(name = "merkle-bls12-381", nameTemplate = "merkle-bls-d{depth}")
+public class MerkleMembership {
+    public MerkleMembership(@CircuitParam("depth") int depth) {
     }
 
     @Prove
@@ -107,14 +131,25 @@ public class MerkleMembership {
                  @Public ZkField root,
                  @Secret @FixedSize(param = "depth") ZkArray<ZkField> siblings,
                  @Secret @FixedSize(param = "depth") ZkArray<ZkBool> pathBits) {
-        return ZkMerkle.isMember(zk, leaf, root, siblings, pathBits, hashType);
+        return ZkMerkle.isMember(
+                zk,
+                leaf,
+                root,
+                siblings,
+                pathBits,
+                (ctx, left, right) -> ZkPoseidon.hash(
+                        ctx,
+                        PoseidonParamsBLS12_381T3.INSTANCE,
+                        left,
+                        right));
     }
 }
 ```
 
 ```java
-var circuit = MerkleMembershipCircuit.build(32, ZkMerkle.HashType.MIMC);
-var inputs = MerkleMembershipCircuit.inputs(32, ZkMerkle.HashType.MIMC);
+var circuit = MerkleMembershipCircuit.build(32);
+var inputs = MerkleMembershipCircuit.inputs(32);
+var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 ```
 
 Changing a circuit parameter changes the generated circuit identity and should
@@ -122,6 +157,12 @@ be treated as a different proving/verifying key lifecycle. For parameterized
 circuits, the rendered `nameTemplate` is a readable prefix; generated names also
 append a canonical parameter suffix to avoid collisions between different
 parameter sets.
+
+`ZkMerkle.HashType.MIMC` and `ZkMerkle.HashType.POSEIDON` remain useful for
+BN254/off-chain compatibility. Today they are not the Cardano default path:
+`MIMC` is BN254-only, and `POSEIDON` uses the no-params Poseidon overload. Use
+the custom hash lambda shown above until a params-aware `ZkMerkle` convenience
+API is added.
 
 ## Testing Pattern
 
@@ -150,7 +191,7 @@ var inputs = AgeVerificationCircuit.inputs()
         .threshold(18);
 
 BigInteger[] witness = AgeVerificationCircuit.calculateWitness(
-        circuit, inputs, CurveId.BN254);
+        circuit, inputs, CurveId.BLS12_381);
 PublicInputs publicInputs = inputs.toPublicInputs();
 CircuitId circuitId = AgeVerificationCircuit.circuitId();
 ZkCircuitMetadata metadata = AgeVerificationCircuit.metadata();
@@ -169,7 +210,7 @@ Use `proofEnvelopeBuilder(...)` to create a
 var envelope = AgeVerificationCircuit.proofEnvelopeBuilder(
         circuit,
         ProofSystemId.GROTH16,
-        CurveId.BN254,
+        CurveId.BLS12_381,
         proof.proveResponse().proofJson().getBytes(StandardCharsets.UTF_8),
         inputs,
         new VerificationKeyRef.ById("age-v1"))
@@ -237,9 +278,15 @@ bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
 - Static `@Prove` methods must use parameter-style inputs.
 - `@CircuitParam` belongs on constructor parameters, not proof method
   parameters.
-- `ZkPoseidon` exposes two-input hashes; use repeated folding or the lower-level
-  `PoseidonN`/Signal APIs for variable-arity hashing.
-- `ZkMiMC` is BN254-only because the underlying MiMC gadget is BN254-only. Use
-  `ZkPoseidon` with BLS12-381 parameters for BLS12-381 circuits.
+- `ZkPoseidon` exposes two-input hashes. Use repeated folding or the
+  lower-level `PoseidonN`/Signal APIs for variable-arity hashing until
+  `ZkPoseidonN` is added. For Cardano, pass
+  `PoseidonParamsBLS12_381T3.INSTANCE` explicitly.
+- `ZkMiMC` is BN254-only because the underlying MiMC gadget is BN254-only.
+  Treat MiMC-based annotated circuits as BN254/off-chain unless a separate
+  BLS12-381 MiMC variant is added.
+- `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON` path are not
+  Cardano defaults today. Use a custom BLS12-381 Poseidon hash lambda for
+  Cardano Merkle circuits.
 - `ZkBits` and `ZkBytes` store one constrained field element per bit or byte;
   packed byte encodings are deferred.

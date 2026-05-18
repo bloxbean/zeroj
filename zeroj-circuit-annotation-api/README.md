@@ -40,9 +40,28 @@ var inputs = RangeProofCircuit.inputs()
         .lo(BigInteger.valueOf(18))
         .hi(BigInteger.valueOf(99));
 
-var witness = circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BN254);
+var witness = circuit.calculateWitness(inputs.toWitnessMap(), CurveId.BLS12_381);
 var publicValues = inputs.publicValues();
 ```
+
+Cardano-oriented annotated circuits should use BLS12-381 Groth16 by default:
+
+```text
+generated *Circuit companion
+  -> compileR1CS(CurveId.BLS12_381)
+  -> Groth16 proof
+  -> Julc / Plutus V3 BLS12-381 verifier
+```
+
+For hashes in Cardano circuits, use explicit BLS12-381 Poseidon parameters:
+
+```java
+ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
+```
+
+Do not rely on no-params Poseidon or MiMC for Cardano defaults. The no-params
+Poseidon path is BN254-compatible behavior, and `ZkMiMC` delegates to the
+BN254-only MiMC gadget.
 
 Important API rules:
 
@@ -69,9 +88,15 @@ Known limitations:
   arrays when needed.
 - `ZkPoseidon` currently exposes two-input hashes. For N-input commitments, fold
   inputs through repeated two-input hashes or use the lower-level
-  `PoseidonN`/Signal APIs until a dedicated `ZkPoseidonN` helper is added.
+  `PoseidonN`/Signal APIs until a dedicated `ZkPoseidonN` helper is added. For
+  Cardano, pass BLS12-381 Poseidon params explicitly.
 - `ZkMiMC` is BN254-only because it delegates to the existing MiMC gadget. Use
-  `ZkPoseidon` with explicit BLS12-381 parameters for BLS12-381 circuits.
+  `ZkPoseidon` with explicit BLS12-381 parameters for Cardano/BLS12-381
+  circuits.
+- `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON` convenience
+  path are BN254-oriented today. For Cardano Merkle circuits, use a custom hash
+  lambda that calls `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE,
+  left, right)` until a params-aware `ZkMerkle` helper is added.
 - Elliptic-curve composite symbolic types are available for the shipped Jubjub
   use cases (`ZkJubjubPoint`, Pedersen, EdDSA-Jubjub). Add a curve-specific
   symbolic wrapper before using another curve family.
@@ -79,4 +104,6 @@ Known limitations:
   package-private field style or parameter-style inputs.
 
 See [docs/adr/circuit-annotation/README.md](../docs/adr/circuit-annotation/README.md)
-for the accepted implementation plan.
+for the accepted implementation plan, and
+[docs/adr/circuit-annotation/cardano-gadget-support-matrix.md](../docs/adr/circuit-annotation/cardano-gadget-support-matrix.md)
+for the current Cardano gadget/curve support matrix.

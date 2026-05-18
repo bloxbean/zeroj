@@ -70,6 +70,32 @@ var merkle32 = MerkleMembershipCircuit.build(32, HashType.POSEIDON);
 This feature should not replace `CircuitSpec` or the current DSL. It should
 generate code that sits on top of them.
 
+## Cardano-Oriented Defaults
+
+For annotated circuits intended to be verified on Cardano, the default target is
+BLS12-381 Groth16:
+
+```text
+@ZKCircuit
+  -> generated *Circuit companion
+  -> compileR1CS(CurveId.BLS12_381)
+  -> Groth16 proof
+  -> Julc / Plutus V3 BLS12-381 verifier
+```
+
+Hash gadgets must be selected with their circuit field in mind. MiMC is
+BN254-only in the current circuit library, and no-params Poseidon is retained
+for BN254 compatibility. Cardano-facing circuits should use Poseidon with
+explicit BLS12-381 parameters:
+
+```java
+ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right);
+```
+
+The current gadget, curve, symbolic-adapter, and Cardano support matrix is
+tracked in
+[`cardano-gadget-support-matrix.md`](cardano-gadget-support-matrix.md).
+
 ## Why We Are Doing This
 
 ZeroJ's core direction is Java-first circuit authoring, pure Java verification,
@@ -891,8 +917,18 @@ developer experience. The MVP needs symbolic adapters for the gadgets used by
 the first real privacy templates:
 
 ```java
-ZkField hash = ZkPoseidon.hash(zk, left, right);
-ZkMerkle.verify(zk, leaf, root, siblings, pathBits, ZkPoseidon::hash);
+ZkField hash = ZkPoseidon.hash(
+        zk,
+        PoseidonParamsBLS12_381T3.INSTANCE,
+        left,
+        right);
+ZkMerkle.verify(
+        zk,
+        leaf,
+        root,
+        siblings,
+        pathBits,
+        (ctx, l, r) -> ZkPoseidon.hash(ctx, PoseidonParamsBLS12_381T3.INSTANCE, l, r));
 ```
 
 Proposed package for these adapters:
@@ -910,6 +946,8 @@ MVP adapters:
 `ZkMiMC` uses the existing MiMC constants and is guarded as BN254-only.
 `ZkPoseidon` should expose both default and explicit-`PoseidonParams` overloads
 so BLS12-381 circuits can select the matching parameter set.
+For Cardano-oriented circuits, use the explicit BLS12-381 overload; the default
+Poseidon overload is BN254-oriented for backward compatibility.
 
 These adapters live in `zeroj-circuit-lib`, not in
 `zeroj-circuit-annotation-api`, so the dependency direction remains:

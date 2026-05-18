@@ -41,4 +41,7 @@ dependencies {
 ```
 
 See [docs/adr/circuit-annotation/README.md](../docs/adr/circuit-annotation/README.md)
-for the accepted implementation plan.
+for the accepted implementation plan, and
+[docs/adr/circuit-annotation/cardano-gadget-support-matrix.md](../docs/adr/circuit-annotation/cardano-gadget-support-matrix.md)
+for the current Cardano-oriented gadget, curve, and symbolic-adapter support
+matrix.

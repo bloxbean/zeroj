@@ -56,3 +56,18 @@ For each phase:
 - Tests include at least one negative witness or negative compile scenario when
   behavior can fail.
 - Review findings are resolved or documented as non-blocking.
+
+## Post-Phase 9 Cardano Follow-Ups
+
+The Cardano-oriented gadget and curve support matrix is tracked in
+[`cardano-gadget-support-matrix.md`](cardano-gadget-support-matrix.md). The
+recommended follow-up order is:
+
+| Priority | Work | Status |
+|----------|------|--------|
+| 1 | Documentation and defaults | Completed |
+| 2 | `ZkPoseidonN` symbolic adapter | Pending |
+| 3 | Params-aware BLS12-381 `ZkMerkle` helpers | Pending |
+| 4 | Generic or generated Cardano Groth16 verifier for arbitrary public-input count | Pending |
+| 5 | Example migration to BLS12-381 Poseidon where examples are Cardano-facing | Pending |
+| 6 | Optional BLS12-381 MiMC decision | Pending |
