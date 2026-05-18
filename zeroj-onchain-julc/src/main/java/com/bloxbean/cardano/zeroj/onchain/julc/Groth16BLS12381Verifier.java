@@ -10,7 +10,8 @@ import com.bloxbean.cardano.julc.stdlib.lib.BlsLib;
 import java.math.BigInteger;
 
 /**
- * On-chain Groth16 BLS12-381 verifier as a Plutus V3 spending validator.
+ * Fixed two-public-input Groth16 BLS12-381 verifier as a Plutus V3 spending
+ * validator.
  * <p>
  * Verification key points are baked in at deploy time via {@link Param}.
  * The proof (piA, piB, piC) is passed as the redeemer (compressed BLS bytes).
@@ -23,8 +24,13 @@ import java.math.BigInteger;
  *     mulMlResult(millerLoop(vk_x, gamma), millerLoop(C, delta))
  *   )
  * </pre>
+ *
+ * @deprecated Use {@link Groth16BLS12381GenericVerifier}. This class is kept
+ * only for compatibility with older examples that baked exactly two public
+ * inputs as three separate IC parameters.
  */
 @SpendingValidator
+@Deprecated
 public class Groth16BLS12381Verifier {
 
     // VK points — compressed bytes baked at compile time

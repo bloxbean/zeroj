@@ -807,4 +807,4 @@ When BBS+ circuits are available:
 
 ### Upgrade Path
 
-All three approaches use the same on-chain verifier (`Groth16BLS12381Verifier`). The circuit changes, but the Plutus V3 script is identical. You can upgrade from Poseidon-signed to EdDSA to BBS+ **without redeploying the on-chain verifier**.
+All three approaches use the same on-chain verifier (`Groth16BLS12381GenericVerifier`). The circuit changes, but the Plutus V3 script shape is identical. You can upgrade from Poseidon-signed to EdDSA to BBS+ without writing a custom on-chain verifier; redeployment is only needed when the verification key changes.

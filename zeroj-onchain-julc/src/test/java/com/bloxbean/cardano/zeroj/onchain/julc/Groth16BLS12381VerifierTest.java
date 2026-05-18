@@ -12,7 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * Tests the on-chain Groth16 BLS12-381 verifier using the Julc VM.
+ * Compatibility tests for the deprecated fixed two-public-input Groth16
+ * BLS12-381 verifier using the Julc VM.
  * <p>
  * This demonstrates the full end-to-end flow:
  * 1. Parse snarkjs JSON artifacts → compressed BLS12-381 bytes
@@ -20,6 +21,7 @@ import java.util.List;
  * 3. Evaluate with proof redeemer and public inputs datum
  * 4. Assert the pairing check passes in the Julc VM
  */
+@SuppressWarnings("deprecation")
 class Groth16BLS12381VerifierTest extends ContractTest {
 
     private static SnarkjsToCardano.VkCompressed vk;

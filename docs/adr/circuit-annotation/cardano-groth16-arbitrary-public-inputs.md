@@ -102,9 +102,9 @@ Then it runs the standard Groth16 pairing check:
 e(A, B) * e(-alpha, beta) == e(vk_x, gamma) * e(C, delta)
 ```
 
-The existing `Groth16BLS12381Verifier` remains in place for source and script
-parameter compatibility. Existing deployed or test code with exactly two public
-inputs does not need to change.
+The existing `Groth16BLS12381Verifier` remains in place only as a deprecated
+source and script-parameter compatibility verifier. New code, examples, docs,
+and generated flows should use `Groth16BLS12381GenericVerifier`.
 
 ## Length Contract
 
@@ -239,9 +239,10 @@ Budget tracking:
 
 Status: implemented.
 
-The final verifier keeps `Groth16BLS12381Verifier` intact and adds
-`Groth16BLS12381GenericVerifier`. The generic verifier accepts five script
-parameters: alpha, beta, gamma, delta, and the full `IC` list.
+The final verifier deprecates the fixed two-input `Groth16BLS12381Verifier`
+and adds `Groth16BLS12381GenericVerifier` as the default. The generic verifier
+accepts five script parameters: alpha, beta, gamma, delta, and the full `IC`
+list.
 
 Julc VM tests cover:
 

@@ -15,6 +15,8 @@ import supranational.blst.P2_Affine;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -77,15 +79,13 @@ class CircomToOnChainE2ETest extends ContractTest {
         byte[] piC = g1Compress(proof.c());
 
         // Compile on-chain verifier with circom VK
-        var compiled = compileValidator(Groth16BLS12381Verifier.class);
+        var compiled = compileValidator(Groth16BLS12381GenericVerifier.class);
         var program = compiled.program().applyParams(
                 PlutusData.bytes(vk.alpha()),
                 PlutusData.bytes(vk.beta()),
                 PlutusData.bytes(vk.gamma()),
                 PlutusData.bytes(vk.delta()),
-                PlutusData.bytes(vk.ic().get(0)),
-                PlutusData.bytes(vk.ic().get(1)),
-                PlutusData.bytes(vk.ic().get(2)));
+                vkIcData(vk.ic()));
 
         // Datum: public signals [c=33, a=3]
         var datum = PlutusData.list(
@@ -117,15 +117,13 @@ class CircomToOnChainE2ETest extends ContractTest {
         byte[] piB = g2Compress(proof.b());
         byte[] piC = g1Compress(proof.c());
 
-        var compiled = compileValidator(Groth16BLS12381Verifier.class);
+        var compiled = compileValidator(Groth16BLS12381GenericVerifier.class);
         var program = compiled.program().applyParams(
                 PlutusData.bytes(vk.alpha()),
                 PlutusData.bytes(vk.beta()),
                 PlutusData.bytes(vk.gamma()),
                 PlutusData.bytes(vk.delta()),
-                PlutusData.bytes(vk.ic().get(0)),
-                PlutusData.bytes(vk.ic().get(1)),
-                PlutusData.bytes(vk.ic().get(2)));
+                vkIcData(vk.ic()));
 
         // Wrong public inputs: claim c=99, a=3 (instead of c=33, a=3)
         var wrongDatum = PlutusData.list(
@@ -168,6 +166,14 @@ class CircomToOnChainE2ETest extends ContractTest {
         byte[] b = v.toByteArray();
         int s = Math.max(0, b.length - FP), c = Math.min(b.length, FP);
         System.arraycopy(b, s, buf, off + FP - c, c);
+    }
+
+    private static PlutusData vkIcData(List<byte[]> ic) {
+        List<PlutusData> values = new ArrayList<>();
+        for (byte[] point : ic) {
+            values.add(PlutusData.bytes(point));
+        }
+        return PlutusData.list(values.toArray(new PlutusData[0]));
     }
 
     private static byte[] loadBytes(String path) throws IOException {

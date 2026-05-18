@@ -109,7 +109,7 @@ reference circuit.
 This is the full end-to-end flow from circuit to on-chain execution:
 
 1. **Load** pre-generated BLS12-381 proof artifacts
-2. **Compile** `Groth16BLS12381Verifier` Julc script with VK parameters baked in
+2. **Compile** `Groth16BLS12381GenericVerifier` Julc script with VK parameters baked in
 3. **Lock** ADA at script address with public inputs (commitment, reservePrice) as datum
 4. **Unlock** with ZK proof (piA, piB, piC) as redeemer
 5. **Plutus V3 executes** BLS12-381 pairing verification on-chain
@@ -123,7 +123,7 @@ The on-chain Plutus V3 validators live in [`zeroj-onchain-julc`](../zeroj-onchai
 
 | Validator | Proof System | Source |
 |-----------|-------------|--------|
-| `Groth16BLS12381Verifier` | Groth16 BLS12-381 | `zeroj-onchain-julc` |
+| `Groth16BLS12381GenericVerifier` | Groth16 BLS12-381 | `zeroj-onchain-julc` |
 | `PlonkBLS12381FullVerifier` | PlonK BLS12-381 prototype | `zeroj-onchain-julc` |
 
 The example-specific `ZkAuctionVerifier` in this module extends the pattern with auction-specific logic (reserve price check).
@@ -141,7 +141,7 @@ The example-specific `ZkAuctionVerifier` in this module extends the pattern with
 |-------------|-------|----------------|
 | Groth16 | BN254 | `Groth16BN254Verifier` |
 | Groth16 | BLS12-381 | `Groth16BLS12381PureJavaVerifier` |
-| Groth16 | BLS12-381 | `Groth16BLS12381Verifier` (blst, faster) |
+| Groth16 | BLS12-381 | `com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier` (off-chain blst verifier) |
 | PlonK | BN254 | `PlonkBN254Verifier` |
 | PlonK | BLS12-381 | `PlonkBLS12381Verifier` |
 

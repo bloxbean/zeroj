@@ -87,9 +87,8 @@ class SealedBidPureJavaE2ETest {
         System.out.println("Off-chain pairing: PASSED");
 
         System.out.println("=== SealedBid E2E (dev tau): off-chain COMPLETE ===");
-        // Note: On-chain Julc VM verification for SealedBid requires a 4-IC-point
-        // verifier (3 public inputs). The generic Groth16BLS12381Verifier supports 2.
-        // See BalanceThresholdPureJavaE2ETest for full on-chain verification demo.
+        // On-chain Julc VM verification for arbitrary public-input counts is
+        // covered by Groth16BLS12381GenericVerifier in zeroj-onchain-julc.
     }
 
     // --- Helpers ---

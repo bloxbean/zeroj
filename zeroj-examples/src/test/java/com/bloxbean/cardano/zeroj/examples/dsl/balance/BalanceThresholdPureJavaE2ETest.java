@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Full-stack E2E for BalanceThreshold: circuit → pure Java prove → off-chain verify → Julc VM on-chain verify.
  *
- * <p>This circuit has 2 public inputs (threshold, isAboveThreshold), matching the generic
- * {@link Groth16BLS12381Verifier} (3 IC points = IC[0] + pub0*IC[1] + pub1*IC[2]).</p>
+ * <p>This circuit has 2 public inputs (threshold, isAboveThreshold), which can
+ * be verified on-chain by {@code Groth16BLS12381GenericVerifier}.</p>
  *
  * <h3>DEV/TEST (this test)</h3>
  * <p>Uses {@code PowersOfTauBLS381.generate(8)} — for development only.</p>
@@ -72,7 +72,7 @@ class BalanceThresholdPureJavaE2ETest {
 
         System.out.println("=== BalanceThreshold E2E (dev tau): off-chain COMPLETE ===");
         // On-chain Julc VM verification runs in the zeroj-onchain-julc module
-        // where compileValidator(Groth16BLS12381Verifier.class) can access Julc bytecode.
+        // where compileValidator(Groth16BLS12381GenericVerifier.class) can access Julc bytecode.
         // Use ProverToCardano.compressVk/compressProof to convert for on-chain submission.
     }
 

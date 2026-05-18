@@ -34,8 +34,8 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
     /**
      * 2-public-input circuit: pure Java prove → on-chain Julc VM verify.
      *
-     * <p>Uses the generic {@link Groth16BLS12381Verifier} which requires exactly
-     * 2 public inputs (3 IC points: IC[0], IC[1], IC[2]).</p>
+     * <p>Uses {@link Groth16BLS12381GenericVerifier}; the same verifier also
+     * supports circuits with more or fewer public inputs.</p>
      *
      * <p>Circuit: publicA * secretB = publicC (publicA and publicC are public).</p>
      */
@@ -47,7 +47,7 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
                 .define(api -> api.assertEqual(api.mul(api.var("a"), api.var("b")), api.var("c")));
 
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        assertEquals(2, r1cs.numPublicInputs(), "Must have exactly 2 public inputs for generic verifier");
+        assertEquals(2, r1cs.numPublicInputs(), "test circuit should have two public inputs");
 
         var constraints = r1cs.constraints();
 
@@ -76,15 +76,13 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
         assertEquals(3, compressedVk.ic().size(), "IC should have numPublic+1 = 3 entries");
 
         // Compile on-chain verifier with VK params
-        var compiled = compileValidator(Groth16BLS12381Verifier.class);
+        var compiled = compileValidator(Groth16BLS12381GenericVerifier.class);
         var program = compiled.program().applyParams(
                 PlutusData.bytes(compressedVk.alpha()),
                 PlutusData.bytes(compressedVk.beta()),
                 PlutusData.bytes(compressedVk.gamma()),
                 PlutusData.bytes(compressedVk.delta()),
-                PlutusData.bytes(compressedVk.ic().get(0)),
-                PlutusData.bytes(compressedVk.ic().get(1)),
-                PlutusData.bytes(compressedVk.ic().get(2)));
+                vkIcData(compressedVk.ic()));
 
         // Datum: 2 public inputs [a=3, c=33]
         var datum = PlutusData.list(
@@ -122,6 +120,14 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
     private static SnarkjsToCardano.ProofCompressed compressProof(Groth16ProofBLS381 proof) {
         return new SnarkjsToCardano.ProofCompressed(
                 g1Compress(proof.a()), g2Compress(proof.b()), g1Compress(proof.c()));
+    }
+
+    private static PlutusData vkIcData(List<byte[]> ic) {
+        List<PlutusData> values = new ArrayList<>();
+        for (byte[] point : ic) {
+            values.add(PlutusData.bytes(point));
+        }
+        return PlutusData.list(values.toArray(new PlutusData[0]));
     }
 
     private static byte[] g1Compress(JacobianG1BLS381.AffineG1 p) {

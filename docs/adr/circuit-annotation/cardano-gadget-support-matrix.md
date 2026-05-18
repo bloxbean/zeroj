@@ -61,7 +61,8 @@ Annotated symbolic circuit
 Relevant source:
 
 - `zeroj-onchain-julc/.../OnChainFeasibility.java`
-- `zeroj-onchain-julc/.../Groth16BLS12381Verifier.java`
+- `zeroj-onchain-julc/.../Groth16BLS12381GenericVerifier.java`
+- `zeroj-onchain-julc/.../Groth16BLS12381Verifier.java` (deprecated fixed two-input compatibility)
 - `zeroj-onchain-julc/.../PlonkBLS12381FullVerifier.java`
 - `zeroj-verifier-groth16/...`
 - `zeroj-verifier-plonk/...`

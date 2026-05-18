@@ -134,15 +134,18 @@ ZeroJ includes reusable Plutus V3 validators compiled from Java via Julc. The VK
 var compressedVk = ProverToCardano.compressVk(setupResult);
 var compressedProof = ProverToCardano.compressProof(proof);
 
+var vkIcData = ListPlutusData.of();
+for (byte[] ic : compressedVk.ic()) {
+    vkIcData.add(new BytesPlutusData(ic));
+}
+
 // Compile Julc validator with VK parameters
-var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
+var script = JulcScriptLoader.load(Groth16BLS12381GenericVerifier.class,
     new BytesPlutusData(compressedVk.alpha()),
     new BytesPlutusData(compressedVk.beta()),
     new BytesPlutusData(compressedVk.gamma()),
     new BytesPlutusData(compressedVk.delta()),
-    new BytesPlutusData(compressedVk.ic().get(0)),
-    new BytesPlutusData(compressedVk.ic().get(1)),
-    new BytesPlutusData(compressedVk.ic().get(2))
+    vkIcData
 );
 
 var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet()).toBech32();
@@ -199,11 +202,11 @@ var unlockResult = new QuickTxBuilder(backend)
 
 ## What Happens On-Chain
 
-The `Groth16BLS12381Verifier` Plutus V3 script executes:
+The `Groth16BLS12381GenericVerifier` Plutus V3 script executes:
 
 1. **Extract** public inputs from datum: `[a, c]`
 2. **Decompress** proof points (piA, piB, piC) from BLS12-381 compressed bytes
-3. **Compute** `vk_x = ic[0] + pub[0] * ic[1] + pub[1] * ic[2]` (linear combination)
+3. **Compute** `vk_x = ic[0] + pub[0] * ic[1] + ... + pub[n-1] * ic[n]`
 4. **Verify** pairing equation: `e(piA, piB) == e(alpha, beta) * e(vk_x, gamma) * e(piC, delta)`
 5. Return `True` if pairing check passes -- UTXO unlocked
 

@@ -223,15 +223,18 @@ assert valid;  // Cryptographic verification passed!
 var compressedVk = ProverToCardano.compressVk(setup);
 var compressedProof = ProverToCardano.compressProof(proof);
 
+var vkIcData = ListPlutusData.of();
+for (byte[] ic : compressedVk.ic()) {
+    vkIcData.add(new BytesPlutusData(ic));
+}
+
 // Load the generic Groth16 BLS12-381 verifier with VK baked in
-var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
+var script = JulcScriptLoader.load(Groth16BLS12381GenericVerifier.class,
     new BytesPlutusData(compressedVk.alpha()),
     new BytesPlutusData(compressedVk.beta()),
     new BytesPlutusData(compressedVk.gamma()),
     new BytesPlutusData(compressedVk.delta()),
-    new BytesPlutusData(compressedVk.ic().get(0)),
-    new BytesPlutusData(compressedVk.ic().get(1)),
-    new BytesPlutusData(compressedVk.ic().get(2)));
+    vkIcData);
 
 var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet());
 
