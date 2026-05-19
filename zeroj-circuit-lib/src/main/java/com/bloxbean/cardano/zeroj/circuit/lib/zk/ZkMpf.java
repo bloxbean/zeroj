@@ -11,7 +11,6 @@ import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParams;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -371,31 +370,50 @@ public final class ZkMpf {
             ZkUInt length,
             ZkField digest,
             int chunkIndex) {
-        ZkField selected = prefixedDigestChunkCandidateFromPath(zk, path, start, 0, digest, chunkIndex);
-        for (int len = 1; len <= MAX_PREFIX_NIBBLES; len++) {
-            ZkField candidate = prefixedDigestChunkCandidateFromPath(zk, path, start, len, digest, chunkIndex);
-            selected = eqConst(zk, length, len).select(candidate, selected);
-        }
-        return selected;
+        // The prefixed digest layout has only three structural cases
+        // (0, 1..32, 33..64), so avoid repacking duplicate candidates for
+        // every possible length.
+        return switch (chunkIndex) {
+            case 0 -> selectPrefixedPathChunk0(zk, path, start, length, digest);
+            case 1 -> selectPrefixedPathChunk1(zk, path, start, length, digest);
+            case 2 -> lteConst(zk, length, BYTE_DIGEST_CHUNK_BYTES)
+                    .select(zk.constant(0), digest);
+            default -> zk.constant(0);
+        };
     }
 
-    private static ZkField prefixedDigestChunkCandidateFromPath(
+    private static ZkField selectPrefixedPathChunk0(
             ZkContext zk,
             PathSignals path,
             ZkUInt start,
-            int length,
-            ZkField digest,
-            int chunkIndex) {
-        List<DigestChunk> chunks = byteDigestChunks(length);
-        if (chunkIndex >= chunks.size()) {
-            return zk.constant(0);
+            ZkUInt length,
+            ZkField digest) {
+        ZkField selected = packPathNibbles(zk, path, start, 0, BYTE_DIGEST_CHUNK_BYTES);
+        for (int len = 1; len < BYTE_DIGEST_CHUNK_BYTES; len++) {
+            ZkBool matchesShortOrLong = eqConst(zk, length, len)
+                    .or(eqConst(zk, length, len + BYTE_DIGEST_CHUNK_BYTES));
+            selected = matchesShortOrLong.select(
+                    packPathNibbles(zk, path, start, 0, len),
+                    selected);
         }
-        DigestChunk chunk = chunks.get(chunkIndex);
-        return switch (chunk.kind()) {
-            case PATH -> packPathNibbles(zk, path, start, chunk.offset(), chunk.length());
-            case ROOT -> digest;
-            case ZERO -> zk.constant(0);
-        };
+        return eqConst(zk, length, 0).select(digest, selected);
+    }
+
+    private static ZkField selectPrefixedPathChunk1(
+            ZkContext zk,
+            PathSignals path,
+            ZkUInt start,
+            ZkUInt length,
+            ZkField digest) {
+        ZkField selected = lteConst(zk, length, BYTE_DIGEST_CHUNK_BYTES)
+                .select(digest, packPathNibbles(zk, path, start, BYTE_DIGEST_CHUNK_BYTES, BYTE_DIGEST_CHUNK_BYTES));
+        selected = eqConst(zk, length, 0).select(zk.constant(0), selected);
+        for (int offset = 1; offset < BYTE_DIGEST_CHUNK_BYTES; offset++) {
+            selected = eqConst(zk, length, offset + BYTE_DIGEST_CHUNK_BYTES).select(
+                    packPathNibbles(zk, path, start, offset, BYTE_DIGEST_CHUNK_BYTES),
+                    selected);
+        }
+        return selected;
     }
 
     private static ZkField selectPrefixedDigestChunkFromWitness(
@@ -404,51 +422,17 @@ public final class ZkMpf {
             ZkArray<ZkField> prefixChunks,
             ZkField digest,
             int chunkIndex) {
-        ZkField selected = prefixedDigestChunkCandidateFromWitness(zk, prefixChunks, 0, digest, chunkIndex);
-        for (int len = 1; len <= MAX_PREFIX_NIBBLES; len++) {
-            ZkField candidate = prefixedDigestChunkCandidateFromWitness(zk, prefixChunks, len, digest, chunkIndex);
-            selected = eqConst(zk, length, len).select(candidate, selected);
-        }
-        return selected;
-    }
-
-    private static ZkField prefixedDigestChunkCandidateFromWitness(
-            ZkContext zk,
-            ZkArray<ZkField> prefixChunks,
-            int length,
-            ZkField digest,
-            int chunkIndex) {
-        List<DigestChunk> chunks = byteDigestChunks(length);
-        if (chunkIndex >= chunks.size()) {
-            return zk.constant(0);
-        }
-        DigestChunk chunk = chunks.get(chunkIndex);
-        return switch (chunk.kind()) {
-            case PATH -> prefixChunks.get(chunk.pathChunkIndex());
-            case ROOT -> digest;
-            case ZERO -> zk.constant(0);
+        return switch (chunkIndex) {
+            case 0 -> eqConst(zk, length, 0).select(digest, prefixChunks.get(0));
+            case 1 -> {
+                ZkField selected = lteConst(zk, length, BYTE_DIGEST_CHUNK_BYTES)
+                        .select(digest, prefixChunks.get(1));
+                yield eqConst(zk, length, 0).select(zk.constant(0), selected);
+            }
+            case 2 -> lteConst(zk, length, BYTE_DIGEST_CHUNK_BYTES)
+                    .select(zk.constant(0), digest);
+            default -> zk.constant(0);
         };
-    }
-
-    private static List<DigestChunk> byteDigestChunks(int prefixLength) {
-        var chunks = new ArrayList<DigestChunk>();
-        int totalLength = prefixLength + BYTE_DIGEST_CHUNK_BYTES;
-        int remainder = totalLength % BYTE_DIGEST_CHUNK_BYTES;
-        int offset = 0;
-        int pathChunk = 0;
-        if (remainder != 0) {
-            chunks.add(DigestChunk.path(0, remainder, pathChunk++));
-            offset = remainder;
-        }
-        while (offset < prefixLength) {
-            chunks.add(DigestChunk.path(offset, BYTE_DIGEST_CHUNK_BYTES, pathChunk++));
-            offset += BYTE_DIGEST_CHUNK_BYTES;
-        }
-        chunks.add(DigestChunk.root());
-        while (chunks.size() < 3) {
-            chunks.add(DigestChunk.zero());
-        }
-        return chunks;
     }
 
     private static ZkField commitLeafFromPath(
@@ -475,12 +459,58 @@ public final class ZkMpf {
             ZkUInt start,
             ZkUInt length,
             int chunkIndex) {
-        ZkField selected = leafChunkCandidate(zk, path, start, 0, chunkIndex);
-        for (int len = 1; len <= KEY_PATH_NIBBLES; len++) {
-            ZkField candidate = leafChunkCandidate(zk, path, start, len, chunkIndex);
-            selected = eqConst(zk, length, len).select(candidate, selected);
+        // Leaf suffix chunks are 31/31/2 bytes. Lengths beyond a chunk's full
+        // width reuse the same packed candidate.
+        return switch (chunkIndex) {
+            case 0 -> selectLeafChunk0(zk, path, start, length);
+            case 1 -> selectLeafChunk1(zk, path, start, length);
+            case 2 -> selectLeafChunk2(zk, path, start, length);
+            default -> zk.constant(0);
+        };
+    }
+
+    private static ZkField selectLeafChunk0(
+            ZkContext zk,
+            PathSignals path,
+            ZkUInt start,
+            ZkUInt length) {
+        ZkField selected = lteConst(zk, length, LEAF_CHUNK_BYTES - 1)
+                .select(zk.constant(0), leafChunkCandidate(zk, path, start, LEAF_CHUNK_BYTES, 0));
+        for (int len = 1; len < LEAF_CHUNK_BYTES; len++) {
+            selected = eqConst(zk, length, len).select(
+                    leafChunkCandidate(zk, path, start, len, 0),
+                    selected);
         }
         return selected;
+    }
+
+    private static ZkField selectLeafChunk1(
+            ZkContext zk,
+            PathSignals path,
+            ZkUInt start,
+            ZkUInt length) {
+        ZkField selected = lteConst(zk, length, (LEAF_CHUNK_BYTES * 2) - 1)
+                .select(zk.constant(0), leafChunkCandidate(zk, path, start, LEAF_CHUNK_BYTES * 2, 1));
+        for (int len = LEAF_CHUNK_BYTES + 1; len < LEAF_CHUNK_BYTES * 2; len++) {
+            selected = eqConst(zk, length, len).select(
+                    leafChunkCandidate(zk, path, start, len, 1),
+                    selected);
+        }
+        return selected;
+    }
+
+    private static ZkField selectLeafChunk2(
+            ZkContext zk,
+            PathSignals path,
+            ZkUInt start,
+            ZkUInt length) {
+        ZkField selected = zk.constant(0);
+        selected = eqConst(zk, length, (LEAF_CHUNK_BYTES * 2) + 1).select(
+                leafChunkCandidate(zk, path, start, (LEAF_CHUNK_BYTES * 2) + 1, 2),
+                selected);
+        return eqConst(zk, length, KEY_PATH_NIBBLES).select(
+                leafChunkCandidate(zk, path, start, KEY_PATH_NIBBLES, 2),
+                selected);
     }
 
     private static ZkField leafChunkCandidate(
@@ -590,26 +620,6 @@ public final class ZkMpf {
             throw new IllegalArgumentException("ZkMpf supports only Poseidon t=3, alpha=5 params");
         }
         zk.builder().api().requireField(params.field());
-    }
-
-    private enum DigestChunkKind {
-        PATH,
-        ROOT,
-        ZERO
-    }
-
-    private record DigestChunk(DigestChunkKind kind, int offset, int length, int pathChunkIndex) {
-        static DigestChunk path(int offset, int length, int pathChunkIndex) {
-            return new DigestChunk(DigestChunkKind.PATH, offset, length, pathChunkIndex);
-        }
-
-        static DigestChunk root() {
-            return new DigestChunk(DigestChunkKind.ROOT, 0, 0, -1);
-        }
-
-        static DigestChunk zero() {
-            return new DigestChunk(DigestChunkKind.ZERO, 0, 0, -1);
-        }
     }
 
     private record PathSignals(ZkArray<ZkUInt> path, Signal[] signals) {
