@@ -18,7 +18,7 @@ ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify
 - **CircuitSpec Java DSL** (recommended) — define circuits as reusable Java classes with `CircuitSpec`
 - **Inline lambda DSL** — quick prototyping with `CircuitBuilder.define(api -> ...)`
 - **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`; `.wasm` witness calculation in incubator)
-- **Standard library** — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck
+- **Standard library** — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck, symbolic `Zk*` adapters, and a per-gadget status table in [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md)
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
@@ -46,11 +46,37 @@ ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify
 
 ## Quick Start — Zero Dependencies
 
-Define a circuit, prove it, and verify — all in pure Java:
+Define a circuit, prove it, and verify — all in pure Java.
+
+ZeroJ supports multiple ways to write the same circuit. For new application
+circuits, start with symbolic annotations. Use `CircuitSpec` when you want a
+manual reusable circuit class, and use the inline DSL for small tests or
+experiments.
+
+### Recommended: Symbolic Annotations
 
 ```java
-// 1. Define the circuit (CircuitSpec — recommended pattern)
-public class SecretMultiplierCircuit implements CircuitSpec {
+// Define the circuit with @ZKCircuit and symbolic Zk* values.
+@ZKCircuit(name = "secret-multiplier", version = 1)
+public class SecretMultiplier {
+    @Prove
+    ZkBool prove(
+            ZkContext zk,
+            @Public ZkField a,
+            @Public ZkField product,
+            @Secret ZkField b) {
+        return a.mul(b).isEqual(product);
+    }
+}
+
+// The annotation processor generates SecretMultiplierCircuit.
+var circuit = SecretMultiplierCircuit.build();
+```
+
+### Equivalent CircuitSpec
+
+```java
+public class SecretMultiplierSpecCircuit implements CircuitSpec {
     @Override
     public void define(SignalBuilder c) {
         Signal a = c.publicInput("a");
@@ -62,12 +88,18 @@ public class SecretMultiplierCircuit implements CircuitSpec {
     public static CircuitBuilder build() {
         return CircuitBuilder.create("secret-multiplier")
                 .publicVar("a").publicVar("product").secretVar("b")
-                .defineSignals(new SecretMultiplierCircuit());
+                .defineSignals(new SecretMultiplierSpecCircuit());
     }
 }
 
-// 2. Compile and compute witness
-var circuit = SecretMultiplierCircuit.build();
+var circuit = SecretMultiplierSpecCircuit.build();
+```
+
+Choose one definition style. Both produce a `CircuitBuilder`, and the proof flow
+is the same after that point:
+
+```java
+// 1. Compile and compute witness
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 var witness = circuit.calculateWitness(Map.of(
     "a", List.of(BigInteger.valueOf(3)),
@@ -75,7 +107,7 @@ var witness = circuit.calculateWitness(Map.of(
     "product", List.of(BigInteger.valueOf(33))
 ), CurveId.BLS12_381);
 
-// 3. Setup + Prove (pure Java — zero native dependencies)
+// 2. Setup + Prove (pure Java — zero native dependencies)
 var srs = PowersOfTauBLS381.generate(4);       // dev/test only
 var constraints = r1cs.constraints();
 var setup = Groth16SetupBLS381.setup(
@@ -83,10 +115,10 @@ var setup = Groth16SetupBLS381.setup(
 var proof = Groth16ProverBLS381.prove(
         setup.provingKey(), witness, constraints, r1cs.numWires());
 
-// 4. Verify off-chain (pure Java)
+// 3. Verify off-chain (pure Java)
 boolean valid = BLS12381Pairing.pairingCheck(...);  // Groth16 pairing equation
 
-// 5. Verify on-chain (Cardano Plutus V3)
+// 4. Verify on-chain (Cardano Plutus V3)
 var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class, vkParams...);
 // Lock ADA → unlock with ZK proof → Cardano verifies BLS12-381 pairing
 ```
@@ -193,7 +225,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-blst`](zeroj-blst/) | BLS12-381 pairing operations via blst native library |
 | [`zeroj-crypto`](zeroj-crypto/) | **Pure Java prover** — Montgomery field arithmetic, EC operations, Groth16 + PlonK for BN254 and BLS12-381 |
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
-| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck |
+| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck, symbolic adapters, and [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
 | [`zeroj-prover-spi`](zeroj-prover-spi/) | Minimal prover request/response SPI shared by prover implementations |
 | [`zeroj-prover-gnark`](zeroj-prover-gnark/) | gnark native prover (Groth16 + PlonK) via FFM |
 | [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
@@ -256,6 +288,7 @@ dependencies {
 - **[Getting Started](docs/getting-started.md)** — end-to-end: circuit to on-chain verification
 - **[Pure Java Prover Guide](docs/pure-java-prover-guide.md)** — zero-dependency proving pipeline
 - **[Circuit DSL User Guide](docs/circuit-dsl-user-guide.md)** — CircuitSpec, Signal API, standard library
+- **[Circuit Library Gadget Status](zeroj-circuit-lib/README.md#gadget-status)** — current curve, symbolic, and Cardano-readiness status for each reusable gadget
 - **[Alternate Prover Backends](docs/alternate-prover-backends.md)** — gnark FFM and snarkjs
 - **[Architecture Overview](docs/architecture-overview.md)** — module design and layer separation
 - **[PlonK Support](docs/plonk-support.md)** — PlonK proving, off-chain verification, and the experimental Julc prototype
@@ -275,8 +308,8 @@ dependencies {
 
 | Example | What It Demonstrates |
 |---------|---------------------|
-| `SealedBidPureJavaE2ETest` | MiMC hash + range proof → pure Java prove → pairing verify |
-| `AnonymousVotingPureJavaE2ETest` | MiMC commitment + boolean → prove → verify |
+| `SealedBidPureJavaE2ETest` | BLS12-381 Poseidon commitment + range proof → pure Java prove → pairing verify |
+| `AnonymousVotingPureJavaE2ETest` | BLS12-381 Poseidon commitment + boolean → prove → verify |
 | `BalanceThresholdPureJavaE2ETest` | Range comparison → prove → verify |
 | `PureJavaProverYaciE2ETest` | **Full stack: prove → Yaci DevKit on-chain verify** |
 | `CircomToOnChainE2ETest` | circom `.zkey` → Java prove → Julc VM on-chain verify |
