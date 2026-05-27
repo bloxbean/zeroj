@@ -130,9 +130,17 @@ The complete helper is shown in `PureJavaProverYaciE2ETest`; it computes the Gro
 ZeroJ includes reusable Plutus V3 validators compiled from Java via Julc. The VK is baked into the script at deploy time:
 
 ```java
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+
 // Compress proof + VK for on-chain BLS format
 var compressedVk = ProverToCardano.compressVk(setupResult);
 var compressedProof = ProverToCardano.compressProof(proof);
+
+var vkIcData = ListPlutusData.of();
+for (byte[] ic : compressedVk.ic()) {
+    vkIcData.add(new BytesPlutusData(ic));
+}
 
 // Compile Julc validator with VK parameters
 var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
@@ -140,9 +148,7 @@ var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
     new BytesPlutusData(compressedVk.beta()),
     new BytesPlutusData(compressedVk.gamma()),
     new BytesPlutusData(compressedVk.delta()),
-    new BytesPlutusData(compressedVk.ic().get(0)),
-    new BytesPlutusData(compressedVk.ic().get(1)),
-    new BytesPlutusData(compressedVk.ic().get(2))
+    vkIcData
 );
 
 var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet()).toBech32();
@@ -203,7 +209,7 @@ The `Groth16BLS12381Verifier` Plutus V3 script executes:
 
 1. **Extract** public inputs from datum: `[a, c]`
 2. **Decompress** proof points (piA, piB, piC) from BLS12-381 compressed bytes
-3. **Compute** `vk_x = ic[0] + pub[0] * ic[1] + pub[1] * ic[2]` (linear combination)
+3. **Compute** `vk_x = ic[0] + pub[0] * ic[1] + ... + pub[n-1] * ic[n]`
 4. **Verify** pairing equation: `e(piA, piB) == e(alpha, beta) * e(vk_x, gamma) * e(piC, delta)`
 5. Return `True` if pairing check passes -- UTXO unlocked
 
@@ -269,7 +275,9 @@ The `zeroj-examples` module contains complete working examples:
 ### Example Circuits
 
 - **Sealed Bid Auction** -- prove bid >= reserve without revealing bid amount
-- **Anonymous Voting** -- prove vote is 0/1 with MiMC commitment (double-vote prevention via nullifier)
+- **Anonymous Voting** -- prove vote is 0/1 with a MiMC commitment in the
+  BN254/off-chain reference flow. For Cardano/BLS12-381 circuits, use Poseidon
+  with explicit BLS12-381 parameters.
 - **Balance Threshold** -- prove balance >= threshold without revealing exact balance
 
 See the [examples README](../zeroj-examples/README.md) for detailed descriptions of each flow.

@@ -98,6 +98,28 @@ public interface CircuitAPI {
     /** Look up a declared variable by name. */
     Variable var(String name);
 
+    /**
+     * Look up a declared public input by name.
+     *
+     * <p>Implementations that track input visibility should reject secret
+     * variables here. The default preserves compatibility with minimal
+     * implementations by falling back to {@link #var(String)}.</p>
+     */
+    default Variable publicInputVar(String name) {
+        return var(name);
+    }
+
+    /**
+     * Look up a declared secret input by name.
+     *
+     * <p>Implementations that track input visibility should reject public
+     * variables here. The default preserves compatibility with minimal
+     * implementations by falling back to {@link #var(String)}.</p>
+     */
+    default Variable secretInputVar(String name) {
+        return var(name);
+    }
+
     // --- Field expectation (checked at compile/witness time) ---
 
     /**

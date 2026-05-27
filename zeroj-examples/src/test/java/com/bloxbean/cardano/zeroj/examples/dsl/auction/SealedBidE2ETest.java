@@ -78,21 +78,21 @@ class SealedBidE2ETest {
 
         // 5. Verify public inputs contain expected values
         var publicInputs = SnarkjsJsonCodec.parsePublicInputs(proof.publicJson());
-        // Public vars: [reservePrice, bidCommitment, isAboveReserve]
-        assertEquals(3, publicInputs.size(), "Should have 3 public inputs");
+        // Public vars: [bidCommitment, reservePrice]
+        assertEquals(2, publicInputs.size(), "Should have 2 public inputs");
+        assertEquals(helper.computeCommitment(bidAmount, salt), publicInputs.get(0),
+                "Public commitment should match BLS12-381 Poseidon");
+        assertEquals(reservePrice, publicInputs.get(1),
+                "Public reserve price should match the witness");
 
-        // isAboveReserve should be 1 (bid 1000 >= reserve 500)
-        var isAboveReserve = publicInputs.get(2); // third public var
-        assertEquals(BigInteger.ONE, isAboveReserve,
-                "isAboveReserve should be 1 for bid above reserve");
     }
 
     /**
-     * Groth16/BLS12-381: sealed bid BELOW reserve price — proof is still valid,
-     * but isAboveReserve = 0.
+     * Groth16/BLS12-381: sealed bid BELOW reserve price fails witness
+     * calculation because the reserve condition is constrained in-circuit.
      */
     @Test
-    void groth16_bls12381_bidBelowReserve(@TempDir Path workDir) throws Exception {
+    void groth16_bls12381_bidBelowReserve_failsWitness(@TempDir Path workDir) throws Exception {
         var helper = new SealedBidProofHelper(CurveId.BLS12_381);
 
         var bidAmount = BigInteger.valueOf(200);
@@ -100,26 +100,8 @@ class SealedBidE2ETest {
         var reservePrice = BigInteger.valueOf(500);
 
         Path ptau = snarkjs.powersOfTau("bls12-381", 13, workDir);
-        var proof = helper.generateGroth16Proof(bidAmount, salt, reservePrice, ptau, workDir, snarkjs);
-
-        // Proof is valid (the circuit still works, it just outputs isAboveReserve=0)
-        assertTrue(snarkjs.groth16Verify(workDir));
-
-        // Off-chain Java verification
-        var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(
-                proof.proofJson(), proof.vkJson(), proof.publicJson(),
-                new CircuitId("sealed-bid"));
-        var material = VerificationMaterial.of(
-                proof.vkJson().getBytes(StandardCharsets.UTF_8),
-                ProofSystemId.GROTH16, CurveId.BLS12_381, new CircuitId("sealed-bid"));
-
-        var result = new Groth16BLS12381PureJavaVerifier().verify(envelope, material);
-        assertTrue(result.proofValid(), "Proof should be valid even for bid below reserve");
-
-        // isAboveReserve should be 0
-        var publicInputs = SnarkjsJsonCodec.parsePublicInputs(proof.publicJson());
-        assertEquals(BigInteger.ZERO, publicInputs.get(2),
-                "isAboveReserve should be 0 for bid below reserve");
+        assertThrows(ArithmeticException.class,
+                () -> helper.generateGroth16Proof(bidAmount, salt, reservePrice, ptau, workDir, snarkjs));
     }
 
     /**

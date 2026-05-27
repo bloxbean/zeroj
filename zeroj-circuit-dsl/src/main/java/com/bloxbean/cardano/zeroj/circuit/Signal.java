@@ -28,6 +28,11 @@ public final class Signal {
     /** The underlying wire variable. */
     public Variable variable() { return variable; }
 
+    /** Return true when this signal was created from the given builder's API. */
+    public boolean isFrom(SignalBuilder builder) {
+        return builder != null && api == builder.api();
+    }
+
     // --- Arithmetic ---
 
     /** Field addition: this + other. */

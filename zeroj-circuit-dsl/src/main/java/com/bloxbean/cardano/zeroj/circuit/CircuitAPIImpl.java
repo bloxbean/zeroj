@@ -15,6 +15,7 @@ class CircuitAPIImpl implements CircuitAPI {
 
     private final List<Gate> gates = new ArrayList<>();
     private final Map<String, Variable> namedVars = new LinkedHashMap<>();
+    private final Map<String, InputVisibility> inputVisibilities = new LinkedHashMap<>();
     private final Map<BigInteger, Variable> constantCache = new HashMap<>();
     private final List<Variable> publicInputs = new ArrayList<>();
     private final List<Variable> secretInputs = new ArrayList<>();
@@ -34,6 +35,7 @@ class CircuitAPIImpl implements CircuitAPI {
             var v = new Variable(nextId++, name);
             publicInputs.add(v);
             namedVars.put(name, v);
+            inputVisibilities.put(name, InputVisibility.PUBLIC);
         }
 
         // Secret inputs
@@ -41,6 +43,7 @@ class CircuitAPIImpl implements CircuitAPI {
             var v = new Variable(nextId++, name);
             secretInputs.add(v);
             namedVars.put(name, v);
+            inputVisibilities.put(name, InputVisibility.SECRET);
         }
     }
 
@@ -280,5 +283,43 @@ class CircuitAPIImpl implements CircuitAPI {
         var v = namedVars.get(name);
         if (v == null) throw new IllegalArgumentException("Unknown variable: " + name);
         return v;
+    }
+
+    @Override
+    public Variable publicInputVar(String name) {
+        return inputVar(name, InputVisibility.PUBLIC);
+    }
+
+    @Override
+    public Variable secretInputVar(String name) {
+        return inputVar(name, InputVisibility.SECRET);
+    }
+
+    private Variable inputVar(String name, InputVisibility expected) {
+        var v = namedVars.get(name);
+        if (v == null) throw new IllegalArgumentException("Unknown variable: " + name);
+
+        var actual = inputVisibilities.get(name);
+        if (actual != expected) {
+            throw new IllegalArgumentException(
+                    "Variable " + name + " is declared as " + actual.label()
+                            + " but was requested as " + expected.label());
+        }
+        return v;
+    }
+
+    private enum InputVisibility {
+        PUBLIC("public"),
+        SECRET("secret");
+
+        private final String label;
+
+        InputVisibility(String label) {
+            this.label = label;
+        }
+
+        String label() {
+            return label;
+        }
     }
 }

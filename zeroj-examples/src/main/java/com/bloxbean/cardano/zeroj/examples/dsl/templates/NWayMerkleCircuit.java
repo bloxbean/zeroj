@@ -34,7 +34,12 @@ import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3
  */
 public class NWayMerkleCircuit implements CircuitSpec {
 
-    /** Supported hash functions for Merkle nodes. */
+    /**
+     * Supported hash functions for Merkle nodes.
+     * <p>
+     * `MIMC` is the BN254/off-chain path. `POSEIDON` uses explicit BLS12-381
+     * params and is the Cardano-oriented path.
+     */
     public enum HashType { MIMC, POSEIDON }
 
     private final int depth;

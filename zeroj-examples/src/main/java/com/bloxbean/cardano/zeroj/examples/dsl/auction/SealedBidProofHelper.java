@@ -1,10 +1,10 @@
 package com.bloxbean.cardano.zeroj.examples.dsl.auction;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
-import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSSerializer;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.GnarkProverHelper;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.SnarkjsProver;
 import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
 import com.bloxbean.cardano.zeroj.prover.wasm.WitnessExporter;
@@ -20,7 +20,7 @@ import java.util.Map;
  * <p>Handles the full lifecycle:</p>
  * <ol>
  *   <li>Compile circuit to R1CS (pure Java)</li>
- *   <li>Compute bid commitment via standalone MiMC hash</li>
+ *   <li>Compute bid commitment via standalone BLS12-381 Poseidon hash</li>
  *   <li>Calculate witness and export to .wtns (pure Java)</li>
  *   <li>Call snarkjs for trusted setup + proof generation</li>
  * </ol>
@@ -30,6 +30,9 @@ public class SealedBidProofHelper {
     private final CurveId curve;
 
     public SealedBidProofHelper(CurveId curve) {
+        if (curve != CurveId.BLS12_381) {
+            throw new IllegalArgumentException("SealedBidCircuit uses explicit BLS12-381 Poseidon params");
+        }
         this.curve = curve;
     }
 
@@ -42,33 +45,32 @@ public class SealedBidProofHelper {
     }
 
     /**
-     * Compute the bid commitment: MiMC(bidAmount, salt).
+     * Compute the bid commitment: PoseidonBLS12_381(bidAmount, salt).
      */
     public BigInteger computeCommitment(BigInteger bidAmount, BigInteger salt) {
-        return MiMCHash.hash(bidAmount, salt, FieldConfig.forCurve(curve).prime());
+        return PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, bidAmount, salt);
     }
 
     /**
      * Generate .wtns binary for the given bid parameters.
      *
-     * <p>Computes bidCommitment and isAboveReserve internally.</p>
+     * <p>Computes bidCommitment internally. Bids below reserve fail witness
+     * calculation because the reserve check is constrained inside the circuit.</p>
      */
     public byte[] generateWitness(BigInteger bidAmount, BigInteger salt, BigInteger reservePrice) {
-        var config = FieldConfig.forCurve(curve);
         var bidCommitment = computeCommitment(bidAmount, salt);
-        var isAboveReserve = bidAmount.compareTo(reservePrice) >= 0
-                ? BigInteger.ONE : BigInteger.ZERO;
 
         var circuit = SealedBidCircuit.build();
         BigInteger[] witness = circuit.calculateWitness(Map.of(
                 "bidAmount", List.of(bidAmount),
                 "salt", List.of(salt),
                 "bidCommitment", List.of(bidCommitment),
-                "reservePrice", List.of(reservePrice),
-                "isAboveReserve", List.of(isAboveReserve)
+                "reservePrice", List.of(reservePrice)
         ), curve);
 
-        return WitnessExporter.toWtns(witness, config.prime(), config.n32());
+        return WitnessExporter.toWtns(witness,
+                PoseidonParamsBLS12_381T3.INSTANCE.field().prime(),
+                PoseidonParamsBLS12_381T3.INSTANCE.field().n32());
     }
 
     /**
@@ -115,8 +117,6 @@ public class SealedBidProofHelper {
             GnarkProver prover) {
 
         var bidCommitment = computeCommitment(bidAmount, salt);
-        var isAboveReserve = bidAmount.compareTo(reservePrice) >= 0
-                ? BigInteger.ONE : BigInteger.ZERO;
 
         return GnarkProverHelper.groth16Prove(
                 SealedBidCircuit.build(),
@@ -124,8 +124,7 @@ public class SealedBidProofHelper {
                         "bidAmount", List.of(bidAmount),
                         "salt", List.of(salt),
                         "bidCommitment", List.of(bidCommitment),
-                        "reservePrice", List.of(reservePrice),
-                        "isAboveReserve", List.of(isAboveReserve)
+                        "reservePrice", List.of(reservePrice)
                 ),
                 curve, prover);
     }

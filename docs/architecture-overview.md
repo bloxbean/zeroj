@@ -132,10 +132,11 @@ Anchoring verified results on L1:
 
 ### Layer 10: On-Chain Verification (`zeroj-onchain-julc`)
 Reusable Plutus V3 spending validators compiled via Julc:
-- `Groth16BLS12381Verifier` -- on-chain Groth16 verification using BLS12-381 builtins
-- `PlonkBLS12381FullVerifier` -- experimental on-chain PlonK prototype with Fiat-Shamir transcript and inverse checks; KZG pairing check deferred
-- `SnarkjsToCardano` -- converts snarkjs JSON to BLS compressed bytes for on-chain use
-- `ScriptBudgetEstimator`, `OnChainFeasibility`, `ReferenceScriptDeployer` -- on-chain budget and deployment helpers
+- `groth16.validator.Groth16BLS12381Verifier` -- on-chain Groth16 verification using BLS12-381 builtins and arbitrary public-input counts
+- `groth16.lib.Groth16BLS12381Lib` -- reusable `@OnchainLibrary` Groth16 verification helper for custom validators
+- `groth16.codec.SnarkjsToCardano` and `groth16.codec.ProverToCardano` -- convert proof/VK artifacts to BLS compressed bytes for on-chain use
+- `plonk.validator.PlonkBLS12381FullVerifier` -- experimental on-chain PlonK prototype with Fiat-Shamir transcript and inverse checks; KZG pairing check deferred
+- `analysis.ScriptBudgetEstimator`, `analysis.OnChainFeasibility`, `deployment.ReferenceScriptDeployer` -- on-chain budget and deployment helpers
 
 ## Crypto Backend Strategy
 

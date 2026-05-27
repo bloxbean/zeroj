@@ -6,12 +6,15 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Standalone MiMC-7 hash computation (outside ZK circuits).
+ * Standalone BN254/off-chain MiMC-7 hash computation (outside ZK circuits).
  *
  * <p>Produces the same output as the circuit-based {@code SignalMiMC.hash()} / {@code MiMC.hash()},
  * allowing the prover to compute hash values before constructing the witness.</p>
  *
  * <p>MiMC-7 parameters: 91 rounds, S-box x^7, round constants = SHA-256("mimc_round_N").</p>
+ *
+ * <p>The in-circuit MiMC gadget is BN254-only. Cardano-facing examples should
+ * use BLS12-381 Poseidon instead.</p>
  */
 public final class MiMCHash {
 
@@ -24,7 +27,7 @@ public final class MiMCHash {
      *
      * @param left  first input
      * @param right second input (used as key in Feistel construction)
-     * @param prime the field prime (curve-dependent)
+     * @param prime the BN254 field prime when matching the in-circuit MiMC gadget
      * @return hash output in the field
      */
     public static BigInteger hash(BigInteger left, BigInteger right, BigInteger prime) {

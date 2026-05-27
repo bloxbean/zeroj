@@ -7,7 +7,7 @@ import com.bloxbean.cardano.client.common.model.Networks;
 import com.bloxbean.cardano.client.function.helper.SignerProviders;
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.Tx;
-import com.bloxbean.cardano.zeroj.onchain.julc.SnarkjsToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 
 import java.io.IOException;
 import java.math.BigInteger;

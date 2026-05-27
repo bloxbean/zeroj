@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -65,9 +67,7 @@ class SealedBidOnChainE2ETest extends ZkE2ETestBase {
                 new BytesPlutusData(vk.beta()),
                 new BytesPlutusData(vk.gamma()),
                 new BytesPlutusData(vk.delta()),
-                new BytesPlutusData(vk.ic().get(0)),
-                new BytesPlutusData(vk.ic().get(1)),
-                new BytesPlutusData(vk.ic().get(2)));
+                vkIcData(vk.ic()));
 
         var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet()).toBech32();
         System.out.println("Auction script address: " + scriptAddr);
@@ -128,5 +128,13 @@ class SealedBidOnChainE2ETest extends ZkE2ETestBase {
         System.out.println("Flow: Java DSL circuit -> snarkjs BLS12-381 proof -> Julc Plutus V3 verifier -> Yaci DevKit");
         System.out.println("Reserve price: " + reservePrice + " (verified: domain == circuit == on-chain)");
         System.out.println("Bid amount: 1000 (PRIVATE — hidden inside ZK proof, never on-chain)");
+    }
+
+    private static ListPlutusData vkIcData(List<byte[]> ic) {
+        List<PlutusData> values = new ArrayList<>();
+        for (byte[] point : ic) {
+            values.add(new BytesPlutusData(point));
+        }
+        return ListPlutusData.of(values.toArray(new PlutusData[0]));
     }
 }

@@ -1,10 +1,11 @@
 package com.bloxbean.cardano.zeroj.examples.dsl.auction;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.bls12381.ec.*;
 import com.bloxbean.cardano.zeroj.bls12381.field.*;
 import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
@@ -53,19 +54,16 @@ class SealedBidPureJavaE2ETest {
         BigInteger bidAmount = BigInteger.valueOf(1000);
         BigInteger salt = BigInteger.valueOf(42);
         BigInteger reservePrice = BigInteger.valueOf(500);
-        BigInteger bidCommitment = MiMCHash.hash(bidAmount, salt,
-                com.bloxbean.cardano.zeroj.circuit.FieldConfig.BLS12_381.prime());
-        BigInteger isAboveReserve = BigInteger.ONE;
+        BigInteger bidCommitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, bidAmount, salt);
 
         BigInteger[] witness = circuit.calculateWitness(Map.of(
                 "bidAmount", List.of(bidAmount),
                 "salt", List.of(salt),
                 "reservePrice", List.of(reservePrice),
-                "bidCommitment", List.of(bidCommitment),
-                "isAboveReserve", List.of(isAboveReserve)), CurveId.BLS12_381);
+                "bidCommitment", List.of(bidCommitment)), CurveId.BLS12_381);
 
         // === Step 3: Dev trusted setup (DEVELOPMENT ONLY) ===
-        var srs = PowersOfTauBLS381.generate(10); // 2^10 = 1024 >= 497 constraints
+        var srs = PowersOfTauBLS381.generate(12);
         var setupResult = Groth16SetupBLS381.setup(constraints, r1cs.numWires(),
                 r1cs.numPublicInputs(), srs.tauScalar());
         var pk = setupResult.provingKey();
@@ -87,9 +85,8 @@ class SealedBidPureJavaE2ETest {
         System.out.println("Off-chain pairing: PASSED");
 
         System.out.println("=== SealedBid E2E (dev tau): off-chain COMPLETE ===");
-        // Note: On-chain Julc VM verification for SealedBid requires a 4-IC-point
-        // verifier (3 public inputs). The generic Groth16BLS12381Verifier supports 2.
-        // See BalanceThresholdPureJavaE2ETest for full on-chain verification demo.
+        // On-chain Julc VM verification for arbitrary public-input counts is
+        // covered by Groth16BLS12381Verifier in zeroj-onchain-julc.
     }
 
     // --- Helpers ---

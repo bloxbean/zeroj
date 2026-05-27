@@ -61,7 +61,7 @@ class AnonymousVotingE2ETest {
         // Verify commitment matches what we'd compute standalone
         var expectedCommitment = helper.computeCommitment(vote, nullifier);
         assertEquals(expectedCommitment, publicInputs.get(0),
-                "Public commitment should match standalone MiMC computation");
+                "Public commitment should match standalone BLS12-381 Poseidon computation");
     }
 
     @Test

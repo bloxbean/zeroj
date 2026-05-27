@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.circuit.lib;
 
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
+import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 
 /**
  * MiMC hash using the Signal API.
@@ -20,6 +21,8 @@ public final class SignalMiMC {
      * MiMC-7 hash of two signals.
      */
     public static Signal hash(SignalBuilder c, Signal left, Signal right) {
+        c.api().requireField(FieldConfig.BN254);
+
         Signal state = left;
         Signal key = right;
 

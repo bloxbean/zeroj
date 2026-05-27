@@ -1,4 +1,9 @@
-# E2E: Sealed-Bid Auction (Java DSL → Groth16 → Cardano)
+# E2E: Sealed-Bid Auction (Java DSL -> Groth16 -> Cardano)
+
+> Status note: this guide documents the legacy MiMC sealed-bid reference flow.
+> In the current circuit library, MiMC is BN254-only. New Cardano/BLS12-381
+> sealed-bid circuits should use Poseidon with explicit BLS12-381 parameters.
+> Treat any BLS12-381 MiMC snippets in this guide as migration candidates.
 
 ## Overview
 

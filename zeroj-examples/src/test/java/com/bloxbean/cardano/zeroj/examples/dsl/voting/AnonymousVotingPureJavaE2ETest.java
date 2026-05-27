@@ -1,10 +1,11 @@
 package com.bloxbean.cardano.zeroj.examples.dsl.voting;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.bls12381.ec.*;
 import com.bloxbean.cardano.zeroj.bls12381.field.*;
 import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
@@ -37,15 +38,14 @@ class AnonymousVotingPureJavaE2ETest {
 
         BigInteger vote = BigInteger.ONE; // YES
         BigInteger nullifier = BigInteger.valueOf(12345);
-        BigInteger commitment = MiMCHash.hash(vote, nullifier,
-                com.bloxbean.cardano.zeroj.circuit.FieldConfig.BLS12_381.prime());
+        BigInteger commitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, vote, nullifier);
 
         BigInteger[] witness = circuit.calculateWitness(Map.of(
                 "vote", List.of(vote),
                 "nullifier", List.of(nullifier),
                 "commitment", List.of(commitment)), CurveId.BLS12_381);
 
-        var srs = PowersOfTauBLS381.generate(9);
+        var srs = PowersOfTauBLS381.generate(11);
         var setupResult = Groth16SetupBLS381.setup(constraints, r1cs.numWires(),
                 r1cs.numPublicInputs(), srs.tauScalar());
 
@@ -60,8 +60,8 @@ class AnonymousVotingPureJavaE2ETest {
         assertTrue(verified, "Vote YES pairing verification MUST pass");
         System.out.println("Off-chain pairing: PASSED");
 
-        // Verify commitment matches standalone MiMC
-        assertEquals(commitment, pubInputs[0], "Commitment matches MiMC hash");
+        // Verify commitment matches standalone Poseidon
+        assertEquals(commitment, pubInputs[0], "Commitment matches BLS12-381 Poseidon hash");
         System.out.println("=== AnonymousVoting E2E (vote=YES, dev tau): COMPLETE ===");
     }
 
@@ -73,15 +73,14 @@ class AnonymousVotingPureJavaE2ETest {
 
         BigInteger vote = BigInteger.ZERO; // NO
         BigInteger nullifier = BigInteger.valueOf(67890);
-        BigInteger commitment = MiMCHash.hash(vote, nullifier,
-                com.bloxbean.cardano.zeroj.circuit.FieldConfig.BLS12_381.prime());
+        BigInteger commitment = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, vote, nullifier);
 
         BigInteger[] witness = circuit.calculateWitness(Map.of(
                 "vote", List.of(vote),
                 "nullifier", List.of(nullifier),
                 "commitment", List.of(commitment)), CurveId.BLS12_381);
 
-        var srs = PowersOfTauBLS381.generate(9);
+        var srs = PowersOfTauBLS381.generate(11);
         var setupResult = Groth16SetupBLS381.setup(constraints, r1cs.numWires(),
                 r1cs.numPublicInputs(), srs.tauScalar());
 

@@ -14,16 +14,55 @@ End-to-end demonstrations of ZeroJ capabilities -- from Java DSL circuit definit
 
 ## Example Circuits
 
+### Cardano Defaults
+
+For new examples intended to be verified on Cardano, prefer:
+
+```text
+Java DSL or @ZKCircuit
+  -> CurveId.BLS12_381
+  -> Groth16
+  -> Julc / Plutus V3 BLS12-381 verifier
+```
+
+Use Poseidon with explicit BLS12-381 parameters for hashes. MiMC-based Java DSL
+and annotation examples are BN254/off-chain references unless they are migrated
+to a separate BLS12-381 hash. The no-params Poseidon path is also BN254-oriented
+for backward compatibility.
+
+See the circuit annotation support matrix:
+[`docs/adr/circuit-annotation/cardano-gadget-support-matrix.md`](../docs/adr/circuit-annotation/cardano-gadget-support-matrix.md).
+
+### 0. Annotation-Based Circuits
+Write circuits as annotated Java classes and use generated companions for
+`build(...)`, `schema(...)`, and witness input builders.
+- **Examples**: range proof, age verification, private transfer, MiMC
+  commitment, [BLS12-381 PoseidonN multi-input commitment](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMultiInputCommitment.java),
+  [BLS12-381 Poseidon Merkle membership](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedBlsPoseidonMerkleMembership.java),
+  [Poseidon MPF private registry membership](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java),
+  sealed-bid auction, anonymous voting, parameterized Merkle membership,
+  Pedersen commitment, proof-flow helper
+- **Source**: [`examples/annotation`](src/main/java/com/bloxbean/cardano/zeroj/examples/annotation)
+- **Tests**: [`AnnotatedCircuitExamplesTest.java`](src/test/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedCircuitExamplesTest.java)
+- **Guide**: [`docs/circuit-annotation-user-guide.md`](../docs/circuit-annotation-user-guide.md)
+- **Note**: MiMC-based annotation examples target BN254/off-chain. For
+  Cardano/BLS12-381 circuits, use `ZkPoseidon` or `ZkPoseidonN` with explicit
+  BLS12-381 parameters.
+
 ### 1. Sealed-Bid Auction
 Prove your bid exceeds a reserve price without revealing the bid amount.
 - **Private**: bidAmount, salt
 - **Public**: reservePrice, bidCommitment (MiMC hash), isAboveReserve (0/1)
+- **Cardano note**: the Java DSL MiMC version is a BN254/off-chain reference.
+  Use a BLS12-381 Poseidon commitment for new Cardano-ready sealed-bid circuits.
 - **Source**: [`SealedBidCircuit.java`](src/main/java/com/bloxbean/cardano/zeroj/examples/dsl/auction/SealedBidCircuit.java)
 
 ### 2. Anonymous Voting
 Prove a vote is valid (0 or 1) with a hash commitment for double-vote prevention.
 - **Private**: vote, nullifier
 - **Public**: commitment (MiMC hash)
+- **Cardano note**: the MiMC commitment version is BN254/off-chain. Use
+  BLS12-381 Poseidon for Cardano-ready voting circuits.
 - **Source**: [`AnonymousVotingCircuit.java`](src/main/java/com/bloxbean/cardano/zeroj/examples/dsl/voting/AnonymousVotingCircuit.java)
 
 ### 3. Balance Threshold
@@ -36,10 +75,10 @@ Prove a balance exceeds a threshold without revealing the exact balance.
 
 | Test | Circuit | Prover | Verifier | On-Chain |
 |------|---------|--------|----------|----------|
-| `SealedBidE2ETest` | Sealed bid | snarkjs CLI | Pure Java (BLS12-381) | No |
-| `SealedBidGnarkE2ETest` | Sealed bid | gnark FFM | Pure Java (BLS12-381) | No |
+| `SealedBidE2ETest` | Sealed bid, MiMC reference | snarkjs CLI | Pure Java | No |
+| `SealedBidGnarkE2ETest` | Sealed bid, MiMC reference | gnark FFM | Pure Java | No |
 | `SealedBidOnChainE2ETest` | Sealed bid | Pre-generated | Julc/Plutus V3 | Yes (Yaci DevKit) |
-| `AnonymousVotingE2ETest` | Voting | snarkjs CLI | Pure Java (BLS12-381) | No |
+| `AnonymousVotingE2ETest` | Voting, MiMC reference | snarkjs CLI | Pure Java | No |
 | `BalanceThresholdE2ETest` | Balance | snarkjs CLI | Pure Java (BLS12-381) | No |
 
 ## Three Proving Paths
@@ -62,7 +101,9 @@ proof adapter is added.
 ```
 Java DSL → R1CS → gnark/snarkjs prove → Julc Plutus V3 verify (Yaci DevKit)
 ```
-Used in: `SealedBidOnChainE2ETest`
+Used in: `SealedBidOnChainE2ETest`. The on-chain path uses BLS12-381 proof
+artifacts and should not be confused with the BN254/off-chain MiMC Java DSL
+reference circuit.
 
 ## On-Chain Flow (SealedBidOnChainE2ETest)
 
@@ -101,7 +142,7 @@ The example-specific `ZkAuctionVerifier` in this module extends the pattern with
 |-------------|-------|----------------|
 | Groth16 | BN254 | `Groth16BN254Verifier` |
 | Groth16 | BLS12-381 | `Groth16BLS12381PureJavaVerifier` |
-| Groth16 | BLS12-381 | `Groth16BLS12381Verifier` (blst, faster) |
+| Groth16 | BLS12-381 | `com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier` (off-chain blst verifier) |
 | PlonK | BN254 | `PlonkBN254Verifier` |
 | PlonK | BLS12-381 | `PlonkBLS12381Verifier` |
 

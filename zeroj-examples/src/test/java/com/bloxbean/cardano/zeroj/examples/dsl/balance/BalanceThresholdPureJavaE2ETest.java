@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Full-stack E2E for BalanceThreshold: circuit → pure Java prove → off-chain verify → Julc VM on-chain verify.
  *
- * <p>This circuit has 2 public inputs (threshold, isAboveThreshold), matching the generic
- * {@link Groth16BLS12381Verifier} (3 IC points = IC[0] + pub0*IC[1] + pub1*IC[2]).</p>
+ * <p>This circuit has 2 public inputs (threshold, isAboveThreshold), which can
+ * be verified on-chain by {@code Groth16BLS12381Verifier}.</p>
  *
  * <h3>DEV/TEST (this test)</h3>
  * <p>Uses {@code PowersOfTauBLS381.generate(8)} — for development only.</p>

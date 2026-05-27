@@ -219,9 +219,17 @@ assert valid;  // Cryptographic verification passed!
 ### Step 6: Verify On-Chain (Cardano Plutus V3)
 
 ```java
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+
 // Compress proof + VK for on-chain BLS format
 var compressedVk = ProverToCardano.compressVk(setup);
 var compressedProof = ProverToCardano.compressProof(proof);
+
+var vkIcData = ListPlutusData.of();
+for (byte[] ic : compressedVk.ic()) {
+    vkIcData.add(new BytesPlutusData(ic));
+}
 
 // Load the generic Groth16 BLS12-381 verifier with VK baked in
 var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
@@ -229,9 +237,7 @@ var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
     new BytesPlutusData(compressedVk.beta()),
     new BytesPlutusData(compressedVk.gamma()),
     new BytesPlutusData(compressedVk.delta()),
-    new BytesPlutusData(compressedVk.ic().get(0)),
-    new BytesPlutusData(compressedVk.ic().get(1)),
-    new BytesPlutusData(compressedVk.ic().get(2)));
+    vkIcData);
 
 var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet());
 
@@ -400,8 +406,8 @@ testImplementation 'com.bloxbean.cardano:cardano-client-lib'
 
 | Test | Circuit | What It Proves |
 |------|---------|---------------|
-| `SealedBidPureJavaE2ETest` | Sealed bid auction (497 constraints) | MiMC hash + range comparison |
-| `AnonymousVotingPureJavaE2ETest` | Anonymous voting (367 constraints) | MiMC commitment + boolean |
+| `SealedBidPureJavaE2ETest` | Sealed bid auction (497 constraints) | MiMC hash + range comparison; BN254/off-chain reference unless migrated to BLS12-381 Poseidon |
+| `AnonymousVotingPureJavaE2ETest` | Anonymous voting (367 constraints) | MiMC commitment + boolean; BN254/off-chain reference unless migrated to BLS12-381 Poseidon |
 | `BalanceThresholdPureJavaE2ETest` | Balance threshold (132 constraints) | Range comparison |
 | `PureJavaProverYaciE2ETest` | Multiplier | **Full stack: prove → Yaci DevKit on-chain** |
 | `Groth16BLS381ZkeyEndToEndTest` | Multiplier + Cubic | snarkjs .zkey import → Java prove → pairing verify |

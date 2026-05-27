@@ -584,8 +584,7 @@ public class ReserveProofVerifier {
     @Param static byte[] vkBeta;
     @Param static byte[] vkGamma;
     @Param static byte[] vkDelta;
-    @Param static byte[] vkIc0;
-    @Param static byte[] vkIc1;
+    @Param static PlutusData vkIc;
 
     record ReserveProof(
         byte[] piA, byte[] piB, byte[] piC,

@@ -11,13 +11,13 @@ import com.bloxbean.cardano.client.quicktx.ScriptTx;
 import com.bloxbean.cardano.client.quicktx.Tx;
 import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
-import com.bloxbean.cardano.zeroj.examples.dsl.multiplier.PrivateMultiplierCircuit;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
-import com.bloxbean.cardano.zeroj.onchain.julc.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.YaciHelper;
-import com.bloxbean.cardano.zeroj.onchain.julc.Groth16BLS12381Verifier;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *   <li>Generate dev Powers of Tau + Groth16 setup (pure Java)</li>
  *   <li>Compute witness and prove (pure Java BLS12-381 prover)</li>
  *   <li>Compress proof + VK to BLS bytes</li>
- *   <li>Load generic {@link Groth16BLS12381Verifier} Plutus V3 script with VK params</li>
+ *   <li>Load canonical {@link Groth16BLS12381Verifier} Plutus V3 script with VK params</li>
  *   <li>Lock tADA at script address with public inputs as datum</li>
  *   <li>Unlock with ZK proof as redeemer — verified on-chain by Cardano node</li>
  * </ol>
@@ -81,10 +81,11 @@ class PureJavaProverYaciE2ETest {
     }
 
     /**
-     * Pure Java circuit → prove → Yaci DevKit on-chain verify using generic Groth16 verifier.
+     * Pure Java circuit → prove → Yaci DevKit on-chain verify using canonical Groth16 verifier.
      *
-     * <p>Circuit: {@link PrivateMultiplierCircuit} — a * b = c (a, c public; b private).
-     * Uses the generic {@link Groth16BLS12381Verifier} (2 public inputs, 3 IC points).</p>
+     * <p>Circuit: a * x + b = c, where a, b, and c are public and x is private.
+     * Uses {@link Groth16BLS12381Verifier} with 3 public
+     * inputs and 4 IC points.</p>
      */
     @Test
     void pureJavaProve_groth16_onChainVerify() throws Exception {
@@ -92,19 +93,27 @@ class PureJavaProverYaciE2ETest {
 
         System.out.println("=== Pure Java BLS12-381 Prove → Yaci DevKit On-Chain Verify ===");
 
-        // 1. Define circuit via CircuitSpec class
-        var circuit = PrivateMultiplierCircuit.build();
+        // 1. Define a three-public-input circuit via Java DSL
+        var circuit = CircuitBuilder.create("three-public-linear-yaci")
+                .publicVar("a")
+                .publicVar("b")
+                .publicVar("c")
+                .secretVar("x")
+                .define(api -> api.assertEqual(
+                        api.add(api.mul(api.var("a"), api.var("x")), api.var("b")),
+                        api.var("c")));
 
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        assertEquals(2, r1cs.numPublicInputs(), "Need exactly 2 public inputs for generic verifier");
+        assertEquals(3, r1cs.numPublicInputs(), "Need three public inputs for arbitrary-count verifier e2e");
 
         var constraints = r1cs.constraints();
 
-        // 2. Witness: a=3, b=11, c=33
+        // 2. Witness: a=3, b=4, c=25, x=7
         BigInteger[] witness = circuit.calculateWitness(Map.of(
                 "a", List.of(BigInteger.valueOf(3)),
-                "b", List.of(BigInteger.valueOf(11)),
-                "c", List.of(BigInteger.valueOf(33))), CurveId.BLS12_381);
+                "b", List.of(BigInteger.valueOf(4)),
+                "c", List.of(BigInteger.valueOf(25)),
+                "x", List.of(BigInteger.valueOf(7))), CurveId.BLS12_381);
 
         System.out.println("Circuit compiled: " + r1cs.numConstraints() + " constraints");
 
@@ -124,7 +133,7 @@ class PureJavaProverYaciE2ETest {
         // 5. Compress VK + proof for on-chain
         var compressedVk = ProverToCardano.compressVk(setupResult);
         var compressedProof = ProverToCardano.compressProof(proof);
-        assertEquals(3, compressedVk.ic().size(), "IC must have numPublic+1 entries");
+        assertEquals(4, compressedVk.ic().size(), "IC must have numPublic+1 entries");
 
         // 6. Load the generic Groth16 BLS12-381 verifier with VK params
         var script = JulcScriptLoader.load(Groth16BLS12381Verifier.class,
@@ -132,19 +141,19 @@ class PureJavaProverYaciE2ETest {
                 new BytesPlutusData(compressedVk.beta()),
                 new BytesPlutusData(compressedVk.gamma()),
                 new BytesPlutusData(compressedVk.delta()),
-                new BytesPlutusData(compressedVk.ic().get(0)),
-                new BytesPlutusData(compressedVk.ic().get(1)),
-                new BytesPlutusData(compressedVk.ic().get(2)));
+                vkIcData(compressedVk.ic()));
 
         var scriptAddr = AddressProvider.getEntAddress(script, Networks.testnet()).toBech32();
         System.out.println("Verifier script address: " + scriptAddr);
 
         // 7. Lock tADA at script address with public inputs as datum
         BigInteger pub0 = witness[1]; // a = 3
-        BigInteger pub1 = witness[2]; // c = 33
+        BigInteger pub1 = witness[2]; // b = 4
+        BigInteger pub2 = witness[3]; // c = 25
         var datum = ListPlutusData.of(
                 BigIntPlutusData.of(pub0),
-                BigIntPlutusData.of(pub1));
+                BigIntPlutusData.of(pub1),
+                BigIntPlutusData.of(pub2));
 
         var quickTx = new QuickTxBuilder(backend);
         var lockTx = new Tx()
@@ -194,8 +203,16 @@ class PureJavaProverYaciE2ETest {
         System.out.println();
         System.out.println("Pipeline: Java DSL circuit");
         System.out.println("       → pure Java BLS12-381 Groth16 prover");
-        System.out.println("       → generic Groth16BLS12381Verifier (Plutus V3)");
+        System.out.println("       → Groth16BLS12381Verifier (Plutus V3)");
         System.out.println("       → Yaci DevKit (Cardano local devnet)");
         System.out.println("Zero external tools. 100% Java 25.");
+    }
+
+    private static ListPlutusData vkIcData(List<byte[]> ic) {
+        var list = ListPlutusData.of();
+        for (byte[] point : ic) {
+            list.add(new BytesPlutusData(point));
+        }
+        return list;
     }
 }

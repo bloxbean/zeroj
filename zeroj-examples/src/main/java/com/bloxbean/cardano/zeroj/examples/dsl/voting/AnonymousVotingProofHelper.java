@@ -1,10 +1,10 @@
 package com.bloxbean.cardano.zeroj.examples.dsl.voting;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
-import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSSerializer;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.GnarkProverHelper;
-import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.SnarkjsProver;
 import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
 import com.bloxbean.cardano.zeroj.prover.wasm.WitnessExporter;
@@ -22,6 +22,9 @@ public class AnonymousVotingProofHelper {
     private final CurveId curve;
 
     public AnonymousVotingProofHelper(CurveId curve) {
+        if (curve != CurveId.BLS12_381) {
+            throw new IllegalArgumentException("AnonymousVotingCircuit uses explicit BLS12-381 Poseidon params");
+        }
         this.curve = curve;
     }
 
@@ -34,10 +37,10 @@ public class AnonymousVotingProofHelper {
     }
 
     /**
-     * Compute the vote commitment: MiMC(vote, nullifier).
+     * Compute the vote commitment: PoseidonBLS12_381(vote, nullifier).
      */
     public BigInteger computeCommitment(BigInteger vote, BigInteger nullifier) {
-        return MiMCHash.hash(vote, nullifier, FieldConfig.forCurve(curve).prime());
+        return PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, vote, nullifier);
     }
 
     /**
@@ -47,7 +50,6 @@ public class AnonymousVotingProofHelper {
      * @param nullifier unique per voter (prevents double-voting)
      */
     public byte[] generateWitness(BigInteger vote, BigInteger nullifier) {
-        var config = FieldConfig.forCurve(curve);
         var commitment = computeCommitment(vote, nullifier);
 
         var circuit = AnonymousVotingCircuit.build();
@@ -57,7 +59,9 @@ public class AnonymousVotingProofHelper {
                 "commitment", List.of(commitment)
         ), curve);
 
-        return WitnessExporter.toWtns(witness, config.prime(), config.n32());
+        return WitnessExporter.toWtns(witness,
+                PoseidonParamsBLS12_381T3.INSTANCE.field().prime(),
+                PoseidonParamsBLS12_381T3.INSTANCE.field().n32());
     }
 
     /**

@@ -296,6 +296,8 @@ Two scripts work together:
 ### Minting Policy — Validates ZK Proof
 
 ```java
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
+
 @MintingValidator
 public class VoteMintingPolicy {
 
@@ -303,10 +305,7 @@ public class VoteMintingPolicy {
     @Param static byte[] vkBeta;
     @Param static byte[] vkGamma;
     @Param static byte[] vkDelta;
-    @Param static byte[] vkIc0;
-    @Param static byte[] vkIc1;
-    @Param static byte[] vkIc2;
-    @Param static byte[] vkIc3;
+    @Param static PlutusData vkIc;
 
     record VoteProof(
         byte[] piA, byte[] piB, byte[] piC,
@@ -316,9 +315,9 @@ public class VoteMintingPolicy {
     @Entrypoint
     static boolean validate(VoteProof redeemer, PlutusData ctx) {
         // 1. Groth16 BLS12-381 pairing check
-        boolean proofValid = verifyGroth16Pairing(
+        boolean proofValid = Groth16BLS12381Lib.verify(publicInputs,
             redeemer.piA(), redeemer.piB(), redeemer.piC(),
-            vkAlpha, vkBeta, vkGamma, vkDelta, vkIc0, vkIc1, vkIc2, vkIc3);
+            vkAlpha, vkBeta, vkGamma, vkDelta, vkIc);
 
         // 2. Minted token name must equal the nullifier
         byte[] ownPolicy = getOwnPolicyId(ctx);
