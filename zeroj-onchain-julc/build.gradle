@@ -15,6 +15,7 @@ buildscript {
 
 plugins {
     id 'java-library'
+    id 'com.bloxbean.cardano.julc' version '0.1.0-pre13'
 }
 
 apply plugin: 'com.bloxbean.cardano.julc'
@@ -22,7 +23,7 @@ apply plugin: 'com.bloxbean.cardano.julc'
 description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 prototype'
 
 ext {
-    julcVersion = '0.1.0-pre12'
+    julcVersion = '0.1.0-pre13'
 }
 
 repositories {
@@ -59,45 +60,45 @@ dependencies {
     testImplementation project(':zeroj-circuit-dsl')
 }
 
-tasks.named('bundleJulcSources') {
-    mustRunAfter tasks.named('processResources')
-
-    doLast {
-        def sourceRoot = layout.buildDirectory.dir('resources/main/META-INF/plutus-sources').get().asFile
-        def sources = new TreeSet<String>(fileTree(sourceRoot) {
-            include '**/*.java'
-        }.files.collect { file ->
-            sourceRoot.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '/' as char)
-        })
-
-        configurations.compileClasspath.files.findAll { it.name.endsWith('.jar') }.each { jar ->
-            zipTree(jar).matching {
-                include 'META-INF/plutus-sources/index.txt'
-            }.files.each { indexFile ->
-                indexFile.eachLine { line ->
-                    def entry = line.trim()
-                    if (entry.endsWith('.java')) {
-                        sources.add(entry)
-                    }
-                }
-            }
-        }
-
-        if (!sources.isEmpty()) {
-            def index = new File(sourceRoot, 'index.txt')
-            index.parentFile.mkdirs()
-            index.text = sources.join('\n') + '\n'
-        }
-    }
-}
-
-tasks.named('compileTestJava') {
-    dependsOn tasks.named('bundleJulcSources')
-}
-
-tasks.named('javadoc') {
-    dependsOn tasks.named('bundleJulcSources')
-}
+//tasks.named('bundleJulcSources') {
+//    mustRunAfter tasks.named('processResources')
+//
+//    doLast {
+//        def sourceRoot = layout.buildDirectory.dir('resources/main/META-INF/plutus-sources').get().asFile
+//        def sources = new TreeSet<String>(fileTree(sourceRoot) {
+//            include '**/*.java'
+//        }.files.collect { file ->
+//            sourceRoot.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '/' as char)
+//        })
+//
+//        configurations.compileClasspath.files.findAll { it.name.endsWith('.jar') }.each { jar ->
+//            zipTree(jar).matching {
+//                include 'META-INF/plutus-sources/index.txt'
+//            }.files.each { indexFile ->
+//                indexFile.eachLine { line ->
+//                    def entry = line.trim()
+//                    if (entry.endsWith('.java')) {
+//                        sources.add(entry)
+//                    }
+//                }
+//            }
+//        }
+//
+//        if (!sources.isEmpty()) {
+//            def index = new File(sourceRoot, 'index.txt')
+//            index.parentFile.mkdirs()
+//            index.text = sources.join('\n') + '\n'
+//        }
+//    }
+//}
+//
+//tasks.named('compileTestJava') {
+//    dependsOn tasks.named('bundleJulcSources')
+//}
+//
+//tasks.named('javadoc') {
+//    dependsOn tasks.named('bundleJulcSources')
+//}
 
 publishing {
     publications {
