@@ -104,6 +104,28 @@ class MontFp381Test {
         assertTrue(MontFp381.fromBigInteger(P.add(BigInteger.ONE)).isOne());
     }
 
+    @Test
+    void fromMontLimbs_acceptsCanonicalLimbs() {
+        long[] limbs = MontFp381.ONE.toLimbs();
+
+        assertTrue(MontFp381.fromMontLimbs(
+                limbs[0], limbs[1], limbs[2], limbs[3], limbs[4], limbs[5]).isOne());
+    }
+
+    @Test
+    void fromMontLimbs_rejectsNonCanonicalLimbs() {
+        assertThrows(IllegalArgumentException.class,
+                () -> MontFp381.fromMontLimbs(
+                        MontFp381.MOD0, MontFp381.MOD1, MontFp381.MOD2,
+                        MontFp381.MOD3, MontFp381.MOD4, MontFp381.MOD5));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> MontFp381.fromMontLimbs(
+                        -8988751357500304535L, 2419637729810828715L,
+                        8198777404514432018L, -5182139003232109836L,
+                        5314520057811676541L, -622504768958473957L));
+    }
+
     @RepeatedTest(100)
     void square_random_matchesMul() {
         BigInteger a = randomFp();

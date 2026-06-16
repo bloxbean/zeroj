@@ -86,10 +86,17 @@ public record G1Point(Fp x, Fp y) {
 
     /**
      * Fixed-schedule scalar multiplication for secret-scalar callers.
+     *
+     * <p>This delegates to the pure-Java Jacobian ladder. It has a uniform operation
+     * schedule, but it is not a JVM constant-time guarantee.</p>
      */
     public G1Point ctScalarMul(BigInteger scalar) {
-        if (scalar.signum() == 0 || isInfinity()) return INFINITY;
+        if (scalar.signum() == 0) return INFINITY;
         if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        if (scalar.bitLength() > 256) {
+            throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
+        }
+        if (isInfinity()) return INFINITY;
         var affine = JacobianG1BLS381.fromAffine(x.value(), y.value())
                 .ctScalarMul(scalar)
                 .toAffine();

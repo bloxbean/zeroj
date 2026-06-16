@@ -58,4 +58,21 @@ class JacobianG2BLS381Test {
             assertTrue(p.toAffine().isOnCurve(), k + " * G2 must be on twist curve");
         }
     }
+
+    @Test
+    void ctScalarMul_matchesScalarMul() {
+        for (int k = 1; k <= 10; k++) {
+            var expected = JacobianG2BLS381.GENERATOR.scalarMul(BigInteger.valueOf(k)).toAffine();
+            var actual = JacobianG2BLS381.GENERATOR.ctScalarMul(BigInteger.valueOf(k)).toAffine();
+            assertEquals(expected, actual, "ctScalarMul(" + k + ") mismatch");
+        }
+    }
+
+    @Test
+    void ctScalarMul_rejectsScalarsAbove256Bits() {
+        BigInteger scalar = BigInteger.ONE.shiftLeft(256).add(BigInteger.ONE);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> JacobianG2BLS381.GENERATOR.ctScalarMul(scalar));
+    }
 }

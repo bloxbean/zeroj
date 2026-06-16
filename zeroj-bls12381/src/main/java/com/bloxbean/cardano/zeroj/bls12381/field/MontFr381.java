@@ -76,6 +76,9 @@ public final class MontFr381 {
     }
 
     static MontFr381 fromMontLimbs(long l0, long l1, long l2, long l3) {
+        if (geqMod(l0, l1, l2, l3)) {
+            throw new IllegalArgumentException("Montgomery Fr limbs must be canonical");
+        }
         return new MontFr381(l0, l1, l2, l3);
     }
 
@@ -136,7 +139,8 @@ public final class MontFr381 {
 
     /**
      * Field inversion via Fermat's little theorem: a^{-1} = a^{r-2} mod r.
-     * Uses fixed-length square-and-multiply for constant-time behavior.
+     * Uses a fixed public exponent schedule, but the pure-Java field operations are
+     * not a full JVM constant-time guarantee.
      */
     public MontFr381 inverse() {
         if (isZero()) throw new ArithmeticException("Cannot invert zero");

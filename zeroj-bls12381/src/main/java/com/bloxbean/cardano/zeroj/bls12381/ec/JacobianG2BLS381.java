@@ -124,10 +124,19 @@ public final class JacobianG2BLS381 {
         return result;
     }
 
-    /** Constant-time scalar multiplication using Montgomery ladder. */
+    /**
+     * Fixed-schedule scalar multiplication using a Montgomery ladder.
+     *
+     * <p>This keeps a uniform operation schedule, but it is not a JVM constant-time
+     * guarantee: bit access, branching, point special cases, and field reductions remain
+     * variable-time.</p>
+     */
     public JacobianG2BLS381 ctScalarMul(BigInteger scalar) {
         if (scalar.signum() == 0) return INFINITY;
         if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        if (scalar.bitLength() > 256) {
+            throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
+        }
         if (this.isInfinity()) return INFINITY;
 
         JacobianG2BLS381 r0 = INFINITY;

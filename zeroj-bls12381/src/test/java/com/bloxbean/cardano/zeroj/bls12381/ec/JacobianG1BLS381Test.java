@@ -85,6 +85,14 @@ class JacobianG1BLS381Test {
     }
 
     @Test
+    void ctScalarMul_rejectsScalarsAbove256Bits() {
+        BigInteger scalar = BigInteger.ONE.shiftLeft(256).add(BigInteger.ONE);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> JacobianG1BLS381.GENERATOR.ctScalarMul(scalar));
+    }
+
+    @Test
     void crossValidate_withVerifierG1Point() {
         var g = JacobianG1BLS381.GENERATOR.toAffine();
         var verG1 = new com.bloxbean.cardano.zeroj.bls12381.ec.G1Point(

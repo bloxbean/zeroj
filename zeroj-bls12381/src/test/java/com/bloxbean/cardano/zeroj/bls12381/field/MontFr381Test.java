@@ -152,6 +152,19 @@ class MontFr381Test {
         assertTrue(MontFr381.fromBigInteger(R.add(BigInteger.ONE)).isOne());
     }
 
+    @Test
+    void fromMontLimbs_acceptsCanonicalLimbs() {
+        assertTrue(MontFr381.fromMontLimbs(
+                MontFr381.RONE0, MontFr381.RONE1, MontFr381.RONE2, MontFr381.RONE3).isOne());
+    }
+
+    @Test
+    void fromMontLimbs_rejectsNonCanonicalLimbs() {
+        assertThrows(IllegalArgumentException.class,
+                () -> MontFr381.fromMontLimbs(
+                        MontFr381.MOD0, MontFr381.MOD1, MontFr381.MOD2, MontFr381.MOD3));
+    }
+
     private BigInteger randomFr() {
         byte[] bytes = new byte[32];
         RNG.nextBytes(bytes);
