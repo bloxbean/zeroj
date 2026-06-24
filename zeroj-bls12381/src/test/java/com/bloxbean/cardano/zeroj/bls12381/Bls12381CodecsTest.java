@@ -11,6 +11,7 @@ import java.math.BigInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class Bls12381CodecsTest {
+    private static final int SORT_FLAG = 0x20;
 
     @Test
     void g1Uncompressed_roundTripsGenerator() {
@@ -52,6 +53,34 @@ class Bls12381CodecsTest {
         assertArrayEquals(
                 hexToBytes("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"),
                 Bls12381Codecs.g2ToCompressed(Bls12381Generators.G2));
+    }
+
+    @Test
+    void g1Compressed_sortBitDistinguishesNegation() {
+        byte[] encoded = Bls12381Codecs.g1ToCompressed(Bls12381Generators.G1);
+        byte[] negated = Bls12381Codecs.g1ToCompressed(Bls12381Generators.G1.negate());
+
+        assertDiffersOnlyBySortBit(encoded, negated);
+        assertEquals(Bls12381Generators.G1, Bls12381Codecs.g1FromCompressed(encoded));
+        assertEquals(Bls12381Generators.G1.negate(), Bls12381Codecs.g1FromCompressed(negated));
+
+        byte[] flipped = encoded.clone();
+        flipped[0] ^= SORT_FLAG;
+        assertEquals(Bls12381Generators.G1.negate(), Bls12381Codecs.g1FromCompressed(flipped));
+    }
+
+    @Test
+    void g2Compressed_sortBitDistinguishesNegation() {
+        byte[] encoded = Bls12381Codecs.g2ToCompressed(Bls12381Generators.G2);
+        byte[] negated = Bls12381Codecs.g2ToCompressed(Bls12381Generators.G2.negate());
+
+        assertDiffersOnlyBySortBit(encoded, negated);
+        assertEquals(Bls12381Generators.G2, Bls12381Codecs.g2FromCompressed(encoded));
+        assertEquals(Bls12381Generators.G2.negate(), Bls12381Codecs.g2FromCompressed(negated));
+
+        byte[] flipped = encoded.clone();
+        flipped[0] ^= SORT_FLAG;
+        assertEquals(Bls12381Generators.G2.negate(), Bls12381Codecs.g2FromCompressed(flipped));
     }
 
     @Test
@@ -131,5 +160,14 @@ class Bls12381CodecsTest {
             out[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
         }
         return out;
+    }
+
+    private static void assertDiffersOnlyBySortBit(byte[] left, byte[] right) {
+        assertEquals(SORT_FLAG, (left[0] ^ right[0]) & 0xff);
+        byte[] leftMasked = left.clone();
+        byte[] rightMasked = right.clone();
+        leftMasked[0] &= ~SORT_FLAG;
+        rightMasked[0] &= ~SORT_FLAG;
+        assertArrayEquals(leftMasked, rightMasked);
     }
 }

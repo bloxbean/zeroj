@@ -118,10 +118,13 @@ proof vectors against the pure Java, WASM, and blst BLS providers.
 - BBS secret-key, signature, proof-randomness, and hidden-message scalar
   multiplications go through the explicit `Bls12381Provider` secret-scalar
   boundary.
-- The pure Java provider backs that boundary with fixed-schedule Jacobian scalar
-  multiplication and Montgomery-form scalar inversion. As with any JVM
-  cryptographic implementation, high-value deployments should still run an
-  environment-specific side-channel review.
+- The default pure Java BLS provider backs that boundary with fixed-schedule
+  Jacobian scalar multiplication and fixed-exponent Montgomery-form scalar
+  inversion, but it is not a full JVM constant-time guarantee.
+- Production workloads that carry high-value BBS signing keys, proof
+  randomness, or hidden-message scalars should select a native BLS provider with
+  a stronger side-channel contract, such as `zeroj-blst`, via
+  `BbsService.withBlsProvider(...)`.
 
 References:
 

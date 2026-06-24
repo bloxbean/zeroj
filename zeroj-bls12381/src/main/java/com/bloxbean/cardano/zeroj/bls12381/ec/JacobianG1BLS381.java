@@ -157,19 +157,24 @@ public final class JacobianG1BLS381 {
     }
 
     /**
-     * Constant-time scalar multiplication using the Montgomery ladder.
+     * Fixed-schedule scalar multiplication using the Montgomery ladder.
      *
      * <p>Always performs both a doubling and an addition per bit, regardless of bit value.
-     * The bit only determines which accumulator receives which result. This prevents
-     * timing side-channels that leak scalar bits.</p>
+     * The bit determines which accumulator receives which result. This is a uniform
+     * operation schedule, but it is not a JVM constant-time guarantee: bit access,
+     * branching, point special cases, and field reductions remain variable-time.</p>
      *
-     * <p>Use this when the scalar is secret (e.g., blinding factors r, s in Groth16).</p>
+     * <p>Use this only as the pure-Java fixed-schedule path. High-value secret-bearing
+     * workloads should use a native provider with a stronger side-channel contract.</p>
      *
-     * @param scalar non-negative scalar (fixed 255-bit processing for BLS12-381 Fr)
+     * @param scalar non-negative scalar with {@code bitLength() <= 256}
      */
     public JacobianG1BLS381 ctScalarMul(BigInteger scalar) {
         if (scalar.signum() == 0) return INFINITY;
         if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        if (scalar.bitLength() > 256) {
+            throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
+        }
         if (this.isInfinity()) return INFINITY;
 
         // Montgomery ladder with a fixed operation schedule per bit.

@@ -67,6 +67,26 @@ class Bls12381HashToCurveTest {
     }
 
     @Test
+    void expandMessageXofShake256_matchesRfc9380Vector() {
+        byte[] msg = "abc".getBytes(StandardCharsets.US_ASCII);
+        byte[] dst = "QUUX-V01-CS02-with-expander-SHAKE256".getBytes(StandardCharsets.US_ASCII);
+
+        assertArrayEquals(
+                hexToBytes("b39e493867e2767216792abce1f2676c197c0692aed061560ead251821808e07"),
+                Bls12381Hash.expandMessageXofShake256(msg, dst, 32));
+    }
+
+    @Test
+    void hashToScalarXofShake256_matchesOfficialBbsFixture() {
+        byte[] message = hexToBytes("9872ad089e452c7b6e283dfac2a80d58e8d0ff71cc4d5e310a1debdda4a45f02");
+        byte[] dst = hexToBytes("4242535f424c53313233383147315f584f463a5348414b452d3235365f535357555f524f5f4832475f484d32535f4832535f");
+
+        assertEquals(
+                new BigInteger("0500031f786fde5326aa9370dd7ffe9535ec7a52cf2b8f432cad5d9acfb73cd3", 16),
+                Bls12381Hash.hashToScalarXofShake256(message, dst));
+    }
+
+    @Test
     void hashToG2_matchesRfc9380EmptyMessageVector() {
         assertG2(
                 Bls12381Hash.hashToG2(new byte[0], G2_RO_DST),
@@ -123,6 +143,14 @@ class Bls12381HashToCurveTest {
     private static byte[] concat(byte[] left, byte[] right) {
         byte[] out = Arrays.copyOf(left, left.length + right.length);
         System.arraycopy(right, 0, out, left.length, right.length);
+        return out;
+    }
+
+    private static byte[] hexToBytes(String hex) {
+        byte[] out = new byte[hex.length() / 2];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+        }
         return out;
     }
 }

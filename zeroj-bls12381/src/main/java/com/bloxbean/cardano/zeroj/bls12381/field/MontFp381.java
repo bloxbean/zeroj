@@ -95,8 +95,12 @@ public final class MontFp381 {
     /**
      * Creates a MontFp381 from 6 Montgomery-form limbs (little-endian: l0 is least significant).
      * The limbs must already be in Montgomery form — no conversion is performed.
+     * The represented Montgomery residue must be canonical ({@code < p}).
      */
     public static MontFp381 fromMontLimbs(long l0, long l1, long l2, long l3, long l4, long l5) {
+        if (geqMod(l0, l1, l2, l3, l4, l5)) {
+            throw new IllegalArgumentException("Montgomery Fp limbs must be canonical");
+        }
         return new MontFp381(l0, l1, l2, l3, l4, l5);
     }
 
@@ -173,9 +177,9 @@ public final class MontFp381 {
     /**
      * Field inversion via Fermat's little theorem: a^{-1} = a^{p-2} mod p.
      *
-     * <p>Uses a fixed-length square-and-multiply chain over the exponent p-2,
-     * providing constant-time behavior (the same number of multiplications
-     * regardless of the input value).</p>
+     * <p>Uses a fixed public exponent ({@code p - 2}). This keeps the exponent schedule
+     * independent of the input value, but the pure-Java field operations are not a full
+     * JVM constant-time guarantee.</p>
      */
     public MontFp381 inverse() {
         if (isZero()) throw new ArithmeticException("Cannot invert zero");

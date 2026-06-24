@@ -33,6 +33,20 @@ Most applications use this module transitively through `zeroj-crypto`,
 directly when implementing a protocol that needs BLS12-381 group operations,
 pairings, or an explicit `Bls12381Provider`.
 
+## Security Contract
+
+The pure Java provider is the portable, correctness-first implementation. It is
+appropriate for public-input operations such as verification, encoding,
+hash-to-curve, and public scalar multiplication.
+
+The `g1SecretScalarMul` and `g2SecretScalarMul` provider methods are the
+secret-scalar boundary for protocols that need one. In this module they use
+fixed-schedule Java ladders, but they are not a full JVM constant-time guarantee:
+bit access, branching, point special cases, field reductions, JIT behavior, and
+GC remain outside that guarantee. Production workloads that carry high-value
+secrets should select a native provider with a stronger side-channel contract,
+such as `zeroj-blst`.
+
 ## Gradle
 
 ```gradle

@@ -89,10 +89,17 @@ public record G2Point(Fp2 x, Fp2 y) {
 
     /**
      * Fixed-schedule scalar multiplication for secret-scalar callers.
+     *
+     * <p>This delegates to the pure-Java Jacobian ladder. It has a uniform operation
+     * schedule, but it is not a JVM constant-time guarantee.</p>
      */
     public G2Point ctScalarMul(BigInteger scalar) {
-        if (scalar.signum() == 0 || isInfinity()) return INFINITY;
+        if (scalar.signum() == 0) return INFINITY;
         if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        if (scalar.bitLength() > 256) {
+            throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
+        }
+        if (isInfinity()) return INFINITY;
         var affine = JacobianG2BLS381.fromAffine(
                         MontFp2_381.of(x.c0().value(), x.c1().value()),
                         MontFp2_381.of(y.c0().value(), y.c1().value()))

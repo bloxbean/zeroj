@@ -13,7 +13,8 @@ import java.util.Objects;
  *
  * <p>Scalar multiplication methods reduce the scalar modulo the BLS12-381
  * scalar-field order. They are for public scalars. Protocol code that multiplies
- * by secret scalars must use a backend with an explicit constant-time contract.</p>
+ * by secret scalars must use the secret-scalar methods and select a provider with
+ * a side-channel contract appropriate for the deployment.</p>
  */
 public interface Bls12381Provider {
     String id();
@@ -51,14 +52,16 @@ public interface Bls12381Provider {
     G2Point g2ScalarMul(G2Point point, BigInteger scalar);
 
     /**
-     * Multiply a G1 point by a secret scalar using this provider's side-channel hardened path.
+     * Multiply a G1 point by a secret scalar using this provider's secret-scalar path.
+     * Consult the provider documentation for its side-channel guarantees.
      */
     default G1Point g1SecretScalarMul(G1Point point, BigInteger scalar) {
         throw new UnsupportedOperationException(id() + " does not declare a secret-scalar G1 multiplication contract");
     }
 
     /**
-     * Multiply a G2 point by a secret scalar using this provider's side-channel hardened path.
+     * Multiply a G2 point by a secret scalar using this provider's secret-scalar path.
+     * Consult the provider documentation for its side-channel guarantees.
      */
     default G2Point g2SecretScalarMul(G2Point point, BigInteger scalar) {
         throw new UnsupportedOperationException(id() + " does not declare a secret-scalar G2 multiplication contract");
