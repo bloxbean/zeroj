@@ -1,10 +1,9 @@
 package com.bloxbean.cardano.zeroj.verifier.plonk;
 
-import com.bloxbean.cardano.zeroj.api.CircuitId;
-import com.bloxbean.cardano.zeroj.api.CurveId;
-import com.bloxbean.cardano.zeroj.api.ProofSystemId;
-import com.bloxbean.cardano.zeroj.api.VerificationMaterial;
+import com.bloxbean.cardano.zeroj.api.*;
+import com.bloxbean.cardano.zeroj.bls12381.ec.G1Point;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
+import com.bloxbean.cardano.zeroj.codec.CanonicalHash;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsPlonkCodec;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProofBLS381;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProverBLS381;
@@ -27,6 +26,230 @@ class PlonkBLS12381VerifierTest {
 
     @Test
     void verify_javaGeneratedProof_accepts() {
+        var fixture = fixture();
+
+        var result = new PlonkBLS12381Verifier().verify(fixture.envelope(), fixture.material());
+        assertTrue(result.proofValid(), () -> result.message().orElse("verification failed"));
+    }
+
+    @Test
+    void verify_cardanoProfileJavaGeneratedProof_accepts() {
+        var fixture = fixture(true);
+
+        var result = new PlonkBLS12381Verifier().verify(fixture.envelope(), fixture.material());
+        assertTrue(result.proofValid(), () -> result.message().orElse("verification failed"));
+    }
+
+    @Test
+    void verify_cardanoProfileProof_rejectsWhenClaimedAsSnarkjsTranscript() {
+        var fixture = fixture(true);
+        var envelope = copyEnvelopeWithProofFormat(fixture.envelope(), PlonkBLS12381Verifier.SNARKJS_PROOF_FORMAT);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.INVALID_PROOF, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsNegativePublicInput() {
+        var fixture = fixture();
+        var envelope = copyEnvelope(fixture.envelope(), fixture.proofJson(),
+                new PublicInputs(List.of(BigInteger.valueOf(-1))));
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsWrongPublicInputCount() {
+        var fixture = fixture();
+        var envelope = copyEnvelope(fixture.envelope(), fixture.proofJson(), new PublicInputs(List.of()));
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsMaterialCircuitMismatch() {
+        var fixture = fixture();
+        var material = VerificationMaterial.of(fixture.vkJson().getBytes(StandardCharsets.UTF_8),
+                ProofSystemId.PLONK, CurveId.BLS12_381, new CircuitId("other-circuit"));
+
+        var result = new PlonkBLS12381Verifier().verify(fixture.envelope(), material);
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.VK_MISMATCH, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsWrongProofCurveMetadata() {
+        var fixture = fixture();
+        var proofJson = fixture.proofJson().replace("\"curve\":\"bls12381\"", "\"curve\":\"bn128\"");
+        var envelope = copyEnvelope(fixture.envelope(), proofJson, fixture.envelope().publicInputs());
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.UNSUPPORTED_CURVE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsWrongVkCurveMetadata() {
+        var fixture = fixture();
+        var vkJson = fixture.vkJson().replace("\"curve\":\"bls12381\"", "\"curve\":\"bn128\"");
+        var envelope = copyEnvelopeWithVkHash(fixture.envelope(), fixture.proofJson(),
+                fixture.envelope().publicInputs(), vkJson);
+        var material = materialFor(fixture, vkJson);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, material);
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.UNSUPPORTED_CURVE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsGnarkProofFormat() {
+        var fixture = fixture();
+        var envelope = copyEnvelopeWithProofFormat(fixture.envelope(), "gnark-plonk-json");
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsUnsupportedProofFormat() {
+        var fixture = fixture();
+        var envelope = copyEnvelopeWithProofFormat(fixture.envelope(), "zeroj-plonk-binary");
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsOverFieldProofScalar() {
+        var fixture = fixture();
+        var proofJson = fixture.proofJson()
+                .replaceFirst("\"eval_a\":\"[0-9]+\"", "\"eval_a\":\"" + G1Point.R + "\"");
+        var envelope = copyEnvelope(fixture.envelope(), proofJson, fixture.envelope().publicInputs());
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsInvalidVkDomainRoot() {
+        var fixture = fixture();
+        var vkJson = replaceTopLevelValue(fixture.vkJson(), "w", "\"1\"");
+        var envelope = copyEnvelopeWithVkHash(fixture.envelope(), fixture.proofJson(),
+                fixture.envelope().publicInputs(), vkJson);
+        var material = materialFor(fixture, vkJson);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, material);
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsInvalidPermutationCoset() {
+        var fixture = fixture();
+        var vkJson = replaceTopLevelValue(fixture.vkJson(), "k1", "\"1\"");
+        var envelope = copyEnvelopeWithVkHash(fixture.envelope(), fixture.proofJson(),
+                fixture.envelope().publicInputs(), vkJson);
+        var material = materialFor(fixture, vkJson);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, material);
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsOffCurveProofCommitment() {
+        var fixture = fixture();
+        var proofJson = fixture.proofJson()
+                .replaceFirst("\"A\":\\[[^]]+\\]", "\"A\":[\"0\",\"0\",\"1\"]");
+        var envelope = copyEnvelope(fixture.envelope(), proofJson, fixture.envelope().publicInputs());
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.INVALID_PROOF, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsNonNormalizedProofCommitment() {
+        var fixture = fixture();
+        var proofJson = replaceTopLevelValue(fixture.proofJson(), "A", "[\"1\",\"2\",\"2\"]");
+        var envelope = copyEnvelope(fixture.envelope(), proofJson, fixture.envelope().publicInputs());
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsInfinityProofCommitment() {
+        var fixture = fixture();
+        var proofJson = replaceTopLevelValue(fixture.proofJson(), "A", "[\"0\",\"1\",\"0\"]");
+        var envelope = copyEnvelope(fixture.envelope(), proofJson, fixture.envelope().publicInputs());
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsInfinityX2() {
+        var fixture = fixture();
+        var vkJson = replaceTopLevelValue(fixture.vkJson(), "X_2",
+                "[[\"0\",\"0\"],[\"1\",\"0\"],[\"0\",\"0\"]]");
+        var envelope = copyEnvelopeWithVkHash(fixture.envelope(), fixture.proofJson(),
+                fixture.envelope().publicInputs(), vkJson);
+        var material = materialFor(fixture, vkJson);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, material);
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_rejectsVkHashMismatch() {
+        var fixture = fixture();
+        var envelope = ZkProofEnvelope.builder()
+                .proofSystem(fixture.envelope().proofSystem())
+                .curve(fixture.envelope().curve())
+                .circuitId(fixture.envelope().circuitId())
+                .proofBytes(fixture.proofJson().getBytes(StandardCharsets.UTF_8))
+                .publicInputs(fixture.envelope().publicInputs())
+                .vkRef(new VerificationKeyRef.ByHash(new byte[32]))
+                .proofFormat("snarkjs-plonk-json")
+                .build();
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.VK_MISMATCH, result.reasonCode().orElseThrow());
+    }
+
+    private static Fixture fixture() {
+        return fixture(false);
+    }
+
+    private static Fixture fixture(boolean cardanoProfile) {
         var circuit = CircuitBuilder.create("multiplier")
                 .publicVar("c").secretVar("a").secretVar("b")
                 .define(api -> api.assertEqual(api.mul(api.var("a"), api.var("b")), api.var("c")));
@@ -69,19 +292,139 @@ class PlonkBLS12381VerifierTest {
             publicInputs[i] = witness[i + 1];
         }
 
-        var proof = PlonKProverBLS381.prove(pk, wireA, wireB, wireC, publicInputs);
+        var proof = cardanoProfile
+                ? PlonKProverBLS381.proveCardano(pk, wireA, wireB, wireC, publicInputs)
+                : PlonKProverBLS381.prove(pk, wireA, wireB, wireC, publicInputs);
         String proofJson = proofJson(proof);
         String vkJson = vkJson(pk);
         String publicJson = "[\"33\"]";
 
         var envelope = SnarkjsPlonkCodec.toEnvelopeFromJson(
                 proofJson, vkJson, publicJson, new CircuitId("bls381-plonk-multiplier"));
+        if (cardanoProfile) {
+            envelope = copyEnvelopeWithProofFormat(envelope, PlonkBLS12381Verifier.CARDANO_PROOF_FORMAT);
+        }
         var material = VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
                 ProofSystemId.PLONK, CurveId.BLS12_381, new CircuitId("bls381-plonk-multiplier"));
 
-        var result = new PlonkBLS12381Verifier().verify(envelope, material);
-        assertTrue(result.proofValid(), () -> result.message().orElse("verification failed"));
+        return new Fixture(envelope, material, proofJson, vkJson);
     }
+
+    private static ZkProofEnvelope copyEnvelope(ZkProofEnvelope original, String proofJson, PublicInputs publicInputs) {
+        return ZkProofEnvelope.builder()
+                .proofSystem(original.proofSystem())
+                .curve(original.curve())
+                .circuitId(original.circuitId())
+                .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
+                .publicInputs(publicInputs)
+                .vkRef(original.vkRef())
+                .proofFormat("snarkjs-plonk-json")
+                .build();
+    }
+
+    private static ZkProofEnvelope copyEnvelopeWithProofFormat(ZkProofEnvelope original, String proofFormat) {
+        return ZkProofEnvelope.builder()
+                .proofSystem(original.proofSystem())
+                .curve(original.curve())
+                .circuitId(original.circuitId())
+                .proofBytes(original.proofBytes())
+                .publicInputs(original.publicInputs())
+                .vkRef(original.vkRef())
+                .proofFormat(proofFormat)
+                .build();
+    }
+
+    private static ZkProofEnvelope copyEnvelopeWithVkHash(
+            ZkProofEnvelope original,
+            String proofJson,
+            PublicInputs publicInputs,
+            String vkJson) {
+        return ZkProofEnvelope.builder()
+                .proofSystem(original.proofSystem())
+                .curve(original.curve())
+                .circuitId(original.circuitId())
+                .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
+                .publicInputs(publicInputs)
+                .vkRef(new VerificationKeyRef.ByHash(CanonicalHash.sha256(vkJson.getBytes(StandardCharsets.UTF_8))))
+                .proofFormat("snarkjs-plonk-json")
+                .build();
+    }
+
+    private static VerificationMaterial materialFor(Fixture fixture, String vkJson) {
+        return VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
+                ProofSystemId.PLONK, CurveId.BLS12_381, fixture.envelope().circuitId());
+    }
+
+    private static String replaceTopLevelValue(String json, String fieldName, String replacement) {
+        String key = "\"" + fieldName + "\":";
+        int keyStart = json.indexOf(key);
+        if (keyStart < 0) {
+            throw new IllegalArgumentException("Missing JSON field: " + fieldName);
+        }
+        int valueStart = keyStart + key.length();
+        int valueEnd = jsonValueEnd(json, valueStart);
+        return json.substring(0, valueStart) + replacement + json.substring(valueEnd);
+    }
+
+    private static int jsonValueEnd(String json, int valueStart) {
+        char first = json.charAt(valueStart);
+        if (first == '"') {
+            boolean escaped = false;
+            for (int i = valueStart + 1; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    return i + 1;
+                }
+            }
+            throw new IllegalArgumentException("Unterminated JSON string");
+        }
+        if (first == '[') {
+            int depth = 0;
+            boolean inString = false;
+            boolean escaped = false;
+            for (int i = valueStart; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (c == '\\') {
+                        escaped = true;
+                    } else if (c == '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+                if (c == '"') {
+                    inString = true;
+                } else if (c == '[') {
+                    depth++;
+                } else if (c == ']') {
+                    depth--;
+                    if (depth == 0) {
+                        return i + 1;
+                    }
+                }
+            }
+            throw new IllegalArgumentException("Unterminated JSON array");
+        }
+        int comma = json.indexOf(',', valueStart);
+        int objectEnd = json.indexOf('}', valueStart);
+        if (comma < 0) {
+            return objectEnd;
+        }
+        return Math.min(comma, objectEnd);
+    }
+
+    private record Fixture(
+            ZkProofEnvelope envelope,
+            VerificationMaterial material,
+            String proofJson,
+            String vkJson
+    ) {}
 
     private static String proofJson(PlonKProofBLS381 proof) {
         return "{"

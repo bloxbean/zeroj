@@ -68,8 +68,8 @@ public class FiatShamirTranscript {
      */
     public void addPolCommitment(BigInteger x, BigInteger y) {
         byte[] buf = new byte[fieldByteSize * 2];
-        writeBigEndian(buf, 0, fieldByteSize, x);
-        writeBigEndian(buf, fieldByteSize, fieldByteSize, y);
+        writeBigEndian(buf, 0, fieldByteSize, x, "G1 x-coordinate");
+        writeBigEndian(buf, fieldByteSize, fieldByteSize, y, "G1 y-coordinate");
         types.add(new int[]{POLYNOMIAL});
         dataList.add(buf);
     }
@@ -78,10 +78,24 @@ public class FiatShamirTranscript {
      * Append a scalar field element (big-endian, scalarByteSize bytes).
      */
     public void addScalar(BigInteger scalar) {
+        if (scalar == null || scalar.signum() < 0 || scalar.compareTo(fieldModulus) >= 0) {
+            throw new IllegalArgumentException("Scalar is outside the transcript field");
+        }
         byte[] buf = new byte[scalarByteSize];
-        writeBigEndian(buf, 0, scalarByteSize, scalar);
+        writeBigEndian(buf, 0, scalarByteSize, scalar, "scalar");
         types.add(new int[]{SCALAR});
         dataList.add(buf);
+    }
+
+    /**
+     * Append already-canonical transcript bytes.
+     */
+    public void addBytes(byte[] data) {
+        if (data == null) {
+            throw new IllegalArgumentException("Transcript bytes must not be null");
+        }
+        types.add(new int[]{SCALAR});
+        dataList.add(data.clone());
     }
 
     /**
@@ -135,17 +149,23 @@ public class FiatShamirTranscript {
     /** @deprecated Use constructor + addScalar/addPolCommitment instead. */
     @Deprecated
     public void appendBytes(byte[] data) {
-        types.add(new int[]{SCALAR});
-        dataList.add(data.clone());
+        addBytes(data);
     }
 
-    private static void writeBigEndian(byte[] buf, int offset, int size, BigInteger value) {
-        byte[] bytes = value.toByteArray();
-        if (bytes.length <= size) {
-            System.arraycopy(bytes, 0, buf, offset + size - bytes.length, bytes.length);
-        } else {
-            // Strip leading zero / trim to size
-            System.arraycopy(bytes, bytes.length - size, buf, offset, size);
+    private static void writeBigEndian(byte[] buf, int offset, int size, BigInteger value, String label) {
+        if (value == null || value.signum() < 0) {
+            throw new IllegalArgumentException(label + " must be a non-negative integer");
         }
+        byte[] bytes = value.toByteArray();
+        int sourceOffset = 0;
+        int length = bytes.length;
+        if (bytes.length == size + 1 && bytes[0] == 0) {
+            sourceOffset = 1;
+            length = size;
+        }
+        if (length > size) {
+            throw new IllegalArgumentException(label + " exceeds fixed-width transcript encoding");
+        }
+        System.arraycopy(bytes, sourceOffset, buf, offset + size - length, length);
     }
 }

@@ -11,14 +11,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OnChainFeasibilityTest {
 
     @Test
-    void marksBls12381Groth16WorkingAndPlonkExperimental() {
+    void marksBls12381Groth16WorkingAndPlonkAuditPendingOptIn() {
         var groth16 = OnChainFeasibility.lookup(ProofSystemId.GROTH16, CurveId.BLS12_381);
         var plonk = OnChainFeasibility.lookup(ProofSystemId.PLONK, CurveId.BLS12_381);
 
         assertEquals(OnChainFeasibility.Status.WORKING, groth16.status());
         assertEquals(OnChainFeasibility.Status.EXPERIMENTAL, plonk.status());
         assertTrue(OnChainFeasibility.isFeasible(ProofSystemId.GROTH16, CurveId.BLS12_381));
-        assertTrue(OnChainFeasibility.isFeasible(ProofSystemId.PLONK, CurveId.BLS12_381));
+        assertFalse(OnChainFeasibility.isFeasible(ProofSystemId.PLONK, CurveId.BLS12_381));
+        assertTrue(OnChainFeasibility.isFeasibleWithExperimentalOptIn(ProofSystemId.PLONK, CurveId.BLS12_381));
     }
 
     @Test

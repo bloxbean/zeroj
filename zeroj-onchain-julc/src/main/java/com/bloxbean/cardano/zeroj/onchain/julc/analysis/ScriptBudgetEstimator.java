@@ -20,6 +20,8 @@ public final class ScriptBudgetEstimator {
     public static final long G1_ADD_CPU = 1_046_420L;
     public static final long G1_MSM_PER_ELEMENT_CPU = 80_000_000L;
     public static final long BLAKE2B_256_CPU = 2_477_736L;
+    public static final long PLONK_BLS12381_ONE_INPUT_MEASURED_CPU = 4_802_500_000L;
+    public static final long PLONK_BLS12381_ONE_INPUT_MEASURED_MEMORY = 865_000L;
 
     /**
      * Estimate CPU units for on-chain verification, or {@code -1} when the
@@ -67,12 +69,8 @@ public final class ScriptBudgetEstimator {
     }
 
     private static long estimatePlonkCpu(int numPublicInputs) {
-        int numMsmElements = 8 + numPublicInputs;
-        return 2 * MILLER_LOOP_CPU
-                + FINAL_VERIFY_CPU
-                + numMsmElements * G1_MSM_PER_ELEMENT_CPU
-                + 10 * G1_ADD_CPU
-                + 6 * BLAKE2B_256_CPU;
+        return PLONK_BLS12381_ONE_INPUT_MEASURED_CPU
+                + Math.max(0, numPublicInputs - 1) * (G1_SCALAR_MUL_CPU + G1_ADD_CPU);
     }
 
     private static long estimateGroth16Memory(int numPublicInputs) {
@@ -80,6 +78,7 @@ public final class ScriptBudgetEstimator {
     }
 
     private static long estimatePlonkMemory(int numPublicInputs) {
-        return 4_000_000L + numPublicInputs * 150_000L;
+        return PLONK_BLS12381_ONE_INPUT_MEASURED_MEMORY
+                + Math.max(0, numPublicInputs - 1) * 125_000L;
     }
 }

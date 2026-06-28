@@ -102,6 +102,44 @@ public class Groth16BLS12381Lib {
                 piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
+    public static boolean verifyFour(BigInteger pub0,
+                                     BigInteger pub1,
+                                     BigInteger pub2,
+                                     BigInteger pub3,
+                                     byte[] piA,
+                                     byte[] piB,
+                                     byte[] piC,
+                                     byte[] vkAlpha,
+                                     byte[] vkBeta,
+                                     byte[] vkGamma,
+                                     byte[] vkDelta,
+                                     PlutusData vkIc) {
+        PlutusData ic0 = Builtins.unListData(vkIc);
+        if (Builtins.nullList(ic0)) return false;
+
+        PlutusData ic1 = Builtins.tailList(ic0);
+        if (Builtins.nullList(ic1)) return false;
+
+        PlutusData ic2 = Builtins.tailList(ic1);
+        if (Builtins.nullList(ic2)) return false;
+
+        PlutusData ic3 = Builtins.tailList(ic2);
+        if (Builtins.nullList(ic3)) return false;
+
+        PlutusData ic4 = Builtins.tailList(ic3);
+        if (Builtins.nullList(ic4)) return false;
+
+        if (!Builtins.nullList(Builtins.tailList(ic4))) return false;
+
+        byte[] vkX0 = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(ic0)));
+        byte[] vkX1 = addPublicInput(vkX0, pub0, ic1);
+        byte[] vkX2 = addPublicInput(vkX1, pub1, ic2);
+        byte[] vkX3 = addPublicInput(vkX2, pub2, ic3);
+        byte[] vkX4 = addPublicInput(vkX3, pub3, ic4);
+
+        return verifyWithComputedVkX(vkX4, piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
+    }
+
     private static boolean verifyWithPublicInputs(PlutusData inputsCursor,
                                                   PlutusData icCursor,
                                                   byte[] vkX,
@@ -117,7 +155,18 @@ public class Groth16BLS12381Lib {
         }
 
         byte[] computedVkX = computeVkX(inputsCursor, icCursor, vkX);
+        return verifyWithComputedVkX(computedVkX, piA, piB, piC,
+                vkAlpha, vkBeta, vkGamma, vkDelta);
+    }
 
+    private static boolean verifyWithComputedVkX(byte[] computedVkX,
+                                                 byte[] piA,
+                                                 byte[] piB,
+                                                 byte[] piC,
+                                                 byte[] vkAlpha,
+                                                 byte[] vkBeta,
+                                                 byte[] vkGamma,
+                                                 byte[] vkDelta) {
         byte[] a = Builtins.bls12_381_G1_uncompress(piA);
         byte[] b = Builtins.bls12_381_G2_uncompress(piB);
         byte[] c = Builtins.bls12_381_G1_uncompress(piC);
@@ -136,6 +185,12 @@ public class Groth16BLS12381Lib {
                 Builtins.bls12_381_millerLoop(c, delta));
 
         return Builtins.bls12_381_finalVerify(lhs, rhs);
+    }
+
+    private static byte[] addPublicInput(byte[] vkX, BigInteger publicInput, PlutusData icCursor) {
+        byte[] ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+        byte[] scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
+        return Builtins.bls12_381_G1_add(vkX, scaled);
     }
 
     private static boolean matchingLengths(PlutusData inputsCursor, PlutusData icCursor) {

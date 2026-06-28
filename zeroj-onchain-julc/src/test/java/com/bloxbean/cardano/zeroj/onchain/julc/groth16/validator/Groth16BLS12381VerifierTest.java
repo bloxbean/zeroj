@@ -33,6 +33,7 @@ class Groth16BLS12381VerifierTest extends ContractTest {
     private static SnarkjsToCardano.ProofCompressed sealedBidProof;
     private static List<BigInteger> sealedBidPublicInputs;
     private static TestProof threePublicInputs;
+    private static TestProof fourPublicInputs;
 
     @BeforeAll
     static void setup() throws Exception {
@@ -44,6 +45,7 @@ class Groth16BLS12381VerifierTest extends ContractTest {
         sealedBidProof = SnarkjsToCardano.parseProof(proofJson);
         sealedBidPublicInputs = SnarkjsToCardano.parsePublicInputs(publicJson);
         threePublicInputs = buildThreePublicInputProof();
+        fourPublicInputs = buildFourPublicInputProof();
     }
 
     @Test
@@ -105,6 +107,20 @@ class Groth16BLS12381VerifierTest extends ContractTest {
                         BigInteger.ONE),
                 vkIcData(threePublicInputs.vk().ic()),
                 false);
+    }
+
+    @Test
+    void fourPublicInputs_fixedArityPath_passes() {
+        assertEquals(5, fourPublicInputs.vk().ic().size(), "IC must have public input count + 1 entries");
+        assertFixedFourVerification(fourPublicInputs.publicInputs(), true);
+    }
+
+    @Test
+    void fourPublicInputs_fixedArityPathWrongInput_fails() {
+        BigInteger[] publicInputs = fourPublicInputs.publicInputs().clone();
+        publicInputs[3] = publicInputs[3].add(BigInteger.ONE);
+
+        assertFixedFourVerification(publicInputs, false);
     }
 
     @Test
@@ -190,6 +206,34 @@ class Groth16BLS12381VerifierTest extends ContractTest {
         }
     }
 
+    private void assertFixedFourVerification(BigInteger[] publicInputs, boolean expectSuccess) {
+        var compiled = compileValidator(Groth16BLS12381FixedFourInputVerifier.class,
+                Path.of("src/test/java"));
+        var program = compiled.program().applyParams(
+                PlutusData.bytes(fourPublicInputs.vk().alpha()),
+                PlutusData.bytes(fourPublicInputs.vk().beta()),
+                PlutusData.bytes(fourPublicInputs.vk().gamma()),
+                PlutusData.bytes(fourPublicInputs.vk().delta()),
+                vkIcData(fourPublicInputs.vk().ic()));
+
+        var redeemer = PlutusData.constr(0,
+                PlutusData.bytes(fourPublicInputs.proof().piA()),
+                PlutusData.bytes(fourPublicInputs.proof().piB()),
+                PlutusData.bytes(fourPublicInputs.proof().piC()));
+
+        var txOutRef = TestDataBuilder.randomTxOutRef_typed();
+        var ctx = spendingContext(txOutRef, datum(publicInputs))
+                .redeemer(redeemer)
+                .buildPlutusData();
+
+        var result = evaluate(program, ctx);
+        if (expectSuccess) {
+            assertSuccess(result);
+        } else {
+            assertFailure(result);
+        }
+    }
+
     private static TestProof buildThreePublicInputProof() {
         var circuit = CircuitBuilder.create("three-public-linear")
                 .publicVar("a")
@@ -229,6 +273,49 @@ class Groth16BLS12381VerifierTest extends ContractTest {
                 ProverToCardano.compressVk(setupResult),
                 ProverToCardano.compressProof(proof),
                 new BigInteger[] { witness[1], witness[2], witness[3] });
+    }
+
+    private static TestProof buildFourPublicInputProof() {
+        var circuit = CircuitBuilder.create("four-public-linear")
+                .publicVar("a")
+                .publicVar("b")
+                .publicVar("c")
+                .publicVar("d")
+                .secretVar("x")
+                .define(api -> api.assertEqual(
+                        api.add(api.add(api.mul(api.var("a"), api.var("x")), api.var("b")), api.var("c")),
+                        api.var("d")));
+
+        var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+        assertEquals(4, r1cs.numPublicInputs(), "test circuit should have four public inputs");
+
+        BigInteger[] witness = circuit.calculateWitness(Map.of(
+                "a", List.of(BigInteger.valueOf(3)),
+                "b", List.of(BigInteger.valueOf(4)),
+                "c", List.of(BigInteger.valueOf(5)),
+                "d", List.of(BigInteger.valueOf(30)),
+                "x", List.of(BigInteger.valueOf(7))), CurveId.BLS12_381);
+
+        var srs = PowersOfTauBLS381.generate(8);
+        var setupResult = Groth16SetupBLS381.setup(
+                r1cs.constraints(),
+                r1cs.numWires(),
+                r1cs.numPublicInputs(),
+                srs.tauScalar());
+        var proof = Groth16ProverBLS381.prove(
+                setupResult.provingKey(),
+                witness,
+                r1cs.constraints(),
+                r1cs.numWires());
+
+        assertTrue(proof.a().isOnCurve());
+        assertTrue(proof.b().isOnCurve());
+        assertTrue(proof.c().isOnCurve());
+
+        return new TestProof(
+                ProverToCardano.compressVk(setupResult),
+                ProverToCardano.compressProof(proof),
+                new BigInteger[] { witness[1], witness[2], witness[3], witness[4] });
     }
 
     private static PlutusData datum(BigInteger... inputs) {

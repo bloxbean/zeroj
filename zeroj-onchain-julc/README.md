@@ -15,7 +15,9 @@ V3.
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381Verifier` | Working validator | Default BLS12-381 Groth16 spending validator using Plutus V3 BLS builtins; supports arbitrary public-input counts |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib` | `Groth16BLS12381Lib` | Working on-chain library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `SnarkjsToCardano`, `ProverToCardano` | Working off-chain helpers | Convert snarkjs and ZeroJ Groth16 artifacts to Cardano-compatible compressed bytes and Plutus data shapes |
-| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381FullVerifier` | Experimental validator prototype | Re-derives transcript and checks inverse constraints; KZG batch opening pairing check is deferred |
+| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381Verifier` | Experimental opt-in validator | Cardano-profile compressed-transcript verifier with full KZG batch-opening pairing check for the current one-public-input shape; third-party audit still pending |
+| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381TranscriptPrototype` | Prototype only | gnark transcript/inverse regression fixture; must not secure value |
+| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.codec` | `PlonKProverToCardano` | Working off-chain helper | Converts ZeroJ BLS12-381 PlonK proofs/VKs to compressed Cardano redeemer/parameter bytes |
 | `com.bloxbean.cardano.zeroj.onchain.julc.analysis` | `ScriptBudgetEstimator`, `OnChainFeasibility` | Planning helpers | Estimate Plutus CPU/memory budgets and report proof system / curve feasibility |
 | `com.bloxbean.cardano.zeroj.onchain.julc.deployment` | `ReferenceScriptDeployer` | Config helper | Describes CIP-0033 reference-script deployment patterns; does not submit transactions |
 
@@ -35,8 +37,9 @@ V3.
 ```
 
 The tests run validators in the Julc VM and include Groth16 positive/negative
-checks, pure Java Groth16 prover to on-chain verification, budget estimation, and
-the PlonK prototype transcript/inverse-check path.
+checks, pure Java Groth16 prover to on-chain verification, budget estimation, the
+PlonK prototype transcript/inverse-check path, and the full Cardano-profile
+PlonK verifier positive/negative/budget gates.
 
 ## Imports
 

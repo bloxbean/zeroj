@@ -20,8 +20,10 @@ plus **pure Java verification** for structured snarkjs/ZeroJ PlonK proof JSON
 on BLS12-381 and BN254 curves.
 gnark's opaque binary PlonK proof JSON should be verified with gnark native
 verification until a dedicated adapter is added. The Julc on-chain PlonK path is
-an experimental prototype today: transcript and inverse checks are implemented,
-but the KZG batch opening pairing check is still deferred.
+implemented for the current BLS12-381 Cardano profile with one public input,
+including compressed-point Fiat-Shamir binding and the KZG batch opening pairing
+check. It remains experimental and opt-in until the remaining production release
+gates, including third-party audit, are closed.
 
 ## What Works Today
 
@@ -32,11 +34,12 @@ but the KZG batch opening pairing check is still deferred.
 - **Both BN254 and BLS12-381 curves supported**
 
 ### On-Chain PlonK (Experimental)
-- Prototype verifier via `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc`
-- Fiat-Shamir challenge re-derivation matching gnark's exact transcript format
-- KZG batch opening pairing check still deferred
+- Full verifier via `PlonkBLS12381Verifier` in `zeroj-onchain-julc` for the current one-public-input Cardano profile
+- Cardano-profile Fiat-Shamir challenge re-derivation over compressed BLS12-381 G1 bytes
+- KZG batch opening pairing check implemented with Plutus V3 BLS12-381 builtins
+- Strict scalar, compressed point, domain, coset, inverse, and public-input shape validation
 - BLS12-381 only (Plutus V3 builtins)
-- Useful for budget and data-shape work, not yet a full trustless on-chain verifier
+- Experimental opt-in pending broader vectors, deployment-size gates, and independent audit
 
 ### Advantage Over Groth16
 | Feature | Groth16 | PlonK |
@@ -109,9 +112,15 @@ See `PlonKBLS381EndToEndTest.java` for the full wire-evaluation and verification
 - **Enterprise privacy**: Verifiable computation with universal setup (no per-circuit ceremony)
 - **Development/testing**: Iterate on ZK circuits without re-running trusted setup
 
-### Future (On-Chain)
-- PlonK verification on Cardano Plutus V3 is feasible using BLS12-381 builtins
-- **Limitation**: Plutus V3 lacks SHA-256 (needed for Fiat-Shamir transcript). Workaround: pass pre-computed challenges as redeemer data
+### On-Chain Release Gates
+- PlonK verification on Cardano Plutus V3 is BLS12-381 only because Cardano does
+  not expose BN254 builtins.
+- The first supported Cardano profile is pinned to ZeroJ pure-Java proofs with
+  compressed BLS12-381 transcript encoding and exactly one public input. Broader
+  public-input profiles must be explicitly designed and tested before release.
+- Production use still requires independent security audit, broader
+  cross-implementation/adversarial vectors, deployment-size checks, and pinned
+  ceremony artifacts.
 - **CIP-0133 (Multi-Scalar Multiplication)**: Would improve the shape of on-chain PlonK verification if available
 - See [ADR-0008](adr/0008-plonk-support-via-gnark.md) for detailed analysis
 
@@ -132,6 +141,10 @@ PlonKConstraintSystem
 PlonKSetupBLS381 / PlonKProverBLS381
     |
 PlonkBLS12381Verifier / PlonkBN254Verifier
+    |
+Optional Cardano profile: PlonKProverBLS381.proveCardano(...)
+    |
+PlonKProverToCardano -> PlonkBLS12381Verifier (Julc, BLS12-381 one-input profile)
     |
 Optional: GnarkProver for native proving and native verification of gnark binary artifacts
 ```

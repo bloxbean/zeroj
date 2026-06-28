@@ -16,7 +16,7 @@ import java.util.HexFormat;
  * Unit test: validates the PlonK Julc prototype with gnark test vectors.
  * Verifies Fiat-Shamir challenge re-derivation matches gnark's exported values.
  */
-class PlonkBLS12381FullVerifierTest extends ContractTest {
+class PlonkBLS12381TranscriptPrototypeTest extends ContractTest {
 
     private static final BigInteger FR = new BigInteger(
             "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16);
@@ -26,14 +26,14 @@ class PlonkBLS12381FullVerifierTest extends ContractTest {
     @BeforeAll
     static void loadVectors() throws Exception {
         json = new ObjectMapper().readTree(new String(
-                PlonkBLS12381FullVerifierTest.class.getResourceAsStream(
+                PlonkBLS12381TranscriptPrototypeTest.class.getResourceAsStream(
                         "/test-circuits/plonk-multiplier-bls12381/plonk_cardano.json").readAllBytes(),
                 StandardCharsets.UTF_8));
     }
 
     @Test
     void fiatShamir_matchesGnark() {
-        var compiled = compileValidator(PlonkBLS12381FullVerifier.class);
+        var compiled = compileValidator(PlonkBLS12381TranscriptPrototype.class);
 
         // Domain params
         BigInteger omega = new BigInteger(json.at("/vk_params/generator").asText());
@@ -147,6 +147,13 @@ class PlonkBLS12381FullVerifierTest extends ContractTest {
 
         assertSuccess(result);
         System.out.println("[test] PlonK Julc prototype accepted transcript and inverse checks.");
+
+        var extraDatum = PlutusData.list(PlutusData.integer(33), PlutusData.integer(1));
+        var extraCtx = spendingContext(TestDataBuilder.randomTxOutRef_typed(), extraDatum)
+                .redeemer(redeemer)
+                .buildPlutusData();
+        var extraResult = evaluate(program, extraCtx);
+        assertFailure(extraResult);
     }
 
     private static byte[] hex(String h) {

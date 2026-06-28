@@ -20,11 +20,12 @@ class ScriptBudgetEstimatorTest {
     }
 
     @Test
-    void estimatesPlonkAsMoreMemoryIntensiveThanGroth16() {
-        long grothMemory = ScriptBudgetEstimator.estimateMemory(ProofSystemId.GROTH16, CurveId.BLS12_381, 1);
-        long plonkMemory = ScriptBudgetEstimator.estimateMemory(ProofSystemId.PLONK, CurveId.BLS12_381, 1);
+    void estimatesPlonkAsMoreCpuIntensiveThanGroth16() {
+        long grothCpu = ScriptBudgetEstimator.estimateCpu(ProofSystemId.GROTH16, CurveId.BLS12_381, 1);
+        long plonkCpu = ScriptBudgetEstimator.estimateCpu(ProofSystemId.PLONK, CurveId.BLS12_381, 1);
 
-        assertTrue(plonkMemory > grothMemory);
+        assertTrue(plonkCpu > grothCpu);
+        assertTrue(plonkCpu < 10_000_000_000L);
     }
 
     @Test

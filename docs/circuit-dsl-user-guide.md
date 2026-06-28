@@ -707,7 +707,7 @@ Properties:
 | Curve | Proof Systems | On-chain? | Note |
 |-------|--------------|-----------|------|
 | BN254 | Groth16, PlonK | No (no Plutus builtins) | circom/snarkjs ecosystem |
-| BLS12-381 | Groth16, PlonK | Groth16: **Yes**; PlonK: prototype | Cardano-native BLS builtins; PlonK KZG pairing check is still deferred on-chain |
+| BLS12-381 | Groth16, PlonK | Groth16: **Yes**; PlonK: experimental opt-in | Cardano-native BLS builtins; PlonK has a full KZG verifier for the current one-public-input Cardano profile, pending audit and release gates |
 
 ## Witness Calculation
 
@@ -771,7 +771,8 @@ Verification (pure Java, zero native deps):
 
 On-Chain (Cardano Plutus V3):
   Groth16BLS12381Verifier (Julc)
-  PlonkBLS12381FullVerifier (Julc prototype: transcript/inverse checks only)
+  PlonkBLS12381Verifier (Julc experimental: Cardano-profile BLS12-381 PlonK, one public input)
+  PlonkBLS12381TranscriptPrototype (Julc prototype: gnark transcript regression only)
 ```
 
 **Recommended path**: CircuitSpec → `compileR1CS(BLS12_381)` → `Groth16ProverBLS381` → on-chain verify.

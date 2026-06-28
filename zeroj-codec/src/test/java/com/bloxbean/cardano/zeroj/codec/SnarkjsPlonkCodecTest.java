@@ -4,6 +4,7 @@ import com.bloxbean.cardano.zeroj.api.CircuitId;
 import com.bloxbean.cardano.zeroj.api.ProofSystemId;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 
@@ -78,6 +79,53 @@ class SnarkjsPlonkCodecTest {
         assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseProof("{\"A\":[1,2,3]}"));
     }
 
+    @Test
+    void parseProof_missingProtocol_throws() {
+        var proofJson = loadString("/test-vectors/plonk-bn254/proof.json")
+                .replace(" \"protocol\": \"plonk\",\n", "");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseProof(proofJson));
+    }
+
+    @Test
+    void parseProof_oversizedInputStream_throws() {
+        byte[] oversized = new byte[2 * 1024 * 1024 + 1];
+
+        assertThrows(CodecException.class,
+                () -> SnarkjsPlonkCodec.parseProof(new ByteArrayInputStream(oversized)));
+    }
+
+    @Test
+    void parseProof_oversizedString_throws() {
+        String oversized = " ".repeat(2 * 1024 * 1024 + 1);
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseProof(oversized));
+    }
+
+    @Test
+    void parseProof_wrongG1Arity_throws() {
+        var proofJson = replaceTopLevelValue(loadString("/test-vectors/plonk-bn254/proof.json"),
+                "A", "[\"1\",\"2\"]");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseProof(proofJson));
+    }
+
+    @Test
+    void parseProof_negativeDecimal_throws() {
+        var proofJson = replaceTopLevelValue(loadString("/test-vectors/plonk-bn254/proof.json"),
+                "eval_a", "\"-1\"");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseProof(proofJson));
+    }
+
+    @Test
+    void parseProof_overlongDecimal_throws() {
+        var proofJson = replaceTopLevelValue(loadString("/test-vectors/plonk-bn254/proof.json"),
+                "eval_a", "\"" + "1".repeat(161) + "\"");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseProof(proofJson));
+    }
+
     // --- Verification key parsing ---
 
     @Test
@@ -128,6 +176,38 @@ class SnarkjsPlonkCodecTest {
     @Test
     void parseVerificationKey_invalidJson_throws() {
         assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseVerificationKey("not json"));
+    }
+
+    @Test
+    void parseVerificationKey_duplicateField_throws() {
+        var vkJson = loadString("/test-vectors/plonk-bn254/verification_key.json")
+                .replaceFirst("\\{", "{\"protocol\":\"plonk\",");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseVerificationKey(vkJson));
+    }
+
+    @Test
+    void parseVerificationKey_nonCanonicalDecimal_throws() {
+        var vkJson = loadString("/test-vectors/plonk-bn254/verification_key.json")
+                .replace("\"k1\": \"2\"", "\"k1\": \"02\"");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseVerificationKey(vkJson));
+    }
+
+    @Test
+    void parseVerificationKey_wrongG2Arity_throws() {
+        var vkJson = replaceTopLevelValue(loadString("/test-vectors/plonk-bn254/verification_key.json"),
+                "X_2", "[[\"0\",\"0\"],[\"1\",\"0\"]]");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseVerificationKey(vkJson));
+    }
+
+    @Test
+    void parseVerificationKey_blankProtocol_throws() {
+        var vkJson = replaceTopLevelValue(loadString("/test-vectors/plonk-bn254/verification_key.json"),
+                "protocol", "\"\"");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.parseVerificationKey(vkJson));
     }
 
     // --- Envelope construction ---
@@ -181,5 +261,72 @@ class SnarkjsPlonkCodecTest {
         // omega^n should equal 1 mod r
         BigInteger omegaN = vk.w().modPow(BigInteger.valueOf(vk.domainSize()), bn254_r);
         assertEquals(BigInteger.ONE, omegaN, "omega^n must equal 1 in Fr");
+    }
+
+    private static String replaceTopLevelValue(String json, String fieldName, String replacement) {
+        String key = "\"" + fieldName + "\":";
+        int keyStart = json.indexOf(key);
+        if (keyStart < 0) {
+            throw new IllegalArgumentException("Missing JSON field: " + fieldName);
+        }
+        int valueStart = keyStart + key.length();
+        while (Character.isWhitespace(json.charAt(valueStart))) {
+            valueStart++;
+        }
+        int valueEnd = jsonValueEnd(json, valueStart);
+        return json.substring(0, valueStart) + replacement + json.substring(valueEnd);
+    }
+
+    private static int jsonValueEnd(String json, int valueStart) {
+        char first = json.charAt(valueStart);
+        if (first == '"') {
+            boolean escaped = false;
+            for (int i = valueStart + 1; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    return i + 1;
+                }
+            }
+            throw new IllegalArgumentException("Unterminated JSON string");
+        }
+        if (first == '[') {
+            int depth = 0;
+            boolean inString = false;
+            boolean escaped = false;
+            for (int i = valueStart; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (c == '\\') {
+                        escaped = true;
+                    } else if (c == '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+                if (c == '"') {
+                    inString = true;
+                } else if (c == '[') {
+                    depth++;
+                } else if (c == ']') {
+                    depth--;
+                    if (depth == 0) {
+                        return i + 1;
+                    }
+                }
+            }
+            throw new IllegalArgumentException("Unterminated JSON array");
+        }
+        int comma = json.indexOf(',', valueStart);
+        int objectEnd = json.indexOf('}', valueStart);
+        if (comma < 0) {
+            return objectEnd;
+        }
+        return Math.min(comma, objectEnd);
     }
 }
