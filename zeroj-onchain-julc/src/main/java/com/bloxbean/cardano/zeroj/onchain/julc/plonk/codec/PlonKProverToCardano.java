@@ -10,10 +10,13 @@ import com.bloxbean.cardano.zeroj.bls12381.field.Fp;
 import com.bloxbean.cardano.zeroj.bls12381.field.Fp2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProofBLS381;
+import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProvingKeyBLS381;
 import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * Converts pure Java BLS12-381 PlonK prover output to the compressed point
@@ -22,6 +25,7 @@ import java.math.BigInteger;
 public final class PlonKProverToCardano {
 
     private static final BigInteger FR = MontFr381.modulus();
+    public static final String CARDANO_MPI_PROOF_FORMAT = PlonKProverBLS381.CARDANO_MPI_PROFILE_TAG;
 
     private PlonKProverToCardano() {}
 
@@ -29,10 +33,31 @@ public final class PlonKProverToCardano {
             PlonKProofBLS381 proof,
             PlonKProvingKeyBLS381 pk,
             BigInteger[] publicInputs) {
+        validateCardanoV1PublicInputs(pk, publicInputs);
         var vk = compressVk(pk);
         var withoutInverses = compressProofWithInverses(proof, BigInteger.ZERO, BigInteger.ZERO);
         var challenges = computeChallenges(vk, withoutInverses, publicInputs);
         return compressProofWithInverses(proof, challenges.xiMinusOneInv(), challenges.xiMinusOmegaInv());
+    }
+
+    public static MultiInputProofCompressed compressMpiProof(
+            PlonKProofBLS381 proof,
+            PlonKProvingKeyBLS381 pk,
+            BigInteger[] publicInputs) {
+        if (pk == null || pk.nPublic() != (publicInputs == null ? -1 : publicInputs.length)) {
+            throw new IllegalArgumentException("proving key public input count must match publicInputs.length");
+        }
+        validateMpiPublicInputs(publicInputs);
+        var vk = compressVk(pk);
+        var base = compressProofWithInverses(proof, BigInteger.ZERO, BigInteger.ZERO);
+        var challenges = computeMpiChallenges(vk, base, publicInputs);
+        return new MultiInputProofCompressed(
+                base.cmA(), base.cmB(), base.cmC(), base.cmZ(),
+                base.cmT1(), base.cmT2(), base.cmT3(),
+                base.wXi(), base.wXiw(),
+                base.evalA(), base.evalB(), base.evalC(),
+                base.evalS1(), base.evalS2(), base.evalZw(),
+                challenges.publicInputInverses());
     }
 
     public static ProofCompressed compressProofWithInverses(
@@ -87,12 +112,46 @@ public final class PlonKProverToCardano {
             VkCompressed vk,
             ProofCompressed proof,
             BigInteger[] publicInputs) {
+        return computeChallenges(vk, proof, publicInputs, false);
+    }
+
+    public static MultiInputChallengeScalars computeMpiChallenges(
+            VkCompressed vk,
+            ProofCompressed proof,
+            BigInteger[] publicInputs) {
+        validateMpiPublicInputs(publicInputs);
+        var challenges = computeChallenges(vk, proof, publicInputs, true);
+        BigInteger[] inverses = new BigInteger[publicInputs.length];
+        BigInteger wPow = BigInteger.ONE;
+        for (int i = 0; i < publicInputs.length; i++) {
+            inverses[i] = challenges.xi().subtract(wPow).mod(FR).modInverse(FR);
+            wPow = wPow.multiply(vk.omega()).mod(FR);
+        }
+        return new MultiInputChallengeScalars(
+                challenges.beta(),
+                challenges.gamma(),
+                challenges.alpha(),
+                challenges.xi(),
+                challenges.v(),
+                challenges.u(),
+                inverses);
+    }
+
+    private static ChallengeScalars computeChallenges(
+            VkCompressed vk,
+            ProofCompressed proof,
+            BigInteger[] publicInputs,
+            boolean mpiProfile) {
         var transcript = new FiatShamirTranscript(FR, 32, 48);
         transcript.addBytes(vk.qm()); transcript.addBytes(vk.ql());
         transcript.addBytes(vk.qr()); transcript.addBytes(vk.qo());
         transcript.addBytes(vk.qc());
         transcript.addBytes(vk.s1()); transcript.addBytes(vk.s2());
         transcript.addBytes(vk.s3());
+        if (mpiProfile) {
+            transcript.addBytes(CARDANO_MPI_PROOF_FORMAT.getBytes(StandardCharsets.US_ASCII));
+            transcript.addScalar(BigInteger.valueOf(publicInputs.length));
+        }
         for (BigInteger publicInput : publicInputs) {
             transcript.addScalar(publicInput);
         }
@@ -132,6 +191,31 @@ public final class PlonKProverToCardano {
         return new ChallengeScalars(beta, gamma, alpha, xi, v, u, xiMinusOneInv, xiMinusOmegaInv);
     }
 
+    private static void validateMpiPublicInputs(BigInteger[] publicInputs) {
+        if (publicInputs == null
+                || publicInputs.length < 1
+                || publicInputs.length > PlonKProverBLS381.MAX_CARDANO_MPI_PUBLIC_INPUTS) {
+            throw new IllegalArgumentException("Cardano PlonK MPI public input count must be 1.."
+                    + PlonKProverBLS381.MAX_CARDANO_MPI_PUBLIC_INPUTS);
+        }
+        for (int i = 0; i < publicInputs.length; i++) {
+            BigInteger publicInput = publicInputs[i];
+            if (publicInput == null || publicInput.signum() < 0 || publicInput.compareTo(FR) >= 0) {
+                throw new IllegalArgumentException("publicInputs[" + i + "] must be a canonical BLS12-381 scalar");
+            }
+        }
+    }
+
+    private static void validateCardanoV1PublicInputs(PlonKProvingKeyBLS381 pk, BigInteger[] publicInputs) {
+        if (pk == null || pk.nPublic() != 1 || publicInputs == null || publicInputs.length != 1) {
+            throw new IllegalArgumentException("Cardano PlonK v1 profile requires exactly one public input");
+        }
+        BigInteger publicInput = publicInputs[0];
+        if (publicInput == null || publicInput.signum() < 0 || publicInput.compareTo(FR) >= 0) {
+            throw new IllegalArgumentException("publicInputs[0] must be a canonical BLS12-381 scalar");
+        }
+    }
+
     public static byte[] g1Compress(JacobianG1BLS381.AffineG1 point) {
         return Bls12381Codecs.g1ToCompressed(toG1Point(point));
     }
@@ -164,6 +248,23 @@ public final class PlonKProverToCardano {
             BigInteger evalS1, BigInteger evalS2, BigInteger evalZw,
             BigInteger xiMinusOneInv, BigInteger xiMinusOmegaInv) {}
 
+    public record MultiInputProofCompressed(
+            byte[] cmA, byte[] cmB, byte[] cmC, byte[] cmZ,
+            byte[] cmT1, byte[] cmT2, byte[] cmT3,
+            byte[] wXi, byte[] wXiw,
+            BigInteger evalA, BigInteger evalB, BigInteger evalC,
+            BigInteger evalS1, BigInteger evalS2, BigInteger evalZw,
+            BigInteger[] publicInputInverses) {
+        public MultiInputProofCompressed {
+            publicInputInverses = publicInputInverses == null ? null : Arrays.copyOf(publicInputInverses, publicInputInverses.length);
+        }
+
+        @Override
+        public BigInteger[] publicInputInverses() {
+            return publicInputInverses == null ? null : Arrays.copyOf(publicInputInverses, publicInputInverses.length);
+        }
+    }
+
     public record VkCompressed(
             byte[] qm, byte[] ql, byte[] qr, byte[] qo, byte[] qc,
             byte[] s1, byte[] s2, byte[] s3,
@@ -188,4 +289,22 @@ public final class PlonKProverToCardano {
             BigInteger u,
             BigInteger xiMinusOneInv,
             BigInteger xiMinusOmegaInv) {}
+
+    public record MultiInputChallengeScalars(
+            BigInteger beta,
+            BigInteger gamma,
+            BigInteger alpha,
+            BigInteger xi,
+            BigInteger v,
+            BigInteger u,
+            BigInteger[] publicInputInverses) {
+        public MultiInputChallengeScalars {
+            publicInputInverses = publicInputInverses == null ? null : Arrays.copyOf(publicInputInverses, publicInputInverses.length);
+        }
+
+        @Override
+        public BigInteger[] publicInputInverses() {
+            return publicInputInverses == null ? null : Arrays.copyOf(publicInputInverses, publicInputInverses.length);
+        }
+    }
 }

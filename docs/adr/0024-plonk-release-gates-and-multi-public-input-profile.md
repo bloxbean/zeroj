@@ -1,7 +1,8 @@
 # ADR-0024: PlonK Release Gates and Multi-Public-Input On-Chain Profile
 
 ## Status
-Proposed
+Accepted - MPI implementation complete; fuzzing/differential CI and external
+audit remain release gates
 
 ## Date
 2026-06-28
@@ -16,6 +17,8 @@ reviewable state:
 - the current on-chain BLS12-381 PlonK verifier implements the
   `zeroj-plonk-bls12381-cardano-v1-json` compressed-transcript profile for the
   current one-public-input proof shape;
+- the bounded MPI profile `zeroj-plonk-bls12381-cardano-mpi-v1-json` now
+  supports 1 through 8 public inputs on-chain through a separate verifier;
 - BN254 remains postponed because Cardano does not currently support BN254
   on-chain;
 - third-party cryptographic/security audit remains a release gate.
@@ -51,13 +54,13 @@ baseline for third-party review.
 The multi-public-input work will be introduced as a new versioned profile rather
 than changing the semantics of v1.
 
-Working name:
+Profile name:
 
 ```text
 zeroj-plonk-bls12381-cardano-mpi-v1-json
 ```
 
-The exact name can change before implementation, but it must include:
+The profile name includes:
 
 - proof system: PlonK;
 - curve: BLS12-381;
@@ -67,17 +70,16 @@ The exact name can change before implementation, but it must include:
 
 ### 2. Implement bounded multi-public-input support, not unbounded generic support
 
-The first multi-public-input profile will support a fixed maximum public input
-count. The initial target is:
+The first multi-public-input profile supports a fixed maximum public input
+count:
 
 ```text
 1 <= publicInputCount <= 8
 ```
 
-The implementation must make this maximum explicit in code, tests, docs, and
-budget gates. If measured budget or script size is too high, the profile may be
-reduced to a smaller maximum such as 4. If applications later need more, that
-requires another measured profile revision.
+This maximum is explicit in code, tests, docs, and budget gates. If
+applications later need more than 8 public inputs, that requires another
+measured profile revision.
 
 The datum must contain exactly `publicInputCount` scalar public inputs. Empty
 lists, extra values, negative values, and values outside `Fr` must fail before
@@ -85,7 +87,7 @@ curve work.
 
 ### 3. Bind public input count and values into the transcript
 
-The multi-public-input transcript must be injective:
+The multi-public-input transcript is injective:
 
 - include the profile/version tag;
 - include the exact public input count;
@@ -93,9 +95,12 @@ The multi-public-input transcript must be injective:
 - preserve public input order;
 - reject non-canonical scalar encodings.
 
-The off-chain prover adapter, off-chain verifier, and on-chain verifier must use
-the same transcript profile. Existing snarkjs/gnark artifacts are not assumed to
-be compatible with the Cardano profile.
+The profile tag bytes are applied as part of the script parameters and pinned by
+the script hash; the on-chain verifier checks the expected tag byte length and
+uses those exact bytes in the challenge preimage. The off-chain prover adapter,
+off-chain verifier, and on-chain verifier use the same transcript profile.
+Existing snarkjs/gnark artifacts are not assumed to be compatible with the
+Cardano profile.
 
 ### 4. Compute and verify the public-input polynomial on-chain
 
@@ -126,11 +131,12 @@ The sign convention must match the off-chain PlonK verifier exactly.
 
 The implementation must update:
 
-- `PlonKProverBLS381` Cardano profile generation;
-- `PlonKProverToCardano` proof/VK compression and inverse-witness generation;
-- `PlonkBLS12381Verifier` off-chain Cardano-profile verifier;
-- on-chain `PlonkBLS12381Verifier` datum/redeemer parsing and public-input
-  polynomial computation;
+- `PlonKProverBLS381.proveCardanoMpi(...)` profile generation;
+- `PlonKProverToCardano.compressMpiProof(...)` proof/VK compression and
+  inverse-witness generation;
+- `PlonkBLS12381Verifier` off-chain Cardano MPI profile verification;
+- on-chain `PlonkBLS12381MultiInputVerifier` datum/redeemer parsing and
+  public-input polynomial computation;
 - proof-format metadata and docs.
 
 The one-public-input profile must continue to pass unchanged.
@@ -157,6 +163,20 @@ The current Cardano budget target remains:
 - memory below the protocol limit with a documented safety margin;
 - applied script and redeemer sizes below the relevant inline limits, or a
   documented reference-script deployment requirement.
+
+Measured Julc VM budgets for the implemented profile:
+
+```text
+public inputs | CPU        | memory
+1             | 4.810B     | 904,911
+2             | 4.827B     | 960,942
+4             | 4.869B     | 1,102,209
+8             | 4.945B     | 1,356,900
+```
+
+The max-input applied script size is 5,608 flat bytes. The 8-input test datum
+is 10 CBOR bytes and the proof redeemer is 944 CBOR bytes for the current test
+circuit.
 
 ### 7. Add adversarial tests specific to multi-public-input PlonK
 
@@ -212,7 +232,7 @@ must be the oracle.
 
 ## Implementation Plan
 
-### Phase 1: Profile Spec
+### Phase 1: Profile Spec - Done
 
 1. Write the exact profile name and metadata fields.
 2. Define public-input datum encoding.
@@ -220,9 +240,9 @@ must be the oracle.
 4. Define transcript preimage order and fixed-width encodings.
 5. Define `MAX_PUBLIC_INPUTS` for the first implementation.
 
-Exit criteria: spec is documented before code changes.
+Exit criteria: spec is documented before code changes. Completed.
 
-### Phase 2: Off-Chain Converter and Verifier
+### Phase 2: Off-Chain Converter and Verifier - Done
 
 1. Extend Cardano proof generation to accept `1..MAX_PUBLIC_INPUTS`.
 2. Generate inverse witnesses for each public input.
@@ -230,9 +250,10 @@ Exit criteria: spec is documented before code changes.
 4. Add 1, 2, 4, and max-input positive and negative tests.
 
 Exit criteria: off-chain prover/verifier and converter produce deterministic
-multi-input Cardano-profile artifacts.
+multi-input Cardano-profile artifacts. Completed with
+`proveCardanoMpi(...)`, `compressMpiProof(...)`, and MPI proof-format tests.
 
-### Phase 3: On-Chain Verifier
+### Phase 3: On-Chain Verifier - Done
 
 1. Parse exact public-input datum shape.
 2. Parse and range-check inverse witnesses.
@@ -241,9 +262,11 @@ multi-input Cardano-profile artifacts.
 5. Add adversarial tests listed above.
 
 Exit criteria: Julc VM accepts valid multi-input proofs and rejects all covered
-tampering cases.
+tampering cases. Completed for 1, 2, 4, and 8 public inputs, including wrong,
+swapped, missing, extra, over-field, malformed-inverse, and tampered-commitment
+cases.
 
-### Phase 4: Budget and Packaging
+### Phase 4: Budget and Packaging - Done
 
 1. Measure CPU, memory, applied script size, datum size, and redeemer size.
 2. Update `ScriptBudgetEstimator`.
@@ -252,9 +275,10 @@ tampering cases.
    deployment requirements.
 
 Exit criteria: measured budget gates pass with margin for every supported public
-input count.
+input count. Completed for the current Julc VM budget gates and inline
+datum/redeemer/script-size checks.
 
-### Phase 5: Release Assurance Gates
+### Phase 5: Release Assurance Gates - Pending
 
 1. Add fuzzing jobs and seed corpora.
 2. Add differential/conformance corpus jobs.

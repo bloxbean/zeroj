@@ -250,6 +250,11 @@ used for transcript derivation to the bytes uncompressed by Plutus BLS builtins.
 Existing snarkjs/gnark proof artifacts are not reusable for this on-chain path
 without re-proving or an adapter that emits this profile.
 
+Implementation status for the bounded MPI profile: complete as
+`zeroj-plonk-bls12381-cardano-mpi-v1-json`. The MPI profile binds the profile
+tag, exact public input count, and ordered fixed-width public input scalars into
+the same compressed-point transcript profile.
+
 ## Phase 9: On-Chain Implementation And Measurement
 
 Goal: replace the transcript/inverse prototype with a measured verifier, if the
@@ -269,16 +274,18 @@ design gate passes.
    witnesses, public inputs, compressed/raw mismatch, infinity encodings, wrong
    VK params, wrong domain params, and wrong challenge tags.
 
-Implementation status: complete for the current one-public-input Cardano
-profile. `PlonkBLS12381Verifier` performs strict compressed point/scalar/domain
-validation, reconstructs the linearized commitment, folds KZG openings, and
-checks the final pairing. `PlonKProverToCardano` converts Java prover output to
-Cardano compressed proof/VK data and computes the inverse scalars. Measured Julc
-VM budget is approximately `4.803B` CPU and `865k` memory with a test gate of
-`5.5B` CPU and `1.5M` memory. The applied validator measures `5,283` UPLC flat
-bytes and the proof redeemer measures `733` CBOR bytes, both below the 16,384-byte
-inline limit. Remaining work before final release: broader vectors if/when a
-multi-public-input profile is generalized, production ceremony artifact pins, and
+Implementation status: complete for the current one-public-input Cardano profile
+and the bounded MPI profile. `PlonkBLS12381Verifier` performs strict compressed
+point/scalar/domain validation, reconstructs the linearized commitment, folds
+KZG openings, and checks the final pairing for the v1 one-input profile.
+`PlonkBLS12381MultiInputVerifier` performs the same proof checks for the MPI
+profile while deriving the public-input polynomial from exactly 1 through 8
+datum values and verified inverse witnesses. `PlonKProverToCardano` converts
+Java prover output to Cardano compressed proof/VK data and computes the required
+inverse scalars. Measured Julc VM budget is approximately `4.803B` CPU and
+`865k` memory for the one-input v1 profile, and up to `4.945B` CPU and `1.357M`
+memory for the 8-input MPI profile. Remaining work before final release:
+production ceremony artifact pins, broader fuzzing/differential vectors, and
 third-party audit.
 
 Deliverable: on-chain PlonK remains experimental unless the full predicate and

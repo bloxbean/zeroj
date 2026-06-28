@@ -9,6 +9,7 @@ import com.bloxbean.cardano.zeroj.bls12381.field.*;
 import com.bloxbean.cardano.zeroj.codec.CodecException;
 import com.bloxbean.cardano.zeroj.codec.CanonicalHash;
 import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
+import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
@@ -39,6 +40,7 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
 
     public static final String SNARKJS_PROOF_FORMAT = "snarkjs-plonk-json";
     public static final String CARDANO_PROOF_FORMAT = "zeroj-plonk-bls12381-cardano-v1-json";
+    public static final String CARDANO_MPI_PROOF_FORMAT = PlonKProverBLS381.CARDANO_MPI_PROFILE_TAG;
 
     private static final BigInteger Fr = G1Point.R;
     private static final BigInteger BASE_FIELD_MODULUS = com.bloxbean.cardano.zeroj.bls12381.field.Fp.P;
@@ -65,7 +67,8 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
             }
             if (envelope.proofFormat().isPresent()
                     && !envelope.proofFormat().orElseThrow().equals(SNARKJS_PROOF_FORMAT)
-                    && !envelope.proofFormat().orElseThrow().equals(CARDANO_PROOF_FORMAT)) {
+                    && !envelope.proofFormat().orElseThrow().equals(CARDANO_PROOF_FORMAT)
+                    && !envelope.proofFormat().orElseThrow().equals(CARDANO_MPI_PROOF_FORMAT)) {
                 return VerificationResult.error(
                         VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
                         "Unsupported PlonK proof format for BLS12-381 verifier");
@@ -73,6 +76,10 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
             boolean compressedTranscript = envelope.proofFormat()
                     .filter(CARDANO_PROOF_FORMAT::equals)
                     .isPresent();
+            boolean mpiTranscript = envelope.proofFormat()
+                    .filter(CARDANO_MPI_PROOF_FORMAT::equals)
+                    .isPresent();
+            compressedTranscript = compressedTranscript || mpiTranscript;
 
             var proofJson = new String(envelope.proofBytes(), StandardCharsets.UTF_8);
             var vkJson = new String(material.vkBytes(), StandardCharsets.UTF_8);
@@ -101,6 +108,7 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
                         VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
                         "Expected " + vk.nPublic() + " public inputs, got " + publicInputs.size());
             }
+            validateCardanoProfilePublicInputCount(compressedTranscript, mpiTranscript, publicInputs.size());
             validatePublicInputs(publicInputs);
             validateProofScalars(proof);
             validateVkDomain(vk);
@@ -136,6 +144,10 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
             addG1(transcript, Qo, compressedTranscript); addG1(transcript, Qc, compressedTranscript);
             addG1(transcript, S1, compressedTranscript); addG1(transcript, S2, compressedTranscript);
             addG1(transcript, S3, compressedTranscript);
+            if (mpiTranscript) {
+                transcript.addBytes(CARDANO_MPI_PROOF_FORMAT.getBytes(StandardCharsets.US_ASCII));
+                transcript.addScalar(BigInteger.valueOf(publicInputs.size()));
+            }
             for (int i = 0; i < publicInputs.size(); i++) {
                 transcript.addScalar(publicInputs.get(i));
             }
@@ -385,6 +397,23 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
                         VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
                         "Invalid PlonK BLS12-381 public input");
             }
+        }
+    }
+
+    private void validateCardanoProfilePublicInputCount(boolean compressedTranscript,
+                                                        boolean mpiTranscript,
+                                                        int publicInputCount) {
+        if (mpiTranscript) {
+            if (publicInputCount < 1 || publicInputCount > PlonKProverBLS381.MAX_CARDANO_MPI_PUBLIC_INPUTS) {
+                throw new VerificationInputException(
+                        VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                        "Cardano PlonK MPI profile supports 1.."
+                                + PlonKProverBLS381.MAX_CARDANO_MPI_PUBLIC_INPUTS + " public inputs");
+            }
+        } else if (compressedTranscript && publicInputCount != 1) {
+            throw new VerificationInputException(
+                    VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                    "Cardano PlonK v1 profile requires exactly one public input");
         }
     }
 

@@ -29,6 +29,14 @@ class ScriptBudgetEstimatorTest {
     }
 
     @Test
+    void returnsMinusOneForUnsupportedPlonkPublicInputCounts() {
+        assertEquals(-1, ScriptBudgetEstimator.estimateCpu(ProofSystemId.PLONK, CurveId.BLS12_381, 0));
+        assertEquals(-1, ScriptBudgetEstimator.estimateMemory(ProofSystemId.PLONK, CurveId.BLS12_381, 0));
+        assertEquals(-1, ScriptBudgetEstimator.estimateCpu(ProofSystemId.PLONK, CurveId.BLS12_381, 9));
+        assertEquals(-1, ScriptBudgetEstimator.estimateMemory(ProofSystemId.PLONK, CurveId.BLS12_381, 9));
+    }
+
+    @Test
     void returnsMinusOneForNonCardanoCurves() {
         assertEquals(-1, ScriptBudgetEstimator.estimateCpu(ProofSystemId.GROTH16, CurveId.BN254, 1));
         assertEquals(-1, ScriptBudgetEstimator.estimateMemory(ProofSystemId.GROTH16, CurveId.BN254, 1));

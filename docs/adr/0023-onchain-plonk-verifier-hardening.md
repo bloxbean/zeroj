@@ -1,7 +1,8 @@
 # ADR-0023: On-Chain PlonK Verifier Hardening Posture
 
 ## Status
-Proposed
+Accepted - implemented for BLS12-381 v1 and bounded MPI profiles; external
+audit and release-assurance gates pending
 
 ## Date
 2026-06-28
@@ -84,21 +85,33 @@ place for the current one-public-input PlonK proof shape:
 - `PlonKProverToCardano` converts ZeroJ BLS12-381 PlonK prover output and VK
   material into the Cardano compressed byte format and computes the inverse
   scalars required by the on-chain verifier.
+- `PlonkBLS12381MultiInputVerifier` implements the bounded
+  `zeroj-plonk-bls12381-cardano-mpi-v1-json` profile for 1 through 8 public
+  inputs. It binds the profile tag, exact public input count, and ordered public
+  input scalars into the Fiat-Shamir transcript, verifies per-input inverse
+  witnesses, and computes the public-input polynomial on-chain using the same
+  sign convention as the off-chain verifier.
 - The measured Julc VM budget for the one-public-input verifier is approximately
   `4.803B` CPU and `865k` memory. The test gate currently caps it at
   `5.5B` CPU and `1.5M` memory.
+- The measured Julc VM budget for the MPI verifier ranges from approximately
+  `4.810B` CPU / `905k` memory at one input to `4.945B` CPU / `1.357M` memory
+  at eight inputs. The 8-input applied script is `5,608` flat bytes and the
+  proof redeemer is `944` CBOR bytes for the current test circuit.
 - The measured deployment size for the same applied validator is `5,283` UPLC
   flat bytes and the proof redeemer is `733` CBOR bytes. The test gate keeps both
   below the 16,384-byte inline size limit.
 - Adversarial tests cover wrong public input, extra public input, tampered proof
   commitment, and over-field proof evaluation scalar. The full verifier test
   runs against a Java-generated Cardano-profile proof.
+- MPI adversarial tests cover wrong, swapped, missing, extra, and over-field
+  public inputs, malformed inverse witnesses, tampered proof commitments, and
+  profile mismatch rejection in the off-chain verifier.
 
 Still open before final value-bearing release: third-party cryptographic/security
-audit, a broader generic multi-public-input profile decision, production ceremony
-artifact pinning, and expanded adversarial/cross-implementation vectors. The
-feasibility matrix therefore remains experimental opt-in until those release gates
-close.
+audit, production ceremony artifact pinning, and expanded fuzzing/differential
+cross-implementation vectors. The feasibility matrix therefore remains
+experimental opt-in until those release gates close.
 
 ## Decision
 

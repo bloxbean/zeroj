@@ -207,11 +207,15 @@ On-chain PlonK validator:
       the current one-public-input profile measures `5,283` applied script flat
       bytes and `733` proof redeemer CBOR bytes, both below the 16,384-byte
       inline limit.
+- [x] Bounded MPI profile implemented as
+      `zeroj-plonk-bls12381-cardano-mpi-v1-json` for 1 through 8 public inputs.
+      The 8-input profile measures approximately `4.945B` CPU, `1.357M`
+      memory, `5,608` applied script flat bytes, and `944` proof redeemer CBOR
+      bytes.
 - [x] Initial adversarial test suite green for wrong/extra public input,
       tampered commitment, and over-field evaluation scalar (0023 §7).
-- [ ] Broader adversarial/cross-implementation vectors for multi-public-input
-      profile decisions; see ADR-0024 for the planned bounded multi-public-input
-      profile.
+- [ ] Broader fuzzing and differential cross-implementation vectors for release
+      assurance; see ADR-0024.
 
 ## References
 

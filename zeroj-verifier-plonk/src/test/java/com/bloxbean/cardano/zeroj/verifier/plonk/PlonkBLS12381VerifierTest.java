@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +40,36 @@ class PlonkBLS12381VerifierTest {
 
         var result = new PlonkBLS12381Verifier().verify(fixture.envelope(), fixture.material());
         assertTrue(result.proofValid(), () -> result.message().orElse("verification failed"));
+    }
+
+    @Test
+    void verify_cardanoMpiProfileJavaGeneratedProof_accepts() {
+        var fixture = mpiFixture(4, true);
+
+        var result = new PlonkBLS12381Verifier().verify(fixture.envelope(), fixture.material());
+        assertTrue(result.proofValid(), () -> result.message().orElse("verification failed"));
+    }
+
+    @Test
+    void verify_cardanoV1ProfileRejectsMultiplePublicInputs() {
+        var fixture = mpiFixture(4, false);
+        var envelope = copyEnvelopeWithProofFormat(fixture.envelope(), PlonkBLS12381Verifier.CARDANO_PROOF_FORMAT);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void verify_cardanoMpiProfileRejectsWhenClaimedAsV1Transcript() {
+        var fixture = mpiFixture(4, true);
+        var envelope = copyEnvelopeWithProofFormat(fixture.envelope(), PlonkBLS12381Verifier.CARDANO_PROOF_FORMAT);
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, fixture.material());
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS, result.reasonCode().orElseThrow());
     }
 
     @Test
@@ -308,6 +340,105 @@ class PlonkBLS12381VerifierTest {
                 ProofSystemId.PLONK, CurveId.BLS12_381, new CircuitId("bls381-plonk-multiplier"));
 
         return new Fixture(envelope, material, proofJson, vkJson);
+    }
+
+    private static Fixture mpiFixture(int publicInputCount, boolean cardanoMpiProfile) {
+        var circuit = multiInputCircuit(publicInputCount);
+        var plonk = circuit.compilePlonK(CurveId.BLS12_381);
+        var witness = circuit.calculateWitness(multiInputWitness(publicInputCount), CurveId.BLS12_381);
+
+        var srs = PowersOfTauBLS381.generate(8);
+        int numGates = plonk.numGates();
+        BigInteger[][] gates = new BigInteger[numGates][5];
+        for (int i = 0; i < numGates; i++) {
+            var row = plonk.gateRows().get(i);
+            gates[i] = new BigInteger[]{row.qL(), row.qR(), row.qO(), row.qM(), row.qC()};
+        }
+
+        var pk = PlonKSetupBLS381.setup(numGates, plonk.numPublicInputs(), gates,
+                plonk.sigmaA(), plonk.sigmaB(), plonk.sigmaC(), plonk.numWires(), srs);
+
+        var extWitness = plonk.extendWitness(witness);
+        int n = pk.domainSize();
+        MontFr381[] wireA = new MontFr381[n];
+        MontFr381[] wireB = new MontFr381[n];
+        MontFr381[] wireC = new MontFr381[n];
+        for (int i = 0; i < n; i++) {
+            if (i < numGates) {
+                var row = plonk.gateRows().get(i);
+                wireA[i] = MontFr381.fromBigInteger(extWitness[row.wireA()]);
+                wireB[i] = MontFr381.fromBigInteger(extWitness[row.wireB()]);
+                wireC[i] = MontFr381.fromBigInteger(extWitness[row.wireC()]);
+            } else {
+                wireA[i] = wireB[i] = wireC[i] = MontFr381.ZERO;
+            }
+        }
+
+        BigInteger[] publicInputs = new BigInteger[plonk.numPublicInputs()];
+        for (int i = 0; i < publicInputs.length; i++) {
+            publicInputs[i] = witness[i + 1];
+        }
+
+        PlonKProofBLS381 proof;
+        if (cardanoMpiProfile) {
+            var rng = new SecureRandom(new byte[]{0x4d, 0x50, 0x49, (byte) publicInputCount});
+            proof = PlonKProverBLS381.proveCardanoMpi(pk, wireA, wireB, wireC, publicInputs, rng);
+        } else {
+            proof = PlonKProverBLS381.prove(pk, wireA, wireB, wireC, publicInputs);
+        }
+
+        String proofJson = proofJson(proof);
+        String vkJson = vkJson(pk);
+        var envelope = SnarkjsPlonkCodec.toEnvelopeFromJson(
+                proofJson, vkJson, publicJson(publicInputs), new CircuitId("bls381-plonk-mpi-" + publicInputCount));
+        if (cardanoMpiProfile) {
+            envelope = copyEnvelopeWithProofFormat(envelope, PlonkBLS12381Verifier.CARDANO_MPI_PROOF_FORMAT);
+        }
+        var material = VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
+                ProofSystemId.PLONK, CurveId.BLS12_381, new CircuitId("bls381-plonk-mpi-" + publicInputCount));
+
+        return new Fixture(envelope, material, proofJson, vkJson);
+    }
+
+    private static CircuitBuilder multiInputCircuit(int publicInputCount) {
+        var builder = CircuitBuilder.create("multi-public-linear-" + publicInputCount);
+        for (int i = 0; i < publicInputCount; i++) {
+            builder.publicVar("p" + i);
+        }
+        builder.secretVar("x");
+        return builder.define(api -> {
+            var expr = api.mul(api.var("p0"), api.var("x"));
+            for (int i = 1; i < publicInputCount - 1; i++) {
+                expr = api.add(expr, api.var("p" + i));
+            }
+            api.assertEqual(expr, api.var("p" + (publicInputCount - 1)));
+        });
+    }
+
+    private static Map<String, List<BigInteger>> multiInputWitness(int publicInputCount) {
+        Map<String, List<BigInteger>> inputs = new HashMap<>();
+        BigInteger x = BigInteger.valueOf(7);
+        inputs.put("x", List.of(x));
+        BigInteger acc = BigInteger.valueOf(3).multiply(x);
+        inputs.put("p0", List.of(BigInteger.valueOf(3)));
+        for (int i = 1; i < publicInputCount - 1; i++) {
+            BigInteger value = BigInteger.valueOf(i + 3L);
+            inputs.put("p" + i, List.of(value));
+            acc = acc.add(value);
+        }
+        inputs.put("p" + (publicInputCount - 1), List.of(acc));
+        return inputs;
+    }
+
+    private static String publicJson(BigInteger[] publicInputs) {
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < publicInputs.length; i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append('"').append(publicInputs[i]).append('"');
+        }
+        return json.append(']').toString();
     }
 
     private static ZkProofEnvelope copyEnvelope(ZkProofEnvelope original, String proofJson, PublicInputs publicInputs) {

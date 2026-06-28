@@ -22,6 +22,11 @@ public final class ScriptBudgetEstimator {
     public static final long BLAKE2B_256_CPU = 2_477_736L;
     public static final long PLONK_BLS12381_ONE_INPUT_MEASURED_CPU = 4_802_500_000L;
     public static final long PLONK_BLS12381_ONE_INPUT_MEASURED_MEMORY = 865_000L;
+    public static final int PLONK_BLS12381_MPI_MAX_PUBLIC_INPUTS = 8;
+    public static final long PLONK_BLS12381_MPI_ONE_INPUT_MEASURED_CPU = 4_810_200_000L;
+    public static final long PLONK_BLS12381_MPI_ONE_INPUT_MEASURED_MEMORY = 905_000L;
+    public static final long PLONK_BLS12381_MPI_PER_EXTRA_INPUT_CPU = 20_000_000L;
+    public static final long PLONK_BLS12381_MPI_PER_EXTRA_INPUT_MEMORY = 65_000L;
 
     /**
      * Estimate CPU units for on-chain verification, or {@code -1} when the
@@ -69,8 +74,15 @@ public final class ScriptBudgetEstimator {
     }
 
     private static long estimatePlonkCpu(int numPublicInputs) {
+        if (numPublicInputs < 1 || numPublicInputs > PLONK_BLS12381_MPI_MAX_PUBLIC_INPUTS) {
+            return -1;
+        }
+        if (numPublicInputs > 1) {
+            return PLONK_BLS12381_MPI_ONE_INPUT_MEASURED_CPU
+                    + (long) (numPublicInputs - 1) * PLONK_BLS12381_MPI_PER_EXTRA_INPUT_CPU;
+        }
         return PLONK_BLS12381_ONE_INPUT_MEASURED_CPU
-                + Math.max(0, numPublicInputs - 1) * (G1_SCALAR_MUL_CPU + G1_ADD_CPU);
+                + Math.max(0, numPublicInputs - 1) * PLONK_BLS12381_MPI_PER_EXTRA_INPUT_CPU;
     }
 
     private static long estimateGroth16Memory(int numPublicInputs) {
@@ -78,7 +90,14 @@ public final class ScriptBudgetEstimator {
     }
 
     private static long estimatePlonkMemory(int numPublicInputs) {
+        if (numPublicInputs < 1 || numPublicInputs > PLONK_BLS12381_MPI_MAX_PUBLIC_INPUTS) {
+            return -1;
+        }
+        if (numPublicInputs > 1) {
+            return PLONK_BLS12381_MPI_ONE_INPUT_MEASURED_MEMORY
+                    + (long) (numPublicInputs - 1) * PLONK_BLS12381_MPI_PER_EXTRA_INPUT_MEMORY;
+        }
         return PLONK_BLS12381_ONE_INPUT_MEASURED_MEMORY
-                + Math.max(0, numPublicInputs - 1) * 125_000L;
+                + Math.max(0, numPublicInputs - 1) * PLONK_BLS12381_MPI_PER_EXTRA_INPUT_MEMORY;
     }
 }

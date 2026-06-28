@@ -16,6 +16,7 @@ V3.
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib` | `Groth16BLS12381Lib` | Working on-chain library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `SnarkjsToCardano`, `ProverToCardano` | Working off-chain helpers | Convert snarkjs and ZeroJ Groth16 artifacts to Cardano-compatible compressed bytes and Plutus data shapes |
 | `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381Verifier` | Experimental opt-in validator | Cardano-profile compressed-transcript verifier with full KZG batch-opening pairing check for the current one-public-input shape; third-party audit still pending |
+| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381MultiInputVerifier` | Experimental opt-in validator | Bounded MPI Cardano profile verifier for `1..8` public inputs with profile/count transcript binding and verified inverse witnesses; third-party audit still pending |
 | `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381TranscriptPrototype` | Prototype only | gnark transcript/inverse regression fixture; must not secure value |
 | `com.bloxbean.cardano.zeroj.onchain.julc.plonk.codec` | `PlonKProverToCardano` | Working off-chain helper | Converts ZeroJ BLS12-381 PlonK proofs/VKs to compressed Cardano redeemer/parameter bytes |
 | `com.bloxbean.cardano.zeroj.onchain.julc.analysis` | `ScriptBudgetEstimator`, `OnChainFeasibility` | Planning helpers | Estimate Plutus CPU/memory budgets and report proof system / curve feasibility |
@@ -39,7 +40,8 @@ V3.
 The tests run validators in the Julc VM and include Groth16 positive/negative
 checks, pure Java Groth16 prover to on-chain verification, budget estimation, the
 PlonK prototype transcript/inverse-check path, and the full Cardano-profile
-PlonK verifier positive/negative/budget gates.
+PlonK verifier positive/negative/budget gates, including the bounded MPI profile
+for 1, 2, 4, and 8 public inputs.
 
 ## Imports
 

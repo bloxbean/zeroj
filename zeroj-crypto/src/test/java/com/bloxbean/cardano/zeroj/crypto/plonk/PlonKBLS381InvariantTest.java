@@ -103,6 +103,29 @@ class PlonKBLS381InvariantTest {
                 fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), fixture.pubInputs(), null));
     }
 
+    @Test
+    void cardanoV1Prover_rejectsMultiplePublicInputs() {
+        BigInteger[] pubInputs = new BigInteger[]{BigInteger.ONE, BigInteger.TWO};
+
+        assertThrows(IllegalArgumentException.class, () -> PlonKProverBLS381.proveCardano(
+                fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), pubInputs));
+    }
+
+    @Test
+    void cardanoMpiProver_rejectsEmptyPublicInputs() {
+        assertThrows(IllegalArgumentException.class, () -> PlonKProverBLS381.proveCardanoMpi(
+                fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), new BigInteger[0]));
+    }
+
+    @Test
+    void cardanoMpiProver_rejectsMoreThanEightPublicInputs() {
+        BigInteger[] pubInputs = new BigInteger[PlonKProverBLS381.MAX_CARDANO_MPI_PUBLIC_INPUTS + 1];
+        Arrays.fill(pubInputs, BigInteger.ONE);
+
+        assertThrows(IllegalArgumentException.class, () -> PlonKProverBLS381.proveCardanoMpi(
+                fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), pubInputs));
+    }
+
     private static PlonKProvingKeyBLS381 setupWith(
             BigInteger[][] selectors,
             int[] sigmaA,

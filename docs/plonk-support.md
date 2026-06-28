@@ -20,10 +20,12 @@ plus **pure Java verification** for structured snarkjs/ZeroJ PlonK proof JSON
 on BLS12-381 and BN254 curves.
 gnark's opaque binary PlonK proof JSON should be verified with gnark native
 verification until a dedicated adapter is added. The Julc on-chain PlonK path is
-implemented for the current BLS12-381 Cardano profile with one public input,
-including compressed-point Fiat-Shamir binding and the KZG batch opening pairing
-check. It remains experimental and opt-in until the remaining production release
-gates, including third-party audit, are closed.
+implemented for BLS12-381 Cardano profiles with compressed-point Fiat-Shamir
+binding and the KZG batch opening pairing check. The strict v1 profile supports
+exactly one public input, and the MPI profile supports 1 through 8 public
+inputs. It remains experimental and opt-in until the remaining production
+release gates, including third-party audit and fuzz/differential CI gates, are
+closed.
 
 ## What Works Today
 
@@ -35,6 +37,7 @@ gates, including third-party audit, are closed.
 
 ### On-Chain PlonK (Experimental)
 - Full verifier via `PlonkBLS12381Verifier` in `zeroj-onchain-julc` for the current one-public-input Cardano profile
+- Bounded multi-public-input verifier via `PlonkBLS12381MultiInputVerifier` for the `zeroj-plonk-bls12381-cardano-mpi-v1-json` profile (`1..8` public inputs)
 - Cardano-profile Fiat-Shamir challenge re-derivation over compressed BLS12-381 G1 bytes
 - KZG batch opening pairing check implemented with Plutus V3 BLS12-381 builtins
 - Strict scalar, compressed point, domain, coset, inverse, and public-input shape validation
@@ -116,8 +119,11 @@ See `PlonKBLS381EndToEndTest.java` for the full wire-evaluation and verification
 - PlonK verification on Cardano Plutus V3 is BLS12-381 only because Cardano does
   not expose BN254 builtins.
 - The first supported Cardano profile is pinned to ZeroJ pure-Java proofs with
-  compressed BLS12-381 transcript encoding and exactly one public input. Broader
-  public-input profiles must be explicitly designed and tested before release.
+  compressed BLS12-381 transcript encoding and exactly one public input.
+- The MPI Cardano profile is separate and bounded to 1 through 8 public inputs.
+  It binds the profile tag, public input count, and ordered fixed-width public
+  input scalars into the transcript, then verifies per-input inverse witnesses
+  before computing the public-input polynomial on-chain.
 - Production use still requires independent security audit, broader
   cross-implementation/adversarial vectors, deployment-size checks, and pinned
   ceremony artifacts.
@@ -145,6 +151,10 @@ PlonkBLS12381Verifier / PlonkBN254Verifier
 Optional Cardano profile: PlonKProverBLS381.proveCardano(...)
     |
 PlonKProverToCardano -> PlonkBLS12381Verifier (Julc, BLS12-381 one-input profile)
+    |
+Optional MPI Cardano profile: PlonKProverBLS381.proveCardanoMpi(...)
+    |
+PlonKProverToCardano.compressMpiProof -> PlonkBLS12381MultiInputVerifier (Julc, BLS12-381 1..8-input profile)
     |
 Optional: GnarkProver for native proving and native verification of gnark binary artifacts
 ```
