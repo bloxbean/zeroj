@@ -18,7 +18,8 @@ reviewable state:
   `zeroj-plonk-bls12381-cardano-v1-json` compressed-transcript profile for the
   current one-public-input proof shape;
 - the bounded MPI profile `zeroj-plonk-bls12381-cardano-mpi-v1-json` now
-  supports 1 through 8 public inputs on-chain through a separate verifier;
+  supports 1 through 8 public inputs on-chain through separate datum-input and
+  script-parameter-input verifiers;
 - BN254 remains postponed because Cardano does not currently support BN254
   on-chain;
 - third-party cryptographic/security audit remains a release gate.
@@ -85,6 +86,11 @@ The datum must contain exactly `publicInputCount` scalar public inputs. Empty
 lists, extra values, negative values, and values outside `Fr` must fail before
 curve work.
 
+For applications whose public statement values are fixed for a deployed script,
+the alternative script-parameter verifier pins the exact public input list in
+the applied script. In that mode the datum is not used for PlonK public inputs;
+the script hash commits to the public input values.
+
 ### 3. Bind public input count and values into the transcript
 
 The multi-public-input transcript is injective:
@@ -137,6 +143,8 @@ The implementation must update:
 - `PlonkBLS12381Verifier` off-chain Cardano MPI profile verification;
 - on-chain `PlonkBLS12381MultiInputVerifier` datum/redeemer parsing and
   public-input polynomial computation;
+- on-chain `PlonkBLS12381MultiInputParamVerifier` script-parameter public-input
+  parsing for pinned-statement deployments;
 - proof-format metadata and docs.
 
 The one-public-input profile must continue to pass unchanged.
@@ -264,7 +272,11 @@ multi-input Cardano-profile artifacts. Completed with
 Exit criteria: Julc VM accepts valid multi-input proofs and rejects all covered
 tampering cases. Completed for 1, 2, 4, and 8 public inputs, including wrong,
 swapped, missing, extra, over-field, malformed-inverse, and tampered-commitment
-cases.
+cases. The script-parameter variant also accepts proofs with pinned public
+inputs while ignoring datum public-input values, rejects wrong, empty,
+over-field, and oversized pinned input lists, and stays under the inline size
+gate at `5,683` applied script flat bytes plus `944` proof redeemer CBOR bytes
+for the 8-input test case.
 
 ### Phase 4: Budget and Packaging - Done
 

@@ -212,6 +212,11 @@ On-chain PlonK validator:
       The 8-input profile measures approximately `4.945B` CPU, `1.357M`
       memory, `5,608` applied script flat bytes, and `944` proof redeemer CBOR
       bytes.
+- [x] Both MPI deployment modes are available: datum-supplied public inputs via
+      `PlonkBLS12381MultiInputVerifier`, and script-parameter pinned public
+      inputs via `PlonkBLS12381MultiInputParamVerifier`. The parameterized
+      8-input variant measures `5,683` applied script flat bytes and `944`
+      proof redeemer CBOR bytes.
 - [x] Initial adversarial test suite green for wrong/extra public input,
       tampered commitment, and over-field evaluation scalar (0023 §7).
 - [ ] Broader fuzzing and differential cross-implementation vectors for release

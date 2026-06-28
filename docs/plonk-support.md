@@ -37,7 +37,8 @@ closed.
 
 ### On-Chain PlonK (Experimental)
 - Full verifier via `PlonkBLS12381Verifier` in `zeroj-onchain-julc` for the current one-public-input Cardano profile
-- Bounded multi-public-input verifier via `PlonkBLS12381MultiInputVerifier` for the `zeroj-plonk-bls12381-cardano-mpi-v1-json` profile (`1..8` public inputs)
+- Bounded multi-public-input verifier via `PlonkBLS12381MultiInputVerifier` for the `zeroj-plonk-bls12381-cardano-mpi-v1-json` profile (`1..8` datum-supplied public inputs)
+- Script-parameter MPI variant via `PlonkBLS12381MultiInputParamVerifier` for statements whose public inputs should be pinned by the script hash
 - Cardano-profile Fiat-Shamir challenge re-derivation over compressed BLS12-381 G1 bytes
 - KZG batch opening pairing check implemented with Plutus V3 BLS12-381 builtins
 - Strict scalar, compressed point, domain, coset, inverse, and public-input shape validation
@@ -123,7 +124,10 @@ See `PlonKBLS381EndToEndTest.java` for the full wire-evaluation and verification
 - The MPI Cardano profile is separate and bounded to 1 through 8 public inputs.
   It binds the profile tag, public input count, and ordered fixed-width public
   input scalars into the transcript, then verifies per-input inverse witnesses
-  before computing the public-input polynomial on-chain.
+  before computing the public-input polynomial on-chain. Use
+  `PlonkBLS12381MultiInputVerifier` when public inputs are transaction-specific
+  datum values, and `PlonkBLS12381MultiInputParamVerifier` when public inputs
+  should be fixed at script-application time.
 - Production use still requires independent security audit, broader
   cross-implementation/adversarial vectors, deployment-size checks, and pinned
   ceremony artifacts.
@@ -155,6 +159,8 @@ PlonKProverToCardano -> PlonkBLS12381Verifier (Julc, BLS12-381 one-input profile
 Optional MPI Cardano profile: PlonKProverBLS381.proveCardanoMpi(...)
     |
 PlonKProverToCardano.compressMpiProof -> PlonkBLS12381MultiInputVerifier (Julc, BLS12-381 1..8-input profile)
+    |
+Alternative pinned-statement deployment: PlonkBLS12381MultiInputParamVerifier
     |
 Optional: GnarkProver for native proving and native verification of gnark binary artifacts
 ```

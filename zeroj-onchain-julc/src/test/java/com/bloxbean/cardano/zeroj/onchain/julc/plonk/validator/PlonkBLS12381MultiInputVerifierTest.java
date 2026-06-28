@@ -161,6 +161,94 @@ class PlonkBLS12381MultiInputVerifierTest extends ContractTest {
     }
 
     private Fixture fixture(int publicInputCount) throws Exception {
+        return fixture(publicInputCount, false, null);
+    }
+
+    @Test
+    void paramVerifierValidatesScriptParameterPublicInputs() throws Exception {
+        var fixture = paramFixture(4);
+        var irrelevantDatum = PlutusData.list(PlutusData.integer(BigInteger.valueOf(999)));
+
+        var result = evaluate(fixture.program(), context(fixture, fixture.proof(), irrelevantDatum));
+
+        assertSuccess(result);
+    }
+
+    @Test
+    void paramVerifierRejectsWrongScriptParameterPublicInputValue() throws Exception {
+        var correct = fixture(4);
+        BigInteger[] wrongScriptInputs = correct.publicInputs().clone();
+        wrongScriptInputs[0] = wrongScriptInputs[0].add(BigInteger.ONE);
+        var fixture = paramFixture(4, wrongScriptInputs);
+
+        var result = evaluate(fixture.program(), context(fixture, fixture.proof(), PlutusData.list()));
+
+        assertFailure(result);
+    }
+
+    @Test
+    void paramVerifierRejectsEmptyScriptParameterPublicInputs() throws Exception {
+        var fixture = paramFixture(1, new BigInteger[0]);
+
+        var result = evaluate(fixture.program(), context(fixture, fixture.proof(), PlutusData.list()));
+
+        assertFailure(result);
+    }
+
+    @Test
+    void paramVerifierRejectsOverFieldScriptParameterPublicInput() throws Exception {
+        var correct = fixture(4);
+        BigInteger[] overFieldInputs = correct.publicInputs().clone();
+        overFieldInputs[2] = correct.vk().fr();
+        var fixture = paramFixture(4, overFieldInputs);
+
+        var result = evaluate(fixture.program(), context(fixture, fixture.proof(), PlutusData.list()));
+
+        assertFailure(result);
+    }
+
+    @Test
+    void paramVerifierRejectsMoreThanEightScriptParameterPublicInputs() throws Exception {
+        BigInteger[] tooMany = new BigInteger[9];
+        for (int i = 0; i < tooMany.length; i++) {
+            tooMany[i] = BigInteger.valueOf(i + 1L);
+        }
+        var fixture = paramFixture(8, tooMany);
+
+        var result = evaluate(fixture.program(), context(fixture, fixture.proof(), PlutusData.list()));
+
+        assertFailure(result);
+    }
+
+    @Test
+    void paramVerifierAppliedScriptAndRedeemerStayWithinInlineSizeGate() throws Exception {
+        var fixture = paramFixture(8);
+        byte[] scriptFlat = UplcFlatEncoder.encodeProgram(fixture.program());
+        byte[] redeemerCbor = PlutusDataCborEncoder.encode(redeemer(fixture.proof()));
+
+        System.out.println("[test] PlonK BLS12-381 MPI param verifier applied script flat bytes: "
+                + scriptFlat.length);
+        System.out.println("[test] PlonK BLS12-381 MPI param verifier redeemer CBOR bytes: "
+                + redeemerCbor.length);
+
+        assertTrue(scriptFlat.length <= 16_384,
+                () -> "Applied PlonK MPI param verifier script is " + scriptFlat.length
+                        + " bytes; use CIP-33 reference-script packaging before deployment");
+        assertTrue(redeemerCbor.length <= 16_384,
+                () -> "PlonK MPI param verifier proof redeemer is " + redeemerCbor.length
+                        + " bytes and exceeds the inline data size limit");
+    }
+
+    private Fixture paramFixture(int publicInputCount) throws Exception {
+        return fixture(publicInputCount, true, null);
+    }
+
+    private Fixture paramFixture(int publicInputCount, BigInteger[] scriptPublicInputs) throws Exception {
+        return fixture(publicInputCount, true, scriptPublicInputs);
+    }
+
+    private Fixture fixture(int publicInputCount, boolean scriptParameterInputs,
+                            BigInteger[] scriptPublicInputsOverride) throws Exception {
         var circuit = circuit(publicInputCount);
         var plonk = circuit.compilePlonK(CurveId.BLS12_381);
         var witness = circuit.calculateWitness(witnessInputs(publicInputCount), CurveId.BLS12_381);
@@ -204,8 +292,21 @@ class PlonkBLS12381MultiInputVerifierTest extends ContractTest {
         var compressedVk = PlonKProverToCardano.compressVk(pk);
         var compressedProof = PlonKProverToCardano.compressMpiProof(proof, pk, publicInputs);
 
-        var compiled = compileValidator(PlonkBLS12381MultiInputVerifier.class);
-        var program = compiled.program().applyParams(
+        Program program;
+        if (scriptParameterInputs) {
+            var compiled = compileValidator(PlonkBLS12381MultiInputParamVerifier.class);
+            BigInteger[] scriptPublicInputs = scriptPublicInputsOverride == null ? publicInputs : scriptPublicInputsOverride;
+            program = applyParamInputParams(compiled.program(), compressedVk, scriptPublicInputs);
+        } else {
+            var compiled = compileValidator(PlonkBLS12381MultiInputVerifier.class);
+            program = applyDatumInputParams(compiled.program(), compressedVk, publicInputCount);
+        }
+
+        return new Fixture(program, compressedVk, compressedProof, publicInputs);
+    }
+
+    private static Program applyDatumInputParams(Program program, VkCompressed compressedVk, int publicInputCount) {
+        return program.applyParams(
                 PlutusData.bytes(compressedVk.qm()),
                 PlutusData.bytes(compressedVk.ql()),
                 PlutusData.bytes(compressedVk.qr()),
@@ -227,8 +328,31 @@ class PlonkBLS12381MultiInputVerifierTest extends ContractTest {
                 PlutusData.bytes(compressedVk.g2Gen()),
                 PlutusData.bytes(PlonKProverToCardano.CARDANO_MPI_PROOF_FORMAT.getBytes(StandardCharsets.US_ASCII)),
                 PlutusData.integer(publicInputCount));
+    }
 
-        return new Fixture(program, compressedVk, compressedProof, publicInputs);
+    private static Program applyParamInputParams(Program program, VkCompressed compressedVk, BigInteger[] publicInputs) {
+        return program.applyParams(
+                PlutusData.bytes(compressedVk.qm()),
+                PlutusData.bytes(compressedVk.ql()),
+                PlutusData.bytes(compressedVk.qr()),
+                PlutusData.bytes(compressedVk.qo()),
+                PlutusData.bytes(compressedVk.qc()),
+                PlutusData.bytes(compressedVk.s1()),
+                PlutusData.bytes(compressedVk.s2()),
+                PlutusData.bytes(compressedVk.s3()),
+                PlutusData.bytes(compressedVk.x2()),
+                PlutusData.integer(compressedVk.domainSize()),
+                PlutusData.integer(compressedVk.domainPower()),
+                PlutusData.integer(compressedVk.omega()),
+                PlutusData.integer(compressedVk.k1()),
+                PlutusData.integer(compressedVk.k2()),
+                PlutusData.integer(compressedVk.k1OverK2()),
+                PlutusData.integer(compressedVk.fr()),
+                PlutusData.integer(compressedVk.nInv()),
+                PlutusData.bytes(compressedVk.g1Gen()),
+                PlutusData.bytes(compressedVk.g2Gen()),
+                PlutusData.bytes(PlonKProverToCardano.CARDANO_MPI_PROOF_FORMAT.getBytes(StandardCharsets.US_ASCII)),
+                datum(publicInputs));
     }
 
     private static CircuitBuilder circuit(int publicInputCount) {

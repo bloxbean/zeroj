@@ -91,6 +91,10 @@ place for the current one-public-input PlonK proof shape:
   input scalars into the Fiat-Shamir transcript, verifies per-input inverse
   witnesses, and computes the public-input polynomial on-chain using the same
   sign convention as the off-chain verifier.
+- `PlonkBLS12381MultiInputParamVerifier` implements the same bounded MPI proof
+  checks with public inputs pinned as script parameters instead of supplied by
+  datum. This variant is intended for fixed-statement deployments where the
+  script hash should commit to the public input values.
 - The measured Julc VM budget for the one-public-input verifier is approximately
   `4.803B` CPU and `865k` memory. The test gate currently caps it at
   `5.5B` CPU and `1.5M` memory.
@@ -105,8 +109,9 @@ place for the current one-public-input PlonK proof shape:
   commitment, and over-field proof evaluation scalar. The full verifier test
   runs against a Java-generated Cardano-profile proof.
 - MPI adversarial tests cover wrong, swapped, missing, extra, and over-field
-  public inputs, malformed inverse witnesses, tampered proof commitments, and
-  profile mismatch rejection in the off-chain verifier.
+  public inputs, malformed inverse witnesses, tampered proof commitments,
+  script-parameter public input mismatches, empty/over-field/oversized pinned
+  public-input lists, and profile mismatch rejection in the off-chain verifier.
 
 Still open before final value-bearing release: third-party cryptographic/security
 audit, production ceremony artifact pinning, and expanded fuzzing/differential

@@ -253,7 +253,10 @@ without re-proving or an adapter that emits this profile.
 Implementation status for the bounded MPI profile: complete as
 `zeroj-plonk-bls12381-cardano-mpi-v1-json`. The MPI profile binds the profile
 tag, exact public input count, and ordered fixed-width public input scalars into
-the same compressed-point transcript profile.
+the same compressed-point transcript profile. Two on-chain variants are
+available: `PlonkBLS12381MultiInputVerifier` for datum-supplied public inputs
+and `PlonkBLS12381MultiInputParamVerifier` for script-parameter pinned public
+inputs.
 
 ## Phase 9: On-Chain Implementation And Measurement
 
@@ -280,13 +283,14 @@ point/scalar/domain validation, reconstructs the linearized commitment, folds
 KZG openings, and checks the final pairing for the v1 one-input profile.
 `PlonkBLS12381MultiInputVerifier` performs the same proof checks for the MPI
 profile while deriving the public-input polynomial from exactly 1 through 8
-datum values and verified inverse witnesses. `PlonKProverToCardano` converts
-Java prover output to Cardano compressed proof/VK data and computes the required
-inverse scalars. Measured Julc VM budget is approximately `4.803B` CPU and
-`865k` memory for the one-input v1 profile, and up to `4.945B` CPU and `1.357M`
-memory for the 8-input MPI profile. Remaining work before final release:
-production ceremony artifact pins, broader fuzzing/differential vectors, and
-third-party audit.
+datum values and verified inverse witnesses. `PlonkBLS12381MultiInputParamVerifier`
+uses the same proof checks with the public input list pinned as script
+parameters. `PlonKProverToCardano` converts Java prover output to Cardano
+compressed proof/VK data and computes the required inverse scalars. Measured
+Julc VM budget is approximately `4.803B` CPU and `865k` memory for the one-input
+v1 profile, and up to `4.945B` CPU and `1.357M` memory for the 8-input MPI
+profile. Remaining work before final release: production ceremony artifact pins,
+broader fuzzing/differential vectors, and third-party audit.
 
 Deliverable: on-chain PlonK remains experimental unless the full predicate and
 all measurement gates pass.
