@@ -25,17 +25,29 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests for the Powers of Tau generator.
  */
 class PowersOfTauTest {
+    private String previousLegacyBn254;
+    private String previousInsecureTrustedSetup;
 
     @BeforeEach
     void enableLegacyBn254AndDevSetup() {
+        previousLegacyBn254 = System.getProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        previousInsecureTrustedSetup = System.getProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
         System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
         System.setProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, "true");
     }
 
     @AfterEach
-    void clearPolicyProperties() {
-        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
-        System.clearProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
+    void restorePolicyProperties() {
+        restoreProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, previousLegacyBn254);
+        restoreProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, previousInsecureTrustedSetup);
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 
     @Test

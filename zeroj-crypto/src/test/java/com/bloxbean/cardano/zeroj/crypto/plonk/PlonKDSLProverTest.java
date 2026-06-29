@@ -25,15 +25,25 @@ import static org.junit.jupiter.api.Assertions.*;
 class PlonKDSLProverTest {
 
     private static final String PTAU_PATH = "/test-circuits/plonk-multiplier/pot8_final.ptau";
+    private String previousLegacyBn254;
 
     @BeforeEach
     void enableLegacyBn254() {
+        previousLegacyBn254 = System.getProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
         System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
     }
 
     @AfterEach
-    void clearLegacyBn254() {
-        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    void restoreLegacyBn254() {
+        restoreProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, previousLegacyBn254);
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 
     @Test

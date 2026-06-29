@@ -3,6 +3,7 @@ package com.bloxbean.cardano.zeroj.crypto.plonk;
 import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTau;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -11,10 +12,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class PlonKLegacyBn254PolicyTest {
+    private String previousLegacyBn254;
+
+    @BeforeEach
+    void rememberPolicy() {
+        previousLegacyBn254 = System.getProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    }
 
     @AfterEach
-    void restoreDefaultPolicy() {
-        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    void restorePolicy() {
+        restoreProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, previousLegacyBn254);
     }
 
     @Test
@@ -38,5 +45,13 @@ class PlonKLegacyBn254PolicyTest {
                 () -> PlonKProver.prove(null, null, null, null, new java.math.BigInteger[0]));
         assertThrows(IllegalStateException.class,
                 () -> PlonKProver.proveUnblinded(null, null, null, null, new java.math.BigInteger[0]));
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 }

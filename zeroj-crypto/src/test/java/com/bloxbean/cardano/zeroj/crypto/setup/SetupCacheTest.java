@@ -7,6 +7,8 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProvingKeyBLS381;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKSetupBLS381;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,6 +27,18 @@ class SetupCacheTest {
 
     @TempDir
     Path tempDir;
+    private String previousInsecureTrustedSetup;
+
+    @BeforeEach
+    void enableDevSetup() {
+        previousInsecureTrustedSetup = System.getProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
+        System.setProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, "true");
+    }
+
+    @AfterEach
+    void restoreDevSetup() {
+        restoreProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, previousInsecureTrustedSetup);
+    }
 
     @Test
     void srsCacheRoundTripsCanonicalBls381MontgomeryLimbs() throws Exception {
@@ -66,18 +80,13 @@ class SetupCacheTest {
 
     @Test
     void insecureTrustedSetupRequiresExplicitOptIn() {
-        String old = System.getProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
         try {
             System.clearProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
             if (!"true".equalsIgnoreCase(System.getenv(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_ENV))) {
                 assertThrows(IllegalStateException.class, () -> PowersOfTauBLS381.generate(4));
             }
         } finally {
-            if (old == null) {
-                System.setProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, "true");
-            } else {
-                System.setProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, old);
-            }
+            restoreProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, previousInsecureTrustedSetup);
         }
     }
 
@@ -172,5 +181,13 @@ class SetupCacheTest {
         assertEquals(expected.s1Commit(), actual.s1Commit());
         assertEquals(expected.s2Commit(), actual.s2Commit());
         assertEquals(expected.s3Commit(), actual.s3Commit());
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 }
