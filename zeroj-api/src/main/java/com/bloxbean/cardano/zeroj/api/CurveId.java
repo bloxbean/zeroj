@@ -5,7 +5,9 @@ package com.bloxbean.cardano.zeroj.api;
  */
 public enum CurveId {
     /**
-     * BN254 (alt_bn128) — used by snarkjs/circom, Ethereum EIP-196/197.
+     * BN254 (alt_bn128) — legacy/off-chain only in ZeroJ.
+     * Cardano does not expose BN254 pairing builtins, and ZeroJ BN254 verifiers
+     * are disabled by default.
      */
     BN254("bn128"),
 

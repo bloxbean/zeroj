@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
@@ -51,6 +52,7 @@ public final class Groth16Prover {
             BigInteger[] witness,
             List<R1CSConstraint> constraints,
             int numWires) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         // Domain size = length of H points array in proving key
         int domainSize = pk.pointsH().length;
         return prove(pk, witness, constraints, numWires, domainSize);
@@ -62,6 +64,7 @@ public final class Groth16Prover {
             List<R1CSConstraint> constraints,
             int numWires,
             int domainSize) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
 
         // --- Input validation ---
         if (witness == null || witness.length == 0)
@@ -105,6 +108,7 @@ public final class Groth16Prover {
     static Groth16Proof proveUnblinded(
             Groth16ProvingKey pk, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
         BigInteger r = BigInteger.ZERO;
         BigInteger s = BigInteger.ZERO;

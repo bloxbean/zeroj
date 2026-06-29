@@ -2,12 +2,13 @@
 
 Native in-process Groth16 and PlonK proving via [gnark](https://github.com/Consensys/gnark) FFM bindings.
 
-This module provides high-performance in-process proof generation using gnark (Go-based ZK framework), accessed through Java's Foreign Function & Memory (FFM) API. It supports **both BLS12-381 and BN254** curves, making it the only prover backend that covers all curves.
+This module provides high-performance in-process proof generation using gnark (Go-based ZK framework), accessed through Java's Foreign Function & Memory (FFM) API. ZeroJ's Cardano path uses **BLS12-381**. BN254 should be treated as legacy/off-chain only and is not suitable for Cardano on-chain verification.
 
 ## Features
 
-- Groth16 proving for BLS12-381 and BN254
-- PlonK proving (beta) for BLS12-381 and BN254
+- Groth16 proving for BLS12-381
+- PlonK proving (beta) for BLS12-381
+- Legacy/off-chain BN254 proving through `GnarkProver` requires `-Dzeroj.allowLegacyBn254=true`; ZeroJ BN254 verifiers are also disabled by default
 - Uses shared `zeroj-prover-spi` response and error types
 - `AutoCloseable` for proper native resource management
 

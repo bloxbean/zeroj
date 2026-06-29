@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
@@ -42,6 +43,7 @@ public final class PlonKProver {
      */
     public static PlonKProof prove(PlonKProvingKey pk, MontFr254[] wireA, MontFr254[] wireB,
                                     MontFr254[] wireC, BigInteger[] pubInputs) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         int n = pk.domainSize();
         int logN = Integer.numberOfTrailingZeros(n);
         MontFr254 omega = pk.omega();
@@ -56,6 +58,7 @@ public final class PlonKProver {
     /** Prove without blinding (for debugging). */
     static PlonKProof proveUnblinded(PlonKProvingKey pk, MontFr254[] wireA, MontFr254[] wireB,
                                       MontFr254[] wireC, BigInteger[] pubInputs) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         MontFr254[] b = new MontFr254[9];
         for (int i = 0; i < 9; i++) b[i] = MontFr254.ZERO;
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);

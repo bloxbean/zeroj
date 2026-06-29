@@ -1,8 +1,14 @@
 package com.bloxbean.cardano.zeroj.codec;
 
+import co.nstant.in.cbor.CborBuilder;
+import co.nstant.in.cbor.CborEncoder;
+import co.nstant.in.cbor.model.ByteString;
+import co.nstant.in.cbor.model.UnsignedInteger;
+import co.nstant.in.cbor.model.UnicodeString;
 import com.bloxbean.cardano.zeroj.api.*;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -102,5 +108,29 @@ class CborEnvelopeCodecTest {
     void decodeMalformedCborThrows() {
         assertThrows(CodecException.class, () ->
                 CborEnvelopeCodec.decode(new byte[]{0x00, 0x01, 0x02}));
+    }
+
+    @Test
+    void decodeRejectsNonSha256VkHashRef() throws Exception {
+        var publicInputs = new co.nstant.in.cbor.model.Array();
+        publicInputs.add(new ByteString(BigInteger.ONE.toByteArray()));
+        var vkRef = new co.nstant.in.cbor.model.Array();
+        vkRef.add(new UnsignedInteger(1));
+        vkRef.add(new ByteString(new byte[16]));
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        new CborEncoder(baos).encode(new CborBuilder()
+                .addMap()
+                .put(new UnsignedInteger(1), new UnsignedInteger(1))
+                .put(new UnsignedInteger(2), new UnicodeString("groth16"))
+                .put(new UnsignedInteger(3), new UnicodeString("bls12-381"))
+                .put(new UnsignedInteger(4), new UnicodeString("bad-vk-ref"))
+                .put(new UnsignedInteger(5), new ByteString(new byte[]{1}))
+                .put(new UnsignedInteger(6), publicInputs)
+                .put(new UnsignedInteger(7), vkRef)
+                .end()
+                .build());
+
+        assertThrows(CodecException.class, () -> CborEnvelopeCodec.decode(baos.toByteArray()));
     }
 }

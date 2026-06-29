@@ -8,13 +8,13 @@ This module contains test resources used across multiple ZeroJ modules. It is **
 
 | Directory | Description |
 |-----------|-------------|
-| `test-vectors/groth16-bn254/` | Groth16/BN254 proof, VK, public inputs (snarkjs format) |
 | `test-vectors/groth16-bls12381/` | Groth16/BLS12-381 proof, VK, public inputs |
-| `test-vectors/groth16-bn254-cubic/` | Additional Groth16/BN254 cubic circuit vector |
-| `test-vectors/groth16-bn254-invalid/` | Tampered proof/input/VK cases for negative tests |
-| `test-vectors/plonk-bn254/` | PlonK/BN254 snarkjs proof, VK, public inputs |
-| `test-vectors/eip197-bn254-pairing/` | Ethereum EIP-197 pairing test vectors for BN254 validation |
 | `test-vectors/plonk-bls12381/` | PlonK/BLS12-381 test vectors (gnark format) |
+| `test-vectors/groth16-bn254/` | Legacy Groth16/BN254 proof, VK, public inputs (snarkjs format) |
+| `test-vectors/groth16-bn254-cubic/` | Legacy Groth16/BN254 cubic circuit vector |
+| `test-vectors/groth16-bn254-invalid/` | Legacy BN254 tampered proof/input/VK cases for negative tests |
+| `test-vectors/plonk-bn254/` | Legacy PlonK/BN254 snarkjs proof, VK, public inputs |
+| `test-vectors/eip197-bn254-pairing/` | Ethereum EIP-197 pairing test vectors for BN254 validation |
 | `test-vectors/circom-wasm-bn254/` | circom WASM/R1CS fixture for witness-calculation tests |
 | `test-vectors/malformed/` | Invalid JSON/proof fixtures for codec validation |
 
@@ -36,7 +36,7 @@ dependencies {
 Test resources are loaded via classpath:
 
 ```java
-String proofJson = loadResource("/test-vectors/groth16-bn254/proof.json");
-String vkJson = loadResource("/test-vectors/groth16-bn254/verification_key.json");
-String publicJson = loadResource("/test-vectors/groth16-bn254/public.json");
+String proofJson = loadResource("/test-vectors/groth16-bls12381/proof.json");
+String vkJson = loadResource("/test-vectors/groth16-bls12381/verification_key.json");
+String publicJson = loadResource("/test-vectors/groth16-bls12381/public.json");
 ```

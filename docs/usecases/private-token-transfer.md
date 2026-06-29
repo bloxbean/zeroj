@@ -809,7 +809,8 @@ var circuit = WithdrawalCircuit.build(20);  // depth 20 = 1M deposits
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 // ~7,260 constraints
 
-// Setup (production: use MPC ceremony .zkey)
+// Setup (local dev requires -Dzeroj.allowInsecureTrustedSetup=true;
+// production: use MPC ceremony .zkey)
 var srs = PowersOfTauBLS381.generate(13);
 var setup = Groth16SetupBLS381.setup(constraints, numWires, numPublic, srs.tauScalar());
 

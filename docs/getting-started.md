@@ -101,6 +101,7 @@ This is all pure Java -- no external tools needed.
 var constraints = r1cs.constraints();
 
 // Local test setup only: toxic waste is known.
+// Requires -Dzeroj.allowInsecureTrustedSetup=true.
 var srs = PowersOfTauBLS381.generate(4);
 var setupResult = Groth16SetupBLS381.setup(
         constraints, r1cs.numWires(), r1cs.numPublicInputs(), srs.tauScalar());
@@ -109,7 +110,8 @@ var proof = Groth16ProverBLS381.prove(
         setupResult.provingKey(), witness, constraints, r1cs.numWires());
 ```
 
-For setup beyond local tests, import MPC-generated `.zkey` artifacts instead of using `PowersOfTauBLS381.generate(...)`.
+For setup beyond local tests, import MPC-generated `.zkey` artifacts instead of
+using `PowersOfTauBLS381.generate(...)`.
 
 ## Step 4: Verify Off-Chain (Pure Java)
 
@@ -286,9 +288,9 @@ See the [examples README](../zeroj-examples/README.md) for detailed descriptions
 
 | Prover | Proof System | Curve | External Deps | Notes |
 |--------|-------------|-------|---------------|-------|
-| **Pure Java** | Groth16 + PlonK | BLS12-381, BN254 | **None** | Recommended default path |
-| **gnark FFM** | Groth16 + PlonK | BLS12-381, BN254 | Go native lib | Optional native backend |
-| **snarkjs CLI** | Groth16 + PlonK | BLS12-381, BN254 | Node.js + snarkjs | External CLI workflow |
+| **Pure Java** | Groth16 + PlonK | BLS12-381 | **None** | Recommended default path |
+| **gnark FFM** | Groth16 + PlonK | BLS12-381 | Go native lib | Optional native backend |
+| **snarkjs CLI** | Groth16 + PlonK | BLS12-381 | Node.js + snarkjs | External CLI workflow |
 
 **Pure Java** is the recommended prover for the core Cardano path -- zero native dependencies and covered by end-to-end on-chain tests. See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.
 
@@ -299,6 +301,6 @@ For native or CLI alternatives, see [Alternate Prover Backends](alternate-prover
 | Curve | Off-Chain | On-Chain (Plutus V3) | Notes |
 |-------|-----------|---------------------|-------|
 | BLS12-381 | Groth16 + PlonK | Groth16 supported; PlonK prototype | Plutus V3 has native BLS builtins |
-| BN254 | Groth16 + PlonK | Not feasible | No Plutus BN254 builtins |
+| BN254 | Legacy/off-chain only | Not feasible | No Plutus BN254 builtins; disabled by default in ZeroJ verifiers |
 
 For on-chain verification, always use **BLS12-381**.

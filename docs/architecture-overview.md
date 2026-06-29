@@ -41,7 +41,7 @@ zeroj-api                  (foundation types)
   |     |
   |     +-- zeroj-verifier-groth16 (→ zeroj-backend-spi, zeroj-codec, zeroj-bls12381, zeroj-blst)
   |     |
-  |     +-- zeroj-verifier-plonk   (→ zeroj-backend-spi, zeroj-codec, zeroj-crypto, zeroj-verifier-groth16 for BN254 arithmetic)
+  |     +-- zeroj-verifier-plonk   (→ zeroj-backend-spi, zeroj-codec, zeroj-crypto, zeroj-verifier-groth16 for legacy BN254 arithmetic)
   +-- zeroj-bls12381       (pure Java BLS12-381 field/curve/pairing)
   |     |
   |     +-- zeroj-crypto   (→ zeroj-api, zeroj-bls12381)
@@ -79,7 +79,7 @@ zeroj-bom-core / zeroj-bom-all (platform modules, no code)
 Immutable data types shared across all modules:
 - `ZkProofEnvelope` -- the proof container
 - `ProofSystemId` -- public docs focus on GROTH16, PLONK, and BBS
-- `CurveId` -- public docs focus on BN254 and BLS12_381
+- `CurveId` -- public docs focus on BLS12_381 for Cardano-facing flows
 - `VerificationResult` -- crypto validity + policy validity
 - `VerificationMaterial` -- verification key + metadata
 
@@ -99,8 +99,8 @@ Backend abstraction:
 
 ### Layer 4: Verification Backends
 Concrete implementations:
-- `zeroj-verifier-groth16` -- Groth16 for BN254 (pure Java) + BLS12-381 (pure Java / blst)
-- `zeroj-verifier-plonk` -- structured PlonK proof verification for BN254 + BLS12-381 (pure Java)
+- `zeroj-verifier-groth16` -- Groth16 for BLS12-381 (pure Java / blst); BN254 legacy verifier disabled by default
+- `zeroj-verifier-plonk` -- structured PlonK proof verification for BLS12-381 (pure Java); BN254 legacy verifier disabled by default
 - `zeroj-blst` -- Low-level BLS12-381 curve operations
 
 ### Layer 5: Circuit Definition (`zeroj-circuit-dsl`, `zeroj-circuit-lib`)
@@ -146,12 +146,10 @@ Reusable Plutus V3 spending validators compiled via Julc:
 |-------------|-------|---------|----------------|-------------|
 | Groth16 | BLS12-381 | Pure Java | `zeroj-verifier-groth16` | None |
 | Groth16 | BLS12-381 | blst native (FFM) | `zeroj-verifier-groth16` | blst |
-| Groth16 | BN254 | Pure Java | `zeroj-verifier-groth16` | None |
 | PlonK | BLS12-381 | Pure Java | `zeroj-verifier-plonk` | None |
-| PlonK | BN254 | Pure Java | `zeroj-verifier-plonk` | None |
 
 - BLS12-381 pure Java verifier uses field arithmetic validated against gnark
-- BN254 uses pure Java field arithmetic, validated against Ethereum EIP-196/197 test vectors
+- BN254 pure Java arithmetic remains for legacy/off-chain tests, but BN254 verifiers are disabled by default and are not ServiceLoader-registered
 - blst option available for BLS12-381 when a native verifier backend is acceptable
 
 ## On-Chain Verification

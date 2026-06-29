@@ -5,6 +5,7 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
+import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PtauImporterBLS381;
 
 import java.math.BigInteger;
@@ -43,6 +44,7 @@ public final class PowersOfTauBLS381 {
      * @return SRS containing tau^i * G1 and tau^i * G2 points
      */
     public static PtauImporterBLS381.SRS generate(int power) {
+        TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
         if (power < 4 || power > 32)
             throw new IllegalArgumentException("Power must be in [4, 32], got " + power
                     + " (minimum 4 required for PlonK domain size >= 8)");

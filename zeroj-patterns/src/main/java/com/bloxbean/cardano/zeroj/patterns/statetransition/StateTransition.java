@@ -119,7 +119,7 @@ public record StateTransition(
         private List<BigInteger> additionalPublicInputs;
         private byte[] proofBytes;
         private ProofSystemId proofSystem = ProofSystemId.GROTH16;
-        private CurveId curve = CurveId.BN254;
+        private CurveId curve = CurveId.BLS12_381;
         private String circuitId;
 
         public Builder oldStateHash(byte[] v) { this.oldStateHash = v; return this; }

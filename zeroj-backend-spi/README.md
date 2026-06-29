@@ -19,7 +19,7 @@ This module defines the contracts that verification backends must implement. It 
 public class MyVerifier implements ZkVerifier {
     @Override
     public BackendDescriptor descriptor() {
-        return new BackendDescriptor(ProofSystemId.GROTH16, CurveId.BN254, "my-verifier");
+        return new BackendDescriptor(ProofSystemId.GROTH16, CurveId.BLS12_381, "my-verifier");
     }
 
     @Override

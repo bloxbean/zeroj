@@ -12,7 +12,7 @@ import com.bloxbean.cardano.zeroj.patterns.statetransition.StateTransitionInput;
 import com.bloxbean.cardano.zeroj.patterns.statetransition.StateTransitionVerifier;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Groth16BN254Verifier;
+import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * the high-level input/output/policy APIs.
  * <p>
  * Each flow shows: domain data → input object → attach proof → verify → enriched result.
- * Uses real snarkjs Groth16/BN254 proofs (multiplier circuit repurposed conceptually).
+ * Uses real snarkjs Groth16/BLS12-381 proofs (multiplier circuit repurposed conceptually).
  */
 class PatternFlowTest {
 
@@ -38,15 +38,15 @@ class PatternFlowTest {
 
     @BeforeEach
     void setUp() {
-        String proofJson = loadString("/test-vectors/groth16-bn254/proof.json");
-        String vkJson = loadString("/test-vectors/groth16-bn254/verification_key.json");
+        String proofJson = loadString("/test-vectors/groth16-bls12381/proof.json");
+        String vkJson = loadString("/test-vectors/groth16-bls12381/verification_key.json");
         byte[] vkBytes = vkJson.getBytes(StandardCharsets.UTF_8);
 
         var registry = VerifierRegistry.empty();
-        registry.register(new Groth16BN254Verifier());
+        registry.register(new Groth16BLS12381PureJavaVerifier());
 
         var vkRegistry = new InMemoryVerificationKeyRegistry();
-        material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BN254,
+        material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BLS12_381,
                 new CircuitId("multiplier"));
         vkRegistry.register(material);
 
@@ -71,7 +71,7 @@ class PatternFlowTest {
         // 2. PROOF: attach externally generated proof (snarkjs, sidecar, etc.)
         var transition = input.withProof(proofBytes, "multiplier");
         assertEquals(ProofSystemId.GROTH16, transition.proofSystem());
-        assertEquals(CurveId.BN254, transition.curve());
+        assertEquals(CurveId.BLS12_381, transition.curve());
 
         // 3. VERIFY: get enriched result with anchoring metadata
         var verifier = new StateTransitionVerifier(orchestrator);
@@ -188,17 +188,21 @@ class PatternFlowTest {
 
     @Test
     void patternPolicy_wrongCurveRejected() {
-        // BLS12-381 policy rejects a BN254 proof
-        var policy = PatternPolicies.groth16Bls12381(orchestrator, 2);
-        var envelope = buildEnvelope(); // BN254
+        // BN254 policy rejects the standard BLS12-381 proof.
+        var policy = VerificationPolicyTemplate.create(orchestrator)
+                .requireProofSystem(ProofSystemId.GROTH16)
+                .requireCurve(CurveId.BN254)
+                .requireMinPublicInputs(2)
+                .build();
+        var envelope = buildEnvelope();
 
         var result = policy.evaluate(envelope, material);
-        assertFalse(result.accepted(), "BLS12-381 policy should reject BN254 proof");
+        assertFalse(result.accepted(), "BN254 policy should reject a BLS12-381 proof");
     }
 
     @Test
     void patternPolicy_tooFewInputsRejected() {
-        var policy = PatternPolicies.groth16Bn254(orchestrator, 10);
+        var policy = PatternPolicies.groth16Bls12381(orchestrator, 10);
         var envelope = buildEnvelope(); // 2 inputs
 
         var result = policy.evaluate(envelope, material);
@@ -210,8 +214,8 @@ class PatternFlowTest {
     private ZkProofEnvelope buildEnvelope() {
         return SnarkjsJsonCodec.toEnvelopeFromJson(
                 new String(proofBytes, StandardCharsets.UTF_8),
-                loadString("/test-vectors/groth16-bn254/verification_key.json"),
-                loadString("/test-vectors/groth16-bn254/public.json"),
+                loadString("/test-vectors/groth16-bls12381/verification_key.json"),
+                loadString("/test-vectors/groth16-bls12381/public.json"),
                 new CircuitId("multiplier"));
     }
 

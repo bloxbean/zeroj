@@ -7,8 +7,8 @@ import com.bloxbean.cardano.zeroj.api.ProofSystemId;
  * Declares what proof system and curve a {@link ZkVerifier} backend supports.
  *
  * @param proofSystem the proof system (e.g., GROTH16)
- * @param curve       the elliptic curve (e.g., BN254, BLS12_381)
- * @param name        human-readable backend name (e.g., "groth16-bn254-java")
+ * @param curve       the elliptic curve (e.g., BLS12_381)
+ * @param name        human-readable backend name (e.g., "groth16-bls12381-java")
  */
 public record BackendDescriptor(
         ProofSystemId proofSystem,

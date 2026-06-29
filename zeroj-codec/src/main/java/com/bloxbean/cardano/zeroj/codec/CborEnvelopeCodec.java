@@ -5,7 +5,6 @@ import co.nstant.in.cbor.CborDecoder;
 import co.nstant.in.cbor.CborEncoder;
 import co.nstant.in.cbor.CborException;
 import co.nstant.in.cbor.model.*;
-import co.nstant.in.cbor.model.Number;
 import com.bloxbean.cardano.zeroj.api.*;
 
 import java.io.ByteArrayInputStream;
@@ -34,6 +33,13 @@ import java.util.Map;
  * </pre>
  */
 public final class CborEnvelopeCodec {
+
+    private static final int MAX_CBOR_BYTES = 16 * 1024 * 1024;
+    private static final int MAX_PROOF_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_PUBLIC_INPUTS = 1 << 20;
+    private static final int MAX_PUBLIC_INPUT_BYTES = 128;
+    private static final int SHA256_BYTES = 32;
+    private static final int MAX_TEXT_BYTES = 256;
 
     private CborEnvelopeCodec() {}
 
@@ -65,8 +71,11 @@ public final class CborEnvelopeCodec {
      */
     public static ZkProofEnvelope decode(byte[] cbor) {
         try {
+            if (cbor == null || cbor.length > MAX_CBOR_BYTES) {
+                throw new CodecException("CBOR envelope is too large");
+            }
             List<DataItem> items = CborDecoder.decode(cbor);
-            if (items.isEmpty() || !(items.getFirst() instanceof co.nstant.in.cbor.model.Map map)) {
+            if (items.size() != 1 || !(items.getFirst() instanceof co.nstant.in.cbor.model.Map map)) {
                 throw new CodecException("CBOR envelope must be a map");
             }
 
@@ -74,7 +83,7 @@ public final class CborEnvelopeCodec {
             String proofSystem = getText(map, 2);
             String curve = getText(map, 3);
             String circuitId = getText(map, 4);
-            byte[] proofBytes = getBytes(map, 5);
+            byte[] proofBytes = getBytes(map, 5, MAX_PROOF_BYTES);
             PublicInputs publicInputs = decodePublicInputs(getArray(map, 6));
             VerificationKeyRef vkRef = decodeVkRef(getArray(map, 7));
 
@@ -122,10 +131,21 @@ public final class CborEnvelopeCodec {
     // --- Decoding helpers ---
 
     private static PublicInputs decodePublicInputs(Array array) {
+        if (array.getDataItems().size() > MAX_PUBLIC_INPUTS) {
+            throw new CodecException("Too many public inputs in CBOR envelope");
+        }
         List<BigInteger> values = new ArrayList<>();
         for (DataItem item : array.getDataItems()) {
             if (item instanceof ByteString bs) {
-                values.add(new BigInteger(bs.getBytes()));
+                byte[] bytes = bs.getBytes();
+                if (bytes == null || bytes.length == 0 || bytes.length > MAX_PUBLIC_INPUT_BYTES) {
+                    throw new CodecException("Invalid public input byte length");
+                }
+                BigInteger value = new BigInteger(bytes);
+                if (value.signum() < 0) {
+                    throw new CodecException("Public input must be non-negative");
+                }
+                values.add(value);
             } else {
                 throw new CodecException("Public input must be a byte string");
             }
@@ -138,10 +158,31 @@ public final class CborEnvelopeCodec {
         if (items.size() != 2) {
             throw new CodecException("VK ref must be a 2-element array");
         }
-        int tag = ((Number) items.get(0)).getValue().intValue();
+        if (!(items.get(0) instanceof UnsignedInteger tagItem)) {
+            throw new CodecException("VK ref tag must be an unsigned integer");
+        }
+        int tag = tagItem.getValue().intValueExact();
         return switch (tag) {
-            case 1 -> new VerificationKeyRef.ByHash(((ByteString) items.get(1)).getBytes());
-            case 2 -> new VerificationKeyRef.ById(((UnicodeString) items.get(1)).getString());
+            case 1 -> {
+                if (!(items.get(1) instanceof ByteString hashItem)) {
+                    throw new CodecException("VK hash ref must be a byte string");
+                }
+                byte[] hash = hashItem.getBytes();
+                if (hash == null || hash.length != SHA256_BYTES) {
+                    throw new CodecException("VK hash ref must be a SHA-256 hash");
+                }
+                yield new VerificationKeyRef.ByHash(hash);
+            }
+            case 2 -> {
+                if (!(items.get(1) instanceof UnicodeString idItem)) {
+                    throw new CodecException("VK id ref must be text");
+                }
+                String id = idItem.getString();
+                if (id == null || id.isBlank() || id.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_TEXT_BYTES) {
+                    throw new CodecException("Invalid VK id ref");
+                }
+                yield new VerificationKeyRef.ById(id);
+            }
             default -> throw new CodecException("Unknown VK ref tag: " + tag);
         };
     }
@@ -149,24 +190,49 @@ public final class CborEnvelopeCodec {
     private static int getUint(co.nstant.in.cbor.model.Map map, int key) {
         DataItem item = map.get(new UnsignedInteger(key));
         if (item == null) throw new CodecException("Missing CBOR map key: " + key);
-        return ((Number) item).getValue().intValue();
+        if (!(item instanceof UnsignedInteger number)) {
+            throw new CodecException("CBOR map key " + key + " must be an unsigned integer");
+        }
+        try {
+            return number.getValue().intValueExact();
+        } catch (ArithmeticException e) {
+            throw new CodecException("CBOR map key " + key + " integer is too large", e);
+        }
     }
 
     private static String getText(co.nstant.in.cbor.model.Map map, int key) {
         DataItem item = map.get(new UnsignedInteger(key));
         if (item == null) throw new CodecException("Missing CBOR map key: " + key);
-        return ((UnicodeString) item).getString();
+        if (!(item instanceof UnicodeString textItem)) {
+            throw new CodecException("CBOR map key " + key + " must be text");
+        }
+        String value = textItem.getString();
+        if (value == null || value.isBlank()
+                || value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_TEXT_BYTES) {
+            throw new CodecException("Invalid CBOR text value for key: " + key);
+        }
+        return value;
     }
 
-    private static byte[] getBytes(co.nstant.in.cbor.model.Map map, int key) {
+    private static byte[] getBytes(co.nstant.in.cbor.model.Map map, int key, int maxLength) {
         DataItem item = map.get(new UnsignedInteger(key));
         if (item == null) throw new CodecException("Missing CBOR map key: " + key);
-        return ((ByteString) item).getBytes();
+        if (!(item instanceof ByteString bytesItem)) {
+            throw new CodecException("CBOR map key " + key + " must be a byte string");
+        }
+        byte[] bytes = bytesItem.getBytes();
+        if (bytes == null || bytes.length == 0 || bytes.length > maxLength) {
+            throw new CodecException("Invalid CBOR byte string length for key: " + key);
+        }
+        return bytes;
     }
 
     private static Array getArray(co.nstant.in.cbor.model.Map map, int key) {
         DataItem item = map.get(new UnsignedInteger(key));
         if (item == null) throw new CodecException("Missing CBOR map key: " + key);
-        return (Array) item;
+        if (!(item instanceof Array array)) {
+            throw new CodecException("CBOR map key " + key + " must be an array");
+        }
+        return array;
     }
 }

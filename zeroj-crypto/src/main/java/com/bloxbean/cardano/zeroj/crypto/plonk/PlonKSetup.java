@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
 import com.bloxbean.cardano.zeroj.crypto.kzg.KZGCommitment;
@@ -41,6 +42,7 @@ public final class PlonKSetup {
             int[] sigmaA, int[] sigmaB, int[] sigmaC,
             int numWires,
             PtauImporter.SRS srs) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
 
         // Domain size = next power of 2 >= numGates
         // Minimum 8: with blinding (degree n+2 wire/Z polynomials), the quotient

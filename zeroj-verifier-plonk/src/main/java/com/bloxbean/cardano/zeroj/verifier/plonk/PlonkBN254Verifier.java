@@ -27,6 +27,12 @@ public class PlonkBN254Verifier implements ZkVerifier {
 
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
+        if (!LegacyCurvePolicy.legacyBn254Enabled()) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.UNSUPPORTED_CURVE,
+                    LegacyCurvePolicy.legacyBn254DisabledMessage());
+        }
+
         try {
             if (envelope.proofFormat().filter("gnark-plonk-json"::equals).isPresent()) {
                 return VerificationResult.error(

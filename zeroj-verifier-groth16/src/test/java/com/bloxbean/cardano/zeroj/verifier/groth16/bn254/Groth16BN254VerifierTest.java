@@ -1,10 +1,13 @@
 package com.bloxbean.cardano.zeroj.verifier.groth16.bn254;
 
 import com.bloxbean.cardano.zeroj.api.*;
+import com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
+import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -12,8 +15,38 @@ class Groth16BN254VerifierTest {
 
     private final Groth16BN254Verifier verifier = new Groth16BN254Verifier();
 
+    @AfterEach
+    void clearLegacyBn254OptIn() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    }
+
+    @Test
+    void verifyDisabledByDefault() {
+        var envelope = loadEnvelope(
+                "/test-vectors/groth16-bn254/proof.json",
+                "/test-vectors/groth16-bn254/public.json",
+                "multiplier");
+        var material = loadMaterial(
+                "/test-vectors/groth16-bn254/verification_key.json",
+                "multiplier");
+
+        var result = verifier.verify(envelope, material);
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.UNSUPPORTED_CURVE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void serviceLoaderDoesNotRegisterBn254() {
+        boolean registered = ServiceLoader.load(ZkVerifier.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .anyMatch(verifier -> verifier.descriptor().supports(ProofSystemId.GROTH16, CurveId.BN254));
+
+        assertFalse(registered, "BN254 Groth16 verifier must not be auto-registered");
+    }
+
     @Test
     void verifyValidMultiplierProof() {
+        enableLegacyBn254();
         var envelope = loadEnvelope(
                 "/test-vectors/groth16-bn254/proof.json",
                 "/test-vectors/groth16-bn254/public.json",
@@ -28,6 +61,7 @@ class Groth16BN254VerifierTest {
 
     @Test
     void verifyValidCubicProof() {
+        enableLegacyBn254();
         var envelope = loadEnvelope(
                 "/test-vectors/groth16-bn254-cubic/proof.json",
                 "/test-vectors/groth16-bn254-cubic/public.json",
@@ -42,6 +76,7 @@ class Groth16BN254VerifierTest {
 
     @Test
     void rejectTamperedProof() {
+        enableLegacyBn254();
         var envelope = loadEnvelope(
                 "/test-vectors/groth16-bn254-invalid/proof_tampered.json",
                 "/test-vectors/groth16-bn254-invalid/public.json",
@@ -56,6 +91,7 @@ class Groth16BN254VerifierTest {
 
     @Test
     void rejectWrongPublicInputs() {
+        enableLegacyBn254();
         var envelope = loadEnvelope(
                 "/test-vectors/groth16-bn254/proof.json",
                 "/test-vectors/groth16-bn254-invalid/public_wrong.json",
@@ -70,6 +106,7 @@ class Groth16BN254VerifierTest {
 
     @Test
     void rejectWrongVerificationKey() {
+        enableLegacyBn254();
         // Use multiplier proof with cubic VK
         var envelope = loadEnvelope(
                 "/test-vectors/groth16-bn254/proof.json",
@@ -93,6 +130,10 @@ class Groth16BN254VerifierTest {
     }
 
     // --- Helpers ---
+
+    private static void enableLegacyBn254() {
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+    }
 
     private ZkProofEnvelope loadEnvelope(String proofPath, String publicPath, String circuitName) {
         String proofJson = loadString(proofPath);

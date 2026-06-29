@@ -490,7 +490,8 @@ var circuit = PrivateVoteCircuit.build(14);  // depth 14 = 16K voters
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 // ~5,600 constraints
 
-// 3. Trusted setup (dev: Java, prod: MPC ceremony)
+// 3. Trusted setup (dev: Java with -Dzeroj.allowInsecureTrustedSetup=true,
+//    prod: MPC ceremony)
 var srs = PowersOfTauBLS381.generate(13);
 var setup = Groth16SetupBLS381.setup(constraints, numWires, numPublic, srs.tauScalar());
 

@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254.AffineG2;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFp254;
@@ -47,6 +48,7 @@ public final class PlonKZkeyImporter {
      * Import a PlonK proving key from a snarkjs PlonK .zkey file.
      */
     public static PlonKProvingKey importZkey(InputStream input) throws IOException {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         byte[] data = input.readAllBytes();
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
 

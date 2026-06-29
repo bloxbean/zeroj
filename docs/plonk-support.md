@@ -70,7 +70,8 @@ var witness = circuit.calculateWitness(Map.of(
         "a", List.of(BigInteger.valueOf(3)),
         "b", List.of(BigInteger.valueOf(11))), CurveId.BLS12_381);
 
-var srs = PowersOfTauBLS381.generate(8); // local test setup only
+// Local test setup only; requires -Dzeroj.allowInsecureTrustedSetup=true.
+var srs = PowersOfTauBLS381.generate(8);
 int numGates = plonk.numGates();
 BigInteger[][] gateSelectors = new BigInteger[numGates][5];
 for (int i = 0; i < numGates; i++) {
@@ -150,7 +151,7 @@ PlonKConstraintSystem
     |
 PlonKSetupBLS381 / PlonKProverBLS381
     |
-PlonkBLS12381Verifier / PlonkBN254Verifier
+PlonkBLS12381Verifier
     |
 Optional Cardano profile: PlonKProverBLS381.proveCardano(...)
     |

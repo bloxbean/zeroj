@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.prover.gnark;
 
 import com.bloxbean.cardano.zeroj.api.CircuitId;
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import com.bloxbean.cardano.zeroj.prover.spi.ProveResponse;
 import com.bloxbean.cardano.zeroj.prover.spi.ProverException;
@@ -13,12 +14,14 @@ import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * Native in-process Groth16 prover using gnark via FFM.
  *
- * <p>Supports both BLS12-381 (Cardano-native) and BN254 curves.
+ * <p>Supports BLS12-381, the Cardano-native curve.
+ * BN254 is legacy/off-chain only and requires explicit legacy opt-in.
  * gnark requires Go compilation before use.
  * Build the native library with:</p>
  * <pre>{@code
@@ -83,7 +86,7 @@ public class GnarkProver implements AutoCloseable {
     /**
      * Generate a Groth16 proof using gnark.
      *
-     * @param curve       curve identifier ("bls12381" or "bn254")
+     * @param curve       curve identifier ("bls12381"; "bn254" only with explicit legacy opt-in)
      * @param r1csPath    path to the compiled R1CS constraint system
      * @param pkPath      path to the proving key
      * @param witnessPath path to the witness file (gnark binary format)
@@ -91,6 +94,7 @@ public class GnarkProver implements AutoCloseable {
      * @throws ProverException if proving fails
      */
     public ProveResponse proveRaw(String curve, Path r1csPath, Path pkPath, Path witnessPath) {
+        requireSupportedCurve(curve);
         long startTime = System.nanoTime();
 
         GnarkLibrary.ProveResult result = library.groth16Prove(
@@ -112,6 +116,7 @@ public class GnarkProver implements AutoCloseable {
      * @return setup result with proving key path and verification key JSON
      */
     public GnarkLibrary.SetupResult setup(String curve, Path r1csPath) {
+        requireSupportedCurve(curve);
         return library.groth16Setup(curve, r1csPath.toAbsolutePath().toString());
     }
 
@@ -123,18 +128,19 @@ public class GnarkProver implements AutoCloseable {
      * In production, use an MPC-generated SRS. The SRS is universal — one SRS
      * works for any circuit whose size does not exceed the SRS threshold.
      *
-     * @param curve    curve identifier ("bls12381" or "bn254")
+     * @param curve    curve identifier ("bls12381"; "bn254" only with explicit legacy opt-in)
      * @param r1csPath path to the SparseR1CS constraint system file
      * @return setup result with proving key path and verification key JSON
      */
     public GnarkLibrary.SetupResult plonkSetup(String curve, Path r1csPath) {
+        requireSupportedCurve(curve);
         return library.plonkSetup(curve, r1csPath.toAbsolutePath().toString());
     }
 
     /**
      * Generate a PlonK proof using gnark.
      *
-     * @param curve       curve identifier ("bls12381" or "bn254")
+     * @param curve       curve identifier ("bls12381"; "bn254" only with explicit legacy opt-in)
      * @param r1csPath    path to the SparseR1CS file
      * @param pkPath      path to the proving key
      * @param witnessPath path to the witness file (gnark binary format)
@@ -142,6 +148,7 @@ public class GnarkProver implements AutoCloseable {
      * @throws ProverException if proving fails
      */
     public ProveResponse plonkProveRaw(String curve, Path r1csPath, Path pkPath, Path witnessPath) {
+        requireSupportedCurve(curve);
         long startTime = System.nanoTime();
 
         GnarkLibrary.ProveResult result = library.plonkProve(
@@ -165,6 +172,7 @@ public class GnarkProver implements AutoCloseable {
      * @return true if the proof is valid
      */
     public boolean plonkVerify(String curve, Path vkPath, String proofBase64, Path witnessPath) {
+        requireSupportedCurve(curve);
         return library.plonkVerify(curve,
                 vkPath.toAbsolutePath().toString(),
                 proofBase64,
@@ -195,6 +203,7 @@ public class GnarkProver implements AutoCloseable {
      */
     public FullProveResponse groth16FullProve(R1CSConstraintSystem r1cs,
                                                BigInteger[] witness, CurveId curve) {
+        requireSupportedCurve(curve);
         String curveName = curve.value();
         String constraintsJson = serializeConstraintsToJson(r1cs);
         String valuesJson = buildWitnessValuesJson(witness, r1cs.numPublicInputs());
@@ -218,6 +227,7 @@ public class GnarkProver implements AutoCloseable {
      */
     public FullProveResponse plonkFullProve(R1CSConstraintSystem r1cs,
                                              BigInteger[] witness, CurveId curve) {
+        requireSupportedCurve(curve);
         String curveName = curve.value();
         String constraintsJson = serializeConstraintsToJson(r1cs);
         String valuesJson = buildWitnessValuesJson(witness, r1cs.numPublicInputs());
@@ -244,6 +254,33 @@ public class GnarkProver implements AutoCloseable {
     }
 
     // --- Internal helpers ---
+
+    static void requireSupportedCurve(CurveId curve) {
+        if (curve == null) {
+            throw new ProverException(ProverException.ErrorCode.INVALID_INPUT, "Curve must not be null");
+        }
+        if (curve == CurveId.BN254 && !LegacyCurvePolicy.legacyBn254Enabled()) {
+            throw new ProverException(ProverException.ErrorCode.INVALID_INPUT,
+                    LegacyCurvePolicy.legacyBn254DisabledMessage());
+        }
+    }
+
+    static void requireSupportedCurve(String curve) {
+        if (curve == null) {
+            throw new ProverException(ProverException.ErrorCode.INVALID_INPUT, "Curve must not be null");
+        }
+        if (isLegacyBn254Alias(curve) && !LegacyCurvePolicy.legacyBn254Enabled()) {
+            throw new ProverException(ProverException.ErrorCode.INVALID_INPUT,
+                    LegacyCurvePolicy.legacyBn254DisabledMessage());
+        }
+    }
+
+    private static boolean isLegacyBn254Alias(String curve) {
+        return switch (curve.toLowerCase(Locale.ROOT)) {
+            case "bn254", "bn128", "alt_bn128" -> true;
+            default -> false;
+        };
+    }
 
     /**
      * Serialize R1CS constraints to JSON for the Go FFM functions.

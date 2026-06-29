@@ -19,7 +19,6 @@ var registry = VerifierRegistry.withServiceLoader();
 
 // Option 2: Manual registration
 var registry = VerifierRegistry.empty();
-registry.register(new Groth16BN254Verifier());
 registry.register(new Groth16BLS12381Verifier());
 
 // Create orchestrator

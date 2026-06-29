@@ -17,6 +17,10 @@ This module bridges external proof tooling (snarkjs, gnark) and ZeroJ's internal
 | `GnarkPlonkCodec` | Typed envelope codec for gnark binary PlonK proof artifacts; verification still uses gnark native verification until a structured adapter exists |
 | `Halo2Codec` | Codec for Halo2 proof artifacts |
 
+Groth16 snarkjs JSON and CBOR envelope parsing use bounded input reads,
+duplicate-key detection, canonical decimal checks, and typed `CodecException`
+failures for malformed input.
+
 ## Usage
 
 ```java

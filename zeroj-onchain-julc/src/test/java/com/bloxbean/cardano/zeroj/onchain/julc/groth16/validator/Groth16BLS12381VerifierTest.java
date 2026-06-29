@@ -29,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class Groth16BLS12381VerifierTest extends ContractTest {
 
+    private static final BigInteger FR = new BigInteger(
+            "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16);
+
     private static SnarkjsToCardano.VkCompressed sealedBidVk;
     private static SnarkjsToCardano.ProofCompressed sealedBidProof;
     private static List<BigInteger> sealedBidPublicInputs;
@@ -86,6 +89,32 @@ class Groth16BLS12381VerifierTest extends ContractTest {
     }
 
     @Test
+    void threePublicInputs_publicInputAboveScalarField_fails() {
+        BigInteger[] publicInputs = threePublicInputs.publicInputs().clone();
+        publicInputs[0] = publicInputs[0].add(FR);
+
+        assertVerification(
+                threePublicInputs.vk(),
+                threePublicInputs.proof(),
+                datum(publicInputs),
+                vkIcData(threePublicInputs.vk().ic()),
+                false);
+    }
+
+    @Test
+    void threePublicInputs_negativePublicInput_fails() {
+        BigInteger[] publicInputs = threePublicInputs.publicInputs().clone();
+        publicInputs[0] = BigInteger.ONE.negate();
+
+        assertVerification(
+                threePublicInputs.vk(),
+                threePublicInputs.proof(),
+                datum(publicInputs),
+                vkIcData(threePublicInputs.vk().ic()),
+                false);
+    }
+
+    @Test
     void threePublicInputs_tooFewPublicInputs_fails() {
         assertVerification(
                 threePublicInputs.vk(),
@@ -124,12 +153,56 @@ class Groth16BLS12381VerifierTest extends ContractTest {
     }
 
     @Test
+    void fourPublicInputs_fixedArityPublicInputAboveScalarField_fails() {
+        BigInteger[] publicInputs = fourPublicInputs.publicInputs().clone();
+        publicInputs[0] = publicInputs[0].add(FR);
+
+        assertFixedFourVerification(publicInputs, false);
+    }
+
+    @Test
+    void fourPublicInputs_fixedArityNegativePublicInput_fails() {
+        BigInteger[] publicInputs = fourPublicInputs.publicInputs().clone();
+        publicInputs[0] = BigInteger.ONE.negate();
+
+        assertFixedFourVerification(publicInputs, false);
+    }
+
+    @Test
     void emptyIcList_fails() {
         assertVerification(
                 threePublicInputs.vk(),
                 threePublicInputs.proof(),
                 datum(threePublicInputs.publicInputs()),
                 PlutusData.list(),
+                false);
+    }
+
+    @Test
+    void proofInfinityPoint_fails() {
+        var proof = new SnarkjsToCardano.ProofCompressed(
+                compressedInfinityG1(),
+                threePublicInputs.proof().piB(),
+                threePublicInputs.proof().piC());
+
+        assertVerification(
+                threePublicInputs.vk(),
+                proof,
+                datum(threePublicInputs.publicInputs()),
+                vkIcData(threePublicInputs.vk().ic()),
+                false);
+    }
+
+    @Test
+    void vkIcInfinityPoint_fails() {
+        List<byte[]> ic = new ArrayList<>(threePublicInputs.vk().ic());
+        ic.set(0, compressedInfinityG1());
+
+        assertVerification(
+                threePublicInputs.vk(),
+                threePublicInputs.proof(),
+                datum(threePublicInputs.publicInputs()),
+                vkIcData(ic),
                 false);
     }
 
@@ -332,6 +405,12 @@ class Groth16BLS12381VerifierTest extends ContractTest {
             values.add(PlutusData.bytes(point));
         }
         return PlutusData.list(values.toArray(new PlutusData[0]));
+    }
+
+    private static byte[] compressedInfinityG1() {
+        byte[] bytes = new byte[48];
+        bytes[0] = (byte) 0xC0;
+        return bytes;
     }
 
     private static String loadResource(String path) throws IOException {
