@@ -1,5 +1,5 @@
 {
-  "_disclaimer": "DEMONSTRATION ONLY — pre-computed values are NOT secure for production. On-chain Fiat-Shamir challenges must be re-derived via blake2b_224 for production use. gnark uses SHA-256 which is unavailable in Plutus V3. See ADR-0008.",
+  "_disclaimer": "DEMONSTRATION ONLY — pre-computed values are NOT secure for production. These vectors exercise a gnark-style SHA-256 transcript prototype; do not treat them as the final on-chain PlonK transcript profile. A production verifier must pin a Plutus-reproducible hash, point serialization, challenge order, and domain-separation scheme. See ADR-0008 and ADR-0023.",
   "challenges": {
     "_note": "Derived using gnark's fiatshamir.Transcript with SHA-256. Transcript format: SHA-256(challenge_name || previous_challenge_hash || bindings...). VK points use Marshal() (compressed 48 bytes). Proof G1 points use RawBytes() (uncompressed 96 bytes). Challenge order: gamma(0) -\u003e beta(1) -\u003e alpha(2) -\u003e zeta(3).",
     "alpha": "19467335676508027344338006522097613698023833624283383267451196633207023265452",

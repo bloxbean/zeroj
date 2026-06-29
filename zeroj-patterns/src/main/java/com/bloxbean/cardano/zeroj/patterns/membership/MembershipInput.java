@@ -55,7 +55,7 @@ public record MembershipInput(
      * Attach a proof to produce a {@link MembershipProof} ready for verification.
      */
     public MembershipProof withProof(byte[] proofBytes, String circuitId) {
-        return withProof(proofBytes, circuitId, ProofSystemId.GROTH16, CurveId.BN254);
+        return withProof(proofBytes, circuitId, ProofSystemId.GROTH16, CurveId.BLS12_381);
     }
 
     /**

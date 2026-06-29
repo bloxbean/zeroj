@@ -9,7 +9,7 @@ import java.util.*;
  * Compiles a {@link ConstraintGraph} into a {@link PlonKConstraintSystem}.
  *
  * <p>Follows the snarkjs PlonK convention for compatibility with snarkjs .zkey files,
- * circom circuits, and the existing PlonkBN254Verifier.</p>
+ * circom circuits, and ZeroJ's structured PlonK verifier conventions.</p>
  *
  * <h3>snarkjs alignment</h3>
  * <ul>

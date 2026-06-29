@@ -1,14 +1,16 @@
 package com.bloxbean.cardano.zeroj.verifier.plonk;
 
 import com.bloxbean.cardano.zeroj.api.*;
+import com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsPlonkCodec;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Optional;
+import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,6 +35,11 @@ class PlonkBN254VerifierTest {
         verifier = new PlonkBN254Verifier();
     }
 
+    @AfterEach
+    void clearLegacyBn254OptIn() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    }
+
     @Test
     void descriptor_correctProofSystemAndCurve() {
         var descriptor = verifier.descriptor();
@@ -43,7 +50,28 @@ class PlonkBN254VerifierTest {
     }
 
     @Test
+    void verify_disabledByDefault() {
+        var envelope = buildEnvelope(proofJson, vkJson, publicJson);
+        var material = buildMaterial(vkJson);
+
+        var result = verifier.verify(envelope, material);
+
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.UNSUPPORTED_CURVE, result.reasonCode().orElseThrow());
+    }
+
+    @Test
+    void serviceLoaderDoesNotRegisterBn254() {
+        boolean registered = ServiceLoader.load(ZkVerifier.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .anyMatch(verifier -> verifier.descriptor().supports(ProofSystemId.PLONK, CurveId.BN254));
+
+        assertFalse(registered, "BN254 PlonK verifier must not be auto-registered");
+    }
+
+    @Test
     void verify_realSnarkjsProof_validProofAccepted() {
+        enableLegacyBn254();
         var envelope = buildEnvelope(proofJson, vkJson, publicJson);
         var material = buildMaterial(vkJson);
 
@@ -56,6 +84,7 @@ class PlonkBN254VerifierTest {
 
     @Test
     void verify_tamperedEvaluation_rejected() {
+        enableLegacyBn254();
         // Tamper with an evaluation to produce an invalid proof
         String tampered = proofJson.replace("\"eval_a\":", "\"eval_a\": \"999\", \"_old_eval_a\":");
         var envelope = ZkProofEnvelope.builder()
@@ -73,6 +102,7 @@ class PlonkBN254VerifierTest {
 
     @Test
     void verify_wrongPublicInputCount_rejectsEarly() {
+        enableLegacyBn254();
         // Build envelope with wrong number of public inputs
         var inputs = new PublicInputs(java.util.List.of(BigInteger.valueOf(33)));
         var envelope = ZkProofEnvelope.builder()
@@ -93,6 +123,7 @@ class PlonkBN254VerifierTest {
 
     @Test
     void verify_malformedProof_returnsError() {
+        enableLegacyBn254();
         var envelope = ZkProofEnvelope.builder()
                 .proofSystem(ProofSystemId.PLONK)
                 .curve(CurveId.BN254)
@@ -110,6 +141,7 @@ class PlonkBN254VerifierTest {
 
     @Test
     void verify_sameProofTwice_deterministic() {
+        enableLegacyBn254();
         var envelope = buildEnvelope(proofJson, vkJson, publicJson);
         var material = buildMaterial(vkJson);
 
@@ -165,6 +197,10 @@ class PlonkBN254VerifierTest {
     }
 
     // --- Helpers ---
+
+    private static void enableLegacyBn254() {
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+    }
 
     private ZkProofEnvelope buildEnvelope(String proofJson, String vkJson, String publicJson) {
         return SnarkjsPlonkCodec.toEnvelopeFromJson(proofJson, vkJson, publicJson, new CircuitId("multiplier"));

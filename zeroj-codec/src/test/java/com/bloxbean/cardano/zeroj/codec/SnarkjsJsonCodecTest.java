@@ -62,6 +62,21 @@ class SnarkjsJsonCodecTest {
         assertThrows(CodecException.class, () -> SnarkjsJsonCodec.parseProof(in));
     }
 
+    @Test
+    void parseDuplicateProofFieldThrows() {
+        String json = """
+                {
+                  "pi_a": ["1", "2", "1"],
+                  "pi_a": ["3", "4", "1"],
+                  "pi_b": [["1", "2"], ["3", "4"], ["1", "0"]],
+                  "pi_c": ["5", "6", "1"],
+                  "protocol": "groth16",
+                  "curve": "bn128"
+                }
+                """;
+        assertThrows(CodecException.class, () -> SnarkjsJsonCodec.parseProof(json));
+    }
+
     // --- Verification key parsing ---
 
     @Test
@@ -111,6 +126,14 @@ class SnarkjsJsonCodecTest {
                 SnarkjsJsonCodec.parsePublicInputs("{\"a\": 1}"));
     }
 
+    @Test
+    void parsePublicInputsNonCanonicalDecimalThrows() {
+        assertThrows(CodecException.class, () ->
+                SnarkjsJsonCodec.parsePublicInputs("[\"01\"]"));
+        assertThrows(CodecException.class, () ->
+                SnarkjsJsonCodec.parsePublicInputs("[\"-1\"]"));
+    }
+
     // --- Envelope construction ---
 
     @Test
@@ -127,6 +150,15 @@ class SnarkjsJsonCodecTest {
         assertEquals(2, envelope.publicInputs().size());
         assertTrue(envelope.proofBytes().length > 0);
         assertEquals("snarkjs-json", envelope.proofFormat().orElse(null));
+    }
+
+    @Test
+    void toEnvelopeRejectsPublicInputCountMismatch() {
+        var proofJson = readResource(PROOF_PATH);
+        var vkJson = readResource(VK_PATH);
+
+        assertThrows(CodecException.class, () ->
+                SnarkjsJsonCodec.toEnvelopeFromJson(proofJson, vkJson, "[\"33\"]", new CircuitId("multiplier")));
     }
 
     // --- Wrong protocol detection ---
@@ -147,5 +179,14 @@ class SnarkjsJsonCodecTest {
             fail("Test resource not found: " + path);
         }
         return in;
+    }
+
+    private String readResource(String path) {
+        try {
+            return new String(loadResource(path).readAllBytes());
+        } catch (Exception e) {
+            fail("Failed to read test resource: " + path, e);
+            return "";
+        }
     }
 }

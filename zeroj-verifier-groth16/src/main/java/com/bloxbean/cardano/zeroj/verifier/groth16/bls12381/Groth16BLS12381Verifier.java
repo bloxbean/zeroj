@@ -28,6 +28,10 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
     private static final BigInteger BLS12_381_P = new BigInteger(
             "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787");
 
+    /** BLS12-381 scalar field order r. */
+    private static final BigInteger BLS12_381_R = new BigInteger(
+            "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16);
+
     /** Size of an Fp element in bytes (381 bits -> 48 bytes). */
     private static final int FP_SIZE = 48;
 
@@ -48,23 +52,27 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
                         VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
                         "Expected " + vk.nPublic() + " public inputs, got " + publicInputs.size());
             }
+            if (!allScalarsInFr(publicInputs)) {
+                return VerificationResult.error(
+                        VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                        "Groth16 BLS12-381 public inputs must be canonical scalars in [0, r)");
+            }
 
             // Parse points from snarkjs JSON to blst format
-            var piA = decodeG1(proof.piA());
-            var piB = decodeG2(proof.piB());
-            var piC = decodeG1(proof.piC());
+            var piA = decodeG1("proof.pi_a", proof.piA());
+            var piB = decodeG2("proof.pi_b", proof.piB());
+            var piC = decodeG1("proof.pi_c", proof.piC());
 
-            var alpha = decodeG1(vk.vkAlpha1());
-            var beta = decodeG2(vk.vkBeta2());
-            var gamma = decodeG2(vk.vkGamma2());
-            var delta = decodeG2(vk.vkDelta2());
+            var alpha = decodeG1("vk.alpha", vk.vkAlpha1());
+            var beta = decodeG2("vk.beta", vk.vkBeta2());
+            var gamma = decodeG2("vk.gamma", vk.vkGamma2());
+            var delta = decodeG2("vk.delta", vk.vkDelta2());
 
             // Compute vk_x = IC[0] + sum(pub_i * IC[i+1])
-            P1 vkX = new P1(decodeG1Bytes(vk.ic().get(0)));
+            P1 vkX = new P1(decodeG1("vk.IC[0]", vk.ic().get(0)));
             for (int i = 0; i < publicInputs.size(); i++) {
-                var icPoint = new P1(decodeG1Bytes(vk.ic().get(i + 1)));
-                icPoint.mult(publicInputs.get(i));
-                vkX.add(new P1_Affine(icPoint.serialize()));
+                var icPoint = new P1(decodeG1("vk.IC[" + (i + 1) + "]", vk.ic().get(i + 1)));
+                vkX.add(icPoint.mult(publicInputs.get(i)).to_affine());
             }
 
             // Negate A for the pairing check: e(A, B) = e(alpha, beta) * e(vk_x, gamma) * e(C, delta)
@@ -75,17 +83,17 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
             var negAlpha = new P1(alpha);
             negAlpha.neg();
 
-            var negVkX = new P1(vkX.compress());
+            var negVkX = vkX.dup();
             negVkX.neg();
 
             var negC = new P1(piC);
             negC.neg();
 
             // Compute multi-pairing
-            var pairingAB = new PT(new P1_Affine(new P1(piA).serialize()), new P2_Affine(new P2(piB).serialize()));
-            var pairingAlphaBeta = new PT(new P1_Affine(negAlpha.serialize()), new P2_Affine(new P2(beta).serialize()));
-            var pairingVkxGamma = new PT(new P1_Affine(negVkX.serialize()), new P2_Affine(new P2(gamma).serialize()));
-            var pairingCDelta = new PT(new P1_Affine(negC.serialize()), new P2_Affine(new P2(delta).serialize()));
+            var pairingAB = new PT(piA, piB);
+            var pairingAlphaBeta = new PT(negAlpha.to_affine(), beta);
+            var pairingVkxGamma = new PT(negVkX.to_affine(), gamma);
+            var pairingCDelta = new PT(negC.to_affine(), delta);
 
             // Multiply all miller loop results
             var mlResult = pairingAB.dup();
@@ -101,6 +109,8 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
             } else {
                 return VerificationResult.proofInvalid("Pairing check failed");
             }
+        } catch (IllegalArgumentException | UnsupportedOperationException e) {
+            return VerificationResult.proofInvalid("Malformed Groth16 BLS12-381 proof or verification key: " + e.getMessage());
         } catch (Exception e) {
             return VerificationResult.error(
                     VerificationResult.ReasonCode.INTERNAL_ERROR,
@@ -108,23 +118,38 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
         }
     }
 
-    /**
-     * Decode a snarkjs G1 point [x, y, z] (projective, decimal strings) to blst uncompressed bytes.
-     * Returns uncompressed serialized bytes for blst P1 constructor.
-     */
-    private byte[] decodeG1(List<BigInteger> coords) {
-        return decodeG1Bytes(coords);
+    private static boolean allScalarsInFr(PublicInputs values) {
+        for (BigInteger value : values.values()) {
+            if (value == null || value.signum() < 0 || value.compareTo(BLS12_381_R) >= 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    private static byte[] decodeG1Bytes(List<BigInteger> coords) {
+    /**
+     * Decode and validate a snarkjs G1 point [x, y, z] (projective, decimal strings).
+     */
+    private P1_Affine decodeG1(String label, List<BigInteger> coords) {
+        var point = new P1_Affine(decodeG1Bytes(label, coords));
+        requireValidNonInfinity(label, point);
+        return point;
+    }
+
+    private static byte[] decodeG1Bytes(String label, List<BigInteger> coords) {
+        if (coords.size() != 3) {
+            throw new IllegalArgumentException(label + " must have 3 projective coordinates");
+        }
         var x = coords.get(0);
         var y = coords.get(1);
         var z = coords.get(2);
+        requireFp(label + ".x", x);
+        requireFp(label + ".y", y);
+        requireFp(label + ".z", z);
 
         // Convert from projective to affine
         if (z.equals(BigInteger.ZERO)) {
-            // Point at infinity — return identity serialization
-            return new byte[FP_SIZE]; // Compressed identity
+            throw new IllegalArgumentException(label + " must not be point at infinity");
         }
 
         BigInteger xAffine, yAffine;
@@ -147,7 +172,20 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
     /**
      * Decode a snarkjs G2 point [[x_c0,x_c1],[y_c0,y_c1],[z_c0,z_c1]] to blst uncompressed bytes.
      */
-    private byte[] decodeG2(List<List<BigInteger>> coords) {
+    private P2_Affine decodeG2(String label, List<List<BigInteger>> coords) {
+        var point = new P2_Affine(decodeG2Bytes(label, coords));
+        requireValidNonInfinity(label, point);
+        return point;
+    }
+
+    private static byte[] decodeG2Bytes(String label, List<List<BigInteger>> coords) {
+        if (coords.size() != 3) {
+            throw new IllegalArgumentException(label + " must have 3 projective coordinates");
+        }
+        requireFp2(label + ".x", coords.get(0));
+        requireFp2(label + ".y", coords.get(1));
+        requireFp2(label + ".z", coords.get(2));
+
         var xc0 = coords.get(0).get(0);
         var xc1 = coords.get(0).get(1);
         var yc0 = coords.get(1).get(0);
@@ -159,7 +197,7 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
         boolean zIsZero = zc0.equals(BigInteger.ZERO) && zc1.equals(BigInteger.ZERO);
 
         if (zIsZero) {
-            return new byte[FP_SIZE * 2]; // Compressed identity
+            throw new IllegalArgumentException(label + " must not be point at infinity");
         }
 
         BigInteger xc0Affine, xc1Affine, yc0Affine, yc1Affine;
@@ -181,6 +219,38 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
         writeFp(result, FP_SIZE * 2, yc1Affine);
         writeFp(result, FP_SIZE * 3, yc0Affine);
         return result;
+    }
+
+    private static void requireValidNonInfinity(String label, P1_Affine point) {
+        if (point.is_inf()) {
+            throw new IllegalArgumentException(label + " must not be point at infinity");
+        }
+        if (!point.on_curve() || !point.in_group()) {
+            throw new IllegalArgumentException(label + " must be on curve and in subgroup");
+        }
+    }
+
+    private static void requireValidNonInfinity(String label, P2_Affine point) {
+        if (point.is_inf()) {
+            throw new IllegalArgumentException(label + " must not be point at infinity");
+        }
+        if (!point.on_curve() || !point.in_group()) {
+            throw new IllegalArgumentException(label + " must be on curve and in subgroup");
+        }
+    }
+
+    private static void requireFp2(String label, List<BigInteger> values) {
+        if (values.size() != 2) {
+            throw new IllegalArgumentException(label + " must have 2 Fp coordinates");
+        }
+        requireFp(label + ".c0", values.get(0));
+        requireFp(label + ".c1", values.get(1));
+    }
+
+    private static void requireFp(String label, BigInteger value) {
+        if (value == null || value.signum() < 0 || value.compareTo(BLS12_381_P) >= 0) {
+            throw new IllegalArgumentException(label + " must be in [0, p)");
+        }
     }
 
     /**

@@ -754,7 +754,8 @@ var circuit = PoseidonCredentialCircuit.build(10);  // depth 10 = 1024 countries
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 // ~1,000 constraints
 
-// Setup (production: MPC ceremony)
+// Setup (local dev requires -Dzeroj.allowInsecureTrustedSetup=true;
+// production: MPC ceremony)
 var srs = PowersOfTauBLS381.generate(10);
 var setup = Groth16SetupBLS381.setup(constraints, numWires, numPublic, srs.tauScalar());
 

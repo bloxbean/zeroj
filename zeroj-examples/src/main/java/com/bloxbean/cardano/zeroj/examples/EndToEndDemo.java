@@ -9,7 +9,6 @@ import com.bloxbean.cardano.zeroj.codec.CanonicalHash;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Groth16BN254Verifier;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier;
 
 import java.nio.charset.StandardCharsets;
@@ -47,10 +46,10 @@ public class EndToEndDemo {
         // the user's off-chain application using circom + snarkjs.
         // The circuit proves: a * b = c (public: [c=33, a=3], private: b=11)
 
-        System.out.println("[Step 1] Loading externally-generated Groth16/BN254 proof...");
-        String proofJson = loadResource("/test-vectors/groth16-bn254/proof.json");
-        String vkJson = loadResource("/test-vectors/groth16-bn254/verification_key.json");
-        String publicJson = loadResource("/test-vectors/groth16-bn254/public.json");
+        System.out.println("[Step 1] Loading externally-generated Groth16/BLS12-381 proof...");
+        String proofJson = loadResource("/test-vectors/groth16-bls12381/proof.json");
+        String vkJson = loadResource("/test-vectors/groth16-bls12381/verification_key.json");
+        String publicJson = loadResource("/test-vectors/groth16-bls12381/public.json");
 
         var proof = SnarkjsJsonCodec.parseProof(proofJson);
         var vk = SnarkjsJsonCodec.parseVerificationKey(vkJson);
@@ -70,15 +69,14 @@ public class EndToEndDemo {
 
         // Register verification backends
         var verifierRegistry = VerifierRegistry.empty();
-        verifierRegistry.register(new Groth16BN254Verifier());    // Pure Java
         verifierRegistry.register(new Groth16BLS12381Verifier()); // Native blst
-        System.out.println("  Registered backends: Groth16/BN254 (pure Java), Groth16/BLS12-381 (blst)");
+        System.out.println("  Registered backend: Groth16/BLS12-381 (blst)");
 
         // Register the verification key
         byte[] vkBytes = vkJson.getBytes(StandardCharsets.UTF_8);
         byte[] vkHash = sha256(vkBytes);
         var vkRegistry = new InMemoryVerificationKeyRegistry();
-        var material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BN254,
+        var material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BLS12_381,
                 new CircuitId("multiplier"), vkHash);
         vkRegistry.register(material);
 

@@ -2,9 +2,5 @@
   {
     "name": "com.bloxbean.cardano.zeroj.verifier.plonk.PlonkBLS12381Verifier",
     "methods": [{"name": "<init>", "parameterTypes": []}]
-  },
-  {
-    "name": "com.bloxbean.cardano.zeroj.verifier.plonk.PlonkBN254Verifier",
-    "methods": [{"name": "<init>", "parameterTypes": []}]
   }
 ]

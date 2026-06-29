@@ -1,9 +1,13 @@
 package com.bloxbean.cardano.zeroj.codec;
 
 import com.bloxbean.cardano.zeroj.api.*;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -25,7 +29,17 @@ import java.util.List;
  */
 public final class SnarkjsPlonkCodec {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final int MAX_JSON_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_DECIMAL_CHARS = 160;
+    private static final int MAX_TEXT_CHARS = 128;
+    private static final ObjectMapper MAPPER = new ObjectMapper(JsonFactory.builder()
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .streamReadConstraints(StreamReadConstraints.builder()
+                    .maxNestingDepth(64)
+                    .maxNumberLength(MAX_DECIMAL_CHARS)
+                    .maxStringLength(MAX_DECIMAL_CHARS)
+                    .build())
+            .build());
 
     private SnarkjsPlonkCodec() {}
 
@@ -33,7 +47,7 @@ public final class SnarkjsPlonkCodec {
 
     public static SnarkjsPlonkProof parseProof(Path path) {
         try {
-            return parseProof(Files.readString(path, StandardCharsets.UTF_8));
+            return parseProof(readBounded(path, "PlonK proof file"));
         } catch (IOException e) {
             throw new CodecException("Failed to read PlonK proof file: " + path, e);
         }
@@ -41,7 +55,7 @@ public final class SnarkjsPlonkCodec {
 
     public static SnarkjsPlonkProof parseProof(InputStream in) {
         try {
-            return parseProof(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return parseProof(readBounded(in, "PlonK proof input stream"));
         } catch (IOException e) {
             throw new CodecException("Failed to read PlonK proof input stream", e);
         }
@@ -49,6 +63,7 @@ public final class SnarkjsPlonkCodec {
 
     public static SnarkjsPlonkProof parseProof(String json) {
         try {
+            requireJsonSize(json, "PlonK proof JSON");
             JsonNode root = MAPPER.readTree(json);
 
             return new SnarkjsPlonkProof(
@@ -67,8 +82,8 @@ public final class SnarkjsPlonkCodec {
                     parseScalar(root, "eval_zw"),
                     parseG1(root, "Wxi"),
                     parseG1(root, "Wxiw"),
-                    root.has("protocol") ? root.get("protocol").asText() : "plonk",
-                    root.has("curve") ? root.get("curve").asText() : "bn128"
+                    parseText(root, "protocol"),
+                    parseText(root, "curve")
             );
         } catch (CodecException e) {
             throw e;
@@ -81,7 +96,7 @@ public final class SnarkjsPlonkCodec {
 
     public static SnarkjsPlonkVerificationKey parseVerificationKey(Path path) {
         try {
-            return parseVerificationKey(Files.readString(path, StandardCharsets.UTF_8));
+            return parseVerificationKey(readBounded(path, "PlonK VK file"));
         } catch (IOException e) {
             throw new CodecException("Failed to read PlonK VK file: " + path, e);
         }
@@ -89,7 +104,7 @@ public final class SnarkjsPlonkCodec {
 
     public static SnarkjsPlonkVerificationKey parseVerificationKey(InputStream in) {
         try {
-            return parseVerificationKey(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return parseVerificationKey(readBounded(in, "PlonK VK input stream"));
         } catch (IOException e) {
             throw new CodecException("Failed to read PlonK VK input stream", e);
         }
@@ -97,15 +112,16 @@ public final class SnarkjsPlonkCodec {
 
     public static SnarkjsPlonkVerificationKey parseVerificationKey(String json) {
         try {
+            requireJsonSize(json, "PlonK verification key JSON");
             JsonNode root = MAPPER.readTree(json);
 
             return new SnarkjsPlonkVerificationKey(
-                    root.has("protocol") ? root.get("protocol").asText() : "plonk",
-                    root.has("curve") ? root.get("curve").asText() : "bn128",
-                    root.get("nPublic").asInt(),
-                    root.get("power").asInt(),
-                    new BigInteger(root.get("k1").asText()),
-                    new BigInteger(root.get("k2").asText()),
+                    parseText(root, "protocol"),
+                    parseText(root, "curve"),
+                    parseNonNegativeInt(root, "nPublic"),
+                    parseNonNegativeInt(root, "power"),
+                    parseScalar(root, "k1"),
+                    parseScalar(root, "k2"),
                     parseG1(root, "Qm"),
                     parseG1(root, "Ql"),
                     parseG1(root, "Qr"),
@@ -115,7 +131,7 @@ public final class SnarkjsPlonkCodec {
                     parseG1(root, "S2"),
                     parseG1(root, "S3"),
                     parseG2(root, "X_2"),
-                    new BigInteger(root.get("w").asText())
+                    parseScalar(root, "w")
             );
         } catch (CodecException e) {
             throw e;
@@ -155,26 +171,29 @@ public final class SnarkjsPlonkCodec {
 
     private static List<BigInteger> parseG1(JsonNode root, String fieldName) {
         var node = root.get(fieldName);
-        if (node == null || !node.isArray()) {
+        if (node == null || !node.isArray() || node.size() != 3) {
             throw new CodecException("Missing or invalid G1 field: " + fieldName);
         }
         List<BigInteger> coords = new ArrayList<>();
         for (var element : node) {
-            coords.add(new BigInteger(element.asText()));
+            coords.add(parseDecimal(element, fieldName));
         }
         return coords;
     }
 
     private static List<List<BigInteger>> parseG2(JsonNode root, String fieldName) {
         var node = root.get(fieldName);
-        if (node == null || !node.isArray()) {
+        if (node == null || !node.isArray() || node.size() != 3) {
             throw new CodecException("Missing or invalid G2 field: " + fieldName);
         }
         List<List<BigInteger>> coords = new ArrayList<>();
         for (var element : node) {
+            if (!element.isArray() || element.size() != 2) {
+                throw new CodecException("Invalid G2 field: " + fieldName);
+            }
             List<BigInteger> pair = new ArrayList<>();
             for (var e : element) {
-                pair.add(new BigInteger(e.asText()));
+                pair.add(parseDecimal(e, fieldName));
             }
             coords.add(pair);
         }
@@ -186,6 +205,79 @@ public final class SnarkjsPlonkCodec {
         if (node == null) {
             throw new CodecException("Missing scalar field: " + fieldName);
         }
-        return new BigInteger(node.asText());
+        return parseDecimal(node, fieldName);
+    }
+
+    private static String parseText(JsonNode root, String fieldName) {
+        var node = root.get(fieldName);
+        if (node == null || !node.isTextual() || node.asText().isBlank()
+                || node.asText().length() > MAX_TEXT_CHARS) {
+            throw new CodecException("Missing or invalid text field: " + fieldName);
+        }
+        return node.asText();
+    }
+
+    private static int parseNonNegativeInt(JsonNode root, String fieldName) {
+        var node = root.get(fieldName);
+        if (node == null) {
+            throw new CodecException("Missing integer field: " + fieldName);
+        }
+        BigInteger value = parseDecimal(node, fieldName);
+        if (value.bitLength() > 31) {
+            throw new CodecException("Integer field too large: " + fieldName);
+        }
+        return value.intValueExact();
+    }
+
+    private static BigInteger parseDecimal(JsonNode node, String fieldName) {
+        if (node == null || !(node.isTextual() || node.isIntegralNumber())) {
+            throw new CodecException("Missing or invalid decimal field: " + fieldName);
+        }
+        String text = node.asText();
+        if (text.length() > MAX_DECIMAL_CHARS || !isCanonicalDecimal(text)) {
+            throw new CodecException("Invalid decimal field: " + fieldName);
+        }
+        return new BigInteger(text);
+    }
+
+    private static boolean isCanonicalDecimal(String text) {
+        if (text.isEmpty()) return false;
+        if (text.length() > 1 && text.charAt(0) == '0') return false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c < '0' || c > '9') return false;
+        }
+        return true;
+    }
+
+    private static void requireJsonSize(String json, String label) {
+        if (json == null || json.getBytes(StandardCharsets.UTF_8).length > MAX_JSON_BYTES) {
+            throw new CodecException(label + " is too large");
+        }
+    }
+
+    private static String readBounded(Path path, String label) throws IOException {
+        if (Files.size(path) > MAX_JSON_BYTES) {
+            throw new CodecException(label + " is too large");
+        }
+        return Files.readString(path, StandardCharsets.UTF_8);
+    }
+
+    private static String readBounded(InputStream in, String label) throws IOException {
+        if (in == null) {
+            throw new CodecException(label + " is null");
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            total += read;
+            if (total > MAX_JSON_BYTES) {
+                throw new CodecException(label + " is too large");
+            }
+            out.write(buffer, 0, read);
+        }
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
     }
 }

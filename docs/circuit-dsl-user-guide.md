@@ -675,7 +675,7 @@ var circuit = MultiFieldCommitCircuit.build("name", "age", "address", "balance")
 ### R1CS (Groth16)
 
 ```java
-var r1cs = circuit.compileR1CS(CurveId.BN254);
+var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 
 // Serialize to iden3 .r1cs binary (for snarkjs or gnark import)
 byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
@@ -693,7 +693,7 @@ Properties:
 ### PlonK
 
 ```java
-var plonk = circuit.compilePlonK(CurveId.BN254);
+var plonk = circuit.compilePlonK(CurveId.BLS12_381);
 ```
 
 Properties:
@@ -706,8 +706,8 @@ Properties:
 
 | Curve | Proof Systems | On-chain? | Note |
 |-------|--------------|-----------|------|
-| BN254 | Groth16, PlonK | No (no Plutus builtins) | circom/snarkjs ecosystem |
-| BLS12-381 | Groth16, PlonK | Groth16: **Yes**; PlonK: prototype | Cardano-native BLS builtins; PlonK KZG pairing check is still deferred on-chain |
+| BLS12-381 | Groth16, PlonK | Groth16: **Yes**; PlonK: experimental opt-in | Cardano-native BLS builtins; PlonK has a full KZG verifier for the current one-public-input Cardano profile, pending audit and release gates |
+| BN254 | Legacy/off-chain only | No (no Plutus builtins) | Disabled by default in ZeroJ verifiers; explicit opt-in required for experiments |
 
 ## Witness Calculation
 
@@ -718,7 +718,7 @@ var witness = circuit.calculateWitness(Map.of(
     "x", List.of(BigInteger.valueOf(3)),
     "y", List.of(BigInteger.valueOf(11)),
     "z", List.of(BigInteger.valueOf(33))
-), CurveId.BN254);
+), CurveId.BLS12_381);
 
 // witness[0] = 1           (constant wire, always 1)
 // witness[1] = 33          (first public var: z)
@@ -742,13 +742,13 @@ void multiplier_validWitness() {
     assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
         "z", List.of(BigInteger.valueOf(33)),
         "x", List.of(BigInteger.valueOf(3)),
-        "y", List.of(BigInteger.valueOf(11))), CurveId.BN254));
+        "y", List.of(BigInteger.valueOf(11))), CurveId.BLS12_381));
 
     // Invalid: 3 * 11 ≠ 99 → throws ArithmeticException
     assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
         "z", List.of(BigInteger.valueOf(99)),
         "x", List.of(BigInteger.valueOf(3)),
-        "y", List.of(BigInteger.valueOf(11))), CurveId.BN254));
+        "y", List.of(BigInteger.valueOf(11))), CurveId.BLS12_381));
 }
 ```
 
@@ -766,12 +766,13 @@ Java CircuitSpec / CircuitBuilder DSL
         └──▶ calculateWitness() ──▶ BigInteger[] (pure Java)
 
 Verification (pure Java, zero native deps):
-  Groth16BN254Verifier / Groth16BLS12381PureJavaVerifier
-  PlonkBN254Verifier / PlonkBLS12381Verifier
+  Groth16BLS12381PureJavaVerifier / Groth16BLS12381Verifier
+  PlonkBLS12381Verifier
 
 On-Chain (Cardano Plutus V3):
   Groth16BLS12381Verifier (Julc)
-  PlonkBLS12381FullVerifier (Julc prototype: transcript/inverse checks only)
+  PlonkBLS12381Verifier (Julc experimental: Cardano-profile BLS12-381 PlonK, one public input)
+  PlonkBLS12381MultiInputVerifier / PlonkBLS12381MultiInputParamVerifier (Julc experimental: bounded BLS12-381 PlonK MPI profiles)
 ```
 
 **Recommended path**: CircuitSpec → `compileR1CS(BLS12_381)` → `Groth16ProverBLS381` → on-chain verify.
@@ -807,6 +808,6 @@ implementation 'com.bloxbean.cardano:zeroj-crypto'
 // implementation 'com.bloxbean.cardano:zeroj-prover-gnark'    // gnark (Groth16 + PlonK)
 
 // Verifiers (pure Java, zero native deps)
-implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'    // Groth16 (BN254 + BLS12-381)
-implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'      // PlonK (BN254 + BLS12-381)
+implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'    // Groth16 BLS12-381
+implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'      // PlonK BLS12-381
 ```

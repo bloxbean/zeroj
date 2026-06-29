@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.zeroj.crypto.setup;
 
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
@@ -50,6 +51,7 @@ public final class Groth16SetupBLS381 {
      */
     public static SetupResult setup(List<R1CSConstraint> constraints, int numWires,
                                      int numPublic, BigInteger tau) {
+        TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");

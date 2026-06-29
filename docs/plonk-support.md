@@ -17,11 +17,16 @@
 
 ZeroJ supports PlonK proof generation via the pure Java prover and gnark FFM,
 plus **pure Java verification** for structured snarkjs/ZeroJ PlonK proof JSON
-on BLS12-381 and BN254 curves.
+on BLS12-381. BN254 PlonK remains a legacy/off-chain compatibility path and is
+disabled by default behind explicit opt-in.
 gnark's opaque binary PlonK proof JSON should be verified with gnark native
 verification until a dedicated adapter is added. The Julc on-chain PlonK path is
-an experimental prototype today: transcript and inverse checks are implemented,
-but the KZG batch opening pairing check is still deferred.
+implemented for BLS12-381 Cardano profiles with compressed-point Fiat-Shamir
+binding and the KZG batch opening pairing check. The strict v1 profile supports
+exactly one public input, and the MPI profile supports 1 through 8 public
+inputs. It is eligible for labeled non-value-bearing public testnet trials, but
+remains experimental and opt-in until the remaining value-bearing release gates,
+including third-party audit and broader fuzz/differential CI gates, are closed.
 
 ## What Works Today
 
@@ -29,14 +34,21 @@ but the KZG batch opening pairing check is still deferred.
 - **Setup**: Universal SRS generation (one setup works for any circuit up to the SRS size)
 - **Prove**: Generate PlonK proofs with the pure Java prover or with gnark FFM
 - **Verify**: **Pure Java verification** for structured snarkjs/ZeroJ proof JSON; gnark binary PlonK proof JSON uses gnark native verification until an adapter lands
-- **Both BN254 and BLS12-381 curves supported**
+- **BLS12-381 is the Cardano/default path**; BN254 is legacy/off-chain only and
+  requires `-Dzeroj.allowLegacyBn254=true` or `ZEROJ_ALLOW_LEGACY_BN254=true`
 
 ### On-Chain PlonK (Experimental)
-- Prototype verifier via `PlonkBLS12381FullVerifier` in `zeroj-onchain-julc`
-- Fiat-Shamir challenge re-derivation matching gnark's exact transcript format
-- KZG batch opening pairing check still deferred
+- Reusable `@OnchainLibrary` via `PlonkBLS12381Lib` for custom validators that
+  need to compose PlonK verification with application-specific `ScriptContext`
+  policy
+- Full verifier via `PlonkBLS12381Verifier` in `zeroj-onchain-julc` for the current one-public-input Cardano profile
+- Bounded multi-public-input verifier via `PlonkBLS12381MultiInputVerifier` for the `zeroj-plonk-bls12381-cardano-mpi-v1-json` profile (`1..8` datum-supplied public inputs)
+- Script-parameter MPI variant via `PlonkBLS12381MultiInputParamVerifier` for statements whose public inputs should be pinned by the script hash
+- Cardano-profile Fiat-Shamir challenge re-derivation over compressed BLS12-381 G1 bytes
+- KZG batch opening pairing check implemented with Plutus V3 BLS12-381 builtins
+- Strict scalar, compressed point, domain, coset, inverse, and public-input shape validation
 - BLS12-381 only (Plutus V3 builtins)
-- Useful for budget and data-shape work, not yet a full trustless on-chain verifier
+- Experimental opt-in pending broader release-assurance vectors and independent audit
 
 ### Advantage Over Groth16
 | Feature | Groth16 | PlonK |
@@ -63,7 +75,8 @@ var witness = circuit.calculateWitness(Map.of(
         "a", List.of(BigInteger.valueOf(3)),
         "b", List.of(BigInteger.valueOf(11))), CurveId.BLS12_381);
 
-var srs = PowersOfTauBLS381.generate(8); // local test setup only
+// Local test setup only; requires -Dzeroj.allowInsecureTrustedSetup=true.
+var srs = PowersOfTauBLS381.generate(8);
 int numGates = plonk.numGates();
 BigInteger[][] gateSelectors = new BigInteger[numGates][5];
 for (int i = 0; i < numGates; i++) {
@@ -109,9 +122,20 @@ See `PlonKBLS381EndToEndTest.java` for the full wire-evaluation and verification
 - **Enterprise privacy**: Verifiable computation with universal setup (no per-circuit ceremony)
 - **Development/testing**: Iterate on ZK circuits without re-running trusted setup
 
-### Future (On-Chain)
-- PlonK verification on Cardano Plutus V3 is feasible using BLS12-381 builtins
-- **Limitation**: Plutus V3 lacks SHA-256 (needed for Fiat-Shamir transcript). Workaround: pass pre-computed challenges as redeemer data
+### On-Chain Release Gates
+- PlonK verification on Cardano Plutus V3 is BLS12-381 only because Cardano does
+  not expose BN254 builtins.
+- The first supported Cardano profile is pinned to ZeroJ pure-Java proofs with
+  compressed BLS12-381 transcript encoding and exactly one public input.
+- The MPI Cardano profile is separate and bounded to 1 through 8 public inputs.
+  It binds the profile tag, public input count, and ordered fixed-width public
+  input scalars into the transcript, then verifies per-input inverse witnesses
+  before computing the public-input polynomial on-chain. Use
+  `PlonkBLS12381MultiInputVerifier` when public inputs are transaction-specific
+  datum values, and `PlonkBLS12381MultiInputParamVerifier` when public inputs
+  should be fixed at script-application time.
+- Value-bearing/mainnet use still requires independent security audit, broader
+  cross-implementation/adversarial vectors, and pinned ceremony artifacts.
 - **CIP-0133 (Multi-Scalar Multiplication)**: Would improve the shape of on-chain PlonK verification if available
 - See [ADR-0008](adr/0008-plonk-support-via-gnark.md) for detailed analysis
 
@@ -131,7 +155,19 @@ PlonKConstraintSystem
     |
 PlonKSetupBLS381 / PlonKProverBLS381
     |
-PlonkBLS12381Verifier / PlonkBN254Verifier
+PlonkBLS12381Verifier
+    |
+Optional Cardano profile: PlonKProverBLS381.proveCardano(...)
+    |
+PlonKProverToCardano -> PlonkBLS12381Verifier (Julc, BLS12-381 one-input profile)
+    |
+Custom validator -> PlonkBLS12381Lib (Julc library, BLS12-381 one-input or MPI profile)
+    |
+Optional MPI Cardano profile: PlonKProverBLS381.proveCardanoMpi(...)
+    |
+PlonKProverToCardano.compressMpiProof -> PlonkBLS12381MultiInputVerifier (Julc, BLS12-381 1..8-input profile)
+    |
+Alternative pinned-statement deployment: PlonkBLS12381MultiInputParamVerifier
     |
 Optional: GnarkProver for native proving and native verification of gnark binary artifacts
 ```
@@ -146,6 +182,10 @@ go run ./cmd/gentestvectors -output ../../zeroj-test-vectors/src/main/resources/
 ```
 
 Circuit: `X * Y = Z` (multiplier), Witness: X=3, Y=11, Z=33
+
+The BLS12-381 off-chain verifier also includes a structured snarkjs PlonK
+multiplier vector under
+`zeroj-verifier-plonk/src/test/resources/test-vectors/snarkjs-plonk-bls12381/`.
 
 ## Related ADRs
 - [ADR-0008: PlonK Support via gnark](adr/0008-plonk-support-via-gnark.md)

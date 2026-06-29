@@ -9,21 +9,21 @@ buildscript {
         }
     }
     dependencies {
-        classpath "com.bloxbean.cardano:julc-gradle-plugin:0.1.0-pre12"
+        classpath "com.bloxbean.cardano:julc-gradle-plugin:0.1.0-pre14"
     }
 }
 
 plugins {
     id 'java-library'
-    id 'com.bloxbean.cardano.julc' version '0.1.0-pre13'
+    id 'com.bloxbean.cardano.julc' version '0.1.0-pre14'
 }
 
 apply plugin: 'com.bloxbean.cardano.julc'
 
-description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 prototype'
+description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 validators'
 
 ext {
-    julcVersion = '0.1.0-pre13'
+    julcVersion = '0.1.0-pre14'
 }
 
 repositories {

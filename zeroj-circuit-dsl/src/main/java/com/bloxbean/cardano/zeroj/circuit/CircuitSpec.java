@@ -19,7 +19,7 @@ package com.bloxbean.cardano.zeroj.circuit;
  *
  * // Use:
  * var circuit = CircuitBuilder.fromSpec("multiplier", new MulCircuit());
- * var witness = circuit.calculateWitness(inputs, CurveId.BN254);
+ * var witness = circuit.calculateWitness(inputs, CurveId.BLS12_381);
  * }</pre>
  */
 @FunctionalInterface

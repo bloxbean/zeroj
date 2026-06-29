@@ -140,15 +140,16 @@ The example-specific `ZkAuctionVerifier` in this module extends the pattern with
 
 | Proof System | Curve | Verifier Class |
 |-------------|-------|----------------|
-| Groth16 | BN254 | `Groth16BN254Verifier` |
 | Groth16 | BLS12-381 | `Groth16BLS12381PureJavaVerifier` |
 | Groth16 | BLS12-381 | `com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier` (off-chain blst verifier) |
-| PlonK | BN254 | `PlonkBN254Verifier` |
 | PlonK | BLS12-381 | `PlonkBLS12381Verifier` |
+
+BN254 verifier classes are legacy/off-chain only, disabled by default, and are
+not registered through ServiceLoader.
 
 ## Legacy Demos
 
-### EndToEndDemo (snarkjs Groth16/BN254)
+### EndToEndDemo (snarkjs Groth16/BLS12-381)
 Pre-generated snarkjs proof flow: load -> verify -> anchor.
 
 ```bash

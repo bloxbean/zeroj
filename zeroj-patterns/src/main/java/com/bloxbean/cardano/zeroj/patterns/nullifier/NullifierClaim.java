@@ -82,7 +82,7 @@ public record NullifierClaim(
         private List<BigInteger> additionalPublicInputs;
         private byte[] proofBytes;
         private ProofSystemId proofSystem = ProofSystemId.GROTH16;
-        private CurveId curve = CurveId.BN254;
+        private CurveId curve = CurveId.BLS12_381;
         private String circuitId;
 
         public Builder nullifier(byte[] v) { this.nullifier = v; return this; }

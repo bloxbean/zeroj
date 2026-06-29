@@ -62,7 +62,7 @@ public record NullifierClaimInput(
      * Attach a proof to produce a {@link NullifierClaim} ready for verification.
      */
     public NullifierClaim withProof(byte[] proofBytes, String circuitId) {
-        return withProof(proofBytes, circuitId, ProofSystemId.GROTH16, CurveId.BN254);
+        return withProof(proofBytes, circuitId, ProofSystemId.GROTH16, CurveId.BLS12_381);
     }
 
     /**

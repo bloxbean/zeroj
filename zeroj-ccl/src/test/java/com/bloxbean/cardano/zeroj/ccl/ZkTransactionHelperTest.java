@@ -7,7 +7,7 @@ import com.bloxbean.cardano.zeroj.cardano.AnchorPattern;
 import com.bloxbean.cardano.zeroj.codec.SnarkjsJsonCodec;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Groth16BN254Verifier;
+import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -85,15 +85,15 @@ class ZkTransactionHelperTest {
 
     @Test
     void validateAndBuildMetadata_validProof_succeeds() {
-        String proofJson = loadString("/test-vectors/groth16-bn254/proof.json");
-        String vkJson = loadString("/test-vectors/groth16-bn254/verification_key.json");
-        String publicJson = loadString("/test-vectors/groth16-bn254/public.json");
+        String proofJson = loadString("/test-vectors/groth16-bls12381/proof.json");
+        String vkJson = loadString("/test-vectors/groth16-bls12381/verification_key.json");
+        String publicJson = loadString("/test-vectors/groth16-bls12381/public.json");
 
         var registry = VerifierRegistry.empty();
-        registry.register(new Groth16BN254Verifier());
+        registry.register(new Groth16BLS12381PureJavaVerifier());
         var vkRegistry = new InMemoryVerificationKeyRegistry();
         var material = VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
-                ProofSystemId.GROTH16, CurveId.BN254, new CircuitId("multiplier"));
+                ProofSystemId.GROTH16, CurveId.BLS12_381, new CircuitId("multiplier"));
         vkRegistry.register(material);
         var orchestrator = new VerifierOrchestrator(registry, vkRegistry);
 
@@ -108,14 +108,14 @@ class ZkTransactionHelperTest {
 
     @Test
     void validateAndBuildMetadata_invalidProof_throws() {
-        String proofJson = loadString("/test-vectors/groth16-bn254/proof.json");
-        String vkJson = loadString("/test-vectors/groth16-bn254/verification_key.json");
+        String proofJson = loadString("/test-vectors/groth16-bls12381/proof.json");
+        String vkJson = loadString("/test-vectors/groth16-bls12381/verification_key.json");
 
         var registry = VerifierRegistry.empty();
-        registry.register(new Groth16BN254Verifier());
+        registry.register(new Groth16BLS12381PureJavaVerifier());
         var vkRegistry = new InMemoryVerificationKeyRegistry();
         var material = VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
-                ProofSystemId.GROTH16, CurveId.BN254, new CircuitId("multiplier"));
+                ProofSystemId.GROTH16, CurveId.BLS12_381, new CircuitId("multiplier"));
         vkRegistry.register(material);
         var orchestrator = new VerifierOrchestrator(registry, vkRegistry);
 

@@ -1,9 +1,12 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFp254;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -22,6 +25,26 @@ import static org.junit.jupiter.api.Assertions.*;
 class PlonKDSLProverTest {
 
     private static final String PTAU_PATH = "/test-circuits/plonk-multiplier/pot8_final.ptau";
+    private String previousLegacyBn254;
+
+    @BeforeEach
+    void enableLegacyBn254() {
+        previousLegacyBn254 = System.getProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+    }
+
+    @AfterEach
+    void restoreLegacyBn254() {
+        restoreProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, previousLegacyBn254);
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
+    }
 
     @Test
     void ptauImport_generatorCorrect() throws IOException {

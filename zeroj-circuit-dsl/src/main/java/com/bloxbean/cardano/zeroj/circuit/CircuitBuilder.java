@@ -26,16 +26,16 @@ import java.util.*;
  *     });
  *
  * // Compile to R1CS (for Groth16)
- * var r1cs = circuit.compileR1CS(CurveId.BN254);
+ * var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
  *
  * // Compile to PlonK
- * var plonk = circuit.compilePlonK(CurveId.BN254);
+ * var plonk = circuit.compilePlonK(CurveId.BLS12_381);
  *
  * // Calculate witness
  * var witness = circuit.calculateWitness(Map.of(
  *     "x", List.of(BigInteger.valueOf(3)),
  *     "y", List.of(BigInteger.valueOf(11)),
- *     "z", List.of(BigInteger.valueOf(33))), CurveId.BN254);
+ *     "z", List.of(BigInteger.valueOf(33))), CurveId.BLS12_381);
  * }</pre>
  */
 public final class CircuitBuilder {

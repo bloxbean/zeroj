@@ -1,5 +1,7 @@
 package com.bloxbean.cardano.zeroj.crypto.setup;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
+import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
@@ -43,6 +45,8 @@ public final class PowersOfTau {
      * @return SRS containing tau^i * G1 and tau^i * G2 points
      */
     public static PtauImporter.SRS generate(int power) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
+        TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
         if (power < 4 || power > 28)
             throw new IllegalArgumentException("Power must be in [4, 28], got " + power
                     + " (minimum 4 required for PlonK domain size >= 8)");

@@ -2,14 +2,14 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ PlonK verification — pure Java for BLS12-381 and BN254, no native dependencies'
+description = 'ZeroJ PlonK verification — pure Java for BLS12-381; BN254 legacy disabled by default'
 
 dependencies {
     api project(':zeroj-backend-spi')
     implementation project(':zeroj-codec')
     implementation project(':zeroj-bls12381')
     implementation project(':zeroj-crypto')
-    implementation project(':zeroj-verifier-groth16') // BN254 field arithmetic reuse
+    implementation project(':zeroj-verifier-groth16') // legacy BN254 field arithmetic reuse
 
     testImplementation project(':zeroj-circuit-dsl')
     testImplementation project(':zeroj-test-vectors')
@@ -20,7 +20,7 @@ publishing {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ Verifier PlonK'
-                description = 'PlonK proof verification for BLS12-381 and BN254 (pure Java, no native dependencies)'
+                description = 'PlonK proof verification for BLS12-381; BN254 legacy verifier disabled by default'
             }
         }
     }

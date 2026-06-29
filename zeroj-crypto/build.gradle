@@ -4,6 +4,12 @@ plugins {
 
 description = 'Pure Java optimized cryptographic primitives — Montgomery field arithmetic, EC operations, FFT, MSM'
 
+test {
+    // zeroj-crypto still exercises legacy BN254 arithmetic/prover regression
+    // coverage. Runtime users must opt in explicitly to BN254.
+    systemProperty 'zeroj.allowLegacyBn254', 'true'
+}
+
 dependencies {
     api project(':zeroj-api')
     api project(':zeroj-bls12381')

@@ -61,6 +61,7 @@ subprojects {
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
         jvmArgs '--enable-native-access=ALL-UNNAMED'
+        systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
         maxHeapSize = '1g'
     }
 

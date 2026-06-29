@@ -1,12 +1,15 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.*;
 import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -24,6 +27,26 @@ class PlonKEndToEndTest {
 
     private static final String PTAU_PATH = "/test-circuits/plonk-multiplier/pot8_final.ptau";
     private static final BigInteger FR = MontFr254.modulus();
+    private String previousLegacyBn254;
+
+    @BeforeEach
+    void enableLegacyBn254() {
+        previousLegacyBn254 = System.getProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+    }
+
+    @AfterEach
+    void restoreLegacyBn254() {
+        restoreProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, previousLegacyBn254);
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
+    }
 
     @Test
     void fullPipeline_multiplier_proveAndVerify() throws IOException {

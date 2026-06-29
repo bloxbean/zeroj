@@ -1,11 +1,20 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
+import com.bloxbean.cardano.zeroj.bls12381.ec.G1Point;
+import com.bloxbean.cardano.zeroj.bls12381.ec.G2Point;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
+import com.bloxbean.cardano.zeroj.bls12381.field.Fp;
+import com.bloxbean.cardano.zeroj.bls12381.field.Fp2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
+import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
 import com.bloxbean.cardano.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
  * PlonK trusted setup for BLS12-381 from a DSL-compiled PlonK constraint system + SRS.
@@ -21,6 +30,8 @@ public final class PlonKSetupBLS381 {
     private PlonKSetupBLS381() {}
 
     private static final BigInteger FR = MontFr381.modulus();
+    private static final int MIN_DOMAIN_SIZE = 8;
+    private static final int MAX_DOMAIN_POWER = 24;
 
     /**
      * Perform PlonK setup: compile selector/permutation polynomials and commit via KZG.
@@ -45,10 +56,9 @@ public final class PlonKSetupBLS381 {
         // Domain size = next power of 2 >= numGates
         // Minimum 8: with blinding (degree n+2 wire/Z polynomials), the quotient
         // numerator has degree ~3n+6. The 4n coset needs 4n > 3n+6, i.e., n > 6.
-        int domainSize = Integer.highestOneBit(numGates);
-        if (domainSize < numGates) domainSize <<= 1;
-        if (domainSize < 8) domainSize = 8; // minimum for blinding with 4n coset
+        int domainSize = domainSizeFor(numGates);
         int logN = Integer.numberOfTrailingZeros(domainSize);
+        validateSetupInputs(numGates, numPublic, gateSelectors, sigmaA, sigmaB, sigmaC, numWires, srs, domainSize);
 
         MontFr381 omega = FieldFFTBLS381.rootOfUnity(logN);
         BigInteger k1 = BigInteger.TWO;
@@ -144,8 +154,147 @@ public final class PlonKSetupBLS381 {
             case 0 -> omegaRow;                 // column A: omega^row
             case 1 -> k1.mul(omegaRow);          // column B: k1 * omega^row
             case 2 -> k2.mul(omegaRow);          // column C: k2 * omega^row
-            default -> omegaRow;
+            default -> throw new IllegalArgumentException("sigma target column out of range: " + col);
         };
+    }
+
+    private static int domainSizeFor(int numGates) {
+        if (numGates <= 0) {
+            throw new IllegalArgumentException("numGates must be positive");
+        }
+        int maxDomainSize = 1 << MAX_DOMAIN_POWER;
+        if (numGates > maxDomainSize) {
+            throw new IllegalArgumentException("numGates exceeds supported PlonK domain 2^" + MAX_DOMAIN_POWER);
+        }
+        int domainSize = Integer.highestOneBit(numGates);
+        if (domainSize < numGates) domainSize <<= 1;
+        return Math.max(domainSize, MIN_DOMAIN_SIZE);
+    }
+
+    private static void validateSetupInputs(
+            int numGates,
+            int numPublic,
+            BigInteger[][] gateSelectors,
+            int[] sigmaA,
+            int[] sigmaB,
+            int[] sigmaC,
+            int numWires,
+            PtauImporterBLS381.SRS srs,
+            int domainSize) {
+        if (numPublic < 0 || numPublic > numGates) {
+            throw new IllegalArgumentException("numPublic must be in [0, numGates]");
+        }
+        if (numWires < 0) {
+            throw new IllegalArgumentException("numWires must be non-negative");
+        }
+        validateGateSelectors(gateSelectors, numGates);
+        validateSigma("sigmaA", sigmaA, numGates);
+        validateSigma("sigmaB", sigmaB, numGates);
+        validateSigma("sigmaC", sigmaC, numGates);
+        validateSrs(srs, domainSize);
+    }
+
+    private static void validateGateSelectors(BigInteger[][] gateSelectors, int numGates) {
+        if (gateSelectors == null || gateSelectors.length != numGates) {
+            throw new IllegalArgumentException("gateSelectors must have exactly numGates rows");
+        }
+        for (int i = 0; i < numGates; i++) {
+            BigInteger[] row = gateSelectors[i];
+            if (row == null || row.length != 5) {
+                throw new IllegalArgumentException("gateSelectors[" + i + "] must have exactly 5 entries");
+            }
+            for (int j = 0; j < 5; j++) {
+                requireScalar(row[j], "gateSelectors[" + i + "][" + j + "]");
+            }
+        }
+    }
+
+    private static void validateSigma(String name, int[] sigma, int numGates) {
+        if (sigma == null || sigma.length != numGates) {
+            throw new IllegalArgumentException(name + " must have exactly numGates entries");
+        }
+        int maxTarget = 3 * numGates;
+        for (int i = 0; i < sigma.length; i++) {
+            if (sigma[i] < 0 || sigma[i] >= maxTarget) {
+                throw new IllegalArgumentException(name + "[" + i + "] is outside [0, 3*numGates)");
+            }
+        }
+    }
+
+    private static void validateSrs(PtauImporterBLS381.SRS srs, int domainSize) {
+        Objects.requireNonNull(srs, "srs");
+        AffineG1[] tauG1 = srs.tauG1();
+        AffineG2[] tauG2 = srs.tauG2();
+        int requiredG1 = 2 * domainSize;
+        if (tauG1 == null || tauG1.length < requiredG1) {
+            throw new IllegalArgumentException("BLS12-381 SRS G1 length must be at least " + requiredG1);
+        }
+        if (tauG2 == null || tauG2.length < 2) {
+            throw new IllegalArgumentException("BLS12-381 SRS G2 length must be at least 2");
+        }
+        for (int i = 0; i < requiredG1; i++) {
+            requireValidSrsG1(tauG1[i], "tauG1[" + i + "]");
+        }
+        requireValidSrsG2(tauG2[0], "tauG2[0]");
+        requireValidSrsG2(tauG2[1], "tauG2[1]");
+        validateSrsConsistency(tauG1, tauG2, requiredG1);
+    }
+
+    private static void requireScalar(BigInteger value, String label) {
+        if (value == null || value.signum() < 0 || value.compareTo(FR) >= 0) {
+            throw new IllegalArgumentException(label + " must be a canonical BLS12-381 scalar");
+        }
+    }
+
+    private static void requireValidSrsG1(AffineG1 point, String label) {
+        if (point == null || point.isInfinity() || !point.isOnCurve()) {
+            throw new IllegalArgumentException(label + " must be a non-infinity BLS12-381 G1 point");
+        }
+        G1Point p = new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
+        if (!p.isValid()) {
+            throw new IllegalArgumentException(label + " must be in the BLS12-381 G1 subgroup");
+        }
+    }
+
+    private static void requireValidSrsG2(AffineG2 point, String label) {
+        if (point == null || point.isInfinity() || !point.isOnCurve()) {
+            throw new IllegalArgumentException(label + " must be a non-infinity BLS12-381 G2 point");
+        }
+        G2Point p = new G2Point(
+                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
+                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
+        if (!p.isValid()) {
+            throw new IllegalArgumentException(label + " must be in the BLS12-381 G2 subgroup");
+        }
+    }
+
+    private static void validateSrsConsistency(AffineG1[] tauG1, AffineG2[] tauG2, int count) {
+        if (!tauG1[0].equals(JacobianG1BLS381.GENERATOR.toAffine())) {
+            throw new IllegalArgumentException("BLS12-381 SRS G1 generator anchor mismatch");
+        }
+        if (!tauG2[0].equals(JacobianG2BLS381.GENERATOR.toAffine())) {
+            throw new IllegalArgumentException("BLS12-381 SRS G2 generator anchor mismatch");
+        }
+        G2Point g2 = toG2(tauG2[0]);
+        G2Point tauG2Point = toG2(tauG2[1]);
+        for (int i = 1; i < count; i++) {
+            boolean consistent = BLS12381Pairing.pairingCheck(
+                    new G1Point[]{toG1(tauG1[i]), toG1(tauG1[i - 1]).negate()},
+                    new G2Point[]{g2, tauG2Point});
+            if (!consistent) {
+                throw new IllegalArgumentException("BLS12-381 SRS powers are inconsistent at G1 index " + i);
+            }
+        }
+    }
+
+    private static G1Point toG1(AffineG1 point) {
+        return new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
+    }
+
+    private static G2Point toG2(AffineG2 point) {
+        return new G2Point(
+                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
+                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
     }
 
     private static MontFr381 evalOmegaPow(MontFr381 omega, int exp) {

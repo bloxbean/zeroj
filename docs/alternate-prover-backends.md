@@ -20,9 +20,13 @@ ZeroJ's **recommended** prover is the [pure Java prover](pure-java-prover-guide.
 
 | Backend | Proof Systems | Curves | Dependencies | Module |
 |---------|-------------|--------|--------------|--------|
-| **Pure Java** | Groth16, PlonK | BN254, BLS12-381 | None | `zeroj-crypto` |
-| **gnark FFM** | Groth16, PlonK | BN254, BLS12-381 | Go native lib | `zeroj-prover-gnark` |
-| **snarkjs CLI** | Groth16, PlonK | BN254, BLS12-381 | Node.js + snarkjs | external process |
+| **Pure Java** | Groth16, PlonK | BLS12-381 | None | `zeroj-crypto` |
+| **gnark FFM** | Groth16, PlonK | BLS12-381 | Go native lib | `zeroj-prover-gnark` |
+| **snarkjs CLI** | Groth16, PlonK | BLS12-381 | Node.js + snarkjs | external process |
+
+BN254 artifacts are legacy/off-chain only in ZeroJ. High-level BN254 proving and
+verification require explicit opt-in, and BN254 verifiers are not registered by
+default; use BLS12-381 for Cardano-oriented proving and verification.
 
 ## gnark FFM (Foreign Function & Memory)
 

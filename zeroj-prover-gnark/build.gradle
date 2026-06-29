@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ gnark prover — native in-process BLS12-381/BN254 Groth16 and PlonK proving via FFM'
+description = 'ZeroJ gnark prover — native in-process BLS12-381 Groth16 and PlonK proving via FFM'
 
 test {
     // Set GOMAXPROCS before Go runtime bootstraps inside the shared library.
@@ -29,7 +29,7 @@ publishing {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ Prover Gnark'
-                description = 'Native in-process BLS12-381/BN254 Groth16 and PlonK proving via gnark FFM bindings'
+                description = 'Native in-process BLS12-381 Groth16 and PlonK proving via gnark FFM bindings'
             }
         }
     }

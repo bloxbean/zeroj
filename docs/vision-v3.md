@@ -275,7 +275,7 @@ public class VestingValidator {
 
 JuLC already produces a working on-chain Groth16 verifier through
 `zeroj-onchain-julc/Groth16BLS12381Verifier` against Plutus V3 BLS12-381
-builtins. `PlonkBLS12381FullVerifier` is an experimental prototype today: it
+builtins. `PlonkBLS12381TranscriptPrototype` is an experimental prototype today: it
 checks the transcript and inverse constraints, while the KZG batch opening
 pairing check remains deferred.
 

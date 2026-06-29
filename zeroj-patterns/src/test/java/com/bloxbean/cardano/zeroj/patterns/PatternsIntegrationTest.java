@@ -11,7 +11,7 @@ import com.bloxbean.cardano.zeroj.patterns.statetransition.StateTransition;
 import com.bloxbean.cardano.zeroj.patterns.statetransition.StateTransitionVerifier;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierOrchestrator;
 import com.bloxbean.cardano.zeroj.verifier.core.VerifierRegistry;
-import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.Groth16BN254Verifier;
+import com.bloxbean.cardano.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests for all three ZK patterns using real snarkjs Groth16/BN254 proofs.
+ * Integration tests for all three ZK patterns using real snarkjs Groth16/BLS12-381 proofs.
  *
  * <p>The multiplier circuit (a * b = c, public inputs: [c, a]) is repurposed to
  * demonstrate each pattern conceptually — in production, each pattern would have
@@ -38,15 +38,15 @@ class PatternsIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        proofJson = loadString("/test-vectors/groth16-bn254/proof.json");
-        vkJson = loadString("/test-vectors/groth16-bn254/verification_key.json");
+        proofJson = loadString("/test-vectors/groth16-bls12381/proof.json");
+        vkJson = loadString("/test-vectors/groth16-bls12381/verification_key.json");
         byte[] vkBytes = vkJson.getBytes(StandardCharsets.UTF_8);
 
         var registry = VerifierRegistry.empty();
-        registry.register(new Groth16BN254Verifier());
+        registry.register(new Groth16BLS12381PureJavaVerifier());
 
         var vkRegistry = new InMemoryVerificationKeyRegistry();
-        material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BN254,
+        material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BLS12_381,
                 new CircuitId("multiplier"));
         vkRegistry.register(material);
 
@@ -63,7 +63,7 @@ class PatternsIntegrationTest {
                 .additionalPublicInputs(List.of(BigInteger.valueOf(33), BigInteger.valueOf(3)))
                 .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
                 .proofSystem(ProofSystemId.GROTH16)
-                .curve(CurveId.BN254)
+                .curve(CurveId.BLS12_381)
                 .circuitId("multiplier")
                 .build();
 
@@ -217,7 +217,7 @@ class PatternsIntegrationTest {
     void policyTemplate_validProofPassesAllRules() {
         var policy = VerificationPolicyTemplate.create(orchestrator)
                 .requireProofSystem(ProofSystemId.GROTH16)
-                .requireCurve(CurveId.BN254)
+                .requireCurve(CurveId.BLS12_381)
                 .requireMinPublicInputs(2)
                 .build();
 
@@ -229,10 +229,10 @@ class PatternsIntegrationTest {
     @Test
     void policyTemplate_wrongCurveRejected() {
         var policy = VerificationPolicyTemplate.create(orchestrator)
-                .requireCurve(CurveId.BLS12_381) // wrong curve
+                .requireCurve(CurveId.BN254) // wrong curve
                 .build();
 
-        var envelope = buildEnvelope(); // BN254
+        var envelope = buildEnvelope();
         var result = policy.evaluate(envelope, material);
         assertFalse(result.accepted());
     }
@@ -265,7 +265,7 @@ class PatternsIntegrationTest {
 
     private ZkProofEnvelope buildEnvelope() {
         return SnarkjsJsonCodec.toEnvelopeFromJson(proofJson, vkJson,
-                loadString("/test-vectors/groth16-bn254/public.json"),
+                loadString("/test-vectors/groth16-bls12381/public.json"),
                 new CircuitId("multiplier"));
     }
 

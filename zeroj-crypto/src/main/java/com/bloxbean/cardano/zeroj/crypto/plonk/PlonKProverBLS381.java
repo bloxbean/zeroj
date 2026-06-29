@@ -1,13 +1,17 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
+import com.bloxbean.cardano.zeroj.bls12381.Bls12381Codecs;
+import com.bloxbean.cardano.zeroj.bls12381.ec.G1Point;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.field.Fp;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 
 /**
@@ -29,6 +33,16 @@ public final class PlonKProverBLS381 {
     private PlonKProverBLS381() {}
 
     private static final BigInteger FR = MontFr381.modulus();
+    private static final int MIN_DOMAIN_SIZE = 8;
+    private static final int MAX_DOMAIN_POWER = 24;
+    public static final int MAX_CARDANO_MPI_PUBLIC_INPUTS = 8;
+    public static final String CARDANO_MPI_PROFILE_TAG = "zeroj-plonk-bls12381-cardano-mpi-v1-json";
+
+    private enum TranscriptEncoding {
+        UNCOMPRESSED_AFFINE,
+        COMPRESSED_G1,
+        COMPRESSED_G1_MPI
+    }
 
     /**
      * Generate a PlonK proof.
@@ -42,15 +56,77 @@ public final class PlonKProverBLS381 {
      */
     public static PlonKProofBLS381 prove(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
                                     MontFr381[] wireC, BigInteger[] pubInputs) {
-        int n = pk.domainSize();
-        int logN = Integer.numberOfTrailingZeros(n);
-        MontFr381 omega = pk.omega();
-        AffineG1[] srs = pk.srsG1();
+        return prove(pk, wireA, wireB, wireC, pubInputs, new SecureRandom());
+    }
 
-        var rng = new SecureRandom();
+    /**
+     * Generate a PlonK proof using a caller-supplied CSPRNG for blinding
+     * scalars. Production callers can use this overload to provide an approved
+     * or externally managed {@link SecureRandom} instance.
+     */
+    public static PlonKProofBLS381 prove(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
+                                    MontFr381[] wireC, BigInteger[] pubInputs, SecureRandom rng) {
+        if (rng == null) {
+            throw new IllegalArgumentException("SecureRandom must not be null");
+        }
         MontFr381[] b = new MontFr381[9];
         for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
-        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);
+        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.UNCOMPRESSED_AFFINE);
+    }
+
+    /**
+     * Generate a PlonK proof for the ZeroJ Cardano on-chain verifier profile.
+     *
+     * <p>The arithmetic is identical to {@link #prove(PlonKProvingKeyBLS381, MontFr381[], MontFr381[], MontFr381[], BigInteger[])},
+     * but Fiat-Shamir G1 transcript entries use canonical compressed BLS12-381
+     * encodings. That lets the on-chain verifier bind the exact bytes it
+     * uncompresses and uses for BLS builtins.</p>
+     */
+    public static PlonKProofBLS381 proveCardano(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
+                                           MontFr381[] wireC, BigInteger[] pubInputs) {
+        return proveCardano(pk, wireA, wireB, wireC, pubInputs, new SecureRandom());
+    }
+
+    /**
+     * Generate a Cardano-profile PlonK proof using a caller-supplied CSPRNG for
+     * blinding scalars.
+     */
+    public static PlonKProofBLS381 proveCardano(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
+                                           MontFr381[] wireC, BigInteger[] pubInputs, SecureRandom rng) {
+        if (rng == null) {
+            throw new IllegalArgumentException("SecureRandom must not be null");
+        }
+        requireCardanoV1PublicInputs(pubInputs);
+        MontFr381[] b = new MontFr381[9];
+        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.COMPRESSED_G1);
+    }
+
+    /**
+     * Generate a PlonK proof for the bounded Cardano multi-public-input profile.
+     *
+     * <p>This profile binds the profile tag and exact public input count into
+     * the first Fiat-Shamir round before the fixed-width public input scalars.
+     * It is intentionally bounded to keep on-chain verification measurable.</p>
+     */
+    public static PlonKProofBLS381 proveCardanoMpi(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
+                                                   MontFr381[] wireC, BigInteger[] pubInputs) {
+        return proveCardanoMpi(pk, wireA, wireB, wireC, pubInputs, new SecureRandom());
+    }
+
+    /**
+     * Generate a bounded Cardano multi-public-input PlonK proof using a
+     * caller-supplied CSPRNG for blinding scalars.
+     */
+    public static PlonKProofBLS381 proveCardanoMpi(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
+                                                   MontFr381[] wireC, BigInteger[] pubInputs, SecureRandom rng) {
+        if (rng == null) {
+            throw new IllegalArgumentException("SecureRandom must not be null");
+        }
+        requireCardanoMpiPublicInputs(pubInputs);
+        MontFr381[] b = new MontFr381[9];
+        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.COMPRESSED_G1_MPI);
     }
 
     /** Prove without blinding (for debugging). */
@@ -58,31 +134,26 @@ public final class PlonKProverBLS381 {
                                       MontFr381[] wireC, BigInteger[] pubInputs) {
         MontFr381[] b = new MontFr381[9];
         for (int i = 0; i < 9; i++) b[i] = MontFr381.ZERO;
-        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);
+        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.UNCOMPRESSED_AFFINE);
     }
 
     private static PlonKProofBLS381 proveInternal(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
-                                             MontFr381[] wireC, BigInteger[] pubInputs, MontFr381[] b) {
+                                             MontFr381[] wireC, BigInteger[] pubInputs, MontFr381[] b,
+                                             TranscriptEncoding transcriptEncoding) {
+        if (pk == null) {
+            throw new IllegalArgumentException("proving key must not be null");
+        }
         int n = pk.domainSize();
         int logN = Integer.numberOfTrailingZeros(n);
         MontFr381 omega = pk.omega();
         AffineG1[] srs = pk.srsG1();
 
         // --- Input validation ---
-        if (wireA.length < n)
-            throw new IllegalArgumentException("wireA.length (" + wireA.length + ") must be >= domainSize (" + n + ")");
-        if (wireB.length < n)
-            throw new IllegalArgumentException("wireB.length (" + wireB.length + ") must be >= domainSize (" + n + ")");
-        if (wireC.length < n)
-            throw new IllegalArgumentException("wireC.length (" + wireC.length + ") must be >= domainSize (" + n + ")");
-        if (pubInputs.length != pk.nPublic())
-            throw new IllegalArgumentException(
-                    "pubInputs.length (" + pubInputs.length + ") must equal nPublic (" + pk.nPublic() + ")");
+        validateProverInputs(pk, wireA, wireB, wireC, pubInputs, b);
 
-        // Pad wire evaluations to domain size
-        MontFr381[] aEvals = padTo(wireA, n);
-        MontFr381[] bEvals = padTo(wireB, n);
-        MontFr381[] cEvals = padTo(wireC, n);
+        MontFr381[] aEvals = wireA;
+        MontFr381[] bEvals = wireB;
+        MontFr381[] cEvals = wireC;
 
         // === Round 1: Wire polynomial commitments ===
         var aCoeffs = FieldFFTBLS381.ifft(aEvals);
@@ -100,13 +171,14 @@ public final class PlonKProverBLS381 {
 
         // Fiat-Shamir: derive beta, gamma
         var transcript = new FiatShamirTranscript(FR, 32, 48);
-        addG1(transcript, pk.qmCommit()); addG1(transcript, pk.qlCommit());
-        addG1(transcript, pk.qrCommit()); addG1(transcript, pk.qoCommit());
-        addG1(transcript, pk.qcCommit());
-        addG1(transcript, pk.s1Commit()); addG1(transcript, pk.s2Commit());
-        addG1(transcript, pk.s3Commit());
-        for (var pi : pubInputs) transcript.addScalar(pi);
-        addG1(transcript, commitA); addG1(transcript, commitB); addG1(transcript, commitC);
+        addG1(transcript, pk.qmCommit(), transcriptEncoding); addG1(transcript, pk.qlCommit(), transcriptEncoding);
+        addG1(transcript, pk.qrCommit(), transcriptEncoding); addG1(transcript, pk.qoCommit(), transcriptEncoding);
+        addG1(transcript, pk.qcCommit(), transcriptEncoding);
+        addG1(transcript, pk.s1Commit(), transcriptEncoding); addG1(transcript, pk.s2Commit(), transcriptEncoding);
+        addG1(transcript, pk.s3Commit(), transcriptEncoding);
+        addPublicInputs(transcript, pubInputs, transcriptEncoding);
+        addG1(transcript, commitA, transcriptEncoding); addG1(transcript, commitB, transcriptEncoding);
+        addG1(transcript, commitC, transcriptEncoding);
         BigInteger betaBi = transcript.getChallenge();
         MontFr381 beta = MontFr381.fromBigInteger(betaBi);
 
@@ -137,7 +209,7 @@ public final class PlonKProverBLS381 {
         var commitZ = KZGCommitmentBLS381.commit(srs, zBlind).toAffine();
 
         transcript.reset(); transcript.addScalar(betaBi); transcript.addScalar(gammaBi);
-        addG1(transcript, commitZ);
+        addG1(transcript, commitZ, transcriptEncoding);
         BigInteger alphaBi = transcript.getChallenge();
         MontFr381 alpha = MontFr381.fromBigInteger(alphaBi);
         MontFr381 alpha2 = alpha.mul(alpha);
@@ -254,7 +326,8 @@ public final class PlonKProverBLS381 {
         var commitT3 = KZGCommitmentBLS381.commit(srs, t3).toAffine();
 
         transcript.reset(); transcript.addScalar(alphaBi);
-        addG1(transcript, commitT1); addG1(transcript, commitT2); addG1(transcript, commitT3);
+        addG1(transcript, commitT1, transcriptEncoding); addG1(transcript, commitT2, transcriptEncoding);
+        addG1(transcript, commitT3, transcriptEncoding);
         BigInteger zetaBi = transcript.getChallenge();
         MontFr381 zeta = MontFr381.fromBigInteger(zetaBi);
 
@@ -478,14 +551,6 @@ public final class PlonKProverBLS381 {
         return r;
     }
 
-    private static MontFr381[] padTo(MontFr381[] arr, int n) {
-        if (arr.length >= n) return arr;
-        var r = new MontFr381[n];
-        System.arraycopy(arr, 0, r, 0, arr.length);
-        for (int i = arr.length; i < n; i++) r[i] = MontFr381.ZERO;
-        return r;
-    }
-
     private static MontFr381 powFr(MontFr381 base, int exp) {
         if (exp == 0) return MontFr381.ONE;
         MontFr381 r = base;
@@ -493,14 +558,126 @@ public final class PlonKProverBLS381 {
         return r;
     }
 
-    private static void addG1(FiatShamirTranscript t, AffineG1 p) {
-        if (p.isInfinity()) t.addPolCommitment(BigInteger.ZERO, BigInteger.ZERO);
-        else t.addPolCommitment(p.xBigInt(), p.yBigInt());
+    private static void addG1(FiatShamirTranscript t, AffineG1 p, TranscriptEncoding encoding) {
+        if (encoding == TranscriptEncoding.COMPRESSED_G1) {
+            t.addBytes(Bls12381Codecs.g1ToCompressed(toG1Point(p)));
+        } else if (encoding == TranscriptEncoding.COMPRESSED_G1_MPI) {
+            t.addBytes(Bls12381Codecs.g1ToCompressed(toG1Point(p)));
+        } else if (p.isInfinity()) {
+            t.addPolCommitment(BigInteger.ZERO, BigInteger.ZERO);
+        } else {
+            t.addPolCommitment(p.xBigInt(), p.yBigInt());
+        }
+    }
+
+    private static void addPublicInputs(FiatShamirTranscript transcript, BigInteger[] pubInputs,
+                                        TranscriptEncoding encoding) {
+        if (encoding == TranscriptEncoding.COMPRESSED_G1_MPI) {
+            transcript.addBytes(CARDANO_MPI_PROFILE_TAG.getBytes(StandardCharsets.US_ASCII));
+            transcript.addScalar(BigInteger.valueOf(pubInputs.length));
+        }
+        for (var pi : pubInputs) {
+            transcript.addScalar(pi);
+        }
+    }
+
+    private static G1Point toG1Point(AffineG1 p) {
+        if (p.isInfinity()) {
+            return G1Point.INFINITY;
+        }
+        return new G1Point(Fp.of(p.xBigInt()), Fp.of(p.yBigInt()));
     }
 
     private static MontFr381 randomFr(SecureRandom rng) {
-        byte[] bytes = new byte[64];
-        rng.nextBytes(bytes);
-        return MontFr381.fromBigInteger(new BigInteger(1, bytes).mod(FR));
+        byte[] bytes = new byte[32];
+        BigInteger value;
+        do {
+            rng.nextBytes(bytes);
+            value = new BigInteger(1, bytes);
+        } while (value.compareTo(FR) >= 0);
+        return MontFr381.fromBigInteger(value);
+    }
+
+    private static void validateProverInputs(
+            PlonKProvingKeyBLS381 pk,
+            MontFr381[] wireA,
+            MontFr381[] wireB,
+            MontFr381[] wireC,
+            BigInteger[] pubInputs,
+            MontFr381[] blinders) {
+        if (pk == null) {
+            throw new IllegalArgumentException("proving key must not be null");
+        }
+        int n = pk.domainSize();
+        validateDomain(n);
+        if (pk.nPublic() < 0 || pk.nPublic() > n) {
+            throw new IllegalArgumentException("nPublic must be in [0, domainSize]");
+        }
+        if (pk.omega() == null) {
+            throw new IllegalArgumentException("omega must not be null");
+        }
+        if (pk.srsG1() == null || pk.srsG1().length < 2 * n) {
+            throw new IllegalArgumentException("SRS G1 length must be at least " + (2 * n));
+        }
+
+        requireWireArray("wireA", wireA, n);
+        requireWireArray("wireB", wireB, n);
+        requireWireArray("wireC", wireC, n);
+
+        if (pubInputs == null || pubInputs.length != pk.nPublic()) {
+            throw new IllegalArgumentException("pubInputs.length must equal nPublic");
+        }
+        for (int i = 0; i < pubInputs.length; i++) {
+            requireScalar(pubInputs[i], "pubInputs[" + i + "]");
+        }
+
+        if (blinders == null || blinders.length != 9) {
+            throw new IllegalArgumentException("PlonK BLS12-381 prover requires exactly 9 blinding scalars");
+        }
+        for (int i = 0; i < blinders.length; i++) {
+            if (blinders[i] == null) {
+                throw new IllegalArgumentException("blinding scalar " + i + " must not be null");
+            }
+        }
+    }
+
+    private static void validateDomain(int n) {
+        if (n < MIN_DOMAIN_SIZE || (n & (n - 1)) != 0) {
+            throw new IllegalArgumentException("domainSize must be a power of two >= " + MIN_DOMAIN_SIZE);
+        }
+        int logN = Integer.numberOfTrailingZeros(n);
+        if (logN > MAX_DOMAIN_POWER) {
+            throw new IllegalArgumentException("domainSize exceeds supported PlonK domain 2^" + MAX_DOMAIN_POWER);
+        }
+    }
+
+    private static void requireWireArray(String name, MontFr381[] wires, int n) {
+        if (wires == null || wires.length != n) {
+            throw new IllegalArgumentException(name + ".length must equal domainSize");
+        }
+        for (int i = 0; i < wires.length; i++) {
+            if (wires[i] == null) {
+                throw new IllegalArgumentException(name + "[" + i + "] must not be null");
+            }
+        }
+    }
+
+    private static void requireScalar(BigInteger value, String label) {
+        if (value == null || value.signum() < 0 || value.compareTo(FR) >= 0) {
+            throw new IllegalArgumentException(label + " must be a canonical BLS12-381 scalar");
+        }
+    }
+
+    private static void requireCardanoV1PublicInputs(BigInteger[] pubInputs) {
+        if (pubInputs == null || pubInputs.length != 1) {
+            throw new IllegalArgumentException("Cardano PlonK v1 profile requires exactly one public input");
+        }
+    }
+
+    private static void requireCardanoMpiPublicInputs(BigInteger[] pubInputs) {
+        if (pubInputs == null || pubInputs.length < 1 || pubInputs.length > MAX_CARDANO_MPI_PUBLIC_INPUTS) {
+            throw new IllegalArgumentException(
+                    "Cardano PlonK MPI profile requires 1.." + MAX_CARDANO_MPI_PUBLIC_INPUTS + " public inputs");
+        }
     }
 }

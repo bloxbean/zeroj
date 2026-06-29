@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ Groth16 verification — BN254 (pure Java) and BLS12-381 (via blst)'
+description = 'ZeroJ Groth16 verification — BLS12-381 pure Java/native blst; BN254 legacy disabled by default'
 
 dependencies {
     api project(':zeroj-backend-spi')
@@ -18,7 +18,7 @@ publishing {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ Verifier Groth16'
-                description = 'Groth16 proof verification for BN254 and BLS12-381'
+                description = 'Groth16 proof verification for BLS12-381; BN254 legacy verifier disabled by default'
             }
         }
     }

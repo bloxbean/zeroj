@@ -17,7 +17,7 @@ import java.util.function.Function;
  * <pre>{@code
  * var policy = VerificationPolicyTemplate.create(orchestrator)
  *     .requireProofSystem(ProofSystemId.GROTH16)
- *     .requireCurve(CurveId.BN254)
+ *     .requireCurve(CurveId.BLS12_381)
  *     .addRule("min-public-inputs", envelope ->
  *         envelope.publicInputs().size() >= 2
  *             ? null

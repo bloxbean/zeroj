@@ -77,7 +77,7 @@ public record StateTransitionInput(
      * @return a {@link StateTransition} ready for verification
      */
     public StateTransition withProof(byte[] proofBytes, String circuitId) {
-        return withProof(proofBytes, circuitId, ProofSystemId.GROTH16, CurveId.BN254);
+        return withProof(proofBytes, circuitId, ProofSystemId.GROTH16, CurveId.BLS12_381);
     }
 
     /**

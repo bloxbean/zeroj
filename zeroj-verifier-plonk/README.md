@@ -1,6 +1,6 @@
 # zeroj-verifier-plonk
 
-PlonK proof verification for BLS12-381 and BN254 curves.
+PlonK proof verification for BLS12-381, the Cardano-supported pairing curve.
 
 This module provides pure Java PlonK verification for structured snarkjs/ZeroJ
 proof JSON. gnark's opaque binary PlonK proof JSON is not accepted by these
@@ -10,7 +10,11 @@ dedicated adapter is added.
 | Backend | Curve | Implementation | Status |
 |---------|-------|----------------|--------|
 | `PlonkBLS12381Verifier` | BLS12-381 | Pure Java | Full implementation |
-| `PlonkBN254Verifier` | BN254 | Pure Java | Challenge derivation done, pairing TODO |
+| `PlonkBN254Verifier` | BN254 | Pure Java | Legacy off-chain only; disabled by default |
+
+BN254 is not registered via ServiceLoader and is not a Cardano on-chain target.
+To run legacy off-chain experiments explicitly, start the JVM with
+`-Dzeroj.allowLegacyBn254=true`.
 
 ## Architecture
 
@@ -28,7 +32,7 @@ PlonK verification involves 6 steps:
 | Class | Purpose |
 |-------|---------|
 | `PlonkBLS12381Verifier` | Implements `ZkVerifier` SPI — full pure Java PlonK verification |
-| `PlonkBN254Verifier` | Implements `ZkVerifier` SPI — BN254 PlonK (scaffold, challenge derivation complete) |
+| `PlonkBN254Verifier` | Legacy BN254 verifier, disabled by default and not ServiceLoader-registered |
 | `FiatShamirTranscript` | Shared Keccak-256 transcript from `zeroj-crypto` for deterministic snarkjs-compatible challenge generation |
 | `KzgVerifier` | KZG polynomial commitment opening proof verification |
 | `PlonkProof` | Parsed proof record (commitments + evaluations) |
@@ -64,7 +68,6 @@ The transcript must match the prover's byte layout exactly. The current implemen
 
 ## Test Vectors
 
-- `zeroj-test-vectors/.../plonk-bn254/` — snarkjs PlonK BN254 (multiplier: 3 × 11 = 33)
 - `zeroj-test-vectors/.../plonk-bls12381/` — gnark PlonK BLS12-381 artifacts used for transcript and compatibility tests
 
 ## Gradle

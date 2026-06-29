@@ -19,10 +19,11 @@ import java.math.BigInteger;
  *   <li>Challenge order: gamma → beta → alpha → zeta</li>
  * </ul>
  *
- * <p>The redeemer carries both compressed G1 points (for BLS pairing operations)
- * and their uncompressed raw bytes (for Fiat-Shamir hashing). The verifier checks
- * that uncompressed bytes correspond to valid G1 points by uncompressing and
- * comparing with the compressed versions.</p>
+     * <p>The redeemer carries both compressed G1 points (for BLS operations)
+     * and their uncompressed raw bytes (for Fiat-Shamir hashing). This prototype
+     * rejects non-canonical compressed encodings and wrong-sized raw transcript
+     * byte strings. A final production verifier must still pin a transcript profile
+     * that can bind the hashed bytes to the group-operation bytes.</p>
  *
  * <p>This version is not a full trustless PlonK verifier yet: the KZG batch
  * opening pairing check is deferred. It is specialized for 1 public input
@@ -30,7 +31,7 @@ import java.math.BigInteger;
  * precomputed inverse constraints.</p>
  */
 @SpendingValidator
-public class PlonkBLS12381FullVerifier {
+public class PlonkBLS12381TranscriptPrototype {
 
     // VK: uncompressed raw bytes for transcript (96 bytes each)
     @Param static byte[] vkS1Raw;
@@ -82,9 +83,19 @@ public class PlonkBLS12381FullVerifier {
 
     @Entrypoint
     static boolean validate(PlutusData datum, PlonkProof p, PlutusData ctx) {
-        // Extract 1 public input from datum
+        if (!validParams() || !validProofShapeAndScalars(p)) {
+            return false;
+        }
+
+        // Extract exactly 1 public input from datum
         PlutusData inputs = Builtins.unListData(datum);
+        if (Builtins.nullList(inputs) || !Builtins.nullList(Builtins.tailList(inputs))) {
+            return false;
+        }
         BigInteger pub0 = Builtins.asInteger(Builtins.headList(inputs));
+        if (!scalarInFr(pub0)) {
+            return false;
+        }
 
         // ======== Fiat-Shamir (gnark format: SHA-256 with name prefix + hash chain) ========
 
@@ -204,6 +215,84 @@ public class PlonkBLS12381FullVerifier {
         // This is not a production PlonK acceptance condition until the KZG
         // batch opening pairing check above is implemented.
         return inv1Ok && inv2Ok;
+    }
+
+    private static boolean validParams() {
+        return fr.signum() > 0
+                && scalarInFr(omega)
+                && scalarInFr(k1)
+                && scalarInFr(k2)
+                && scalarInFr(nInv)
+                && isCanonicalG1(vkS1)
+                && isCanonicalG1(vkS2)
+                && isCanonicalG1(vkS3)
+                && isCanonicalG1(vkQm)
+                && isCanonicalG1(vkQl)
+                && isCanonicalG1(vkQr)
+                && isCanonicalG1(vkQo)
+                && isCanonicalG1(vkQc)
+                && isCanonicalG1(g1Gen)
+                && isCanonicalG2(vkX2)
+                && isCanonicalG2(g2Gen)
+                && isRawG1(vkS1Raw)
+                && isRawG1(vkS2Raw)
+                && isRawG1(vkS3Raw)
+                && isRawG1(vkQlRaw)
+                && isRawG1(vkQrRaw)
+                && isRawG1(vkQmRaw)
+                && isRawG1(vkQoRaw)
+                && isRawG1(vkQkRaw);
+    }
+
+    private static boolean validProofShapeAndScalars(PlonkProof p) {
+        return scalarInFr(p.evalA())
+                && scalarInFr(p.evalB())
+                && scalarInFr(p.evalC())
+                && scalarInFr(p.evalS1())
+                && scalarInFr(p.evalS2())
+                && scalarInFr(p.evalZw())
+                && scalarInFr(p.xiMinusOneInv())
+                && scalarInFr(p.xiMinusOmegaInv())
+                && isCanonicalG1(p.cmA())
+                && isCanonicalG1(p.cmB())
+                && isCanonicalG1(p.cmC())
+                && isCanonicalG1(p.cmZ())
+                && isCanonicalG1(p.cmT1())
+                && isCanonicalG1(p.cmT2())
+                && isCanonicalG1(p.cmT3())
+                && isCanonicalG1(p.wXi())
+                && isCanonicalG1(p.wXiw())
+                && isRawG1(p.cmARaw())
+                && isRawG1(p.cmBRaw())
+                && isRawG1(p.cmCRaw())
+                && isRawG1(p.cmZRaw())
+                && isRawG1(p.cmT1Raw())
+                && isRawG1(p.cmT2Raw())
+                && isRawG1(p.cmT3Raw());
+    }
+
+    private static boolean scalarInFr(BigInteger value) {
+        return value.signum() >= 0 && value.compareTo(fr) < 0;
+    }
+
+    private static boolean isCanonicalG1(byte[] compressed) {
+        return Builtins.lengthOfByteString(compressed) == 48
+                && Builtins.equalsByteString(
+                        Builtins.bls12_381_G1_compress(Builtins.bls12_381_G1_uncompress(compressed)),
+                        compressed);
+    }
+
+    private static boolean isCanonicalG2(byte[] compressed) {
+        return Builtins.lengthOfByteString(compressed) == 96
+                && Builtins.equalsByteString(
+                        Builtins.bls12_381_G2_compress(Builtins.bls12_381_G2_uncompress(compressed)),
+                        compressed);
+    }
+
+    private static boolean isRawG1(byte[] raw) {
+        return Builtins.lengthOfByteString(raw) == 96
+                && Builtins.lengthOfByteString(Builtins.sliceByteString(0, 48, raw)) == 48
+                && Builtins.lengthOfByteString(Builtins.sliceByteString(48, 48, raw)) == 48;
     }
 
     // Challenge name bytes (hardcoded UTF-8 — avoids Builtins.encodeUtf8 which returns BytesData)

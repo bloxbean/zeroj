@@ -12,7 +12,7 @@ This module defines the foundational data types shared across all ZeroJ modules.
 | `VerificationResult` | Separates cryptographic validity from policy validity with typed reason codes |
 | `VerificationMaterial` | VK bytes + proof system/curve/circuit metadata for verification |
 | `ProofSystemId` | Enum: `GROTH16`, `PLONK`, `FFLONK`, `HALO2`, `BBS` |
-| `CurveId` | Enum: `BN254`, `BLS12_381`, `PALLAS` |
+| `CurveId` | Enum: `BLS12_381`, `PALLAS`, and legacy/off-chain `BN254` |
 | `CircuitId` | Typed wrapper for circuit identifiers (non-blank string) |
 | `PublicInputs` | Immutable list of `BigInteger` field elements |
 | `VerificationKeyRef` | Sealed interface — `ByHash` (SHA-256) or `ById` (named registry lookup) |
@@ -31,7 +31,7 @@ This module defines the foundational data types shared across all ZeroJ modules.
 // Build a proof envelope
 var envelope = ZkProofEnvelope.builder()
         .proofSystem(ProofSystemId.GROTH16)
-        .curve(CurveId.BN254)
+        .curve(CurveId.BLS12_381)
         .circuitId(new CircuitId("multiplier"))
         .proofBytes(proofBytes)
         .publicInputs(PublicInputs.of(List.of(BigInteger.valueOf(33), BigInteger.valueOf(3))))
@@ -40,7 +40,7 @@ var envelope = ZkProofEnvelope.builder()
 
 // Build verification material
 var material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16,
-        CurveId.BN254, new CircuitId("multiplier"), vkHash);
+        CurveId.BLS12_381, new CircuitId("multiplier"), vkHash);
 ```
 
 ## Gradle

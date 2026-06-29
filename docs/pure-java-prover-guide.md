@@ -27,9 +27,9 @@ Java Circuit → compileR1CS(BLS12_381) → Groth16ProverBLS381.prove() → on-c
 | Proof System | Curve | Module | Status |
 |-------------|-------|--------|--------|
 | Groth16 | BLS12-381 | `zeroj-crypto` | Implemented; primary on-chain path |
-| PlonK | BLS12-381 | `zeroj-crypto` | Implemented off-chain; on-chain prototype |
+| PlonK | BLS12-381 | `zeroj-crypto` | Implemented off-chain; experimental on-chain validators |
 | Groth16 | BN254 | `zeroj-crypto` | Implemented off-chain |
-| PlonK | BN254 | `zeroj-crypto` | Implemented off-chain |
+| PlonK | BN254 | `zeroj-crypto` | Legacy/off-chain only; explicit opt-in required |
 
 For on-chain Cardano verification, use **BLS12-381** (Plutus V3 has native BLS builtins).
 
@@ -92,6 +92,7 @@ BigInteger[] witness = circuit.calculateWitness(Map.of(
 ), CurveId.BLS12_381);
 
 // Local test setup only: toxic waste is known.
+// Requires -Dzeroj.allowInsecureTrustedSetup=true.
 var srs = PowersOfTauBLS381.generate(4);
 var setup = Groth16SetupBLS381.setup(constraints, r1cs.numWires(),
     r1cs.numPublicInputs(), srs.tauScalar());
@@ -159,6 +160,7 @@ BigInteger[] witness = circuit.calculateWitness(Map.of(
 
 ```java
 // WARNING: Single-party setup. Toxic waste is known. Use for local tests only.
+// Requires -Dzeroj.allowInsecureTrustedSetup=true.
 var srs = PowersOfTauBLS381.generate(8);  // 2^8 = 256 constraints max
 var setup = Groth16SetupBLS381.setup(constraints, r1cs.numWires(),
     r1cs.numPublicInputs(), srs.tauScalar());
@@ -275,7 +277,7 @@ The PlonK prover follows the same pattern but uses `PlonKProverBLS381`:
 // Compile to PlonK
 var plonk = circuit.compilePlonK(CurveId.BLS12_381);
 
-// Setup (development)
+// Setup (development; requires -Dzeroj.allowInsecureTrustedSetup=true)
 var srs = PowersOfTauBLS381.generate(8);
 var pk = PlonKSetupBLS381.setup(numGates, numPublic, gateSelectors,
     sigmaA, sigmaB, sigmaC, numWires, srs);
@@ -318,7 +320,7 @@ var proof = Groth16ProverBLS381.prove(zkeyData.provingKey(), witness,
 
 | | Local tests | MPC artifacts |
 |---|---|---|
-| **Powers of Tau** | `PowersOfTauBLS381.generate(n)` | Import .ptau from MPC ceremony (Hermez, PPOT) |
+| **Powers of Tau** | `PowersOfTauBLS381.generate(n)` with `-Dzeroj.allowInsecureTrustedSetup=true` | Import .ptau from MPC ceremony (Hermez, PPOT) |
 | **Phase 2 Setup** | `Groth16SetupBLS381.setup(...)` | `snarkjs groth16 setup` with multi-party ceremony |
 | **Importing** | Use `srs.tauScalar()` directly | Use `ZkeyImporterBLS381.importZkeyFull(...)` |
 | **Trust** | Single party (toxic waste known) | Multi-party (trust distributed) |
@@ -375,7 +377,7 @@ implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
 implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
 implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
 
-// Pure Java prover (BN254 + BLS12-381, Groth16 + PlonK)
+// Pure Java prover (BLS12-381, Groth16 + PlonK)
 implementation 'com.bloxbean.cardano:zeroj-crypto'
 
 // Off-chain verification (pure Java)

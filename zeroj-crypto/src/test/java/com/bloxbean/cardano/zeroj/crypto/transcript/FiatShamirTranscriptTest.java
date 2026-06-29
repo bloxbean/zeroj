@@ -76,6 +76,43 @@ class FiatShamirTranscriptTest {
     }
 
     @Test
+    void addScalar_rejectsNegativeValue() {
+        var t = new FiatShamirTranscript(BN254_R);
+
+        assertThrows(IllegalArgumentException.class, () -> t.addScalar(BigInteger.valueOf(-1)));
+    }
+
+    @Test
+    void addScalar_rejectsFieldModulus() {
+        var t = new FiatShamirTranscript(BN254_R);
+
+        assertThrows(IllegalArgumentException.class, () -> t.addScalar(BN254_R));
+    }
+
+    @Test
+    void addPolCommitment_rejectsNegativeCoordinate() {
+        var t = new FiatShamirTranscript(BN254_R);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> t.addPolCommitment(BigInteger.valueOf(-1), BigInteger.TWO));
+    }
+
+    @Test
+    void addPolCommitment_rejectsOverWidthCoordinate() {
+        var t = new FiatShamirTranscript(BN254_R);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> t.addPolCommitment(BigInteger.ONE.shiftLeft(256), BigInteger.TWO));
+    }
+
+    @Test
+    void addPolCommitment_acceptsUnsignedHighBitCoordinate() {
+        var t = new FiatShamirTranscript(BN254_R);
+
+        assertDoesNotThrow(() -> t.addPolCommitment(BigInteger.ONE.shiftLeft(255), BigInteger.TWO));
+    }
+
+    @Test
     void appendBytes_affectsChallenge() {
         var t1 = new FiatShamirTranscript(BN254_R);
         var t2 = new FiatShamirTranscript(BN254_R);

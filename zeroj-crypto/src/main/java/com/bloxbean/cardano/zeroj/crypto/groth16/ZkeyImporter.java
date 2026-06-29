@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254.AffineG2;
@@ -59,6 +60,7 @@ public final class ZkeyImporter {
      * @throws IOException if the file format is invalid
      */
     public static Groth16ProvingKey importZkey(InputStream input) throws IOException {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         return importZkeyFull(input.readAllBytes()).provingKey();
     }
 
@@ -67,6 +69,7 @@ public final class ZkeyImporter {
      * The constraints are needed for h(x) polynomial computation in the prover.
      */
     public static ZkeyData importZkeyFull(byte[] data) throws IOException {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
 
         // Global header

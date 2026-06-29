@@ -42,7 +42,7 @@ public final class OnChainFeasibility {
                 new Entry(ProofSystemId.PLONK, CurveId.BLS12_381, Status.EXPERIMENTAL,
                         ScriptBudgetEstimator.estimateCpu(ProofSystemId.PLONK, CurveId.BLS12_381, 1),
                         ScriptBudgetEstimator.estimateMemory(ProofSystemId.PLONK, CurveId.BLS12_381, 1),
-                        "Prototype only: transcript and inverse checks exist, but the KZG batch opening pairing check is deferred."),
+                        "Full Cardano-profile verifier implemented and measured for the current one-public-input shape; remains opt-in until audit/release gates close."),
 
                 new Entry(ProofSystemId.HALO2, CurveId.BLS12_381, Status.ASSESSMENT_ONLY,
                         -1, -1,
@@ -70,7 +70,20 @@ public final class OnChainFeasibility {
                         "Unknown combination; no assessment available."));
     }
 
+    /**
+     * Returns true only for proof systems that are ready for value-bearing
+     * on-chain use without experimental opt-in.
+     */
     public static boolean isFeasible(ProofSystemId proofSystem, CurveId curve) {
+        var entry = lookup(proofSystem, curve);
+        return entry.status() == Status.WORKING;
+    }
+
+    /**
+     * Returns true for working paths and for explicitly opted-in experimental
+     * paths. Do not use this for production deployment decisions.
+     */
+    public static boolean isFeasibleWithExperimentalOptIn(ProofSystemId proofSystem, CurveId curve) {
         var entry = lookup(proofSystem, curve);
         return entry.status() == Status.WORKING || entry.status() == Status.EXPERIMENTAL;
     }
