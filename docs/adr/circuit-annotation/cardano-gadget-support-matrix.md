@@ -51,10 +51,10 @@ Annotated symbolic circuit
 | Proof system | Curve | ZeroJ off-chain support | Cardano on-chain support | Current status |
 |--------------|-------|-------------------------|--------------------------|----------------|
 | Groth16 | BLS12-381 | Yes | Yes | Production path. `OnChainFeasibility` marks this `WORKING`. |
-| PlonK | BLS12-381 | Yes | Experimental | Julc verifier prototype exists, but the full KZG batch opening pairing check is deferred. |
+| PlonK | BLS12-381 | Yes | Experimental | Julc validators perform the KZG batch opening pairing check for the current Cardano profiles; value-bearing use waits for external review. |
 | Halo2 | BLS12-381 | Assessment only | No production verifier | Research path only in current repo. |
 | Groth16 | BN254 | Yes | No | Plutus V3 has no BN254 pairing builtins in the current ZeroJ support model. |
-| PlonK | BN254 | Yes | No | Useful off-chain, not a Cardano on-chain target today. |
+| PlonK | BN254 | Legacy opt-in only | No | Not a Cardano on-chain target today; disabled by default in ZeroJ. |
 | Halo2 | Pallas | Incubator/off-chain | No | No Pallas curve builtins or Cardano on-chain verifier in current repo. |
 | BBS | BLS12-381 | Yes, separate proof system | No ZeroJ on-chain verifier today | Useful for off-chain selective disclosure; not an annotated circuit gadget. |
 
@@ -63,7 +63,8 @@ Relevant source:
 - `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
 - `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/groth16/validator/Groth16BLS12381Verifier.java`
 - `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381TranscriptPrototype.java`
+- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381Verifier.java`
+- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381MultiInputVerifier.java`
 - `zeroj-verifier-groth16/...`
 - `zeroj-verifier-plonk/...`
 - `incubator/zeroj-verifier-halo2/...`
@@ -125,7 +126,7 @@ Relevant source:
 | `zeroj-bls12381-wasm` | WASM BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
 | `zeroj-bbs` / `zeroj-bbs-wasm` | CFRG BBS signatures and presentations | BLS12-381 | Not an annotated circuit gadget | No current ZeroJ on-chain verifier | Keep separate from annotated circuits for now. |
 | Groth16 pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through R1CS/witness APIs | BLS12-381 proofs target Cardano through the canonical arbitrary-count verifier | None for public-input count; consider generated fixed-count validators only for budget-critical circuits. |
-| PlonK pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through existing compile APIs | BLS12-381 on-chain is experimental | Do not make PlonK the Cardano default until on-chain verifier is complete. |
+| PlonK pure Java provers | Proof generation | BLS12-381 by default; BN254 legacy opt-in only | Consumes generated circuits through existing compile APIs | BLS12-381 on-chain is experimental | Do not make PlonK the Cardano default until external review closes. |
 | Halo2 incubator verifier | Halo2 IPA verification | Pallas | Not a symbolic circuit target for Cardano | No | Keep as incubator/off-chain. |
 
 ## Important Current Limitations
@@ -194,8 +195,8 @@ For new Cardano-oriented annotated circuits:
 4. Use Jubjub/Pedersen/EdDSA-Jubjub symbolic adapters only on BLS12-381.
 5. Treat MiMC as BN254/off-chain unless a BLS12-381 MiMC variant is explicitly
    designed and documented.
-6. Treat PlonK on-chain support as experimental until the full KZG opening
-   verifier is implemented.
+6. Treat PlonK on-chain support as experimental until external review and
+   release-assurance gates close.
 7. Generate or generalize the Groth16 BLS12-381 on-chain verifier so annotated
    circuits with arbitrary public-input schemas have a first-class Cardano path.
 

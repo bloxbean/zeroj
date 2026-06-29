@@ -1,8 +1,9 @@
 # ADR-0025: End-to-End Security Audit Outcomes and Public-Testnet Readiness Gates (Groth16 + PlonK)
 
 ## Status
-Accepted — BLS12-381 Groth16 testnet blockers implemented; PlonK value-bearing
-gates and third-party audit remain pending
+Accepted — BLS12-381 Groth16 and PlonK public-testnet blockers implemented;
+value-bearing/mainnet use still requires independent audit and release-assurance
+gates
 
 ## Date
 2026-06-29
@@ -28,7 +29,7 @@ across `zeroj-verifier-groth16`, `zeroj-verifier-plonk`, `zeroj-crypto`,
 3. Low-level crypto primitives (fields, EC, pairing, MSM, FFT, codecs, hash-to-curve).
 4. Trusted setup / SRS handling and the setup cache.
 5. Codec / parsing of untrusted artifacts (`.zkey`/`.ptau`/`.r1cs`/`.wtns`, JSON, CBOR envelope).
-6. On-chain Plutus V3 verification via Julc (Groth16 and the four PlonK validators).
+6. On-chain Plutus V3 verification via Julc (Groth16 and PlonK validators).
 
 ### What the audit confirmed as strong (lock in, do not regress)
 
@@ -45,7 +46,7 @@ across `zeroj-verifier-groth16`, `zeroj-verifier-plonk`, `zeroj-crypto`,
   performs the full pairing equation, the verification key is baked into the script hash
   (so it cannot be attacker-swapped), the Cardano `bls12_381_*_uncompress` builtins
   enforce prime-order subgroup membership, and there is a real-node (Yaci DevKit) E2E.
-- **Three of the four on-chain PlonK validators perform the full batched-KZG pairing
+- **The deployable on-chain PlonK validators perform the full batched-KZG pairing
   check** (`PlonkBLS12381Verifier`, `PlonkBLS12381MultiInputVerifier`,
   `PlonkBLS12381MultiInputParamVerifier`), with inverse witnesses re-verified on-chain.
 - **The BLS12-381 `.ptau` and PlonK `.zkey` importers are well-hardened** — bounds,
@@ -62,6 +63,10 @@ The result is a set of soundness and robustness gaps that are individually fixab
 copying patterns that already exist in the tree.
 
 ### Findings (severity-tagged)
+
+The table records the original audit findings. The implementation-status section below
+records which findings have since been closed, deferred, or left as release-assurance
+gates.
 
 | ID | Sev | Surface | Finding | Location |
 |---|---|---|---|---|
@@ -95,15 +100,16 @@ non-value-bearing public testnet after the listed gates; it is **not** mainnet a
 |---|---:|---|
 | Groth16 on-chain (BLS12-381 Plutus V3) | 7/10 | **Testnet-eligible** after Decisions 3, 5, 6 |
 | Groth16 off-chain — blst | 3/10 (path) | Testnet-eligible after Decision 2 |
-| Groth16 off-chain — pure Java (BLS / BN254) | 3/10 | Validation must be wired (Decision 2) before relied on |
-| PlonK off-chain | 6/10 | Demo/testnet with caveats (Decision 2, 7) |
-| PlonK on-chain | 3/10 | **Not value-bearing** until Decisions 4, 7 close; experimental flag stays |
+| Groth16 off-chain — pure Java (BLS / BN254) | 3/10 | BLS12-381 testnet-eligible after Decision 2; BN254 legacy opt-in only |
+| PlonK off-chain | 6/10 | BLS12-381 testnet-eligible after Decision 7 vector coverage; BN254 legacy opt-in only |
+| PlonK on-chain | 3/10 | BLS12-381 experimental/testnet-eligible after Decisions 4, 7; **not value-bearing** until external review |
 | Trusted setup | 5/10 | Testnet only with imported ceremony SRS (Decision 5) |
 | Codec / parsing | 5/10 | Harden before exposing to untrusted input (Decision 6) |
 
-**Headline product decision:** the **Groth16 BLS12-381 end-to-end flow is the supported
-public-testnet path.** PlonK is testnet-eligible off-chain for demos; PlonK on-chain
-remains `EXPERIMENTAL` and must not gate funds until its release gates close.
+**Headline product decision:** the **Groth16 BLS12-381 end-to-end flow is the primary
+public-testnet path.** PlonK BLS12-381 is now testnet-eligible as an explicitly
+experimental path after the internal gates below, but must not gate funds or other
+value-bearing state until independent cryptographic/security review closes.
 
 ### 2. Make point and public-input validation a verifier-layer release gate
 
@@ -116,10 +122,10 @@ each IC element.
   parsed point (F3).
 - **blst Groth16:** add `P1_Affine.in_group()` / `P2_Affine.in_group()` after
   deserialize (F3).
-- **BN254:** add `isOnCurve()` and a prime-order subgroup check to the BN254 point classes
-  first, then enforce them in both BN254 verifiers (F2). Until that lands, the BN254
-  verifiers are **not** registered as default SPI services for untrusted input and are
-  documented as experimental/off-chain-only (BN254 is not a Cardano on-chain target).
+- **BN254:** remains legacy/off-chain-only and is not part of Cardano readiness.
+  High-level BN254 proving and verification require explicit legacy opt-in, and BN254
+  verifiers are **not** registered as default SPI services for untrusted input. Point
+  validation parity is deferred unless legacy BN254 support is re-promoted.
 - **Public inputs:** add an `0 <= x < r` check in the Groth16 off-chain verifiers and in
   `Groth16BLS12381Lib` on-chain (`scalarInFr`, matching the PlonK path) (F4).
 
@@ -202,8 +208,9 @@ authorization (F8). Provide a composing example that binds a proof to the spendi
 
 ## Test Plan
 
-Negative/adversarial vectors become release gates across all verifiers (shared where
-possible):
+Negative/adversarial vectors become release gates across all BLS12-381 verifiers
+(shared where possible). BN254 gates apply only if legacy/off-chain BN254 support is
+re-promoted beyond explicit opt-in:
 
 - **Point validation:** off-curve point rejected; on-curve but off-subgroup (torsion)
   point rejected; infinity proof point rejected; non-canonical coordinate (`x >= p`)
@@ -291,12 +298,25 @@ the real-node E2E.
   ~61 seconds loading/validating setup and ~14 seconds across proof generation, script
   compilation, submission, and confirmation. The PlonK proof-of-reserves and compliance
   credential Yaci E2E tests also passed.
-- **Still pending in this ADR:** PlonK prototype non-deployability (F1), broader
-  fuzzing/differential CI gates, and third-party cryptographic/security audit. BN254
-  high-level proving and verification APIs now require the explicit legacy opt-in
-  `-Dzeroj.allowLegacyBn254=true`, and BN254 verifiers are not auto-discovered.
-  BN254 point-validation parity remains postponed and is no longer a Cardano
+- **Completed for BLS12-381 PlonK testnet readiness:** the non-verifying transcript
+  prototype is no longer in deployable main sources. `PlonkBLS12381Lib` now provides a
+  reusable `@OnchainLibrary` for custom validators, the built-in PlonK validators
+  delegate to it, and a guard test asserts that the library performs a BLS12-381 Miller
+  loop plus final pairing check. `PlonkBLS12381VerifierTest` now verifies an
+  independently generated snarkjs BLS12-381 PlonK vector, and the Cardano-profile
+  one-input and bounded MPI validators remain covered by positive, negative, budget,
+  and Yaci E2E tests. `zeroj-usecases` proof-of-reserves and compliance-credential
+  PlonK demos now use app-local validators that compose `PlonkBLS12381Lib` with
+  usecase-specific public-input policy, and both demos passed real Yaci DevKit
+  lock/spend E2E tests after publishing the local ZeroJ artifact.
+- **BN254 PlonK status:** BN254 high-level proving and verification APIs require the
+  explicit legacy opt-in `-Dzeroj.allowLegacyBn254=true` or
+  `ZEROJ_ALLOW_LEGACY_BN254=true`, and BN254 verifiers are not auto-discovered. BN254
+  point-validation parity remains postponed and is no longer a Cardano
   production-readiness blocker because Cardano only exposes BLS12-381 builtins.
+- **Still pending before value-bearing/mainnet use:** broader fuzzing/differential CI
+  gates and third-party cryptographic/security audit. These are release-assurance gates,
+  not blockers for labeled non-value-bearing public testnet trials.
 
 ### Phase 2 — Robustness hardening
 5. Decision 6: propagate codec/importer bounds and typed failures; bound CBOR decode.
@@ -306,10 +326,12 @@ the real-node E2E.
 Exit: all parsers fail closed on the adversarial corpus; cache poisoning vector closed.
 
 ### Phase 3 — PlonK value-bearing gates
-8. Decision 7: independent PlonK cross-verification vector; transcript-profile external
-   review; real-node PlonK E2E and budget re-measurement.
+8. Decision 7: internal independent PlonK cross-verification vector, real-node PlonK E2E,
+   and budget re-measurement are complete for BLS12-381 public-testnet trials. Broader
+   transcript-profile differential/fuzz coverage remains a release-assurance gate.
 9. Independent third-party cryptographic audit (mandatory before mainnet, per ADR-0024).
-Exit: PlonK on-chain audit findings closed or explicitly deferred with rationale.
+Exit: PlonK on-chain external-audit findings closed or explicitly deferred with
+rationale.
 
 ## Risks
 

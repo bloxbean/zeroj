@@ -1,8 +1,11 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.field.MontFr254;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -15,6 +18,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class PlonKProverTest {
 
     private static final String PTAU_PATH = "/test-circuits/plonk-multiplier/pot8_final.ptau";
+
+    @BeforeEach
+    void enableLegacyBn254() {
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+    }
+
+    @AfterEach
+    void clearLegacyBn254() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    }
 
     @Test
     void prover_producesStructurallyValidProof() throws IOException {

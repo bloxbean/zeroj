@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.HexFormat;
 
 /**
@@ -33,7 +34,8 @@ class PlonkBLS12381TranscriptPrototypeTest extends ContractTest {
 
     @Test
     void fiatShamir_matchesGnark() {
-        var compiled = compileValidator(PlonkBLS12381TranscriptPrototype.class);
+        var compiled = compileValidator(PlonkBLS12381TranscriptPrototype.class,
+                Path.of("src/test/java"));
 
         // Domain params
         BigInteger omega = new BigInteger(json.at("/vk_params/generator").asText());

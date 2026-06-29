@@ -136,8 +136,9 @@ Reusable Plutus V3 spending validators compiled via Julc:
 - `groth16.lib.Groth16BLS12381Lib` -- reusable `@OnchainLibrary` Groth16 verification helper for custom validators
 - `groth16.codec.SnarkjsToCardano` and `groth16.codec.ProverToCardano` -- convert proof/VK artifacts to BLS compressed bytes for on-chain use
 - `plonk.codec.PlonKProverToCardano` -- converts ZeroJ pure-Java BLS12-381 PlonK proofs and verification keys to the Cardano compressed profile
+- `plonk.lib.PlonkBLS12381Lib` -- reusable `@OnchainLibrary` PlonK verification helper for custom validators
 - `plonk.validator.PlonkBLS12381Verifier` -- experimental opt-in on-chain PlonK verifier for the current one-public-input BLS12-381 Cardano profile with compressed transcript binding and full KZG batch opening check
-- `plonk.validator.PlonkBLS12381TranscriptPrototype` -- gnark transcript regression prototype, not a trustless verifier
+- `plonk.validator.PlonkBLS12381MultiInputVerifier` and `PlonkBLS12381MultiInputParamVerifier` -- experimental opt-in bounded MPI PlonK validators for datum-supplied or script-parameter public inputs
 - `analysis.ScriptBudgetEstimator`, `analysis.OnChainFeasibility`, `deployment.ReferenceScriptDeployer` -- on-chain budget and deployment helpers
 
 ## Crypto Backend Strategy
@@ -159,7 +160,7 @@ On-chain ZK verification uses Julc (Java-to-Plutus compiler) to create reusable 
 | Proof System | Curve | On-Chain Status | Module |
 |-------------|-------|----------------|--------|
 | Groth16 | BLS12-381 | Working | `zeroj-onchain-julc` |
-| PlonK | BLS12-381 | Experimental opt-in full verifier for current one-public-input Cardano profile; audit pending | `zeroj-onchain-julc` |
+| PlonK | BLS12-381 | Experimental opt-in full verifiers for current Cardano profiles; audit pending | `zeroj-onchain-julc` |
 | Groth16/PlonK | BN254 | Not feasible | No Plutus BN254 builtins |
 
 The `zeroj-examples` module includes complete end-to-end tests (DSL to on-chain execution on Yaci DevKit).

@@ -1,5 +1,8 @@
 package com.bloxbean.cardano.zeroj.crypto.plonk;
 
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -10,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class PlonKZkeyImporterTest {
 
     private static final String ZKEY_PATH = "/test-circuits/plonk-multiplier/multiplier_plonk.zkey";
+
+    @BeforeEach
+    void enableLegacyBn254() {
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+    }
+
+    @AfterEach
+    void clearLegacyBn254() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+    }
 
     @Test
     void importZkey_parsesSuccessfully() throws IOException {

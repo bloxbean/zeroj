@@ -36,7 +36,7 @@ ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify
 
 ### Verify On-Chain (Cardano Plutus V3)
 - **Groth16 BLS12-381** — reusable Plutus V3 spending validator via Julc
-- **PlonK BLS12-381** — experimental Julc validators; supported profiles perform the KZG pairing check, but value-bearing use remains gated pending release gates and external review
+- **PlonK BLS12-381** — experimental Julc validators; supported profiles perform the KZG pairing check and are suitable for labeled non-value-bearing testnet trials, but value-bearing use remains gated pending external review
 - VK baked at deploy time, proof passed as redeemer, public inputs as datum
 - **Proven end-to-end for Groth16**: Java DSL circuit → pure Java prove → Yaci DevKit on-chain verify
 
@@ -238,7 +238,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
 | [`zeroj-cardano`](zeroj-cardano/) | Cardano anchoring — proof anchor model, metadata encoding |
 | [`zeroj-ccl`](zeroj-ccl/) | Cardano Client Lib integration — fluent transaction helpers |
-| [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers via Julc; Groth16 is the primary supported path, PlonK is an experimental prototype |
+| [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
 #### Mainline Opt-In Modules (`zeroj-bom-all` only)
 
@@ -299,7 +299,7 @@ dependencies {
 - **[Circuit Library Gadget Status](zeroj-circuit-lib/README.md#gadget-status)** — current curve, symbolic, and Cardano-readiness status for each reusable gadget
 - **[Alternate Prover Backends](docs/alternate-prover-backends.md)** — gnark FFM and snarkjs
 - **[Architecture Overview](docs/architecture-overview.md)** — module design and layer separation
-- **[PlonK Support](docs/plonk-support.md)** — PlonK proving, off-chain verification, and the experimental Julc prototype
+- **[PlonK Support](docs/plonk-support.md)** — PlonK proving, off-chain verification, and the experimental Julc validators
 
 ### Use Cases
 - **[ZK Use Cases on Cardano](docs/usecases/README.md)** — 8 real-world applications with secret/public input breakdowns

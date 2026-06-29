@@ -300,7 +300,7 @@ For native or CLI alternatives, see [Alternate Prover Backends](alternate-prover
 
 | Curve | Off-Chain | On-Chain (Plutus V3) | Notes |
 |-------|-----------|---------------------|-------|
-| BLS12-381 | Groth16 + PlonK | Groth16 supported; PlonK prototype | Plutus V3 has native BLS builtins |
+| BLS12-381 | Groth16 + PlonK | Groth16 supported; PlonK experimental opt-in validators | Plutus V3 has native BLS builtins |
 | BN254 | Legacy/off-chain only | Not feasible | No Plutus BN254 builtins; disabled by default in ZeroJ verifiers |
 
 For on-chain verification, always use **BLS12-381**.

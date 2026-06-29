@@ -20,7 +20,7 @@ plugins {
 
 apply plugin: 'com.bloxbean.cardano.julc'
 
-description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 prototype'
+description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 validators'
 
 ext {
     julcVersion = '0.1.0-pre14'

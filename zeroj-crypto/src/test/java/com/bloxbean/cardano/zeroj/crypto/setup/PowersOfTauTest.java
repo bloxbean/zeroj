@@ -1,6 +1,8 @@
 package com.bloxbean.cardano.zeroj.crypto.setup;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
+import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
@@ -9,6 +11,8 @@ import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKProver;
 import com.bloxbean.cardano.zeroj.crypto.plonk.PlonKSetup;
 import com.bloxbean.cardano.zeroj.verifier.groth16.bn254.*;
 import com.bloxbean.cardano.zeroj.crypto.transcript.FiatShamirTranscript;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -21,6 +25,18 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests for the Powers of Tau generator.
  */
 class PowersOfTauTest {
+
+    @BeforeEach
+    void enableLegacyBn254AndDevSetup() {
+        System.setProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, "true");
+        System.setProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, "true");
+    }
+
+    @AfterEach
+    void clearPolicyProperties() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        System.clearProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
+    }
 
     @Test
     void generate_producesValidSRS() {

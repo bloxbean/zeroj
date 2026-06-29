@@ -9,17 +9,12 @@ audit and release-assurance gates pending
 
 ## Context
 
-`zeroj-onchain-julc` contains an experimental BLS12-381 PlonK validator:
-
-- `PlonkBLS12381TranscriptPrototype`
-- `OnChainFeasibility`
-- `PlonkBLS12381TranscriptPrototypeTest`
-
-The implementation is useful for Julc data-shape, transcript, inverse, and
-budget exploration. It is not a trustless on-chain PlonK verifier today. The
-code and docs already say the KZG batch opening pairing check is deferred, but
-the class name and positive test can still create a production-readiness
-misunderstanding.
+`zeroj-onchain-julc` initially contained an experimental BLS12-381 PlonK
+transcript prototype plus feasibility tooling. The implementation was useful
+for Julc data-shape, transcript, inverse, and budget exploration, but it was not
+a trustless on-chain PlonK verifier. The code and docs said the KZG batch
+opening pairing check was deferred, but the class name and positive test could
+still create a production-readiness misunderstanding.
 
 The focused review confirmed:
 
@@ -64,8 +59,8 @@ The focused review confirmed:
 
 ## Implementation Status
 
-Phase 0 has started and the Cardano-profile verifier implementation is now in
-place for the current one-public-input PlonK proof shape:
+The Cardano-profile verifier implementation is now in place for the current
+one-public-input and bounded-MPI PlonK proof shapes:
 
 - `OnChainFeasibility.isFeasible` now reports only production-ready `WORKING`
   paths. Experimental PlonK requires explicit
@@ -73,6 +68,9 @@ place for the current one-public-input PlonK proof shape:
 - The former `PlonkBLS12381FullVerifier` class has been renamed to
   `PlonkBLS12381TranscriptPrototype` so the class name no longer signals a full
   verifier.
+- `PlonkBLS12381TranscriptPrototype` has been moved to test scope as a gnark
+  transcript regression fixture and is no longer deployable or emitted in the
+  production Julc blueprint.
 - `PlonkBLS12381TranscriptPrototype` now rejects non-canonical compressed BLS
   encodings, wrong-sized raw G1 transcript byte strings, non-scalar proof values,
   and datum values that are empty, extra, negative, or outside `Fr`.
@@ -95,6 +93,13 @@ place for the current one-public-input PlonK proof shape:
   checks with public inputs pinned as script parameters instead of supplied by
   datum. This variant is intended for fixed-statement deployments where the
   script hash should commit to the public input values.
+- `PlonkBLS12381Lib` is now the reusable `@OnchainLibrary` implementation for
+  the one-input and bounded MPI profiles. The built-in validators delegate to
+  this library, and custom application validators can compose the same
+  pairing-check logic with their own `ScriptContext` policy.
+- `zeroj-usecases` now exercises this reusable-library path through app-local
+  proof-of-reserves and compliance-credential validators that call
+  `PlonkBLS12381Lib` and add their own public-input policy checks.
 - The measured Julc VM budget for the one-public-input verifier is approximately
   `4.803B` CPU and `865k` memory. The test gate currently caps it at
   `5.5B` CPU and `1.5M` memory.
@@ -112,6 +117,10 @@ place for the current one-public-input PlonK proof shape:
   public inputs, malformed inverse witnesses, tampered proof commitments,
   script-parameter public input mismatches, empty/over-field/oversized pinned
   public-input lists, and profile mismatch rejection in the off-chain verifier.
+- A deployable-source guard asserts that the reusable PlonK library performs a
+  BLS12-381 Miller loop and final pairing verification, that every main-source
+  PlonK `@SpendingValidator` delegates to the library, and that the
+  transcript-only prototype is absent from main sources.
 
 Still open before final value-bearing release: third-party cryptographic/security
 audit, production ceremony artifact pinning, and expanded fuzzing/differential
@@ -123,12 +132,15 @@ experimental opt-in until those release gates close.
 ### 1. Keep on-chain PlonK explicitly experimental and fail closed for value-bearing use
 
 `PlonkBLS12381TranscriptPrototype` must not be advertised or used as a production
-validator until it enforces the full PlonK acceptance equation. Until then:
+validator. It remains only as a test-scope transcript fixture. Production-facing
+PlonK examples must use one of the full pairing-check validators:
+`PlonkBLS12381Verifier`, `PlonkBLS12381MultiInputVerifier`, or
+`PlonkBLS12381MultiInputParamVerifier`.
 
-- Docs and support matrices must call it a transcript/inverse prototype.
-- Any deployment examples must state that it must not secure funds or
-  authorization decisions.
-- The class has been renamed away from `FullVerifier` to avoid a production
+- Docs and support matrices must call the fixture test-only if it is mentioned.
+- Any deployment examples must state that PlonK remains experimental and must not
+  secure funds or authorization decisions before external review.
+- The class has been moved out of main sources to avoid a deployable production
   signal.
 - `OnChainFeasibility.isFeasible` must not report experimental PlonK as
   generally feasible unless the caller has explicitly opted into experimental
@@ -305,6 +317,6 @@ acceptance:
 - ADR-0012: Pure Java Provers for Groth16 and PlonK
 - ADR-0022: Pure Java PlonK Backend Review Outcomes and Hardening Posture
 - `docs/plonk-support.md`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381TranscriptPrototype.java`
+- `zeroj-onchain-julc/src/test/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381TranscriptPrototype.java`
 - `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
 - `zeroj-verifier-plonk/src/main/java/com/bloxbean/cardano/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`

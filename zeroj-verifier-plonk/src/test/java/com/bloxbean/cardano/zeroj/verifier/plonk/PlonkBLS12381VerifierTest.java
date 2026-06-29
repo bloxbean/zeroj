@@ -51,6 +51,22 @@ class PlonkBLS12381VerifierTest {
     }
 
     @Test
+    void verify_snarkjsBls12381StructuredVector_accepts() {
+        String proofJson = loadResource("/test-vectors/snarkjs-plonk-bls12381/proof.json");
+        String vkJson = loadResource("/test-vectors/snarkjs-plonk-bls12381/verification_key.json");
+        String publicJson = loadResource("/test-vectors/snarkjs-plonk-bls12381/public.json");
+        var circuitId = new CircuitId("snarkjs-bls12381-plonk-multiplier");
+        var envelope = SnarkjsPlonkCodec.toEnvelopeFromJson(proofJson, vkJson, publicJson, circuitId);
+        var material = VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
+                ProofSystemId.PLONK, CurveId.BLS12_381, circuitId,
+                CanonicalHash.sha256(vkJson.getBytes(StandardCharsets.UTF_8)));
+
+        var result = new PlonkBLS12381Verifier().verify(envelope, material);
+
+        assertTrue(result.proofValid(), () -> result.message().orElse("verification failed"));
+    }
+
+    @Test
     void verify_cardanoV1ProfileRejectsMultiplePublicInputs() {
         var fixture = mpiFixture(4, false);
         var envelope = copyEnvelopeWithProofFormat(fixture.envelope(), PlonkBLS12381Verifier.CARDANO_PROOF_FORMAT);
@@ -398,6 +414,15 @@ class PlonkBLS12381VerifierTest {
                 ProofSystemId.PLONK, CurveId.BLS12_381, new CircuitId("bls381-plonk-mpi-" + publicInputCount));
 
         return new Fixture(envelope, material, proofJson, vkJson);
+    }
+
+    private static String loadResource(String path) {
+        try (var in = PlonkBLS12381VerifierTest.class.getResourceAsStream(path)) {
+            assertNotNull(in, "Missing test resource: " + path);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to load test resource: " + path, e);
+        }
     }
 
     private static CircuitBuilder multiInputCircuit(int publicInputCount) {

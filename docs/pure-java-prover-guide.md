@@ -27,9 +27,9 @@ Java Circuit → compileR1CS(BLS12_381) → Groth16ProverBLS381.prove() → on-c
 | Proof System | Curve | Module | Status |
 |-------------|-------|--------|--------|
 | Groth16 | BLS12-381 | `zeroj-crypto` | Implemented; primary on-chain path |
-| PlonK | BLS12-381 | `zeroj-crypto` | Implemented off-chain; on-chain prototype |
+| PlonK | BLS12-381 | `zeroj-crypto` | Implemented off-chain; experimental on-chain validators |
 | Groth16 | BN254 | `zeroj-crypto` | Implemented off-chain |
-| PlonK | BN254 | `zeroj-crypto` | Implemented off-chain |
+| PlonK | BN254 | `zeroj-crypto` | Legacy/off-chain only; explicit opt-in required |
 
 For on-chain Cardano verification, use **BLS12-381** (Plutus V3 has native BLS builtins).
 
