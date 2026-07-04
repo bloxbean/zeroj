@@ -69,14 +69,8 @@ class SealedBidGnarkE2ETest {
         var reservePrice = BigInteger.valueOf(500);
 
         try (var prover = new GnarkProver()) {
-            var result = helper.generateGroth16ProofNative(bidAmount, salt, reservePrice, prover);
-
-            assertNotNull(result);
-            assertEquals("groth16", result.proveResponse().protocol());
-            assertFalse(result.proveResponse().publicSignals().isEmpty());
-
-            System.out.println("Gnark Groth16 bid-below-reserve: public signals = "
-                    + result.proveResponse().publicSignals());
+            assertThrows(ArithmeticException.class,
+                    () -> helper.generateGroth16ProofNative(bidAmount, salt, reservePrice, prover));
         }
     }
 

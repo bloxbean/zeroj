@@ -12,6 +12,34 @@ Java-first zero-knowledge proof toolkit for Cardano.
 
 ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify** them off-chain, and **execute on-chain verification** on Cardano. The Java DSL and pure-Java proving path require no native libraries or external CLIs.
 
+## Support Matrix
+
+**Beta** means feature-complete and correctness-tested (3,500+ tests; the full
+Groth16 flow is verified end-to-end on-chain against Yaci DevKit), but **not
+externally audited and not for value-bearing/mainnet use**. **Experimental**
+components are opt-in and may change or have known limitations. Statuses and
+remaining production gates are tracked in
+[ADR-0026](docs/adr/0026-production-readiness-review-and-remediation-plan.md).
+
+| Area | Components | Status |
+|------|-----------|--------|
+| Core proof model, codecs, verifier SPI/orchestrator | `zeroj-api`, `zeroj-codec`, `zeroj-backend-spi`, `zeroj-verifier-core` | **Beta** |
+| Circuit definition (DSL, symbolic annotations, gadgets) | `zeroj-circuit-dsl`, `zeroj-circuit-annotation-*`, `zeroj-circuit-lib` ([per-gadget table](zeroj-circuit-lib/README.md)) | **Beta** |
+| Groth16 BLS12-381 — pure Java prove + verify | `zeroj-crypto`, `zeroj-verifier-groth16` | **Beta** (production trusted setup requires an external snarkjs MPC ceremony; in-repo setup is dev-only and flag-gated) |
+| Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16BLS12381TxOutRefBindingVerifier`) |
+| PlonK BLS12-381 — pure Java prove + verify, `.ptau`/`.zkey` import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Beta** |
+| PlonK BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Experimental** — full KZG check implemented; labeled testnet trials only |
+| BBS (CFRG draft-10) — verification | `zeroj-bbs` | **Beta** (spec is an IRTF draft, not yet an RFC) |
+| BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — default pure-Java provider is not constant-time; prefer the blst provider for issuer keys |
+| BLS12-381 pure Java primitives | `zeroj-bls12381` | **Beta** — verification-grade; performance work tracked in ADR-0026 |
+| blst native acceleration | `zeroj-blst` | **Beta, opt-in** — upstream binary provenance not yet pinned |
+| Cardano anchoring + CCL helpers | `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` | **Beta** |
+| WASM backends | `zeroj-bls12381-wasm`, `zeroj-bbs-wasm` | **Experimental, opt-in** |
+| gnark native prover | `zeroj-prover-gnark` | **Experimental, opt-in** (Go native library) |
+| MPF Poseidon | `zeroj-mpf-poseidon` | **Experimental** (circuit too large for the practical on-chain path) |
+| BN254 (Groth16 + PlonK, off-chain) | legacy classes | **Disabled by default** — `-Dzeroj.allowLegacyBn254=true`; not a Cardano curve |
+| Halo2 verifier, WASM prover | `incubator/*` | **Incubator** |
+
 ## What You Can Do Today
 
 ### Define ZK Circuits

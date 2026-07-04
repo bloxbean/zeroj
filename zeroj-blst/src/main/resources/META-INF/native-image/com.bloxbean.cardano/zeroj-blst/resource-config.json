@@ -1,5 +1,10 @@
 {
   "resources": {
-    "includes": []
+    "includes": [
+      { "pattern": "supranational/blst/Mac/x86_64/libblst\\.dylib" },
+      { "pattern": "supranational/blst/Mac/aarch64/libblst\\.dylib" },
+      { "pattern": "supranational/blst/Linux/amd64/libblst\\.so" },
+      { "pattern": "supranational/blst/Linux/aarch64/libblst\\.so" }
+    ]
   }
 }

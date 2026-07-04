@@ -7,6 +7,8 @@ import java.util.Objects;
  * CFRG BBS proof octets.
  */
 public final class BbsProof {
+    private static final int MAX_MESSAGES = 1024;
+
     private final byte[] bytes;
     private final BbsCiphersuite ciphersuite;
 
@@ -19,6 +21,10 @@ public final class BbsProof {
         }
         if ((bytes.length - floor) % ciphersuite.scalarBytes() != 0) {
             throw new IllegalArgumentException("BBS proof scalar section is not aligned to 32-byte scalars");
+        }
+        int maxLength = floor + MAX_MESSAGES * ciphersuite.scalarBytes();
+        if (bytes.length > maxLength) {
+            throw new IllegalArgumentException("BBS proof exceeds " + MAX_MESSAGES + " messages");
         }
         this.bytes = bytes.clone();
         this.ciphersuite = ciphersuite;

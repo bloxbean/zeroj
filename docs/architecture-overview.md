@@ -146,7 +146,7 @@ Reusable Plutus V3 spending validators compiled via Julc:
 | Proof System | Curve | Backend | Implementation | Native Deps |
 |-------------|-------|---------|----------------|-------------|
 | Groth16 | BLS12-381 | Pure Java | `zeroj-verifier-groth16` | None |
-| Groth16 | BLS12-381 | blst native (FFM) | `zeroj-verifier-groth16` | blst |
+| Groth16 | BLS12-381 | blst native (JNI/SWIG) | `zeroj-verifier-groth16` | blst |
 | PlonK | BLS12-381 | Pure Java | `zeroj-verifier-plonk` | None |
 
 - BLS12-381 pure Java verifier uses field arithmetic validated against gnark

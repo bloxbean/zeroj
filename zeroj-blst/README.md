@@ -9,16 +9,21 @@ This module wraps the `blst-java` library to provide BLS12-381 pairing operation
 | Type | Description |
 |------|-------------|
 | `BlstBls12381Provider` | Explicit native-backed `Bls12381Provider` implementation |
-| `BlstPairing` | Wrapper for blst FFM pairing operations (multi-pairing, point validation) |
+| `BlstPairing` | Wrapper for blst JNI/SWIG pairing operations (multi-pairing, point validation) |
 
 ## Why blst?
 
 | Property | Value |
 |----------|-------|
 | Performance | ~1ms verification (vs ~100-300ms pure Java BN254) |
-| Library | `foundation.icon:blst-java:0.3.2` (same as julc-bls) |
+| Library | `foundation.icon:blst-java:0.3.2` (third-party JNI/SWIG binding) |
 | Platforms | Linux (x86_64, aarch64), macOS (x86_64, arm64) |
-| GraalVM | Compatible via FFM |
+| GraalVM | JNI metadata and packaged native-library resources are included; run an application-specific native-image smoke test before deployment |
+
+The exact upstream blst commit embedded in `foundation.icon:blst-java:0.3.2`
+has not yet been independently verified in this repository. Treat this provider
+as beta native acceleration until that provenance is pinned or ZeroJ builds and
+bundles upstream blst directly.
 
 ## Gradle
 

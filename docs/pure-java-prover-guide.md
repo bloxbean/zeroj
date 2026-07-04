@@ -220,6 +220,14 @@ assert valid;  // Cryptographic verification passed!
 
 ### Step 6: Verify On-Chain (Cardano Plutus V3)
 
+The generic `Groth16BLS12381Verifier` below performs only the cryptographic
+Groth16 pairing check. Do not lock value at this validator unchanged: it does
+not bind the proof to the spending transaction, signer, datum, output, or a
+nullifier, so a valid proof observed in the mempool can be replayed by another
+transaction. For value-like workflows, use a custom validator that composes
+`Groth16BLS12381Lib` and checks `ScriptContext`, or use the bundled
+`Groth16BLS12381TxOutRefBindingVerifier` pattern described after this snippet.
+
 ```java
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
@@ -269,9 +277,26 @@ var unlockTx = new ScriptTx()
 // Transaction succeeds = proof verified on Cardano!
 ```
 
+For a transaction-bound validator, compile the circuit with the first public
+input equal to:
+
+```text
+blake2b_256(spentTxId || spentOutputIndex32) mod Fr
+```
+
+Then load `Groth16BLS12381TxOutRefBindingVerifier` instead of the generic
+verifier. The validator recomputes that scalar from `ScriptContext` and rejects
+the same proof when replayed against another UTxO. Production policies should
+bind the statement to the application-specific signer, datum, value, output,
+deadline, and/or nullifier fields they rely on.
+
 ## PlonK Prover (Pure Java)
 
 The PlonK prover follows the same pattern but uses `PlonKProverBLS381`:
+
+As with Groth16, the reusable PlonK validators/libraries verify the proof
+statement only. Value-bearing PlonK scripts must add their own `ScriptContext`
+binding for authorization, replay protection, nullifiers, and output policy.
 
 ```java
 // Compile to PlonK

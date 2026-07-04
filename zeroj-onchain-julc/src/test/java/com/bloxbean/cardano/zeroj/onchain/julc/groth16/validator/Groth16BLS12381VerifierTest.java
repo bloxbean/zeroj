@@ -1,8 +1,10 @@
 package com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator;
 
 import com.bloxbean.cardano.julc.core.PlutusData;
+import com.bloxbean.cardano.julc.ledger.TxOutRef;
 import com.bloxbean.cardano.julc.testkit.ContractTest;
 import com.bloxbean.cardano.julc.testkit.TestDataBuilder;
+import com.bloxbean.cardano.client.crypto.Blake2bUtil;
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
@@ -207,13 +209,23 @@ class Groth16BLS12381VerifierTest extends ContractTest {
     }
 
     @Test
-    void customValidator_composesGroth16LibraryWithDomainLogic_passes() {
-        assertFirstInputBindingVerification(sealedBidPublicInputs.get(0), true);
-    }
+    void txOutRefBoundValidator_acceptsBoundSpendAndRejectsReplay() {
+        var txOutRef = TestDataBuilder.randomTxOutRef_typed();
+        var boundPublicInput = txOutRefScalar(txOutRef);
+        var boundProof = buildSinglePublicInputProof(boundPublicInput);
+        var program = txOutRefBoundProgram(boundProof.vk());
+        var datum = datum(boundProof.publicInputs());
+        var redeemer = redeemer(boundProof.proof());
 
-    @Test
-    void customValidator_domainLogicFailure_fails() {
-        assertFirstInputBindingVerification(sealedBidPublicInputs.get(0).add(BigInteger.ONE), false);
+        var validCtx = spendingContext(txOutRef, datum)
+                .redeemer(redeemer)
+                .buildPlutusData();
+        assertSuccess(evaluate(program, validCtx));
+
+        var replayCtx = spendingContext(TestDataBuilder.randomTxOutRef_typed(), datum)
+                .redeemer(redeemer)
+                .buildPlutusData();
+        assertFailure(evaluate(program, replayCtx));
     }
 
     private void assertVerification(SnarkjsToCardano.VkCompressed vk,
@@ -248,37 +260,6 @@ class Groth16BLS12381VerifierTest extends ContractTest {
         }
     }
 
-    private void assertFirstInputBindingVerification(BigInteger expectedFirstPublicInput,
-                                                     boolean expectSuccess) {
-        var compiled = compileValidator(Groth16BLS12381FirstInputBindingVerifier.class,
-                Path.of("src/test/java"));
-        var program = compiled.program().applyParams(
-                PlutusData.integer(expectedFirstPublicInput),
-                PlutusData.bytes(sealedBidVk.alpha()),
-                PlutusData.bytes(sealedBidVk.beta()),
-                PlutusData.bytes(sealedBidVk.gamma()),
-                PlutusData.bytes(sealedBidVk.delta()),
-                vkIcData(sealedBidVk.ic()));
-
-        var datum = datum(sealedBidPublicInputs.get(0), sealedBidPublicInputs.get(1));
-        var redeemer = PlutusData.constr(0,
-                PlutusData.bytes(sealedBidProof.piA()),
-                PlutusData.bytes(sealedBidProof.piB()),
-                PlutusData.bytes(sealedBidProof.piC()));
-
-        var txOutRef = TestDataBuilder.randomTxOutRef_typed();
-        var ctx = spendingContext(txOutRef, datum)
-                .redeemer(redeemer)
-                .buildPlutusData();
-
-        var result = evaluate(program, ctx);
-        if (expectSuccess) {
-            assertSuccess(result);
-        } else {
-            assertFailure(result);
-        }
-    }
-
     private void assertFixedFourVerification(BigInteger[] publicInputs, boolean expectSuccess) {
         var compiled = compileValidator(Groth16BLS12381FixedFourInputVerifier.class,
                 Path.of("src/test/java"));
@@ -305,6 +286,37 @@ class Groth16BLS12381VerifierTest extends ContractTest {
         } else {
             assertFailure(result);
         }
+    }
+
+    private static TestProof buildSinglePublicInputProof(BigInteger boundPublicInput) {
+        var circuit = CircuitBuilder.create("txoutref-bound")
+                .publicVar("bound")
+                .secretVar("witness")
+                .define(api -> api.assertEqual(api.var("bound"), api.var("witness")));
+
+        var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+        assertEquals(1, r1cs.numPublicInputs(), "test circuit should have one public input");
+
+        BigInteger[] witness = circuit.calculateWitness(Map.of(
+                "bound", List.of(boundPublicInput),
+                "witness", List.of(boundPublicInput)), CurveId.BLS12_381);
+
+        var srs = PowersOfTauBLS381.generate(8);
+        var setupResult = Groth16SetupBLS381.setup(
+                r1cs.constraints(),
+                r1cs.numWires(),
+                r1cs.numPublicInputs(),
+                srs.tauScalar());
+        var proof = Groth16ProverBLS381.prove(
+                setupResult.provingKey(),
+                witness,
+                r1cs.constraints(),
+                r1cs.numWires());
+
+        return new TestProof(
+                ProverToCardano.compressVk(setupResult),
+                ProverToCardano.compressProof(proof),
+                new BigInteger[] { witness[1] });
     }
 
     private static TestProof buildThreePublicInputProof() {
@@ -405,6 +417,43 @@ class Groth16BLS12381VerifierTest extends ContractTest {
             values.add(PlutusData.bytes(point));
         }
         return PlutusData.list(values.toArray(new PlutusData[0]));
+    }
+
+    private com.bloxbean.cardano.julc.core.Program txOutRefBoundProgram(SnarkjsToCardano.VkCompressed vk) {
+        var compiled = compileValidator(Groth16BLS12381TxOutRefBindingVerifier.class);
+        return compiled.program().applyParams(
+                PlutusData.bytes(vk.alpha()),
+                PlutusData.bytes(vk.beta()),
+                PlutusData.bytes(vk.gamma()),
+                PlutusData.bytes(vk.delta()),
+                vkIcData(vk.ic()));
+    }
+
+    private static PlutusData redeemer(SnarkjsToCardano.ProofCompressed proof) {
+        return PlutusData.constr(0,
+                PlutusData.bytes(proof.piA()),
+                PlutusData.bytes(proof.piB()),
+                PlutusData.bytes(proof.piC()));
+    }
+
+    private static BigInteger txOutRefScalar(TxOutRef txOutRef) {
+        byte[] preimage = concat(txOutRef.txId().hash(), fixedBigEndian(txOutRef.index(), 32));
+        return new BigInteger(1, Blake2bUtil.blake2bHash256(preimage)).mod(FR);
+    }
+
+    private static byte[] fixedBigEndian(BigInteger value, int size) {
+        byte[] raw = value.toByteArray();
+        byte[] out = new byte[size];
+        int copy = Math.min(raw.length, size);
+        System.arraycopy(raw, raw.length - copy, out, size - copy, copy);
+        return out;
+    }
+
+    private static byte[] concat(byte[] a, byte[] b) {
+        byte[] out = new byte[a.length + b.length];
+        System.arraycopy(a, 0, out, 0, a.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
     }
 
     private static byte[] compressedInfinityG1() {

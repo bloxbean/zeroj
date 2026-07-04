@@ -13,6 +13,7 @@ import com.bloxbean.cardano.zeroj.api.PublicInputs;
 import com.bloxbean.cardano.zeroj.api.VerificationKeyRef;
 import com.bloxbean.cardano.zeroj.api.VerificationMaterial;
 import com.bloxbean.cardano.zeroj.api.ZkProofEnvelope;
+import com.bloxbean.cardano.zeroj.bbs.internal.BbsCodec;
 import com.bloxbean.cardano.zeroj.bbs.verifier.BbsZkVerifier;
 import com.bloxbean.cardano.zeroj.bbs.spi.PureJavaBbsProvider;
 import com.bloxbean.cardano.zeroj.bls12381.ec.G1Point;
@@ -48,6 +49,28 @@ class BbsServiceTest {
         assertEquals(List.of(new BbsRevealedMessage(0, messages.get(0)), new BbsRevealedMessage(2, messages.get(2))),
                 presentation.revealedMessages());
         assertTrue(service.verifyPresentation(keyPair.publicKey(), presentation));
+    }
+
+    @Test
+    void secretKeyMaterialIsRedactedFromToString() {
+        BbsService service = BbsService.pureJava();
+        BbsKeyPair keyPair = service.keyPair(bytes("01234567890123456789012345678901"), bytes("issuer-key"));
+
+        String secretValue = keyPair.secretKey().value().toString();
+
+        assertTrue(keyPair.secretKey().toString().contains("redacted"));
+        assertFalse(keyPair.secretKey().toString().contains(secretValue));
+        assertTrue(keyPair.toString().contains("secretKey=redacted"));
+        assertFalse(keyPair.toString().contains(secretValue));
+    }
+
+    @Test
+    void rawProofRejectsMoreThanMaxMessages() {
+        BbsCiphersuite suite = BbsCiphersuite.BLS12381_SHA256;
+        int floor = 3 * suite.g1Bytes() + 4 * suite.scalarBytes();
+        byte[] oversized = new byte[floor + (BbsCodec.MAX_MESSAGES + 1) * suite.scalarBytes()];
+
+        assertThrows(IllegalArgumentException.class, () -> new BbsProof(oversized, suite));
     }
 
     @Test

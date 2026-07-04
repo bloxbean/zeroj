@@ -182,7 +182,9 @@ public final class Groth16ProverBLS381 {
 
             int bitOffset = w * c;
             for (int i = 0; i < n; i++) {
-                BigInteger s_i = scalars[i].signum() < 0 ? scalars[i].mod(fr) : scalars[i];
+                BigInteger s_i = scalars[i].signum() < 0 || scalars[i].compareTo(fr) >= 0
+                        ? scalars[i].mod(fr)
+                        : scalars[i];
                 int digit = 0;
                 for (int b = 0; b < c; b++) {
                     int bitPos = bitOffset + b;

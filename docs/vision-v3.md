@@ -290,7 +290,7 @@ Shipping today:
 * public / private signal declarations, comparators, hashes, Merkle
 * pure-Java Groth16 over BN254 and BLS12-381
 * pure-Java PlonK over BLS12-381
-* native acceleration through `zeroj-blst` (BLS12-381 via FFM) and
+* native acceleration through `zeroj-blst` (BLS12-381 via JNI/SWIG) and
   `zeroj-prover-gnark` (gnark Groth16/PlonK prover via FFM)
 * on-chain Plutus V3 verifier for Groth16 on BLS12-381, plus an experimental
   PlonK Julc prototype with KZG pairing verification still deferred
@@ -332,7 +332,7 @@ public class AgeCredentialCircuit implements CircuitSpec {
 
 `zeroj-crypto` is the common cryptographic substrate: field and EC
 arithmetic, pairing operations, FFT/MSM, canonical serialization. Pure-Java
-first, with `zeroj-blst` providing FFM-backed BLS12-381 acceleration where
+first, with `zeroj-blst` providing JNI/SWIG-backed BLS12-381 acceleration where
 performance matters.
 
 `zeroj-circuit-lib` provides the standard gadget catalog: Poseidon, MiMC,
@@ -525,7 +525,7 @@ backend-*explicit* at deployment, cost estimation, and audit boundaries.
 |---------------------------------------------------|-----------------------------|----------------------------------------------------------------------|
 | Java circuit definition with `CircuitSpec`        | **Shipping**                | Core developer path.                                                 |
 | Pure-Java Groth16 (BN254 and BLS12-381)           | **Shipping**                | Default for zero-native-dependency workflows.                        |
-| Native Groth16/PlonK proving via gnark / blst     | **Shipping**                | Opt-in acceleration through FFM.                                     |
+| Native Groth16/PlonK proving via gnark / blst     | **Shipping**                | Opt-in acceleration through gnark FFM and blst JNI/SWIG.             |
 | Pure-Java PlonK on BLS12-381                      | **Shipping**                | Includes full Fiat-Shamir transcript verification.                   |
 | Groth16 BLS12-381 on-chain verification           | **Shipping**                | `Groth16BLS12381Verifier` against Plutus V3 builtins.                |
 | PlonK BLS12-381 off-chain verification            | **Shipping**                | Pure Java verifier with full KZG pairing check.                       |

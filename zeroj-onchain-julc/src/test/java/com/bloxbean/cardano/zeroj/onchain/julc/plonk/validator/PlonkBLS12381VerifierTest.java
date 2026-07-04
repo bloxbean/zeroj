@@ -111,6 +111,55 @@ class PlonkBLS12381VerifierTest extends ContractTest {
     }
 
     @Test
+    void rejectsWrongProtocolFrParameter() throws Exception {
+        var fixture = fixture();
+        var tamperedVk = vkWithProtocolParams(fixture.vk(),
+                fixture.vk().fr().subtract(BigInteger.ONE),
+                fixture.vk().g1Gen(),
+                fixture.vk().g2Gen());
+        var tamperedProgram = program(tamperedVk);
+
+        var result = evaluate(tamperedProgram,
+                context(fixture, fixture.proof(), PlutusData.list(PlutusData.integer(33))));
+
+        assertFailure(result);
+    }
+
+    @Test
+    void rejectsWrongProtocolG1GeneratorParameter() throws Exception {
+        var fixture = fixture();
+        byte[] wrongG1 = fixture.vk().g1Gen().clone();
+        wrongG1[wrongG1.length - 1] ^= 1;
+        var tamperedVk = vkWithProtocolParams(fixture.vk(),
+                fixture.vk().fr(),
+                wrongG1,
+                fixture.vk().g2Gen());
+        var tamperedProgram = program(tamperedVk);
+
+        var result = evaluate(tamperedProgram,
+                context(fixture, fixture.proof(), PlutusData.list(PlutusData.integer(33))));
+
+        assertFailure(result);
+    }
+
+    @Test
+    void rejectsWrongProtocolG2GeneratorParameter() throws Exception {
+        var fixture = fixture();
+        byte[] wrongG2 = fixture.vk().g2Gen().clone();
+        wrongG2[wrongG2.length - 1] ^= 1;
+        var tamperedVk = vkWithProtocolParams(fixture.vk(),
+                fixture.vk().fr(),
+                fixture.vk().g1Gen(),
+                wrongG2);
+        var tamperedProgram = program(tamperedVk);
+
+        var result = evaluate(tamperedProgram,
+                context(fixture, fixture.proof(), PlutusData.list(PlutusData.integer(33))));
+
+        assertFailure(result);
+    }
+
+    @Test
     void appliedScriptAndRedeemerStayWithinInlineSizeGate() throws Exception {
         var fixture = fixture();
         byte[] scriptFlat = UplcFlatEncoder.encodeProgram(fixture.program());
@@ -177,8 +226,14 @@ class PlonkBLS12381VerifierTest extends ContractTest {
         var compressedVk = PlonKProverToCardano.compressVk(pk);
         var compressedProof = PlonKProverToCardano.compressProof(proof, pk, publicInputs);
 
+        var program = program(compressedVk);
+
+        return new Fixture(program, compressedVk, compressedProof);
+    }
+
+    private Program program(VkCompressed compressedVk) {
         var compiled = compileValidator(PlonkBLS12381Verifier.class);
-        var program = compiled.program().applyParams(
+        return compiled.program().applyParams(
                 PlutusData.bytes(compressedVk.qm()),
                 PlutusData.bytes(compressedVk.ql()),
                 PlutusData.bytes(compressedVk.qr()),
@@ -198,8 +253,15 @@ class PlonkBLS12381VerifierTest extends ContractTest {
                 PlutusData.integer(compressedVk.nInv()),
                 PlutusData.bytes(compressedVk.g1Gen()),
                 PlutusData.bytes(compressedVk.g2Gen()));
+    }
 
-        return new Fixture(program, compressedVk, compressedProof);
+    private static VkCompressed vkWithProtocolParams(VkCompressed vk, BigInteger fr, byte[] g1Gen, byte[] g2Gen) {
+        return new VkCompressed(
+                vk.qm(), vk.ql(), vk.qr(), vk.qo(), vk.qc(),
+                vk.s1(), vk.s2(), vk.s3(), vk.x2(),
+                vk.domainSize(), vk.domainPower(), vk.omega(),
+                vk.k1(), vk.k2(), vk.k1OverK2(),
+                fr, vk.nInv(), g1Gen, g2Gen);
     }
 
     private PlutusData context(Fixture fixture, ProofCompressed proof, PlutusData datum) {

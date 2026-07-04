@@ -16,4 +16,9 @@ public record BbsSecretKey(BigInteger value, BbsCiphersuite ciphersuite) {
     public byte[] toBytes() {
         return com.bloxbean.cardano.zeroj.bbs.internal.BbsCodec.scalarToBytes(value);
     }
+
+    @Override
+    public String toString() {
+        return "BbsSecretKey[redacted, ciphersuite=" + ciphersuite + "]";
+    }
 }

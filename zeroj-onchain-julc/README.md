@@ -12,7 +12,8 @@ V3.
 
 | Package | Contents | Status | Notes |
 |---------|----------|--------|-------|
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381Verifier` | Working validator | Default BLS12-381 Groth16 spending validator using Plutus V3 BLS builtins; supports arbitrary public-input counts |
+| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381Verifier` | Working crypto-only validator | Default BLS12-381 Groth16 spending validator using Plutus V3 BLS builtins; supports arbitrary public-input counts, but does not bind `ScriptContext` |
+| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381TxOutRefBindingVerifier` | Working bound validator example | Binds the first public input to `blake2b_256(spentTxId || spentOutputIndex32) mod Fr` to reject proof replay across UTxOs |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib` | `Groth16BLS12381Lib` | Working on-chain library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `SnarkjsToCardano`, `ProverToCardano` | Working off-chain helpers | Convert snarkjs and ZeroJ Groth16 artifacts to Cardano-compatible compressed bytes and Plutus data shapes |
 | `com.bloxbean.cardano.zeroj.onchain.julc.plonk.lib` | `PlonkBLS12381Lib` | Experimental opt-in on-chain library | Reusable `@OnchainLibrary` PlonK verification helper for custom validators; supports one-input and bounded MPI Cardano profiles |
@@ -53,14 +54,17 @@ Use package names by role:
 
 ```java
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381TxOutRefBindingVerifier;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 import com.bloxbean.cardano.zeroj.onchain.julc.plonk.lib.PlonkBLS12381Lib;
 ```
 
-Custom validators should define their own local redeemer record and compose the
-shared library:
+Custom validators should define their own local redeemer record, compose the
+shared library, and enforce the `ScriptContext` policy needed by the
+application. The bare verifier below is crypto-only and should not be used by
+itself to protect value:
 
 ```java
 @SpendingValidator

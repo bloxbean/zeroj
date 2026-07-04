@@ -1,7 +1,8 @@
 # ADR-0012: Pure Java Provers for Groth16 and PlonK
 
 ## Status
-Proposed
+Accepted — implemented for BLS12-381 Groth16 and PlonK beta paths; production
+ceremony/audit gates tracked by ADR-0026
 
 ## Date
 2026-03-29

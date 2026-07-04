@@ -107,6 +107,18 @@ class PippengerBLS381Test {
     }
 
     @Test
+    void msm_reducesPositiveScalarsModuloFr() {
+        var g = JacobianG1BLS381.GENERATOR.toAffine();
+        var twoG = JacobianG1BLS381.GENERATOR.doublePoint().toAffine();
+
+        var result = PippengerBLS381.msm(
+                new AffineG1[]{g, twoG},
+                new BigInteger[]{FR.add(BigInteger.valueOf(5)), BigInteger.ZERO});
+
+        assertPointsEqual(JacobianG1BLS381.GENERATOR.scalarMul(BigInteger.valueOf(5)), result);
+    }
+
+    @Test
     void msm_4points_matchesNaive() { assertMsmMatchesNaive(4); }
 
     @Test

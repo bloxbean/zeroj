@@ -250,6 +250,9 @@ public final class CfrgBbsCore {
             int undisclosedCount = proofParts.mHats().size();
             int revealedCount = Objects.requireNonNull(disclosedMessages, "disclosed messages required").size();
             int messageCount = undisclosedCount + revealedCount;
+            if (messageCount > BbsCodec.MAX_MESSAGES) {
+                return false;
+            }
             int[] indexes = validateDisclosedIndexes(disclosedIndexes, messageCount);
             if (indexes.length != revealedCount) {
                 return false;
@@ -408,7 +411,7 @@ public final class CfrgBbsCore {
         G1Point aBar = bls.g1SecretScalarMul(signature.a(), mod(r1.multiply(r2)));
         G1Point bBar = bls.g1Add(
                 bls.g1SecretScalarMul(d, r1),
-                bls.g1Negate(bls.g1ScalarMul(aBar, signature.e())));
+                bls.g1Negate(bls.g1SecretScalarMul(aBar, signature.e())));
         G1Point t1 = bls.g1Add(bls.g1SecretScalarMul(aBar, eTilde), bls.g1SecretScalarMul(d, r1Tilde));
         G1Point t2 = bls.g1SecretScalarMul(d, r3Tilde);
         for (int u = 0; u < undisclosedIndexes.length; u++) {
