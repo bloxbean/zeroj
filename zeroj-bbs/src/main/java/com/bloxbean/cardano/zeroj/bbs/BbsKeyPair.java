@@ -13,4 +13,9 @@ public record BbsKeyPair(BbsSecretKey secretKey, BbsPublicKey publicKey) {
             throw new IllegalArgumentException("secret and public key ciphersuites differ");
         }
     }
+
+    @Override
+    public String toString() {
+        return "BbsKeyPair[secretKey=redacted, publicKey=" + publicKey + "]";
+    }
 }

@@ -38,6 +38,7 @@ repositories {
 dependencies {
     // Julc on-chain compilation
     api "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
+    api "com.bloxbean.cardano:julc-ledger-api:${julcVersion}"
     annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
 
     // ZeroJ — blst for point compression in SnarkjsToCardano / ProverToCardano
@@ -58,6 +59,7 @@ dependencies {
 
     // Test — circuit DSL for on-chain verification tests
     testImplementation project(':zeroj-circuit-dsl')
+    testImplementation 'com.bloxbean.cardano:cardano-client-crypto:0.8.0-pre4'
 }
 
 //tasks.named('bundleJulcSources') {

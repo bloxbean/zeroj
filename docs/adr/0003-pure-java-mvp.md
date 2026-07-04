@@ -15,14 +15,14 @@ ZK verification requires elliptic curve arithmetic including pairing operations.
 3. **Hybrid**: Use native bindings for one curve (BLS12-381 via blst) and pure Java for the other (BN254).
 
 After analysis, a hybrid approach provides the best trade-off:
-- **BLS12-381** is Cardano's native curve (CIP-0381). The `foundation.icon:blst-java` library is already a proven dependency in the bloxbean ecosystem (used by julc-bls). It provides audited, constant-time implementations with both JNI (SWIG) and FFM bindings.
+- **BLS12-381** is Cardano's native curve (CIP-0381). The `foundation.icon:blst-java` library is already a proven dependency in the bloxbean ecosystem (used by julc-bls). It provides native blst-backed operations through JNI/SWIG bindings.
 - **BN254** is the Ethereum/snarkjs ecosystem curve. Pure Java is viable here because: (a) extensive Ethereum test vectors exist (EIP-196, EIP-197), (b) Hyperledger Besu has reference Java implementations, and (c) 100-300ms verification latency is acceptable for semi-trusted node networks.
 
 ## Decision
 
 Use a **hybrid backend from day one** (Milestone 2):
 
-- **BLS12-381**: via `foundation.icon:blst-java:0.3.2` (JNI + FFM, same as julc-bls). The `zeroj-blst` module wraps the blst library and exposes curve operations needed for Groth16 verification.
+- **BLS12-381**: via `foundation.icon:blst-java:0.3.2` (JNI/SWIG, same as julc-bls). The `zeroj-blst` module wraps the blst library and exposes curve operations needed for Groth16 verification.
 - **BN254**: via pure Java implementation in `zeroj-verifier-groth16`. Field arithmetic (Fp through Fp12 tower), curve operations (G1, G2), and optimal Ate pairing implemented in Java.
 
 Both backends are behind the `ZkVerifier` SPI, so consumers don't need to know which backend handles their proof.

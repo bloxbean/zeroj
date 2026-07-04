@@ -1,7 +1,8 @@
 # ADR-0022: Pure Java PlonK Backend Review Outcomes and Hardening Posture
 
 ## Status
-Proposed
+Accepted — hardening implemented for the current beta path; remaining
+production gates tracked by ADR-0026
 
 ## Date
 2026-06-27

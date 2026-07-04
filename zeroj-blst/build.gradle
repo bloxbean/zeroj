@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ BLS12-381 operations via blst native library (FFM/JNI)'
+description = 'ZeroJ BLS12-381 operations via blst native library (JNI/SWIG)'
 
 dependencies {
     api project(':zeroj-api')

@@ -34,7 +34,7 @@ Even without Plutus builtins for IPA/Pasta curves, Halo2 is valuable off-chain:
 **Implementation approach:**
 1. Build a Rust shared library (`cdylib`) wrapping Halo2 KZG verification on BLS12-381
 2. Expose C-ABI functions: `halo2_verify(vk, proof, public_inputs) → bool`
-3. Call from Java via FFM (same pattern as zeroj-blst and zeroj-prover-gnark)
+3. Call from Java via FFM (same native-provider pattern as zeroj-prover-gnark; zeroj-blst remains JNI/SWIG)
 4. Register as `ZkVerifier` SPI implementation (`Halo2BLS12381Verifier`)
 5. The rest of ZeroJ (patterns, pipeline, anchoring) works unchanged
 

@@ -312,6 +312,7 @@ public class PlonkBLS12381Lib {
             BigInteger fr, BigInteger nInv,
             byte[] g1Gen, byte[] g2Gen) {
         return fr.signum() > 0
+                && fr.equals(bls12381Fr())
                 && domainPower.compareTo(BigInteger.valueOf(3)) >= 0
                 && domainPower.compareTo(BigInteger.valueOf(24)) <= 0
                 && domainSize.equals(pow2(domainPower))
@@ -338,9 +339,9 @@ public class PlonkBLS12381Lib {
                 && isCanonicalNonInfinityG1(vkS1)
                 && isCanonicalNonInfinityG1(vkS2)
                 && isCanonicalNonInfinityG1(vkS3)
-                && isCanonicalNonInfinityG1(g1Gen)
+                && matchesCanonicalG1Gen(g1Gen)
                 && isCanonicalNonInfinityG2(vkX2)
-                && isCanonicalNonInfinityG2(g2Gen);
+                && matchesCanonicalG2Gen(g2Gen);
     }
 
     private static boolean validProofShapeAndScalars(
@@ -369,6 +370,63 @@ public class PlonkBLS12381Lib {
 
     private static boolean scalarInFr(BigInteger value, BigInteger fr) {
         return value.signum() >= 0 && value.compareTo(fr) < 0;
+    }
+
+    private static BigInteger bls12381Fr() {
+        BigInteger base = BigInteger.valueOf(1000000000000000000L);
+        return BigInteger.valueOf(52435L).multiply(base)
+                .add(BigInteger.valueOf(875175126190479447L)).multiply(base)
+                .add(BigInteger.valueOf(740508185965837690L)).multiply(base)
+                .add(BigInteger.valueOf(552500527637822603L)).multiply(base)
+                .add(BigInteger.valueOf(658699938581184513L));
+    }
+
+    private static boolean matchesCanonicalG1Gen(byte[] value) {
+        return Builtins.lengthOfByteString(value) == 48
+                && Builtins.equalsByteString(
+                Builtins.sliceByteString(0, 32, value),
+                Builtins.integerToByteString(true, 32,
+                        dec5(68726L, 511054697848001352L, 333424636383349594L,
+                                607638148756106676L, 376926689882254424L)))
+                && Builtins.equalsByteString(
+                Builtins.sliceByteString(32, 16, value),
+                Builtins.integerToByteString(true, 16,
+                        dec3(144L, 2679365358043812L, 139219534557136571L)));
+    }
+
+    private static boolean matchesCanonicalG2Gen(byte[] value) {
+        return Builtins.lengthOfByteString(value) == 96
+                && Builtins.equalsByteString(
+                Builtins.sliceByteString(0, 32, value),
+                Builtins.integerToByteString(true, 32,
+                        dec5(66886L, 61856180658750807L, 951915040859702014L,
+                                214469681281891963L, 406255258037342281L)))
+                && Builtins.equalsByteString(
+                Builtins.sliceByteString(32, 32, value),
+                Builtins.integerToByteString(true, 32,
+                        dec5(23203L, 899462880326757973L, 173860169971512441L,
+                                102435249191570977L, 930623154804559953L)))
+                && Builtins.equalsByteString(
+                Builtins.sliceByteString(64, 32, value),
+                Builtins.integerToByteString(true, 32,
+                        dec5(89961L, 632905173714226157L, 479458612185649920L,
+                                463576279427516307L, 505038263245192632L)));
+    }
+
+    private static BigInteger dec3(long a, long b, long c) {
+        BigInteger base = BigInteger.valueOf(1000000000000000000L);
+        return BigInteger.valueOf(a).multiply(base)
+                .add(BigInteger.valueOf(b)).multiply(base)
+                .add(BigInteger.valueOf(c));
+    }
+
+    private static BigInteger dec5(long a, long b, long c, long d, long e) {
+        BigInteger base = BigInteger.valueOf(1000000000000000000L);
+        return BigInteger.valueOf(a).multiply(base)
+                .add(BigInteger.valueOf(b)).multiply(base)
+                .add(BigInteger.valueOf(c)).multiply(base)
+                .add(BigInteger.valueOf(d)).multiply(base)
+                .add(BigInteger.valueOf(e));
     }
 
     private static BigInteger boundedLength(PlutusData cursor, BigInteger count) {

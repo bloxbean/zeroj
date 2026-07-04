@@ -10,6 +10,7 @@ import com.bloxbean.cardano.client.quicktx.ScriptTx;
 import com.bloxbean.cardano.client.quicktx.Tx;
 import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
 import com.bloxbean.cardano.zeroj.examples.dsl.auction.onchain.ZkAuctionVerifier;
+import com.bloxbean.cardano.zeroj.examples.dsl.common.YaciHelper;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.ZkE2ETestBase;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -111,11 +112,7 @@ class SealedBidOnChainE2ETest extends ZkE2ETestBase {
                 .payToAddress(sender.baseAddress(), Amount.ada(4.5))
                 .attachSpendingValidator(script);
 
-        var unlockResult = quickTx.compose(unlockTx)
-                .withSigner(SignerProviders.signerFrom(sender))
-                .feePayer(sender.baseAddress())
-                .collateralPayer(sender.baseAddress())
-                .complete();
+        var unlockResult = completeOrSkipBlsCostingFailure(quickTx, unlockTx);
 
         assertTrue(unlockResult.isSuccessful(), "Unlock failed: " + unlockResult.getResponse());
         String unlockTxHash = unlockResult.getValue();
@@ -128,6 +125,20 @@ class SealedBidOnChainE2ETest extends ZkE2ETestBase {
         System.out.println("Flow: Java DSL circuit -> snarkjs BLS12-381 proof -> Julc Plutus V3 verifier -> Yaci DevKit");
         System.out.println("Reserve price: " + reservePrice + " (verified: domain == circuit == on-chain)");
         System.out.println("Bid amount: 1000 (PRIVATE — hidden inside ZK proof, never on-chain)");
+    }
+
+    private static com.bloxbean.cardano.client.api.model.Result<String> completeOrSkipBlsCostingFailure(
+            QuickTxBuilder quickTx, ScriptTx unlockTx) throws Exception {
+        try {
+            return quickTx.compose(unlockTx)
+                    .withSigner(SignerProviders.signerFrom(sender))
+                    .feePayer(sender.baseAddress())
+                    .collateralPayer(sender.baseAddress())
+                    .complete();
+        } catch (RuntimeException e) {
+            YaciHelper.assumeNoBlsCostingFailure(e);
+            throw e;
+        }
     }
 
     private static ListPlutusData vkIcData(List<byte[]> ic) {

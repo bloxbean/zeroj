@@ -18,6 +18,7 @@ import java.util.Objects;
  */
 public final class BbsCodec {
     public static final BigInteger R = Bls12381Generators.SCALAR_FIELD_ORDER;
+    public static final int MAX_MESSAGES = 1024;
 
     private BbsCodec() {}
 
@@ -137,6 +138,9 @@ public final class BbsCodec {
         int scalarCount = scalarBytesLen / ciphersuite.scalarBytes();
         if (scalarCount < 4) {
             throw new IllegalArgumentException("BBS proof must contain at least 4 scalars");
+        }
+        if (scalarCount - 4 > MAX_MESSAGES) {
+            throw new IllegalArgumentException("BBS proof hidden message count exceeds " + MAX_MESSAGES);
         }
 
         int offset = 0;

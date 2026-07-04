@@ -26,12 +26,14 @@ public final class PippengerBLS381 {
             throw new IllegalArgumentException("points and scalars must have the same length");
         int n = points.length;
         if (n == 0) return JacobianG1BLS381.INFINITY;
-        if (n == 1) return JacobianG1BLS381.fromAffine(points[0].x(), points[0].y()).scalarMul(scalars[0]);
 
         scalars = scalars.clone();
         for (int i = 0; i < n; i++) {
-            if (scalars[i].signum() < 0) scalars[i] = scalars[i].mod(FR);
+            if (scalars[i].signum() < 0 || scalars[i].compareTo(FR) >= 0) {
+                scalars[i] = scalars[i].mod(FR);
+            }
         }
+        if (n == 1) return JacobianG1BLS381.fromAffine(points[0].x(), points[0].y()).scalarMul(scalars[0]);
 
         int c = windowSize(n);
         int numBuckets = (1 << c) - 1;
