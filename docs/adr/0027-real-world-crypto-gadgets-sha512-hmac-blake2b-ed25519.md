@@ -226,7 +226,17 @@ root-anchor (2²³) as gated on the blst + memory-optimization follow-up.
 | **M2** | HMAC-SHA512 wrapper | ✅ **DONE** — `lib/hash/HmacSha512.java` + `HmacSha512Test`; JCA-validated across key regimes (short / 32B chain-code / exact-128 / >128-hashed) + empty/multi-block msg + RFC 4231 case 1 fixed vector + negative; BN254 & BLS12-381. **535,685 constraints** at the BIP32 shape. | 3 days |
 | **M3** | Blake2b (-224 / -256) | ✅ **DONE** — `lib/hash/Blake2b.java` + `Blake2bTest`; cross-checked byte-exact vs cardano-client `Blake2bUtil.blake2bHash224/256` across lengths incl. the 32B key-hash shape + RFC 7693 blake2b-512("abc") anchor + negative; BN254 & BLS12-381. **76,832 constraints/block**. | 4 days |
 | **M4** | `NonNativeField` foreign-field layer (`GF(2²⁵⁵−19)`) | ✅ **DONE** — `lib/field/Fe25519.java` + `Fe25519Test`; 5×51 limbs, deterministic carry reduction (no advice; final-carry-zero assert as safety net), redundant 16·p subtraction bias. add/sub/mul/square/**inverse**/canonical cross-checked vs `BigInteger` over edge + random on BN254 & BLS12-381; canonicalization of the [p,2²⁵⁵) window; negative test. **mul = 8,051 constraints**; one Fermat inverse ≈ 3M (⇒ one-per-scalar-mult in M5). | 1.5 wk |
-| **M5** | `Ed25519Point` ops + fixed-base scalar-mul `A = kL·B` | RFC 8032 pubkey vectors; cross-check vs host Ed25519 | 1.5 wk |
+| **M5** | `Ed25519Point` ops + fixed-base scalar-mul `A = kL·B` | ✅ **DONE** — `lib/ed25519/Ed25519Host.java` (host ref, validated vs **BouncyCastle** RFC 8032) + `Ed25519Point.java` (extended coords, unified add, fixed-base scalar mul, RFC 8032 encode) + `Ed25519PointTest`; circuit validated vs host for add/encode/scalar-mul. **point-add = 115,468 constraints ⇒ ~29M per 255-bit scalar mul** — see cost finding below. | 1.5 wk |
+
+> **M5 cost finding (drives optimization priority).** One Ed25519 fixed-base scalar mult is
+> ~29M constraints in the current correct-first field (mul 8k + a full carry-reduction after
+> every add/sub). That is ~2⁴·⁸, well past the comfortably-provable band from M7 (≈2²¹–2²²).
+> Correctness is fully established at the **witness** level (M6/M8 validate the derivation
+> against cardano-client-lib without proving), but *proving* the full circuit needs: (a) a
+> leaner Fe25519 (lazy reduction after add/sub; fewer mul carry passes — the final-carry-zero
+> assert makes such changes safe, they can only fail loudly), (b) fixed-base **windowing** to
+> cut the number of adds, and (c) the **blst** MSM prover (M7). These are the gating follow-ups
+> before an at-scale on-chain proof; they do not affect correctness.
 | **M6** | BIP32-Ed25519 one soft + one hardened derivation step, composed | cardano-client-lib HD derivation vectors; CIP-1852 path | 1 wk |
 | **M7** | **Prover-scale benchmark** (2²¹–2²³) + blst-MSM decision | ✅ **DONE** — `Groth16ScaleBenchmark` + `:zeroj-crypto:benchmark` task; measured 2¹²–2¹⁸, extrapolated to targets (see §6.1). **Verdict: GO (server-side, role-anchor).** | 1 wk |
 | **M8** | Full CIP-1852 derivation circuit; integrate into `account-ownership-recovery` usecase | end-to-end prove (snark) + verify off-chain **and** on Yaci DevKit | 2 wk |
