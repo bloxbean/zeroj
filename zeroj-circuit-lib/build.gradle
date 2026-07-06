@@ -4,6 +4,12 @@ plugins {
 
 description = 'ZeroJ Circuit Library — reusable ZK circuit components (Poseidon, Merkle, comparators)'
 
+test {
+    // Non-native-field / hash gadgets build large constraint graphs (a single Ed25519 field
+    // inverse is ~3M constraints); give the test JVM headroom so heavy gadget tests don't OOM.
+    maxHeapSize = '4g'
+}
+
 dependencies {
     api project(':zeroj-circuit-dsl')
     api project(':zeroj-circuit-annotation-api')
