@@ -180,6 +180,44 @@ apply** here — we author natively for BLS12-381 from the first line.
 - Production requires an **MPC trusted-setup ceremony** at the chosen power (ties to ADR-0013,
   ADR-0025); dev uses the flag-gated `generateForTesting` setup.
 
+### 6.1 M7 measured results (pure-Java, BLS12-381, this machine)
+
+Synthetic modular-squaring chain (exactly N constraints); `Groth16SetupBLS381` +
+`Groth16ProverBLS381`, no blst. Reproduce with `./gradlew :zeroj-crypto:benchmark`.
+
+| log₂N | constraints | setup (s) | prove (s) | peak heap (MB) |
+|------:|------------:|----------:|----------:|---------------:|
+| 12 | 4,096 | 14.1 | 2.3 | 635 |
+| 14 | 16,384 | 56.4 | 6.7 | 669 |
+| 16 | 65,536 | 223.5 | 23.0 | 779 |
+| 18 | 262,144 | 894.8 | 68.6 | 1,349 |
+
+Per-constraint at 2¹⁸: setup ≈ 3.4 ms, prove ≈ 262 µs, heap ≈ 5.3 KB. Linear extrapolation
+(a **lower bound** — FFT is superlinear):
+
+| target | setup | prove | peak heap |
+|-------:|------:|------:|----------:|
+| 2²¹ (~2.1M) | ~2.0 h | **~9 min** | ~10.5 GB |
+| 2²² (~4.2M) | ~4.0 h | ~18 min | ~21 GB |
+| 2²³ (~8.4M) | ~8.0 h | ~37 min | ~42 GB |
+
+**Verdict — GO, with a defined operating envelope:**
+1. **Proving is tractable server-side.** ~9 min at 2²¹ (the role-anchor recovery target) is
+   fine for a recovery portal; per-proof cost is not the blocker.
+2. **Memory is the binding ceiling**, not time. 2²¹ fits a 16 GB box; 2²³ needs ~48 GB+.
+   This — not wall-clock — caps how deep an anchor we can prove on commodity hardware.
+3. **Setup is a one-time cost.** The ~2 h pure-Java setup at 2²¹ is a dev-loop annoyance, not
+   a production cost: production uses a pinned MPC-ceremony `.ptau` (`PtauImporterBLS381`), not
+   `Groth16SetupBLS381`. Dev iteration should use the smallest anchor/circuit that exercises
+   the logic.
+4. **blst MSM wiring is the highest-value optimization**, but is **not on the critical path
+   for a role-anchor PoC** — pure-Java already clears it. Prioritize it before the root-anchor
+   (2²³) target, alongside the SHA-512 constraint reduction (§7 cost table), since both memory
+   and the ~130k/block SHA-512 cost push the derivation circuit toward the 2²²–2²³ band.
+
+Consequence for the usecase: **target the role-anchor (~2²¹–2²²) circuit first**; treat
+root-anchor (2²³) as gated on the blst + memory-optimization follow-up.
+
 ## Milestones
 
 | # | Scope | Tests / oracles | Est. effort |
@@ -190,7 +228,7 @@ apply** here — we author natively for BLS12-381 from the first line.
 | **M4** | `NonNativeField` foreign-field layer (`GF(2²⁵⁵−19)`) | random-input cross-check vs `BigInteger` mod-p; carry/reduction edge cases; negative (under-constraint) tests | 1.5 wk |
 | **M5** | `Ed25519Point` ops + fixed-base scalar-mul `A = kL·B` | RFC 8032 pubkey vectors; cross-check vs host Ed25519 | 1.5 wk |
 | **M6** | BIP32-Ed25519 one soft + one hardened derivation step, composed | cardano-client-lib HD derivation vectors; CIP-1852 path | 1 wk |
-| **M7** | **Prover-scale benchmark** (2²¹–2²³) + blst-MSM decision | wall-clock / memory / PK-size report; go/no-go gate | 1 wk |
+| **M7** | **Prover-scale benchmark** (2²¹–2²³) + blst-MSM decision | ✅ **DONE** — `Groth16ScaleBenchmark` + `:zeroj-crypto:benchmark` task; measured 2¹²–2¹⁸, extrapolated to targets (see §6.1). **Verdict: GO (server-side, role-anchor).** | 1 wk |
 | **M8** | Full CIP-1852 derivation circuit; integrate into `account-ownership-recovery` usecase | end-to-end prove (snark) + verify off-chain **and** on Yaci DevKit | 2 wk |
 
 Each `Zk*` annotation adapter (`ZkSha512`, `ZkHmacSha512`, `ZkBlake2b`, `ZkEd25519`) ships
