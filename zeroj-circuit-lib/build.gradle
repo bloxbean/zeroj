@@ -19,6 +19,8 @@ dependencies {
     // implementation Cardano uses for key hashes, so cross-checking against it proves
     // Cardano-compatibility of blake2b-224 / -256 directly. Not a compile/runtime dependency.
     testImplementation 'com.bloxbean.cardano:cardano-client-crypto:0.8.0-pre4'
+    // Authoritative RFC 8032 Ed25519 oracle for the Ed25519 gadget tests.
+    testImplementation 'org.bouncycastle:bcprov-jdk18on:1.83'
 }
 
 /**
