@@ -9,6 +9,10 @@ dependencies {
     api project(':zeroj-circuit-annotation-api')
 
     testImplementation project(':zeroj-test-vectors')
+    // Test-only oracle for the Blake2b gadget: cardano-client's Blake2bUtil is exactly the
+    // implementation Cardano uses for key hashes, so cross-checking against it proves
+    // Cardano-compatibility of blake2b-224 / -256 directly. Not a compile/runtime dependency.
+    testImplementation 'com.bloxbean.cardano:cardano-client-crypto:0.8.0-pre4'
 }
 
 /**
