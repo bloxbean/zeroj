@@ -224,7 +224,7 @@ root-anchor (2²³) as gated on the blst + memory-optimization follow-up.
 |---|-------|-----------------|-------------|
 | **M1** | SHA-512 gadget + 64-bit mod-add driver + padding | ✅ **DONE** — `lib/hash/Sha512.java` + `Sha512Test`; JCA-validated across padding boundaries + multi-block on BN254 **and** BLS12-381; `rotr`/`shr` cross-checked vs `Long`; negative test. **Measured 129,723 constraints/block** (correct-first; optimization deferred, see cost table). | 1 wk |
 | **M2** | HMAC-SHA512 wrapper | ✅ **DONE** — `lib/hash/HmacSha512.java` + `HmacSha512Test`; JCA-validated across key regimes (short / 32B chain-code / exact-128 / >128-hashed) + empty/multi-block msg + RFC 4231 case 1 fixed vector + negative; BN254 & BLS12-381. **535,685 constraints** at the BIP32 shape. | 3 days |
-| **M3** | Blake2b (-224 / -256) | cardano-client-lib `Blake2bUtil`; RFC 7693 vectors | 4 days |
+| **M3** | Blake2b (-224 / -256) | ✅ **DONE** — `lib/hash/Blake2b.java` + `Blake2bTest`; cross-checked byte-exact vs cardano-client `Blake2bUtil.blake2bHash224/256` across lengths incl. the 32B key-hash shape + RFC 7693 blake2b-512("abc") anchor + negative; BN254 & BLS12-381. **76,832 constraints/block**. | 4 days |
 | **M4** | `NonNativeField` foreign-field layer (`GF(2²⁵⁵−19)`) | random-input cross-check vs `BigInteger` mod-p; carry/reduction edge cases; negative (under-constraint) tests | 1.5 wk |
 | **M5** | `Ed25519Point` ops + fixed-base scalar-mul `A = kL·B` | RFC 8032 pubkey vectors; cross-check vs host Ed25519 | 1.5 wk |
 | **M6** | BIP32-Ed25519 one soft + one hardened derivation step, composed | cardano-client-lib HD derivation vectors; CIP-1852 path | 1 wk |
