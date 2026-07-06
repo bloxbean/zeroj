@@ -237,7 +237,7 @@ root-anchor (2²³) as gated on the blst + memory-optimization follow-up.
 > assert makes such changes safe, they can only fail loudly), (b) fixed-base **windowing** to
 > cut the number of adds, and (c) the **blst** MSM prover (M7). These are the gating follow-ups
 > before an at-scale on-chain proof; they do not affect correctness.
-| **M6** | BIP32-Ed25519 one soft + one hardened derivation step, composed | cardano-client-lib HD derivation vectors; CIP-1852 path | 1 wk |
+| **M6** | BIP32-Ed25519 one soft + one hardened derivation step, composed | ✅ **DONE** — `lib/ed25519/Bip32Ed25519.java` + `Bip32Ed25519Test`; hardened + soft (AP-injected) **and full soft computing A=kL·B in-circuit** validated byte-exact vs cardano-client `HdKeyGenerator.getChildKeyPair` (child kL/kR/chainCode read back from the witness). Hardened step = 1,075,050 constraints; full soft ~30M (heavy test, `-Dzeroj.heavy`). | 1 wk |
 | **M7** | **Prover-scale benchmark** (2²¹–2²³) + blst-MSM decision | ✅ **DONE** — `Groth16ScaleBenchmark` + `:zeroj-crypto:benchmark` task; measured 2¹²–2¹⁸, extrapolated to targets (see §6.1). **Verdict: GO (server-side, role-anchor).** | 1 wk |
 | **M8** | Full CIP-1852 derivation circuit; integrate into `account-ownership-recovery` usecase | end-to-end prove (snark) + verify off-chain **and** on Yaci DevKit | 2 wk |
 

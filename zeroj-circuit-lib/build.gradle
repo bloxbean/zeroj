@@ -10,6 +10,20 @@ test {
     maxHeapSize = '4g'
 }
 
+// Opt-in heavy gadget tests (full Ed25519 scalar-mult circuits, ~30M+ constraints). Gated on
+// -Dzeroj.heavy=true so the normal test run stays fast. Run: ./gradlew :zeroj-circuit-lib:heavyGadgetTest
+tasks.register('heavyGadgetTest', Test) {
+    description = 'ADR-0027 heavy gadget tests (full in-circuit Ed25519 scalar mult).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    maxHeapSize = '48g'
+    systemProperty 'zeroj.heavy', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 dependencies {
     api project(':zeroj-circuit-dsl')
     api project(':zeroj-circuit-annotation-api')
