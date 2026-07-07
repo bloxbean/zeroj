@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="static/zeroj-readme-hero.png" alt="ZeroJ — Zero-Knowledge Proofs for the JVM" width="100%">
+</p>
+
 # ZeroJ
 
 > [!WARNING]
