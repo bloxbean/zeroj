@@ -146,13 +146,17 @@ public final class Fe25519 {
     public static volatile boolean USE_HINT_MUL = false;
 
     /**
-     * ADR-0028 opt-in: when {@code true}, {@link Ed25519Point#encode}-style inversions route through
-     * the hint-based {@link #inverseHint} (~300× cheaper than the Fermat {@link #inverse}).
-     * <b>Audit-gated</b> like {@link #USE_HINT_MUL}, though the inverse hint is trivially sound
-     * ({@code a·a⁻¹ = 1} uniquely pins the inverse). Its identity check uses the <b>deterministic</b>
-     * mul, so it is independent of the CRT-mul audit.
+     * ADR-0028: when {@code true} (the <b>default</b>), {@link Ed25519Point#encode}-style inversions
+     * route through the hint-based {@link #inverseHint} (~380× cheaper than the Fermat
+     * {@link #inverse}). Enabled by default because the inverse hint is <b>trivially sound and
+     * standard practice</b>: its check {@code a·a⁻¹ == 1} uniquely pins the inverse (adversarially
+     * reviewed, no forgery), and it uses the <b>deterministic</b> mul, so it is independent of the
+     * audit-gated CRT-mul.
+     *
+     * <p>To disable (fully-deterministic Fermat inverse, zero advice in the circuit) set
+     * {@code Fe25519.USE_HINT_INVERSE = false} before building the circuit.</p>
      */
-    public static volatile boolean USE_HINT_INVERSE = false;
+    public static volatile boolean USE_HINT_INVERSE = true;
 
     /** (this * other) mod p, normalized. Routes to {@link #mulHint} when {@link #USE_HINT_MUL}. */
     public Fe25519 mul(Fe25519 other) {
