@@ -241,9 +241,25 @@ n=1 falls back to `blst_p1_mult`, as pippenger is batch-only). Timing vs the pur
 | 2¹⁸ | 3782 | **1497** | **2.53×** |
 
 **Conclusion: Rung B via FFM is worth wiring** (2.5–3.8× on G1 MSM vs ~1.0× for the per-op wrapper).
-The prover's four G1 MSMs dominate prove time, so this should translate to a large prove-time win on
-top of Track-A. Next: G2 MSM binding + wire behind the `ProverBackend` SPI (M7), then GraalVM FFM
-config (M9).
+
+### B0-result-3. M7: blst G1 backend wired into the prover — 1.4× end-to-end
+
+Added a `G1MsmBackend` SPI seam (`PURE_JAVA` default | injectable blst) threaded through the prover's
+four G1 MSMs; the FFM-blst backend produces **bit-identical proofs**. Full-prove timing:
+
+| n | pure-Java (ms) | blst-G1 (ms) | speedup |
+|---|---|---|---|
+| 2¹² | 1565 | 1187 | 1.32× |
+| 2¹⁴ | 4462 | 3181 | 1.40× |
+| 2¹⁶ | 14850 | 10515 | **1.41×** |
+
+The G1 MSM's 2.5–3.8× dilutes to ~1.4× on the full prove because **the FFT (`computeH`) and the G2
+MSM are still pure-Java**, plus per-MSM point conversion. Levers to close the gap (M7 cont.):
+- **G2 MSM** via `blst_p2s_mult_pippenger` (accelerate `computePiB_G2`),
+- **pre-convert the fixed PK** to blst encoding once (drop per-MSM conversion),
+- the FFT is then the remaining pure-Java bottleneck (blst doesn't help it).
+
+Remaining: M9 GraalVM FFM config + `--enable-native-access`; swap in a release `libblst`.
 
 > **libblst provenance:** the bundled binaries are currently lifted from the (old, 2023)
 > icon-foundation jar — **fine for validating the FFM binding** (the pippenger C ABI has been stable
