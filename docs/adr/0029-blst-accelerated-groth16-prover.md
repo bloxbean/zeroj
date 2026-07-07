@@ -87,6 +87,43 @@ Sequencing: **Track A first** (unblocks feasibility while preserving native-imag
 prove *time* becomes the binding constraint. The blst provider is behind a provider seam mirroring
 `Bls12381Provider`; the pure-Java default is never removed.
 
+### Target hardware: 16–64 GB RAM (this decides what's mandatory)
+
+The deployment target is commodity machines with **16 GB to 64 GB RAM**. Mapping the ~19M-constraint
+(2²⁵) derivation onto that range:
+
+| RAM | `BigInteger` (today) | A1 packed limbs (~20–30 GB) | A1 + `mmap` | blst (~30–50 GB) |
+|---|---|---|---|---|
+| 64 GB | OOM | **fits, all-RAM (fastest A)** | not needed | fits |
+| 32 GB | OOM | fits (tight) | comfortable | tight |
+| 16 GB | OOM | **doesn't fit** | **required** | doesn't fit → needs mmap |
+
+Consequences for the build plan:
+- **A1 (packed `long[]`) is mandatory** — the current `BigInteger` prover OOMs across the *entire*
+  16–64 GB range, so nothing works without it.
+- **`mmap` is mandatory to reach the 16 GB floor** — both A1-alone (~20–30 GB) and blst (~30–50 GB)
+  exceed 16 GB, so file-backed PK is the only way to hit the low end. This vindicates making mmap an
+  **automatic behavior keyed on detected RAM**: off on a 64 GB box (all-RAM, faster), auto-engaged
+  below ~32–48 GB. A memory↔time dial the prover sets itself.
+- **Vector API stays optional/measured** — it's a *speed* lever, orthogonal to fitting the RAM
+  target; it never decides whether a proof fits.
+- Smaller circuits (the commitment ~829, or ~1–2M usecases) fit trivially in 16 GB — mmap only
+  auto-engages for derivation-scale circuits on the smaller boxes.
+
+## Non-goals & build discipline
+
+This ADR is a **menu of levers to pull when measured**, not a mandate to build all of them. To avoid
+shipping five parallel backends as a maintenance tax:
+
+- **Build unconditionally:** the `ProverBackend` SPI seam, the **A1 packed-limb refactor**, `mmap`
+  auto-engagement (both mandated by the 16–64 GB target above), and the `BigInteger` reference oracle.
+- **Build only when a measurement justifies it:** the **Vector API** (M3 spike must show a real
+  ≥~1.5× before it ships) and **blst** (only if Track A prove-*time* is too slow for a real
+  workload — for offline server-side proving, Track A's tens-of-minutes may already suffice).
+- **Non-goals:** exposing mmap/SIMD/FFT-strategy as user knobs (they're internal); using
+  native-image for prover *speed* (it isn't a speed lever); changing the verifier or the setup's
+  *security* (only its dev-loop cost).
+
 ## Track A — pure-Java, native-image-clean
 
 ### A1. Packed `long[]` Montgomery arithmetic (the prerequisite, biggest single win)
@@ -159,14 +196,22 @@ directly. And both proofs MUST be accepted by the off-chain (`Groth16BLS12381Ver
 on-chain (Julc) verifiers. This is the release gate for every accelerated component (MSM, then
 setup): the pure-Java path is the frozen reference oracle (same discipline as ADR-0028).
 
-### 7. Deployment posture
+### 7. API surface & deployment posture
 
-- Track A (pure-Java, incl. Vector API + `mmap`): **default**, for GraalVM native-image and JNI-free
-  deployments — the prover stays native-image-compilable.
-- Track B (blst): **opt-in** (server-side proving), where JNI is available. Ships with `jni-config` +
-  the `libblst.so`/`.dylib` resources for native-image users who opt in (reuse `zeroj-blst`'s
-  config; mirror yaci-store ADR 017).
-- The **verifier** is unaffected by all of the above — pure-Java, native-image-clean, milliseconds.
+**Exactly two user-facing backends** — the menu stays small on purpose:
+
+- **Track A (pure-Java): the default.** GraalVM-native-image-friendly, JNI-free. `mmap` and the
+  Vector API are **internal auto-behaviors within Track A, not user-facing knobs** — the prover
+  decides to memory-map the PK when it exceeds a memory threshold, and to use SIMD when the platform
+  and measured benefit warrant it. Users get a working prover; they don't reason about mmap or IFMA.
+- **Track B (blst): the one opt-in**, for latency-sensitive server-side proving where JNI is
+  available. Ships with `jni-config` + `libblst` resources (reuse `zeroj-blst`'s config; mirror
+  yaci-store ADR 017). Its own `mmap` is likewise internal.
+
+So the selectable surface is a single `ProverBackend` choice (`PURE_JAVA` default | `BLST` opt-in);
+everything else (compact limbs, SIMD, mmap, single-pass Pippenger, external FFT) is an internal
+implementation detail behind that seam. The **verifier** is unaffected — pure-Java,
+native-image-clean, milliseconds.
 
 ## Milestones
 
