@@ -181,14 +181,15 @@ class Groth16ScaleBenchmark {
         System.out.printf("  setup: %.2f us/constraint | prove: %.2f us/constraint | heap: %.3f KB/constraint%n",
                 setupS * 1e6 / n, proveS * 1e6 / n, heapMB * 1024 / n);
         System.out.println();
-        System.out.println("--- Linear extrapolation to ADR-0027 target sizes (lower bound; "
-                + "FFT is superlinear, so real prove time is somewhat worse) ---");
-        System.out.printf("%-10s %14s %14s %16s%n", "target", "setup(s)", "prove(s)", "peakHeap(GB)");
-        for (int logN : new int[]{21, 22, 23}) {
+        System.out.println("--- Linear extrapolation toward the ADR-0029 account-ownership target "
+                + "(~19M constraints = 2^25 domain; lower bound, FFT is superlinear) ---");
+        System.out.printf("%-12s %14s %14s %16s%n", "target", "setup(s)", "prove(s)", "peakHeap(GB)");
+        for (int logN : new int[]{21, 23, 24, 25}) {
             double tn = 1L << logN;
             double f = tn / n;
-            System.out.printf("2^%-8d %14.1f %14.1f %16.1f%n",
-                    logN, setupS * f, proveS * f, heapMB * f / 1024.0);
+            String tag = logN == 25 ? "2^25 (~19M)" : "2^" + logN;
+            System.out.printf("%-12s %14.1f %14.1f %16.1f%n",
+                    tag, setupS * f, proveS * f, heapMB * f / 1024.0);
         }
         System.out.println();
         System.out.println("NOTE: prover uses pure-Java Pippenger MSM (no blst path wired in). "

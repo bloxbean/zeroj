@@ -315,7 +315,14 @@ as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64
 
 | milestone | backend | circuit (constraints) | setup time | prove time | peak RAM | verify | notes |
 |---|---|---|---|---|---|---|---|
-| M0 baseline | pure-Java (current) | derivation (~19M) | — | — | — | — | to be captured |
+| M0 baseline | pure-Java (current) | ~19M (2²⁵ domain) | ~32.6 h | ~3.2 h | ~384 GB | ✗ infeasible | extrapolated from 2¹⁶ (setup 3502 µs/c, prove 345 µs/c, 12 KB/c). **OOMs the 16–64 GB target.** |
+
+**M0 finding.** The current pure-Java prover cannot produce the derivation proof on the target
+hardware — ~384 GB and ~36 h (setup+prove) at 2²⁵. Two things stand out: **memory (~384 GB) is the
+hard blocker** (the immutable-per-op allocation identified above), and **setup is ~10× prove per
+constraint** — setup's per-wire scalar-muls (`Groth16SetupBLS381`) dominate, so M2 (setup) matters as
+much as M1 (MSM). This validates the whole effort: without ADR-0029 the account-ownership derivation
+proof is simply not generatable on a 16–64 GB machine.
 
 ## References
 
