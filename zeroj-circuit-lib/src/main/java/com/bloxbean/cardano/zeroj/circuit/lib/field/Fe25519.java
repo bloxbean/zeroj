@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.zeroj.circuit.lib.field;
 
 import com.bloxbean.cardano.zeroj.circuit.CircuitAPI;
+import com.bloxbean.cardano.zeroj.circuit.Gate;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
 
 import java.math.BigInteger;
@@ -136,8 +137,17 @@ public final class Fe25519 {
     /** (this - other) mod p, normalized. */
     public Fe25519 sub(Fe25519 other) { return subLazy(other).reduce(); }
 
+    /**
+     * ADR-0028 Phase C opt-in: when {@code true}, {@link #mul} routes through the hint-based
+     * {@link #mulHint}. <b>AUDIT-GATED — do not enable in production until the hint path's
+     * integer-identity argument is externally audited</b> (ADR-0028 pillar 5). Default {@code false}
+     * keeps the deterministic path. Used by tests to measure/validate the wired end-to-end circuit.
+     */
+    public static volatile boolean USE_HINT_MUL = false;
+
     /** (this * other) mod p, normalized. */
     public Fe25519 mul(Fe25519 other) {
+        if (USE_HINT_MUL) return mulHint(other);
         Fe25519 a = (this.overflow > MAX_MUL_OVERFLOW) ? this.reduce() : this;
         Fe25519 b = (other.overflow > MAX_MUL_OVERFLOW) ? other.reduce() : other;
 
@@ -158,6 +168,111 @@ public final class Fe25519 {
 
     /** this^2 mod p, normalized. */
     public Fe25519 square() { return mul(this); }
+
+    // ------------------------------------------------------------------
+    // Hint-based multiplication (ADR-0028 Phase C — AUDIT-GATED)
+    // ------------------------------------------------------------------
+
+    // Constant limbs of p, the subtraction-free product-check offset, and the target digits of
+    // OFF·S (S = Σ_{k=0}^{8} 2^{51k}) for the integer-identity carry chain.
+    private static final long[] P_LIMB = new long[LIMBS];
+    private static final BigInteger MUL_OFFSET = BigInteger.ONE.shiftLeft(106); // ≥ max column of q·p+r
+    private static final BigInteger[] TARGET_DIGIT = new BigInteger[2 * LIMBS - 1];
+    private static final BigInteger TARGET_HIGH;
+    private static final int MUL_CHECK_WIDTH = 112; // > max (column + carry) ≈ 2^108
+    static {
+        for (int i = 0; i < LIMBS; i++) P_LIMB[i] = P.shiftRight(LIMB_BITS * i).and(LIMB_MASK).longValueExact();
+        BigInteger s = BigInteger.ZERO;
+        for (int k = 0; k < 2 * LIMBS - 1; k++) s = s.add(BigInteger.ONE.shiftLeft(LIMB_BITS * k));
+        BigInteger target = MUL_OFFSET.multiply(s);
+        for (int k = 0; k < 2 * LIMBS - 1; k++) TARGET_DIGIT[k] = target.shiftRight(LIMB_BITS * k).and(LIMB_MASK);
+        TARGET_HIGH = target.shiftRight(LIMB_BITS * (2 * LIMBS - 1));
+    }
+
+    /**
+     * (this * other) mod p using prover-supplied advice (ADR-0028 Phase C). The prover supplies the
+     * quotient/remainder of the integer product via a {@link Gate.HintKind#MUL_MOD_REDUCE} hint;
+     * {@link #mulFromQR} then range-checks them, forces {@code r < p}, and enforces
+     * {@code a·b = q·p + r} <b>over the integers</b>. Operands are canonicalized ({@code < p}) so
+     * {@code q} fits 5 limbs.
+     *
+     * <p><b>AUDIT-GATED (ADR-0028 pillar 5):</b> the hint path is not yet audited; it is behind an
+     * explicit opt-in and the deterministic {@link #mul} remains the default until an external audit
+     * of the integer-identity argument clears.</p>
+     */
+    public Fe25519 mulHint(Fe25519 other) {
+        Variable[] a = this.canonical().limbs;
+        Variable[] b = other.canonical().limbs;
+        Variable[] inputs = new Variable[2 * LIMBS];
+        System.arraycopy(a, 0, inputs, 0, LIMBS);
+        System.arraycopy(b, 0, inputs, LIMBS, LIMBS);
+        BigInteger[] params = {P, BigInteger.valueOf(LIMB_BITS), BigInteger.valueOf(LIMBS)};
+        Variable[] hint = api.hintN(Gate.HintKind.MUL_MOD_REDUCE, params, 2 * LIMBS, inputs);
+        Variable[] q = slice(hint, 0, LIMBS);
+        Variable[] r = slice(hint, LIMBS, 2 * LIMBS);
+        return mulFromQR(api, a, b, q, r);
+    }
+
+    /**
+     * Enforce {@code a·b = q·p + r} with {@code 0 ≤ r < p} for the given (already 51-bit) operand
+     * limbs and candidate {@code q, r}, returning {@code r} as the normalized product. Package-visible
+     * so soundness tests can feed <b>adversarial</b> {@code q, r} directly (the hint is bypassed) and
+     * assert rejection — the soundness of the whole scheme lives entirely in these constraints.
+     *
+     * <p>Soundness rests on: (1) every {@code q, r} limb is range-checked to 51 bits, bounding each
+     * product column {@code < 2^106} so it never wraps the native field; (2) {@code r < p} makes the
+     * remainder unique; (3) the identity is checked <b>over the integers</b> — the carry chain keeps
+     * every intermediate {@code < 2^112 ≪ nativeP}, so a difference of any nonzero multiple of the
+     * native modulus cannot hide.</p>
+     */
+    static Fe25519 mulFromQR(CircuitAPI api, Variable[] a, Variable[] b, Variable[] q, Variable[] r) {
+        // Range-check ALL operands to 51 bits so the gadget is self-contained: the magnitude
+        // bounds the integer-identity check relies on (dk > 0, t < 2^112) require a,b limbs < 2^51,
+        // not just q,r. (mulHint already passes canonical() limbs; this hardens direct callers.)
+        for (Variable v : a) api.assertInRange(v, LIMB_BITS);
+        for (Variable v : b) api.assertInRange(v, LIMB_BITS);
+        for (Variable v : q) api.assertInRange(v, LIMB_BITS);
+        for (Variable v : r) api.assertInRange(v, LIMB_BITS);
+        assertLessThanP(api, r);
+
+        Variable zero = api.constant(0);
+        Variable[] lhs = new Variable[2 * LIMBS - 1];
+        Variable[] rhs = new Variable[2 * LIMBS - 1];
+        for (int k = 0; k < lhs.length; k++) { lhs[k] = zero; rhs[k] = zero; }
+        for (int i = 0; i < LIMBS; i++) {
+            for (int j = 0; j < LIMBS; j++) {
+                lhs[i + j] = api.add(lhs[i + j], api.mul(a[i], b[j]));              // a·b columns
+                rhs[i + j] = api.add(rhs[i + j], api.mul(q[i], api.constant(P_LIMB[j]))); // q·p columns
+            }
+        }
+        for (int k = 0; k < LIMBS; k++) rhs[k] = api.add(rhs[k], r[k]);            // + r
+
+        // Verify Σ_k (lhs[k] + OFF − rhs[k])·2^{51k} == OFF·S over the integers via a positive carry
+        // chain: each digit must equal OFF·S's digit and the final carry its high part.
+        Variable off = api.constant(MUL_OFFSET);
+        Variable carry = zero;
+        for (int k = 0; k < 2 * LIMBS - 1; k++) {
+            Variable dk = api.sub(api.add(lhs[k], off), rhs[k]); // > 0, < 2^107
+            Variable t = api.add(dk, carry);
+            Variable[] bits = api.toBinary(t, MUL_CHECK_WIDTH);
+            Variable low = api.fromBinary(slice(bits, 0, LIMB_BITS));
+            carry = api.fromBinary(slice(bits, LIMB_BITS, MUL_CHECK_WIDTH));
+            api.assertEqual(low, api.constant(TARGET_DIGIT[k]));
+        }
+        api.assertEqual(carry, api.constant(TARGET_HIGH));
+        return new Fe25519(api, r.clone(), 0);
+    }
+
+    /** Assert the value in {@code r} (5 limbs < 2^51) is strictly less than p. */
+    static void assertLessThanP(CircuitAPI api, Variable[] r) {
+        Variable carry = api.constant(19); // r + 19 < 2^255  ⟺  r < p
+        for (int i = 0; i < LIMBS; i++) {
+            Variable t = api.add(r[i], carry);
+            Variable[] bits = api.toBinary(t, 53);
+            carry = api.fromBinary(slice(bits, LIMB_BITS, 53));
+        }
+        api.assertEqual(carry, api.constant(0)); // no weight-2^255 carry ⟹ r < p
+    }
 
     /** Multiplicative inverse via Fermat: this^(p-2) mod p. Fails (unsatisfiable) if this == 0. */
     public Fe25519 inverse() {
