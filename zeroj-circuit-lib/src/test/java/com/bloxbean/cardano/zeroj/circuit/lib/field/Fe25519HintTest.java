@@ -107,28 +107,35 @@ class Fe25519HintTest {
     // 2. Soundness: adversarial (q, r) fed to mulFromQR must be REJECTED
     // ------------------------------------------------------------------
 
-    /** Run mulFromQR with the given a,b,q,r limb values; return whether the witness is satisfiable. */
+    private static final int QN = Fe25519.HINT_Q_LIMBS; // quotient limb count (6)
+
+    /** Run mulFromQR (a,b,r = 5 limbs; q = QN limbs); return whether the witness is satisfiable. */
     private static boolean accepts(BigInteger[] a, BigInteger[] b, BigInteger[] q, BigInteger[] r) {
         var builder = CircuitBuilder.create("qr");
-        for (int i = 0; i < 5; i++) builder.secretVar("a" + i).secretVar("b" + i).secretVar("q" + i).secretVar("r" + i);
+        for (int i = 0; i < 5; i++) builder.secretVar("a" + i).secretVar("b" + i).secretVar("r" + i);
+        for (int i = 0; i < QN; i++) builder.secretVar("q" + i);
         builder.define(api -> {
-            Variable[] av = new Variable[5], bv = new Variable[5], qv = new Variable[5], rv = new Variable[5];
-            for (int i = 0; i < 5; i++) {
-                av[i] = api.var("a" + i); bv[i] = api.var("b" + i);
-                qv[i] = api.var("q" + i); rv[i] = api.var("r" + i);
-            }
+            Variable[] av = new Variable[5], bv = new Variable[5], rv = new Variable[5], qv = new Variable[QN];
+            for (int i = 0; i < 5; i++) { av[i] = api.var("a" + i); bv[i] = api.var("b" + i); rv[i] = api.var("r" + i); }
+            for (int i = 0; i < QN; i++) qv[i] = api.var("q" + i);
             Fe25519.mulFromQR(api, av, bv, qv, rv);
         });
         Map<String, List<BigInteger>> in = new HashMap<>();
-        for (int i = 0; i < 5; i++) {
-            in.put("a" + i, List.of(a[i])); in.put("b" + i, List.of(b[i]));
-            in.put("q" + i, List.of(q[i])); in.put("r" + i, List.of(r[i]));
-        }
+        for (int i = 0; i < 5; i++) { in.put("a" + i, List.of(a[i])); in.put("b" + i, List.of(b[i])); in.put("r" + i, List.of(r[i])); }
+        for (int i = 0; i < QN; i++) in.put("q" + i, List.of(q[i]));
         try { builder.calculateWitness(in, CurveId.BN254); return true; }
         catch (ArithmeticException | IllegalArgumentException e) { return false; }
     }
 
     private static BigInteger[] limbs(BigInteger v) { return Fe25519.toLimbValues(v); }
+
+    /** Split a non-negative value into {@code n} radix-2^51 limbs (no mod-p reduction). */
+    private static BigInteger[] limbsN(BigInteger v, int n) {
+        BigInteger mask = BigInteger.ONE.shiftLeft(51).subtract(BigInteger.ONE);
+        BigInteger[] out = new BigInteger[n];
+        for (int i = 0; i < n; i++) { out[i] = v.and(mask); v = v.shiftRight(51); }
+        return out;
+    }
 
     @Test
     void soundness_correctQR_accepted_tamperedQR_rejected() {
@@ -136,18 +143,18 @@ class Fe25519HintTest {
             BigInteger a = randFe(), b = randFe();
             BigInteger prod = a.multiply(b);
             BigInteger q = prod.divide(P), r = prod.mod(P);
-            BigInteger[] al = limbs(a), bl = limbs(b), ql = limbs(q), rl = limbs(r);
+            BigInteger[] al = limbs(a), bl = limbs(b), ql = limbsN(q, QN), rl = limbs(r);
 
             assertTrue(accepts(al, bl, ql, rl), "honest (q,r) must be accepted");
 
-            // Mutate each q and r limb by +1 and -1 (staying a valid field element) -> must reject.
-            for (int i = 0; i < 5; i++) {
-                for (int delta : new int[]{1, -1}) {
+            // Mutate each q (6) and r (5) limb by +1 and -1 -> must reject.
+            for (int delta : new int[]{1, -1}) {
+                for (int i = 0; i < QN; i++)
                     assertFalse(accepts(al, bl, mutate(ql, i, delta), rl),
                             "tampered q[" + i + "]" + (delta > 0 ? "+1" : "-1") + " must be rejected");
+                for (int i = 0; i < 5; i++)
                     assertFalse(accepts(al, bl, ql, mutate(rl, i, delta)),
                             "tampered r[" + i + "]" + (delta > 0 ? "+1" : "-1") + " must be rejected");
-                }
             }
         }
     }
@@ -165,7 +172,7 @@ class Fe25519HintTest {
             BigInteger rPrime = r.add(P), qPrime = q.subtract(BigInteger.ONE);
             // sanity: identity still holds over integers
             assertEquals(prod, qPrime.multiply(P).add(rPrime));
-            assertFalse(accepts(limbs(a), limbs(b), limbs(qPrime), splitRaw(rPrime)),
+            assertFalse(accepts(limbs(a), limbs(b), limbsN(qPrime, QN), splitRaw(rPrime)),
                     "non-canonical r (>= p) must be rejected");
             return; // one qualifying case is enough
         }
@@ -175,7 +182,7 @@ class Fe25519HintTest {
     void soundness_swappedLimbs_rejected() {
         BigInteger a = randFe(), b = randFe();
         BigInteger prod = a.multiply(b);
-        BigInteger[] ql = limbs(prod.divide(P)), rl = limbs(prod.mod(P));
+        BigInteger[] ql = limbsN(prod.divide(P), QN), rl = limbs(prod.mod(P));
         if (rl[0].equals(rl[1])) return; // need distinct to make the swap a real change
         BigInteger[] rSwap = rl.clone();
         BigInteger tmp = rSwap[0]; rSwap[0] = rSwap[1]; rSwap[1] = tmp;
