@@ -65,24 +65,58 @@ public final class Groth16ProverBLS381 {
         BigInteger r = randomScalar(rng);
         BigInteger s = randomScalar(rng);
 
-        return proveInternal(pk, witness, hCoeffs, r, s);
+        return proveInternal(pk, heapReaders(pk), witness, hCoeffs, r, s);
     }
 
     static Groth16ProofBLS381 proveUnblinded(
             Groth16ProvingKeyBLS381 pk, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
-        return proveInternal(pk, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+        return proveInternal(pk, heapReaders(pk), witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+    }
+
+    /** The G1 proving-key point arrays as readers (heap or mmap-backed). */
+    public record G1Readers(PippengerFlatBLS381.G1AffineReader a, PippengerFlatBLS381.G1AffineReader b1,
+                            PippengerFlatBLS381.G1AffineReader h, PippengerFlatBLS381.G1AffineReader l) {}
+
+    /** Deterministic (unblinded) prove with reader-supplied G1 key — for differential heap-vs-mmap tests. */
+    static Groth16ProofBLS381 proveUnblindedWithReaders(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, BigInteger[] witness,
+            List<R1CSConstraint> constraints, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
+        return proveInternal(pk, readers, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+    }
+
+    /** In-RAM readers over the PK's flat G1 arrays. */
+    public static G1Readers heapReaders(Groth16ProvingKeyBLS381 pk) {
+        return new G1Readers(
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsA()),
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsB1()),
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsH()),
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsL()));
+    }
+
+    /**
+     * Prove with the G1 proving key supplied as {@link G1Readers} — pass mmap-backed
+     * {@link PippengerFlatBLS381.SegmentG1Reader}s to prove with the PK off-heap/file-backed
+     * (ADR-0029 M4). Single points + G2 come from {@code pk}.
+     */
+    public static Groth16ProofBLS381 proveWithReaders(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, BigInteger[] witness,
+            List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
+        var rng = new SecureRandom();
+        return proveInternal(pk, readers, witness, hCoeffs, randomScalar(rng), randomScalar(rng));
     }
 
     private static Groth16ProofBLS381 proveInternal(
-            Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger[] hCoeffs,
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, BigInteger[] witness, BigInteger[] hCoeffs,
             BigInteger r, BigInteger s) {
 
-        var piA = computePiA(pk, witness, r);
+        var piA = computePiA(pk, readers.a(), witness, r);
         var piB = computePiB_G2(pk, witness, s);
-        var piB1 = computePiB_G1(pk, witness, s);
-        var piC = computePiC(pk, hCoeffs, witness, r, s, piA, piB1);
+        var piB1 = computePiB_G1(pk, readers.b1(), witness, s);
+        var piC = computePiC(pk, readers.h(), readers.l(), hCoeffs, witness, r, s, piA, piB1);
 
         return new Groth16ProofBLS381(piA.toAffine(), piB.toAffine(), piC.toAffine());
     }
@@ -137,14 +171,15 @@ public final class Groth16ProverBLS381 {
         return FieldFFTBLS381.fft(coeffs);
     }
 
-    private static JacobianG1BLS381 computePiA(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger r) {
+    private static JacobianG1BLS381 computePiA(Groth16ProvingKeyBLS381 pk,
+            PippengerFlatBLS381.G1AffineReader aReader, BigInteger[] witness, BigInteger r) {
         var result = JacobianG1BLS381.fromAffine(pk.alphaG1().x(), pk.alphaG1().y());
 
-        int n = Math.min(witness.length, Groth16ProvingKeyBLS381.count(pk.pointsA()));
+        int n = Math.min(witness.length, aReader.count());
         if (n > 0) {
             BigInteger[] scalars = new BigInteger[n];
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsA(), n, scalars));
+            result = result.add(PippengerFlatBLS381.msmReader(aReader, n, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(r));
@@ -205,14 +240,15 @@ public final class Groth16ProverBLS381 {
         return result;
     }
 
-    private static JacobianG1BLS381 computePiB_G1(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger s) {
+    private static JacobianG1BLS381 computePiB_G1(Groth16ProvingKeyBLS381 pk,
+            PippengerFlatBLS381.G1AffineReader b1Reader, BigInteger[] witness, BigInteger s) {
         var result = JacobianG1BLS381.fromAffine(pk.betaG1().x(), pk.betaG1().y());
 
-        int n = Math.min(witness.length, Groth16ProvingKeyBLS381.count(pk.pointsB1()));
+        int n = Math.min(witness.length, b1Reader.count());
         if (n > 0) {
             BigInteger[] scalars = new BigInteger[n];
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsB1(), n, scalars));
+            result = result.add(PippengerFlatBLS381.msmReader(b1Reader, n, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(s));
@@ -220,25 +256,26 @@ public final class Groth16ProverBLS381 {
     }
 
     private static JacobianG1BLS381 computePiC(
-            Groth16ProvingKeyBLS381 pk, BigInteger[] hCoeffs, BigInteger[] witness,
+            Groth16ProvingKeyBLS381 pk, PippengerFlatBLS381.G1AffineReader hReader,
+            PippengerFlatBLS381.G1AffineReader lReader, BigInteger[] hCoeffs, BigInteger[] witness,
             BigInteger r, BigInteger s,
             JacobianG1BLS381 piA, JacobianG1BLS381 piB1) {
 
         JacobianG1BLS381 result = JacobianG1BLS381.INFINITY;
 
-        int hLen = Math.min(hCoeffs.length, Groth16ProvingKeyBLS381.count(pk.pointsH()));
+        int hLen = Math.min(hCoeffs.length, hReader.count());
         if (hLen > 0) {
             BigInteger[] hScalars = new BigInteger[hLen];
             System.arraycopy(hCoeffs, 0, hScalars, 0, hLen);
-            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsH(), hLen, hScalars));
+            result = result.add(PippengerFlatBLS381.msmReader(hReader, hLen, hScalars));
         }
 
         int numPrivate = witness.length - pk.numPublic() - 1;
-        if (numPrivate > 0 && Groth16ProvingKeyBLS381.count(pk.pointsL()) > 0) {
-            int lLen = Math.min(numPrivate, Groth16ProvingKeyBLS381.count(pk.pointsL()));
+        if (numPrivate > 0 && lReader.count() > 0) {
+            int lLen = Math.min(numPrivate, lReader.count());
             BigInteger[] lScalars = new BigInteger[lLen];
             System.arraycopy(witness, pk.numPublic() + 1, lScalars, 0, lLen);
-            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsL(), lLen, lScalars));
+            result = result.add(PippengerFlatBLS381.msmReader(lReader, lLen, lScalars));
         }
 
         result = result.add(piA.scalarMul(s));
