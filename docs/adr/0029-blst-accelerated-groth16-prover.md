@@ -1,10 +1,34 @@
 # ADR-0029: Groth16 Prover Performance — Memory (mmap) and Speed (blst / Vector API)
 
 ## Status
-Proposed
+Accepted (2026-07-07) — implementation started on `feat/adr_0029_prover_perf`.
 
 ## Date
 2026-07-07
+
+## Goals (this effort)
+
+1. **Benchmark-driven.** The **account-ownership CIP-1852 derivation proof** (~19M constraints) is
+   the running benchmark. After *each* milestone, generate that proof the new way and record
+   setup/prove time + peak (heap **and** native/file-backed) memory + verify result in the
+   **Benchmark log** section below.
+2. **Ship blst as a user-facing prover option** for speed (the `BLST` opt-in backend), not just a
+   Track-A internal.
+3. **Make the account-ownership usecase practical.** Once the derivation is provable, the on-chain
+   gate must verify a **real** ownership statement (a Groth16 proof of the CIP-1852 derivation),
+   replacing today's placeholder `Poseidon(secret, addr) == commitment` with its arbitrary,
+   enrollment-time `secret`.
+
+## Finding that reframed M1 (code check, 2026-07-07)
+
+The prover is **already Montgomery long-limb**, not `BigInteger`-based: `MontFp381` (6×64-bit limbs,
+BLS12-381 Fp) exists and `JacobianG1BLS381` uses it; `BigInteger` only appears at boundaries
+(conversions, scalar inputs). So "BigInteger → long[]" is **already done**. The actual bottleneck is
+**immutable per-operation object allocation**: `MontFp381` is an immutable value object and every
+field/point op returns a *new* object — an MSM over ~50M points allocates hundreds of millions of
+short-lived objects, which is the memory ceiling (GC working set + object headers), not the
+representation. **A1 is therefore reframed** from "change representation" to "eliminate per-op
+allocation + pack storage" (below).
 
 > **Scope: the PROVER only.** Verification is a fixed, tiny cost — ~3–4 pairings + one scalar-mul
 > per public input, *independent of circuit size* — so the pure-Java `Groth16BLS12381Verifier` is
@@ -50,11 +74,13 @@ provenance**, and **GraalVM native-image** requires `jni-config` + the `libblst.
 
 **Two independent axes.** Prover cost has *two* separable problems, and they need *different* levers:
 
-- **Memory** — the ~150 GB at 2²⁵ is largely JVM object bloat (`BigInteger` coords, point objects,
-  GC headroom). Fixed by **compact representation** + **`mmap`-ing the read-only proving key** from a
-  file so only the working set is RAM-resident. *This is what makes a big proof `fit`.*
-- **Speed** — the arithmetic throughput of MSM/FFT. Fixed by **native asm (blst)** or, JNI-free, by
-  **packed-limb arithmetic + the Java Vector API (SIMD)**. *This is what makes a proof `fast`.*
+- **Memory** — the ~150 GB at 2²⁵ is JVM object bloat: **immutable per-op `MontFp381`/point object
+  allocation** + GC headroom (the arithmetic is *already* Montgomery long-limb; see the finding
+  above). Fixed by **allocation-free flat `long[]` storage** + **`mmap`-ing the read-only proving
+  key** so only the working set is RAM-resident. *This is what makes a big proof `fit`.*
+- **Speed** — the arithmetic throughput of MSM/FFT. The Montgomery kernels already exist; speed comes
+  from **removing allocation/GC**, then **native asm (blst)** or, JNI-free, the **Java Vector API
+  (SIMD)** on the packed limbs. *This is what makes a proof `fast`.*
 
 `mmap` (memory) composes with *either* speed backend. And AOT/native-image is **not** a speed lever:
 for a minutes-to-hours numeric hot loop a warm JVM JIT matches or beats native image (startup and
@@ -126,13 +152,16 @@ shipping five parallel backends as a maintenance tax:
 
 ## Track A — pure-Java, native-image-clean
 
-### A1. Packed `long[]` Montgomery arithmetic (the prerequisite, biggest single win)
+### A1. Allocation-lean MSM/point path + flat packed storage (the prerequisite, biggest single win)
 
-Replace the prover's `BigInteger`-backed Fp/Fr and point representations with packed `long[]` limbs
-(Montgomery form) and **in-place, allocation-free** field/point ops (reused mutable buffers). This
-alone is ~5–10× (specialization + near-zero GC), shrinks resident memory dramatically, and is the
-representation `mmap` and SIMD both build on. Differential-tested against the frozen `BigInteger`
-path (identical field/point results).
+The Montgomery long-limb *math* already exists (`MontFp381`/`MontFp2_381` + their `montMul` kernels
+and the BN254 `MontFp254` pattern) — A1 does **not** rewrite it. A1 removes the **allocation**: extract
+the montMul/add/sub kernels to operate on `long[]` at offsets, and rework the MSM (`PippengerBLS381`),
+the point add/double hot loop, and proving-key storage to use **flat struct-of-arrays `long[]`**
+(6 longs per Fp, contiguous) with **in-place ops on reused scratch buffers** — no per-op `MontFp381`
+/ `JacobianG1BLS381` allocation. This is the win: near-zero GC, a compact PK (no object headers →
+`mmap`-able), same arithmetic. The immutable `MontFp381`/`JacobianG1BLS381` classes stay as the clean
+public API **and the frozen bit-identical oracle**; the packed path is validated against them.
 
 ### A2. Java Vector API (SIMD) for field multiply
 
@@ -219,7 +248,8 @@ Track A first (feasibility + native-image), then the shared `mmap`, then Track B
 
 | # | Track | Scope | Validation |
 |---|-------|-------|-----------|
-| **M1** | A | Packed `long[]` Montgomery Fp/Fr + point ops, allocation-free | differential vs frozen `BigInteger` path — identical field/point results over random + edge |
+| **M0** | — | **Benchmark harness**: build the derivation circuit → setup → prove → verify, report constraints / setup+prove time / peak heap+native memory; scalable to sub-sizes | baseline captured (current prover; note where it hits the wall) |
+| **M1** | A | Allocation-lean MSM/point path + flat `long[]` PK storage (reuse existing Montgomery kernels) | differential vs frozen `MontFp381`/`JacobianG1BLS381` oracle — identical points over random + edge; benchmark delta |
 | **M2** | A | Rework MSM/FFT onto the packed representation; benchmark | bit-identical proof vs `BigInteger` prover; prove-time + memory delta |
 | **M3** | A | Java Vector API (SIMD) field multiply (behind a flag) | identical results; **measure** the real speedup (validate/kill the ~1.5–3× estimate) |
 | **M4** | shared | `mmap` the read-only PK (single-pass Pippenger; `Arena`/`MemorySegment`) | identical proof; run a 2²⁵ proof on a modest-RAM box; report resident RAM vs file size |
@@ -277,6 +307,15 @@ Per-milestone branch → the integration branch; the pure-Java `BigInteger` refe
    ship it only if the number is real.
 6. **`mmap` thrashing** if the working set ≫ RAM on slow storage. *Mitigation:* single-pass Pippenger
    (M4) so each PK point is paged once; require NVMe/SSD; treat it as a memory↔time dial, not free.
+
+## Benchmark log
+
+The account-ownership CIP-1852 derivation proof, measured after each milestone (Goal 1). Filled in
+as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64 GB target.
+
+| milestone | backend | circuit (constraints) | setup time | prove time | peak RAM | verify | notes |
+|---|---|---|---|---|---|---|---|
+| M0 baseline | pure-Java (current) | derivation (~19M) | — | — | — | — | to be captured |
 
 ## References
 
