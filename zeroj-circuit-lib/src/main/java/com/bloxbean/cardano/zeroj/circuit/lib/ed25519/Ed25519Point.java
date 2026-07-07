@@ -89,10 +89,14 @@ public final class Ed25519Point {
     }
 
     /**
-     * Fixed-base scalar multiplication {@code Σ bit_i · [2^i]·B}. {@code scalarBits} are LSB-first
-     * and each is asserted boolean. Uses precomputed doublings of B (no in-circuit doublings).
+     * Bit-by-bit fixed-base scalar multiplication {@code Σ bit_i · [2^i]·B} (one conditional add per
+     * scalar bit). <b>Reference implementation only</b> — production code should use the ~4× cheaper
+     * {@link #scalarMulFixedBaseBWindowed}. This is retained, package-private, as the differential
+     * oracle the windowed method is validated against (ADR-0028 pillar 1: keep the deterministic
+     * reference); it is intentionally not part of the public API so no circuit calls the slow path
+     * by accident.
      */
-    public static Ed25519Point scalarMulFixedBaseB(CircuitAPI api, Variable[] scalarBits) {
+    static Ed25519Point scalarMulFixedBaseB(CircuitAPI api, Variable[] scalarBits) {
         Ed25519Host.Affine[] table = Ed25519Host.precompDoublingsOfB(scalarBits.length);
         Ed25519Point acc = identity(api);
         for (int i = 0; i < scalarBits.length; i++) {
