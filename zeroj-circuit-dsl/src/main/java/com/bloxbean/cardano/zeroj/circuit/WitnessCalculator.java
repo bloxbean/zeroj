@@ -98,6 +98,31 @@ public final class WitnessCalculator {
                                 ? BigInteger.ZERO : inputVal.modInverse(p);
                     };
                 }
+
+                case Gate.HintN(var hOut, var kind, var hIn, var params) -> {
+                    switch (kind) {
+                        case MUL_MOD_REDUCE -> {
+                            BigInteger modulus = params[0];
+                            int radixBits = params[1].intValueExact();
+                            int numLimbs = params[2].intValueExact();
+                            BigInteger mask = BigInteger.ONE.shiftLeft(radixBits).subtract(BigInteger.ONE);
+                            BigInteger aVal = BigInteger.ZERO, bVal = BigInteger.ZERO;
+                            for (int i = 0; i < numLimbs; i++) {
+                                aVal = aVal.add(witness[hIn[i].id()].shiftLeft(radixBits * i));
+                                bVal = bVal.add(witness[hIn[numLimbs + i].id()].shiftLeft(radixBits * i));
+                            }
+                            BigInteger prod = aVal.multiply(bVal);
+                            BigInteger q = prod.divide(modulus);
+                            BigInteger r = prod.mod(modulus);
+                            for (int i = 0; i < numLimbs; i++) {
+                                witness[hOut[i].id()] = q.and(mask);
+                                q = q.shiftRight(radixBits);
+                                witness[hOut[numLimbs + i].id()] = r.and(mask);
+                                r = r.shiftRight(radixBits);
+                            }
+                        }
+                    }
+                }
             }
         }
 

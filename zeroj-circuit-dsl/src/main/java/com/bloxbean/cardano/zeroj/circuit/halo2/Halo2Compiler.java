@@ -112,6 +112,7 @@ public final class Halo2Compiler {
 
                 // Hints and BitDecompose don't create gates
                 case Gate.Hint(_, _, _) -> {}
+                case Gate.HintN(_, _, _, _) -> {}
                 case Gate.BitDecompose(_, _, _) -> {}
             }
         }

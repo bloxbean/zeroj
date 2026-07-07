@@ -165,6 +165,10 @@ public final class PlonKCompiler {
                 case Gate.Hint(var out, var type, var input) -> {
                     // Hints don't create gates
                 }
+
+                case Gate.HintN(var outputs, var kind, var inputs, var params) -> {
+                    // Hints don't create gates
+                }
             }
         }
 

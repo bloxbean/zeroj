@@ -1,9 +1,12 @@
 # ADR-0028: Circuit-DSL Optimization — Fixed-Base Windowing, Lazy Reduction, and a Hint-Soundness Contract
 
 ## Status
-Proposed — Phase A (windowing) and Phase B (lazy reduction) **done and validated** (combined ~6×
-on Ed25519 scalar mult: ~29M → ~4.7M); Phase C (hints + CRT mul) **queued** with an
-implementation-ready spec, gated on the soundness tests + external audit.
+Proposed — Phase A (windowing) + Phase B (lazy reduction) **done and validated** (combined ~6× on
+Ed25519 scalar mult: ~29M → ~4.7M). Phase C (hint/CRT mul) **implemented + soundness-tested** (a
+correct, sound `mulHint`, ~1.7× on an isolated reduced-operand mul) but **audit-gated and default
+off**; Phase D found it **does not compound with Phase B** for Ed25519 (canonicalization negates
+lazy reduction — point-add regresses), so the net at-scale win here is **Phase A+B (~6×)**, with
+the hint mul kept as a validated primitive pending a loose-operand generalization + external audit.
 
 ## Date
 2026-07-07
@@ -99,7 +102,8 @@ constraints. Gated on the soundness negative tests (pillar 2), the integer-ident
 |---|-------|-----------|--------|
 | **A** | Fixed-base windowing for Ed25519 scalar mult | ✅ **DONE** — `Ed25519Point.scalarMulFixedBaseBWindowed` + `Ed25519WindowedTest`; result **bit-identical** to the deterministic `scalarMulFixedBaseB` and to BouncyCastle over edge + random scalars, w∈{1,2,3,4,5}, on BN254 & BLS12-381. **Measured (32-bit): w=4 → 3.97×, w=5 → 4.51×** fewer constraints (⇒ 255-bit scalar mult ~29M → ~7M at w=4). | **DONE** |
 | **B** | `Fe25519` magnitude bounds + lazy reduction | ✅ **DONE** — `Fe25519` overflow tracking + `addLazy`/`subLazy` + loose-operand `mul` (reduced path bit-identical, still 8,051); `Ed25519Point.add` switched to lazy. `Fe25519LazyTest` validates vs `BigInteger` incl. high-overflow chains past the mul reduce-backstop and canonical on overflow-9 accumulators; Ed25519 point-add vs BouncyCastle and the full ~90M CIP-1852 derivation vs cardano-client still exact. **point-add 107k → 73,859 (~1.45×)**; combined A+B: 255-bit scalar mult ~29M → ~4.7M. | **DONE** |
-| **C** | General trusted hints + CRT non-native mul | soundness negative tests (mutate hints → reject) + integer-identity argument + audit | **QUEUED** — implementation spec ready: [`0028-phaseC-hints-crt-mul-plan.md`](0028-phaseC-hints-crt-mul-plan.md). Not implemented until the under-constraint tests + external audit clear (pillars 2, 4, 5). |
+| **C** | General trusted hints + CRT non-native mul | soundness negative tests (mutate hints → reject) + integer-identity argument + audit | **IMPLEMENTED, audit-gated** — general `Gate.HintN`/`HintKind.MUL_MOD_REDUCE` in the DSL + `Fe25519.mulHint`/`mulFromQR` (integer-identity carry check). `Fe25519HintTest`: differential vs deterministic `mul` + `BigInteger`, and the **soundness suite passes** (every ±1 limb mutation, non-canonical `r=r+p`, swapped limbs → rejected). **mulHint = 4,751 vs 8,051 (~1.7× isolated).** Default off (`USE_HINT_MUL=false`); external audit still required. Spec: [`0028-phaseC-hints-crt-mul-plan.md`](0028-phaseC-hints-crt-mul-plan.md). |
+| **D** | Wire hint mul into the derivation + measure | full-path pkh unchanged; real Groth16 proof at reduced size | **DONE (with a negative result)** — `Ed25519HintMulPhaseDTest`: the hint scalar mult is correct (validated vs host), but **point-add gets *worse* with hint mul (73,859 → 94,223, 0.78×)** — `mulHint` canonicalizes operands, negating Phase B's lazy reduction. Realizing a net Ed25519 win needs a **loose-operand** `mulHint` (accept overflow, 6-limb `q`, re-bounded identity check) — additional audit-scoped work. Deterministic path stays default. |
 | **D** | Switch the derivation circuit to the optimized gadgets; re-validate vs cardano-client; measure end-to-end reduction; provability check | full-path pkh unchanged; real Groth16 proof at reduced size | planned |
 
 Per-milestone branch → the `feat/adr_0028_dsl_optimizations` integration branch, with a review per
