@@ -100,15 +100,46 @@ class Cip1852DerivationTest {
     @Test
     @EnabledIfSystemProperty(named = "zeroj.heavy", matches = "true")
     void constraintCount_fullPath_reported() {
-        var builder = CircuitBuilder.create("cip1852-cost");
-        for (int i = 0; i < 32; i++) builder.secretVar("kL" + i).secretVar("kR" + i).secretVar("cc" + i);
-        builder.define(api -> {
-            Variable[] kL = new Variable[32], kR = new Variable[32], cc = new Variable[32];
-            for (int i = 0; i < 32; i++) { kL[i] = api.var("kL" + i); kR[i] = api.var("kR" + i); cc[i] = api.var("cc" + i); }
-            Cip1852Derivation.paymentKeyHash(api, kL, kR, cc, 0, 0, 0);
-        });
-        int c = builder.compileR1CS(CurveId.BN254).numConstraints();
-        System.out.println("[ADR-0028] full CIP-1852 derivation (windowed, deterministic mul) constraints = " + c);
+        System.out.println("[ADR-0028] full CIP-1852 derivation constraints:");
+        System.out.println("    windowed + deterministic mul + Fermat inverse = " + fullPathConstraints(false, false));
+        System.out.println("    + hint inverse                                = " + fullPathConstraints(false, true));
+        System.out.println("    + hint inverse + hint mul                     = " + fullPathConstraints(true, true));
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "zeroj.heavy", matches = "true")
+    void fullPath_withHints_stillMatchesCardanoClient() {
+        boolean pm = com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL;
+        boolean pi = com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE;
+        try {
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL = true;
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE = true;
+            fullPath_paymentKeyHash_matchesCardanoClient(); // same assertion, now with both hints on
+            System.out.println("[ADR-0028] full derivation with hint mul + hint inverse validated vs cardano-client");
+        } finally {
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL = pm;
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE = pi;
+        }
+    }
+
+    private static int fullPathConstraints(boolean hintMul, boolean hintInv) {
+        boolean pm = com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL;
+        boolean pi = com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE;
+        try {
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL = hintMul;
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE = hintInv;
+            var builder = CircuitBuilder.create("cip1852-cost-" + hintMul + "-" + hintInv);
+            for (int i = 0; i < 32; i++) builder.secretVar("kL" + i).secretVar("kR" + i).secretVar("cc" + i);
+            builder.define(api -> {
+                Variable[] kL = new Variable[32], kR = new Variable[32], cc = new Variable[32];
+                for (int i = 0; i < 32; i++) { kL[i] = api.var("kL" + i); kR[i] = api.var("kR" + i); cc[i] = api.var("cc" + i); }
+                Cip1852Derivation.paymentKeyHash(api, kL, kR, cc, 0, 0, 0);
+            });
+            return builder.compileR1CS(CurveId.BN254).numConstraints();
+        } finally {
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL = pm;
+            com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE = pi;
+        }
     }
 
     private HdKeyPair derivePath(byte[] entropy, long account, long role, long index) {

@@ -67,6 +67,15 @@ public sealed interface Gate {
          * r-limbs where {@code a·b = q·modulus + r}, {@code 0 <= r < modulus}. The hint is
          * unconstrained here — the caller MUST range-check q,r and enforce the identity + r<modulus.
          */
-        MUL_MOD_REDUCE
+        MUL_MOD_REDUCE,
+
+        /**
+         * Non-native modular inverse advice for {@code a^{-1} mod m}. Layout — params:
+         * {@code [modulus, radixBits, numLimbs]}; inputs: {@code numLimbs} a-limbs; outputs:
+         * {@code numLimbs} limbs of {@code a^{-1} mod m} (0 if a is not invertible). Unconstrained
+         * here — the caller MUST enforce {@code a · a^{-1} == 1 (mod m)} (and range/canonical checks),
+         * which uniquely pins the inverse for {@code a != 0}.
+         */
+        INV_MOD
     }
 }
