@@ -65,14 +65,17 @@ public final class Ed25519Point {
      * </pre>
      */
     public Ed25519Point add(Ed25519Point o) {
-        Fe25519 a = y.sub(x).mul(o.y.sub(o.x));
-        Fe25519 b = y.add(x).mul(o.y.add(o.x));
+        // Lazy field ops (ADR-0028 Phase B): the intermediate adds/subs skip normalization and let
+        // the surrounding muls absorb the loosely-reduced operands (overflow stays ≤ 2 here).
+        Fe25519 a = y.subLazy(x).mul(o.y.subLazy(o.x));
+        Fe25519 b = y.addLazy(x).mul(o.y.addLazy(o.x));
         Fe25519 c = t.mul(twoD(api)).mul(o.t);
-        Fe25519 d = z.mul(o.z).add(z.mul(o.z)); // Z1·2·Z2 = Z1Z2 + Z1Z2
-        Fe25519 e = b.sub(a);
-        Fe25519 f = d.sub(c);
-        Fe25519 g = d.add(c);
-        Fe25519 h = b.add(a);
+        Fe25519 zz = z.mul(o.z);
+        Fe25519 d = zz.addLazy(zz); // Z1·2·Z2
+        Fe25519 e = b.subLazy(a);
+        Fe25519 f = d.subLazy(c);
+        Fe25519 g = d.addLazy(c);
+        Fe25519 h = b.addLazy(a);
         return new Ed25519Point(api, e.mul(f), g.mul(h), f.mul(g), e.mul(h));
     }
 
@@ -98,6 +101,56 @@ public final class Ed25519Point {
             acc = select(api, scalarBits[i], added, acc);
         }
         return acc;
+    }
+
+    /**
+     * Fixed-base windowed scalar multiplication {@code k·B} (ADR-0028 Phase A). Processes
+     * {@code windowBits} scalar bits per step against per-window precomputed tables
+     * {@code table_j[v] = (v · 2^{w·j}) · B} (compile-time constants), selecting the window multiple
+     * with a binary MUX tree and performing <b>one point-add per window</b> — {@code ⌈n/w⌉} adds
+     * instead of {@code n}. Result is identical to {@link #scalarMulFixedBaseB}; the base point is a
+     * compile-time constant, so only the runtime adds + tiny MUX cost constraints.
+     *
+     * @param windowBits window size (e.g. 4 → ~4× fewer adds). Must be ≥ 1.
+     */
+    public static Ed25519Point scalarMulFixedBaseBWindowed(CircuitAPI api, Variable[] scalarBits, int windowBits) {
+        if (windowBits < 1 || windowBits > 16)
+            throw new IllegalArgumentException("windowBits must be in [1, 16], got " + windowBits);
+        int n = scalarBits.length;
+        for (Variable b : scalarBits) api.assertBoolean(b);
+
+        Ed25519Point acc = identity(api);
+        int numWindows = (n + windowBits - 1) / windowBits;
+        for (int j = 0; j < numWindows; j++) {
+            int lo = j * windowBits;
+            int w = Math.min(windowBits, n - lo);           // last window may be narrower
+            Variable[] bits = new Variable[w];
+            System.arraycopy(scalarBits, lo, bits, 0, w);
+
+            // table[v] = (v · 2^{w·j}) · B for v = 0..2^w-1 (v=0 is the identity).
+            int size = 1 << w;
+            Ed25519Point[] table = new Ed25519Point[size];
+            for (int v = 0; v < size; v++) {
+                java.math.BigInteger scalar = java.math.BigInteger.valueOf(v).shiftLeft(lo);
+                table[v] = (v == 0) ? identity(api)
+                        : constant(api, Ed25519Host.scalarMulBase(scalar));
+            }
+            Ed25519Point selected = muxTree(api, table, bits);
+            acc = acc.add(selected);
+        }
+        return acc;
+    }
+
+    /** Select {@code table[Σ bits[i]·2^i]} via a binary MUX tree (bits LSB-first). */
+    private static Ed25519Point muxTree(CircuitAPI api, Ed25519Point[] table, Variable[] bits) {
+        if (bits.length == 0) return table[0];
+        int half = table.length / 2;
+        Variable[] lower = new Variable[bits.length - 1];
+        System.arraycopy(bits, 0, lower, 0, lower.length);
+        Ed25519Point loHalf = muxTree(api, java.util.Arrays.copyOfRange(table, 0, half), lower);
+        Ed25519Point hiHalf = muxTree(api, java.util.Arrays.copyOfRange(table, half, table.length), lower);
+        // top bit selects between the high and low halves of the index range.
+        return select(api, bits[bits.length - 1], hiHalf, loHalf);
     }
 
     /**

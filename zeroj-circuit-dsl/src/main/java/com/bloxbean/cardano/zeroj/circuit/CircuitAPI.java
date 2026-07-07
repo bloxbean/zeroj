@@ -120,6 +120,20 @@ public interface CircuitAPI {
         return var(name);
     }
 
+    // --- Advice / hints (ADR-0028 Phase C) ---
+
+    /**
+     * Request {@code numOutputs} prover-advice values computed by the enumerated trusted-core
+     * {@code kind} from {@code inputs} and {@code params}. The returned variables are
+     * <b>unconstrained</b> — the caller MUST add constraints that fully pin them down; soundness
+     * lives entirely in those constraints, not in the hint. Creates no constraints itself.
+     *
+     * <p>Default implementation throws; DSL implementations that support advice override it.</p>
+     */
+    default Variable[] hintN(Gate.HintKind kind, java.math.BigInteger[] params, int numOutputs, Variable[] inputs) {
+        throw new UnsupportedOperationException("hintN not supported by this CircuitAPI implementation");
+    }
+
     // --- Field expectation (checked at compile/witness time) ---
 
     /**

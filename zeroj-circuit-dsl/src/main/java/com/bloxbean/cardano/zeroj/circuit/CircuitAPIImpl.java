@@ -53,6 +53,14 @@ class CircuitAPIImpl implements CircuitAPI {
         return v;
     }
 
+    @Override
+    public Variable[] hintN(Gate.HintKind kind, java.math.BigInteger[] params, int numOutputs, Variable[] inputs) {
+        var outputs = new Variable[numOutputs];
+        for (int i = 0; i < numOutputs; i++) outputs[i] = newIntermediate();
+        gates.add(new Gate.HintN(outputs, kind, inputs.clone(), params.clone()));
+        return outputs;
+    }
+
     ConstraintGraph buildGraph(String name) {
         return new ConstraintGraph(name, gates, oneWire, publicInputs, secretInputs,
                 intermediateVars, nextId, expectedField);
