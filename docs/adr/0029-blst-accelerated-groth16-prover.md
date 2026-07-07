@@ -321,6 +321,14 @@ as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64
 | M2b flat PK | + flat G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK 18 GB** (was ~31 GB as objects) | — | G1 PK is now a flat `long[]` blob (**mmap-able**, M4). Measured PK = 36 MB @ 2¹⁶ → **18 GB @ 2²⁵**. |
 | M4 mmap PK | + mmap'd G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK off-heap** (page cache) | ✓ bit-identical | prover reads the G1 key from an mmap'd file (`Arena`/`MemorySegment`); unblinded mmap-prove == heap-prove bit-for-bit. The ~18 GB key no longer counts against `-Xmx`, so JVM-heap prove footprint drops to the transient working set (FFT arrays) → **fits 16–32 GB**. Auto-engages when the key exceeds a heap fraction. |
 
+| M2c flat FFT | + flat Fr FFT | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | transients ~1.5× smaller | ✓ bit-identical | `computeH`'s 6 domain-size Fr arrays are now flat `long[]` via `FrFFTFlat`/`FrArith381` (no `MontFr381[]` object churn). Proofs unchanged. **Completes Track-A's memory story** (PK off-heap + lean transients). |
+
+**Track-A status (M1 + M2 + M4): the pure-Java, native-image-clean prover is done.** Speed: prove
+1.47×, setup 1.7×. Memory: the ~18 GB key is off-heap (mmap), the FFT transients are flat and
+~1.5× smaller — so the 2²⁵ derivation's on-heap footprint is the small flat working set, **provable
+on a 16–32 GB box in pure Java, no JNI**. Remaining: M3 (Vector API speed, measured), M5 (the real
+end-to-end 2²⁵ run — an hours-long job), and the blst backend / G2-flat as further speed.
+
 **M4 finding.** With the flat G1 key `mmap`'d, the JVM heap no longer holds the proving key — it sits
 in off-heap file-backed memory (OS page cache). So the on-heap prove footprint at 2²⁵ collapses to
 the transient FFT working arrays (M2c will shrink those too). Combined with the M2b memory-metric
