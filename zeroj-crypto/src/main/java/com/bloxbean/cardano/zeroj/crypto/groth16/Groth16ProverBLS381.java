@@ -6,7 +6,7 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
-import com.bloxbean.cardano.zeroj.crypto.msm.PippengerBLS381;
+import com.bloxbean.cardano.zeroj.crypto.msm.PippengerFlatBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
@@ -146,7 +146,7 @@ public final class Groth16ProverBLS381 {
             BigInteger[] scalars = new BigInteger[n];
             System.arraycopy(pk.pointsA(), 0, points, 0, n);
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerBLS381.msm(points, scalars));
+            result = result.add(PippengerFlatBLS381.msm(points, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(r));
@@ -216,7 +216,7 @@ public final class Groth16ProverBLS381 {
             BigInteger[] scalars = new BigInteger[n];
             System.arraycopy(pk.pointsB1(), 0, points, 0, n);
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerBLS381.msm(points, scalars));
+            result = result.add(PippengerFlatBLS381.msm(points, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(s));
@@ -236,7 +236,7 @@ public final class Groth16ProverBLS381 {
             BigInteger[] hScalars = new BigInteger[hLen];
             System.arraycopy(pk.pointsH(), 0, hPoints, 0, hLen);
             System.arraycopy(hCoeffs, 0, hScalars, 0, hLen);
-            result = result.add(PippengerBLS381.msm(hPoints, hScalars));
+            result = result.add(PippengerFlatBLS381.msm(hPoints, hScalars));
         }
 
         int numPrivate = witness.length - pk.numPublic() - 1;
@@ -246,7 +246,7 @@ public final class Groth16ProverBLS381 {
             BigInteger[] lScalars = new BigInteger[lLen];
             System.arraycopy(pk.pointsL(), 0, lPoints, 0, lLen);
             System.arraycopy(witness, pk.numPublic() + 1, lScalars, 0, lLen);
-            result = result.add(PippengerBLS381.msm(lPoints, lScalars));
+            result = result.add(PippengerFlatBLS381.msm(lPoints, lScalars));
         }
 
         result = result.add(piA.scalarMul(s));
