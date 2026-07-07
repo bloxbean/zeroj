@@ -173,86 +173,91 @@ public final class Fe25519 {
     // Hint-based multiplication (ADR-0028 Phase C — AUDIT-GATED)
     // ------------------------------------------------------------------
 
-    // Constant limbs of p, the subtraction-free product-check offset, and the target digits of
-    // OFF·S (S = Σ_{k=0}^{8} 2^{51k}) for the integer-identity carry chain.
+    // Hint-mul parameters (loose-operand version — ADR-0028 Phase C.2).
+    static final int HINT_MAX_OVERFLOW = 2;                       // operand overflow accepted directly
+    private static final int HINT_AB_BITS = LIMB_BITS + HINT_MAX_OVERFLOW; // a,b limb range-check (53)
+    static final int HINT_Q_LIMBS = 6;                           // q up to ~2^260 for overflow-2 operands
+    private static final int MUL_COLUMNS = HINT_Q_LIMBS + LIMBS - 1;       // 10 (q·p spans 0..9)
     private static final long[] P_LIMB = new long[LIMBS];
-    private static final BigInteger MUL_OFFSET = BigInteger.ONE.shiftLeft(106); // ≥ max column of q·p+r
-    private static final BigInteger[] TARGET_DIGIT = new BigInteger[2 * LIMBS - 1];
+    private static final BigInteger MUL_OFFSET = BigInteger.ONE.shiftLeft(110); // ≥ max column (~2^104.3)
+    private static final BigInteger[] TARGET_DIGIT = new BigInteger[MUL_COLUMNS];
     private static final BigInteger TARGET_HIGH;
-    private static final int MUL_CHECK_WIDTH = 112; // > max (column + carry) ≈ 2^108
+    private static final int MUL_CHECK_WIDTH = 116;              // > max (column + carry) ≈ 2^110.5
     static {
         for (int i = 0; i < LIMBS; i++) P_LIMB[i] = P.shiftRight(LIMB_BITS * i).and(LIMB_MASK).longValueExact();
         BigInteger s = BigInteger.ZERO;
-        for (int k = 0; k < 2 * LIMBS - 1; k++) s = s.add(BigInteger.ONE.shiftLeft(LIMB_BITS * k));
+        for (int k = 0; k < MUL_COLUMNS; k++) s = s.add(BigInteger.ONE.shiftLeft(LIMB_BITS * k));
         BigInteger target = MUL_OFFSET.multiply(s);
-        for (int k = 0; k < 2 * LIMBS - 1; k++) TARGET_DIGIT[k] = target.shiftRight(LIMB_BITS * k).and(LIMB_MASK);
-        TARGET_HIGH = target.shiftRight(LIMB_BITS * (2 * LIMBS - 1));
+        for (int k = 0; k < MUL_COLUMNS; k++) TARGET_DIGIT[k] = target.shiftRight(LIMB_BITS * k).and(LIMB_MASK);
+        TARGET_HIGH = target.shiftRight(LIMB_BITS * MUL_COLUMNS);
     }
 
     /**
      * (this * other) mod p using prover-supplied advice (ADR-0028 Phase C). The prover supplies the
      * quotient/remainder of the integer product via a {@link Gate.HintKind#MUL_MOD_REDUCE} hint;
      * {@link #mulFromQR} then range-checks them, forces {@code r < p}, and enforces
-     * {@code a·b = q·p + r} <b>over the integers</b>. Operands are canonicalized ({@code < p}) so
-     * {@code q} fits 5 limbs.
+     * {@code a·b = q·p + r} <b>over the integers</b>.
      *
-     * <p><b>AUDIT-GATED (ADR-0028 pillar 5):</b> the hint path is not yet audited; it is behind an
-     * explicit opt-in and the deterministic {@link #mul} remains the default until an external audit
-     * of the integer-identity argument clears.</p>
+     * <p><b>Loose operands (Phase C.2):</b> accepts operands with overflow up to
+     * {@link #HINT_MAX_OVERFLOW} directly (no canonicalization — so it composes with Phase B's lazy
+     * reduction), using a {@value #HINT_Q_LIMBS}-limb quotient. Operands with larger overflow are
+     * reduced first.</p>
+     *
+     * <p><b>AUDIT-GATED (ADR-0028 pillar 5):</b> the hint path is behind {@link #USE_HINT_MUL}
+     * (default off); the deterministic {@link #mul} remains the default until an external audit of
+     * the integer-identity argument clears.</p>
      */
     public Fe25519 mulHint(Fe25519 other) {
-        Variable[] a = this.canonical().limbs;
-        Variable[] b = other.canonical().limbs;
+        Variable[] a = (this.overflow > HINT_MAX_OVERFLOW) ? this.reduce().limbs : this.limbs;
+        Variable[] b = (other.overflow > HINT_MAX_OVERFLOW) ? other.reduce().limbs : other.limbs;
         Variable[] inputs = new Variable[2 * LIMBS];
         System.arraycopy(a, 0, inputs, 0, LIMBS);
         System.arraycopy(b, 0, inputs, LIMBS, LIMBS);
-        BigInteger[] params = {P, BigInteger.valueOf(LIMB_BITS), BigInteger.valueOf(LIMBS)};
-        Variable[] hint = api.hintN(Gate.HintKind.MUL_MOD_REDUCE, params, 2 * LIMBS, inputs);
-        Variable[] q = slice(hint, 0, LIMBS);
-        Variable[] r = slice(hint, LIMBS, 2 * LIMBS);
+        BigInteger[] params = {P, BigInteger.valueOf(LIMB_BITS), BigInteger.valueOf(LIMBS), BigInteger.valueOf(HINT_Q_LIMBS)};
+        Variable[] hint = api.hintN(Gate.HintKind.MUL_MOD_REDUCE, params, HINT_Q_LIMBS + LIMBS, inputs);
+        Variable[] q = slice(hint, 0, HINT_Q_LIMBS);
+        Variable[] r = slice(hint, HINT_Q_LIMBS, HINT_Q_LIMBS + LIMBS);
         return mulFromQR(api, a, b, q, r);
     }
 
     /**
-     * Enforce {@code a·b = q·p + r} with {@code 0 ≤ r < p} for the given (already 51-bit) operand
-     * limbs and candidate {@code q, r}, returning {@code r} as the normalized product. Package-visible
-     * so soundness tests can feed <b>adversarial</b> {@code q, r} directly (the hint is bypassed) and
-     * assert rejection — the soundness of the whole scheme lives entirely in these constraints.
+     * Enforce {@code a·b = q·p + r} with {@code 0 ≤ r < p}, returning {@code r} as the normalized
+     * product. {@code a,b} are 5 limbs {@code < 2^53} (overflow ≤ {@link #HINT_MAX_OVERFLOW});
+     * {@code q} is {@value #HINT_Q_LIMBS} limbs; {@code r} is 5 limbs. Package-visible so soundness
+     * tests can feed <b>adversarial</b> {@code q, r} directly and assert rejection.
      *
-     * <p>Soundness rests on: (1) every {@code q, r} limb is range-checked to 51 bits, bounding each
-     * product column {@code < 2^106} so it never wraps the native field; (2) {@code r < p} makes the
-     * remainder unique; (3) the identity is checked <b>over the integers</b> — the carry chain keeps
-     * every intermediate {@code < 2^112 ≪ nativeP}, so a difference of any nonzero multiple of the
-     * native modulus cannot hide.</p>
+     * <p>Soundness: (1) all operand limbs are range-checked (a,b to {@value #HINT_AB_BITS} bits, q,r
+     * to 51) so {@code a·b} columns stay {@code < 2^108.4} and {@code q·p+r} columns {@code < 2^104.4}
+     * — bounding {@code dk = lhs+OFF−rhs > 0} and the carry-chain value {@code t < 2^110.4}; (2)
+     * {@code r < p} makes the remainder unique; (3) the identity is checked <b>over the integers</b>
+     * — every intermediate stays {@code < 2^110.4 ≪ nativeP} (≥143 bits of headroom), so no nonzero
+     * multiple of the native modulus can hide.</p>
      */
     static Fe25519 mulFromQR(CircuitAPI api, Variable[] a, Variable[] b, Variable[] q, Variable[] r) {
-        // Range-check ALL operands to 51 bits so the gadget is self-contained: the magnitude
-        // bounds the integer-identity check relies on (dk > 0, t < 2^112) require a,b limbs < 2^51,
-        // not just q,r. (mulHint already passes canonical() limbs; this hardens direct callers.)
-        for (Variable v : a) api.assertInRange(v, LIMB_BITS);
-        for (Variable v : b) api.assertInRange(v, LIMB_BITS);
+        for (Variable v : a) api.assertInRange(v, HINT_AB_BITS);
+        for (Variable v : b) api.assertInRange(v, HINT_AB_BITS);
         for (Variable v : q) api.assertInRange(v, LIMB_BITS);
         for (Variable v : r) api.assertInRange(v, LIMB_BITS);
         assertLessThanP(api, r);
 
         Variable zero = api.constant(0);
-        Variable[] lhs = new Variable[2 * LIMBS - 1];
-        Variable[] rhs = new Variable[2 * LIMBS - 1];
-        for (int k = 0; k < lhs.length; k++) { lhs[k] = zero; rhs[k] = zero; }
-        for (int i = 0; i < LIMBS; i++) {
-            for (int j = 0; j < LIMBS; j++) {
-                lhs[i + j] = api.add(lhs[i + j], api.mul(a[i], b[j]));              // a·b columns
-                rhs[i + j] = api.add(rhs[i + j], api.mul(q[i], api.constant(P_LIMB[j]))); // q·p columns
-            }
-        }
-        for (int k = 0; k < LIMBS; k++) rhs[k] = api.add(rhs[k], r[k]);            // + r
+        Variable[] lhs = new Variable[MUL_COLUMNS];
+        Variable[] rhs = new Variable[MUL_COLUMNS];
+        for (int k = 0; k < MUL_COLUMNS; k++) { lhs[k] = zero; rhs[k] = zero; }
+        for (int i = 0; i < LIMBS; i++)
+            for (int j = 0; j < LIMBS; j++)
+                lhs[i + j] = api.add(lhs[i + j], api.mul(a[i], b[j]));                 // a·b columns 0..8
+        for (int i = 0; i < HINT_Q_LIMBS; i++)
+            for (int j = 0; j < LIMBS; j++)
+                rhs[i + j] = api.add(rhs[i + j], api.mul(q[i], api.constant(P_LIMB[j]))); // q·p columns 0..9
+        for (int k = 0; k < LIMBS; k++) rhs[k] = api.add(rhs[k], r[k]);               // + r
 
         // Verify Σ_k (lhs[k] + OFF − rhs[k])·2^{51k} == OFF·S over the integers via a positive carry
-        // chain: each digit must equal OFF·S's digit and the final carry its high part.
+        // chain: each 51-bit digit must equal OFF·S's digit and the final carry its high part.
         Variable off = api.constant(MUL_OFFSET);
         Variable carry = zero;
-        for (int k = 0; k < 2 * LIMBS - 1; k++) {
-            Variable dk = api.sub(api.add(lhs[k], off), rhs[k]); // > 0, < 2^107
+        for (int k = 0; k < MUL_COLUMNS; k++) {
+            Variable dk = api.sub(api.add(lhs[k], off), rhs[k]); // > 0, < 2^110.4
             Variable t = api.add(dk, carry);
             Variable[] bits = api.toBinary(t, MUL_CHECK_WIDTH);
             Variable low = api.fromBinary(slice(bits, 0, LIMB_BITS));

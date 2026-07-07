@@ -34,11 +34,11 @@ class Ed25519HintMulPhaseDTest {
             int addDet = pointAddConstraints();
             Fe25519.USE_HINT_MUL = true;
             int addHint = pointAddConstraints();
-            // FINDING: hint mul is WORSE here — it canonicalizes operands, negating Phase B's lazy
-            // reduction (point-add muls receive loose operands the deterministic mul absorbs cheaply).
-            System.out.printf("[ADR-0028 D] Ed25519 point-add: deterministic=%d  hint=%d  (%.2fx — hint LOSES "
-                    + "in the lazy context; it needs a loose-operand generalization to help)%n",
+            // The loose-operand hint mul (Phase C.2) accepts lazy operands directly (no
+            // canonicalization), so it composes with Phase B and reduces point-add.
+            System.out.printf("[ADR-0028 D] Ed25519 point-add: deterministic=%d  hint=%d  (%.2fx)%n",
                     addDet, addHint, addDet / (double) addHint);
+            assertTrue(addHint < addDet, "loose-operand hint mul must reduce point-add (composes with lazy reduction)");
 
             // --- correctness: a full 255-bit windowed scalar mult with hint mul still == host ---
             Fe25519.USE_HINT_MUL = true;
