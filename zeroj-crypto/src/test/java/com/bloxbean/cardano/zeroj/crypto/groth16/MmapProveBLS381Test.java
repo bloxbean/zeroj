@@ -47,7 +47,7 @@ class MmapProveBLS381Test {
 
         // Heap prove (unblinded → deterministic)
         var heap = Groth16ProverBLS381.proveUnblindedWithReaders(
-                pk, Groth16ProverBLS381.heapReaders(pk), witness, constraints, domainSize);
+                pk, Groth16ProverBLS381.heapReaders(pk), com.bloxbean.cardano.zeroj.crypto.msm.G1MsmBackend.PURE_JAVA, witness, constraints, domainSize);
 
         // Write the 4 G1 key arrays to files, mmap, prove reading from the segments
         Path dir = Files.createTempDirectory("zeroj-pk-mmap");
@@ -63,7 +63,7 @@ class MmapProveBLS381Test {
                     new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(fb1, arena)),
                     new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(fh, arena)),
                     new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(fl, arena)));
-            var mmap = Groth16ProverBLS381.proveUnblindedWithReaders(pk, readers, witness, constraints, domainSize);
+            var mmap = Groth16ProverBLS381.proveUnblindedWithReaders(pk, readers, com.bloxbean.cardano.zeroj.crypto.msm.G1MsmBackend.PURE_JAVA, witness, constraints, domainSize);
 
             assertProofEquals(heap, mmap);
         } finally {
