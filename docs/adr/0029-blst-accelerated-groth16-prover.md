@@ -228,6 +228,29 @@ single batched-pippenger native call per MSM** (`blst_p1s_mult_pippenger`), whic
 So M6's next step is **Rung B via FFM**, not more Rung-A work. The spike did its job: it killed a
 path that would have wasted the wiring effort.
 
+### B0-result-2. Rung B built + measured (FFM) — 2.5–3.8× MSM, the real win
+
+Built a **custom Java-25 FFM binding** (`BlstFfm` loader + `BlstG1Msm`) that calls
+`blst_p1s_mult_pippenger` in **one native call per MSM** against the bundled `libblst` (raw
+`blst_*` symbols confirmed present). Differential-verified == pure-Java for batch sizes (n=2…300;
+n=1 falls back to `blst_p1_mult`, as pippenger is batch-only). Timing vs the pure-Java flat MSM:
+
+| n | pure-Java (ms) | **blst FFM (ms)** | speedup |
+|---|---|---|---|
+| 2¹⁶ | 1595 | **421** | **3.79×** |
+| 2¹⁸ | 3782 | **1497** | **2.53×** |
+
+**Conclusion: Rung B via FFM is worth wiring** (2.5–3.8× on G1 MSM vs ~1.0× for the per-op wrapper).
+The prover's four G1 MSMs dominate prove time, so this should translate to a large prove-time win on
+top of Track-A. Next: G2 MSM binding + wire behind the `ProverBackend` SPI (M7), then GraalVM FFM
+config (M9).
+
+> **libblst provenance:** the bundled binaries are currently lifted from the (old, 2023)
+> icon-foundation jar — **fine for validating the FFM binding** (the pippenger C ABI has been stable
+> for years), but **not for release**. For production, replace with a current `libblst` from blst's
+> official release or a **build-from-source CI matrix** (Linux/Mac/Windows × x86_64/aarch64) → one
+> all-platform `zeroj-blst` jar. The FFM binding is identical regardless of the binary version.
+
 ### B1. blst-backed MSM (the speed win)
 
 A `BlstMsmBLS381` producing G1/G2 multi-scalar multiplications. Two rungs:
