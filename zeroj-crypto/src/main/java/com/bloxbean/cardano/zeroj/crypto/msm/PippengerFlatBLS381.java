@@ -1,6 +1,9 @@
 package com.bloxbean.cardano.zeroj.crypto.msm;
 
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianArith381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.bls12381.field.MontFp381;
 
 import java.math.BigInteger;
 
@@ -86,6 +89,35 @@ public final class PippengerFlatBLS381 {
             }
             JacobianArith381.add(out, oo, out, oo, window, 0, s);
         }
+    }
+
+    /**
+     * Drop-in for {@link PippengerBLS381#msm}: packs {@code AffineG1[]} into flat storage, runs the
+     * allocation-lean MSM, and returns the result as a {@link JacobianG1BLS381}. Same result (see
+     * {@code PippengerFlatBLS381Test}), no per-op object churn in the MSM.
+     */
+    public static JacobianG1BLS381 msm(AffineG1[] points, BigInteger[] scalars) {
+        int n = points.length;
+        long[] affine = new long[n * AFF];
+        for (int i = 0; i < n; i++) {
+            AffineG1 p = points[i];
+            if (p.isInfinity()) continue; // leave (0,0)
+            System.arraycopy(p.x().toLimbs(), 0, affine, i * AFF, 6);
+            System.arraycopy(p.y().toLimbs(), 0, affine, i * AFF + 6, 6);
+        }
+        long[] out = new long[PL];
+        msm(out, 0, affine, n, scalars);
+        return toJacobian(out);
+    }
+
+    /** Flat Jacobian (18 longs) → {@link JacobianG1BLS381} (via affine; one Fp inverse). */
+    private static JacobianG1BLS381 toJacobian(long[] p) {
+        if (JacobianArith381.isInfinity(p, 0)) return JacobianG1BLS381.INFINITY;
+        MontFp381 x = MontFp381.fromMontLimbs(p[0], p[1], p[2], p[3], p[4], p[5]);
+        MontFp381 y = MontFp381.fromMontLimbs(p[6], p[7], p[8], p[9], p[10], p[11]);
+        MontFp381 z = MontFp381.fromMontLimbs(p[12], p[13], p[14], p[15], p[16], p[17]);
+        MontFp381 zi = z.inverse(), zi2 = zi.square(), zi3 = zi2.mul(zi);
+        return JacobianG1BLS381.fromAffine(x.mul(zi2), y.mul(zi3));
     }
 
     static int windowSize(int n) {
