@@ -317,7 +317,17 @@ as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64
 |---|---|---|---|---|---|---|---|
 | M0 baseline | pure-Java (current) | ~19M (2²⁵ domain) | ~32.6 h | ~3.2 h | ~384 GB | ✗ infeasible | extrapolated from 2¹⁶ (setup 3502 µs/c, prove 345 µs/c, 12 KB/c). **OOMs the 16–64 GB target.** |
 | M1 flat MSM | pure-Java + flat MSM | ~19M (2²⁵ domain) | ~32.3 h | ~2.2 h | ~389 GB | ✗ (memory) | prove **345 → 234 µs/c (1.47×)**; setup + peak heap unchanged (expected — M1 only touches the prover MSM). |
-| M2a fixed-base G1 | + G1 comb setup | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | ~371 GB | ✗ (memory) | setup **3502 → 2028 µs/c (1.7×)**; residual setup now dominated by G2 `pointsB2` (still object double-and-add). Memory unchanged (M2b/M4). |
+| M2a fixed-base G1 | + G1 comb setup | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | (see note) | — | setup **3502 → 2028 µs/c (1.7×)**; residual setup now dominated by G2 `pointsB2` (still object double-and-add). |
+| M2b flat PK | + flat G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK 18 GB** (was ~31 GB as objects) | — | G1 PK is now a flat `long[]` blob (**mmap-able**, M4). Measured PK = 36 MB @ 2¹⁶ → **18 GB @ 2²⁵**. |
+
+> **⚠ Memory-metric correction (M2b).** The M0/M1/M2a "peak RAM" column above (~384 GB) was a
+> **linear extrapolation of the 2¹⁶ sampled peak heap, which is ~90% fixed JVM baseline** — scaling
+> a fixed baseline 512× is simply wrong, and grossly overestimates. Measuring the real driver — the
+> **retained proving key** — gives **~18 GB flat at 2²⁵**. Adding prove transients (FFT working
+> arrays), the honest 2²⁵ prove footprint is on the order of **~30–50 GB, which already fits a 64 GB
+> box**; mmap-ing the flat PK (M4) drops resident RAM toward **~16–32 GB**. So the derivation is
+> far closer to feasible than M0's naive extrapolation implied — the "infeasible" verdict was a bad
+> metric, not reality. (The benchmark now reports PK size directly.)
 
 **M1 finding.** The allocation-lean flat MSM gives **1.47× on prove time** (less GC churn), proofs
 bit-identical. As predicted it does **not** move peak memory or setup — the proving-key *objects*

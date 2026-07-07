@@ -63,11 +63,11 @@ public final class Groth16SetupCache {
             SetupCacheIO.writeG2(out, pk.deltaG2());
             out.writeInt(pk.numPublic());
 
-            SetupCacheIO.writeG1Array(out, pk.pointsA());
-            SetupCacheIO.writeG1Array(out, pk.pointsB1());
+            SetupCacheIO.writeG1Array(out, Groth16ProvingKeyBLS381.toAffineArray(pk.pointsA()));
+            SetupCacheIO.writeG1Array(out, Groth16ProvingKeyBLS381.toAffineArray(pk.pointsB1()));
             SetupCacheIO.writeG2Array(out, pk.pointsB2());
-            SetupCacheIO.writeG1Array(out, pk.pointsH());
-            SetupCacheIO.writeG1Array(out, pk.pointsL());
+            SetupCacheIO.writeG1Array(out, Groth16ProvingKeyBLS381.toAffineArray(pk.pointsH()));
+            SetupCacheIO.writeG1Array(out, Groth16ProvingKeyBLS381.toAffineArray(pk.pointsL()));
 
             SetupCacheIO.writeG2(out, setup.gammaG2());
             SetupCacheIO.writeG1Array(out, setup.ic());
@@ -101,7 +101,9 @@ public final class Groth16SetupCache {
 
             var pk = new Groth16ProvingKeyBLS381(
                     alphaG1, betaG1, betaG2, deltaG1, deltaG2,
-                    pointsA, pointsB1, pointsB2, pointsH, pointsL, numPublic);
+                    Groth16ProvingKeyBLS381.flattenG1(pointsA), Groth16ProvingKeyBLS381.flattenG1(pointsB1),
+                    pointsB2, Groth16ProvingKeyBLS381.flattenG1(pointsH), Groth16ProvingKeyBLS381.flattenG1(pointsL),
+                    numPublic);
 
             return new Groth16SetupBLS381.SetupResult(pk, gammaG2, ic);
         });
@@ -112,11 +114,13 @@ public final class Groth16SetupCache {
             throw new IOException("Groth16 setup must not be null");
         }
         var pk = setup.provingKey();
-        validateGroth16SetupShape(pk.numPublic(), pk.pointsA(), pk.pointsB1(), pk.pointsB2(),
-                pk.pointsH(), pk.pointsL(), setup.ic());
+        var pA = Groth16ProvingKeyBLS381.toAffineArray(pk.pointsA());
+        var pB1 = Groth16ProvingKeyBLS381.toAffineArray(pk.pointsB1());
+        var pH = Groth16ProvingKeyBLS381.toAffineArray(pk.pointsH());
+        var pL = Groth16ProvingKeyBLS381.toAffineArray(pk.pointsL());
+        validateGroth16SetupShape(pk.numPublic(), pA, pB1, pk.pointsB2(), pH, pL, setup.ic());
         validateGroth16SetupPoints(pk.alphaG1(), pk.betaG1(), pk.betaG2(), pk.deltaG1(), pk.deltaG2(),
-                pk.pointsA(), pk.pointsB1(), pk.pointsB2(), pk.pointsH(), pk.pointsL(),
-                setup.gammaG2(), setup.ic());
+                pA, pB1, pk.pointsB2(), pH, pL, setup.gammaG2(), setup.ic());
     }
 
     private static void validateGroth16SetupShape(

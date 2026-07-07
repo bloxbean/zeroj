@@ -125,16 +125,18 @@ public final class Groth16SetupBLS381 {
         AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
         AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
 
-        // pointsA[s] = u_s(tau) * G1
-        AffineG1[] pointsA = new AffineG1[numWires];
+        // pointsA[s] = u_s(tau) * G1  (flat: 12 longs/point)
+        long[] pointsA = new long[numWires * Groth16ProvingKeyBLS381.G1_STRIDE];
         for (int s = 0; s < numWires; s++) {
-            pointsA[s] = us[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(us[s]);
+            Groth16ProvingKeyBLS381.writeG1(pointsA, s,
+                    us[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(us[s]));
         }
 
-        // pointsB1[s] = v_s(tau) * G1
-        AffineG1[] pointsB1 = new AffineG1[numWires];
+        // pointsB1[s] = v_s(tau) * G1  (flat)
+        long[] pointsB1 = new long[numWires * Groth16ProvingKeyBLS381.G1_STRIDE];
         for (int s = 0; s < numWires; s++) {
-            pointsB1[s] = vs[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(vs[s]);
+            Groth16ProvingKeyBLS381.writeG1(pointsB1, s,
+                    vs[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(vs[s]));
         }
 
         // pointsB2[s] = v_s(tau) * G2
@@ -145,12 +147,13 @@ public final class Groth16SetupBLS381 {
 
         // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
         int numPrivate = numWires - numPublic - 1;
-        AffineG1[] pointsL = new AffineG1[Math.max(0, numPrivate)];
+        long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
         for (int j = 0; j < numPrivate; j++) {
             int s = numPublic + 1 + j;
             BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
                     .multiply(deltaInv).mod(FR);
-            pointsL[j] = lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal);
+            Groth16ProvingKeyBLS381.writeG1(pointsL, j,
+                    lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal));
         }
 
         // H points: odd-indexed Lagrange basis on double-sized domain / delta
@@ -162,7 +165,7 @@ public final class Groth16SetupBLS381 {
         BigInteger zh2 = tauN2.subtract(BigInteger.ONE).mod(FR);
         BigInteger nInv2 = BigInteger.valueOf(domainSize2).modInverse(FR);
 
-        AffineG1[] pointsH = new AffineG1[domainSize];
+        long[] pointsH = new long[domainSize * Groth16ProvingKeyBLS381.G1_STRIDE];
         for (int i = 0; i < domainSize; i++) {
             int lagIdx = 2 * i + 1; // odd index
             // omega2^lagIdx
@@ -177,7 +180,8 @@ public final class Groth16SetupBLS381 {
                         .multiply(diff.modInverse(FR)).mod(FR);
             }
             BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
-            pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(hVal);
+            Groth16ProvingKeyBLS381.writeG1(pointsH, i,
+                    hVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(hVal));
         }
 
         // Verification key components: gamma_G2 and IC points

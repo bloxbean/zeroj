@@ -1,0 +1,15 @@
+Branch name
+
+  feat/adr_0027_realworld_crypto_gadgets
+
+  Since 0027 is an 8-milestone epic with a review gate per milestone (the ADR mandates that), I'd treat the above as the integration branch and cut per-milestone branches off
+  it:
+
+  feat/adr_0027_m1_sha512
+  feat/adr_0027_m4_nonnative_field
+  feat/adr_0027_m5_ed25519
+
+#1 — Which ADR is blst MSM wiring part of? It's not an implementation item in any ADR yet — it's a finding/recommendation in ADR-0027 M7 ("blst MSM is the top optimization;
+  the prover has no native path wired in today"). It belongs in its own ADR because it's a fundamentally different layer: A/B/C/E optimize the circuit (fewer constraints),
+  while blst-MSM optimizes the prover (faster proving of the same circuit) — it touches zeroj-crypto/zeroj-blst, not the DSL. That warrants ADR-0029 (blst-accelerated Groth16
+  prover). I can draft it, but flagging: it's a bigger, native-code effort, separate from the gadget work.
