@@ -145,9 +145,22 @@ public final class Fe25519 {
      */
     public static volatile boolean USE_HINT_MUL = false;
 
-    /** (this * other) mod p, normalized. */
+    /**
+     * ADR-0028 opt-in: when {@code true}, {@link Ed25519Point#encode}-style inversions route through
+     * the hint-based {@link #inverseHint} (~300× cheaper than the Fermat {@link #inverse}).
+     * <b>Audit-gated</b> like {@link #USE_HINT_MUL}, though the inverse hint is trivially sound
+     * ({@code a·a⁻¹ = 1} uniquely pins the inverse). Its identity check uses the <b>deterministic</b>
+     * mul, so it is independent of the CRT-mul audit.
+     */
+    public static volatile boolean USE_HINT_INVERSE = false;
+
+    /** (this * other) mod p, normalized. Routes to {@link #mulHint} when {@link #USE_HINT_MUL}. */
     public Fe25519 mul(Fe25519 other) {
-        if (USE_HINT_MUL) return mulHint(other);
+        return USE_HINT_MUL ? mulHint(other) : mulDeterministic(other);
+    }
+
+    /** Deterministic schoolbook multiply (the frozen reference path; never uses advice). */
+    Fe25519 mulDeterministic(Fe25519 other) {
         Fe25519 a = (this.overflow > MAX_MUL_OVERFLOW) ? this.reduce() : this;
         Fe25519 b = (other.overflow > MAX_MUL_OVERFLOW) ? other.reduce() : other;
 
@@ -168,6 +181,35 @@ public final class Fe25519 {
 
     /** this^2 mod p, normalized. */
     public Fe25519 square() { return mul(this); }
+
+    /**
+     * Multiplicative inverse via prover advice (ADR-0028): the prover supplies {@code a⁻¹} through an
+     * {@link Gate.HintKind#INV_MOD} hint and the circuit enforces {@code a · a⁻¹ == 1 (mod p)} — a
+     * range-checked, canonical {@code a⁻¹}, one deterministic mul, and one equality — replacing the
+     * ~3M-constraint Fermat {@link #inverse}. Fails (unsatisfiable) if {@code this == 0}, as required.
+     */
+    public Fe25519 inverseHint() {
+        Fe25519 a = this.canonical();
+        BigInteger[] params = {P, BigInteger.valueOf(LIMB_BITS), BigInteger.valueOf(LIMBS)};
+        Variable[] ainv = api.hintN(Gate.HintKind.INV_MOD, params, LIMBS, a.limbs);
+        return inverseFromCandidate(api, a.limbs, ainv);
+    }
+
+    /**
+     * Enforce that {@code cand} is the inverse of {@code a}: range-check + canonical + {@code a·cand
+     * == 1 (mod p)}, returning {@code cand}. Package-visible so soundness tests can feed adversarial
+     * candidates and assert rejection. Soundness is one line: {@code a·cand ≡ 1} uniquely determines
+     * {@code cand = a⁻¹} for {@code a != 0} (and is unsatisfiable for {@code a == 0}). Uses the
+     * deterministic mul, so it is independent of the CRT-mul audit.
+     */
+    static Fe25519 inverseFromCandidate(CircuitAPI api, Variable[] aLimbs, Variable[] cand) {
+        for (Variable v : cand) api.assertInRange(v, LIMB_BITS);
+        assertLessThanP(api, cand);
+        Fe25519 inv = new Fe25519(api, cand.clone(), 0);
+        Fe25519 a = new Fe25519(api, aLimbs.clone(), 0);
+        a.mulDeterministic(inv).assertEqual(constant(api, BigInteger.ONE));
+        return inv;
+    }
 
     // ------------------------------------------------------------------
     // Hint-based multiplication (ADR-0028 Phase C — AUDIT-GATED)

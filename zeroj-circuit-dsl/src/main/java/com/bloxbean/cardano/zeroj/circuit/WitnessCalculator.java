@@ -121,6 +121,19 @@ public final class WitnessCalculator {
                             for (int i = 0; i < nQ; i++) { witness[hOut[i].id()] = q.and(mask); q = q.shiftRight(radixBits); }
                             for (int i = 0; i < nAB; i++) { witness[hOut[nQ + i].id()] = r.and(mask); r = r.shiftRight(radixBits); }
                         }
+                        case INV_MOD -> {
+                            // params: [modulus, radixBits, numLimbs]; inputs: numLimbs a-limbs;
+                            // outputs: numLimbs limbs of a^-1 mod modulus (0 if a % modulus == 0).
+                            BigInteger modulus = params[0];
+                            int radixBits = params[1].intValueExact();
+                            int numLimbs = params[2].intValueExact();
+                            BigInteger mask = BigInteger.ONE.shiftLeft(radixBits).subtract(BigInteger.ONE);
+                            BigInteger aVal = BigInteger.ZERO;
+                            for (int i = 0; i < numLimbs; i++) aVal = aVal.add(witness[hIn[i].id()].shiftLeft(radixBits * i));
+                            aVal = aVal.mod(modulus);
+                            BigInteger ainv = aVal.signum() == 0 ? BigInteger.ZERO : aVal.modInverse(modulus);
+                            for (int i = 0; i < numLimbs; i++) { witness[hOut[i].id()] = ainv.and(mask); ainv = ainv.shiftRight(radixBits); }
+                        }
                     }
                 }
             }

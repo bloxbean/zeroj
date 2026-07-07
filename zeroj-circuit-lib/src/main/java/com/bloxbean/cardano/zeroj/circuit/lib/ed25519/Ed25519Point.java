@@ -163,7 +163,7 @@ public final class Ed25519Point {
      * Returns 32 field-element bytes in [0,255], ready to feed to {@code Blake2b}.
      */
     public Variable[] encode() {
-        Fe25519 zInv = z.inverse();
+        Fe25519 zInv = Fe25519.USE_HINT_INVERSE ? z.inverseHint() : z.inverse();
         Fe25519 ax = x.mul(zInv).canonical();
         Fe25519 ay = y.mul(zInv).canonical();
 
