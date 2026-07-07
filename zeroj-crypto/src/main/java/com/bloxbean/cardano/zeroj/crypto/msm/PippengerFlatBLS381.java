@@ -5,6 +5,8 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFp381;
 
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 import java.math.BigInteger;
 
 /**
@@ -45,10 +47,20 @@ public final class PippengerFlatBLS381 {
      * @param scalars n scalars
      */
     public static void msm(long[] out, int oo, long[] affine, int n, BigInteger[] scalars) {
+        msm(out, oo, new HeapG1Reader(affine), n, scalars);
+    }
+
+    /**
+     * Core MSM reading points through a {@link G1AffineReader} — a heap {@code long[]} or an mmap'd
+     * {@link MemorySegment} (ADR-0029 M4). Each point is copied into a small reusable buffer, so the
+     * proving key can live off-heap / file-backed without changing the arithmetic.
+     */
+    public static void msm(long[] out, int oo, G1AffineReader reader, int n, BigInteger[] scalars) {
         JacobianArith381.setInfinity(out, oo);
         if (n == 0) return;
 
         long[] s = new long[JacobianArith381.SCRATCH_LONGS];
+        long[] pbuf = new long[AFF];
 
         byte[][] sb = new byte[n][];
         for (int i = 0; i < n; i++) {
@@ -75,10 +87,10 @@ public final class PippengerFlatBLS381 {
             for (int i = 0; i < n; i++) {
                 int digit = extractWindow(sb[i], bitOffset, c);
                 if (digit == 0) continue;
-                int po = i * AFF;
-                if (isAffineInfinity(affine, po)) continue;
+                reader.readInto(i, pbuf);
+                if (isAffineInfinity(pbuf, 0)) continue;
                 int bo = digit * PL;
-                JacobianArith381.addAffine(buckets, bo, buckets, bo, affine, po, affine, po + 6, s);
+                JacobianArith381.addAffine(buckets, bo, buckets, bo, pbuf, 0, pbuf, 6, s);
             }
 
             JacobianArith381.setInfinity(running, 0);
@@ -89,6 +101,43 @@ public final class PippengerFlatBLS381 {
             }
             JacobianArith381.add(out, oo, out, oo, window, 0, s);
         }
+    }
+
+    /** Reads flat affine G1 points (12 Montgomery longs each) from some backing store. */
+    public interface G1AffineReader {
+        int count();
+        /** Copy point {@code i}'s 12 longs (x[6],y[6]) into {@code buf[0..11]}. */
+        void readInto(int i, long[] buf);
+    }
+
+    /** {@link G1AffineReader} over an on-heap flat {@code long[]}. */
+    public static final class HeapG1Reader implements G1AffineReader {
+        private final long[] a;
+        public HeapG1Reader(long[] a) { this.a = a; }
+        public int count() { return a.length / AFF; }
+        public void readInto(int i, long[] buf) { System.arraycopy(a, i * AFF, buf, 0, AFF); }
+    }
+
+    /** {@link G1AffineReader} over an mmap'd {@link MemorySegment} (file-backed, off-heap). */
+    public static final class SegmentG1Reader implements G1AffineReader {
+        private final MemorySegment seg;
+        private final int count;
+        public SegmentG1Reader(MemorySegment seg) {
+            this.seg = seg;
+            this.count = (int) (seg.byteSize() / (AFF * 8L));
+        }
+        public int count() { return count; }
+        public void readInto(int i, long[] buf) {
+            long base = (long) i * AFF;
+            for (int k = 0; k < AFF; k++) buf[k] = seg.getAtIndex(ValueLayout.JAVA_LONG, base + k);
+        }
+    }
+
+    /** MSM over an mmap'd segment: {@code Σ scalars[i]·point_i} → {@link JacobianG1BLS381}. */
+    public static JacobianG1BLS381 msmSegment(MemorySegment seg, int n, BigInteger[] scalars) {
+        long[] out = new long[PL];
+        msm(out, 0, new SegmentG1Reader(seg), n, scalars);
+        return toJacobian(out);
     }
 
     /**
