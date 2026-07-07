@@ -65,15 +65,17 @@ public final class Ed25519Point {
      * </pre>
      */
     public Ed25519Point add(Ed25519Point o) {
-        Fe25519 a = y.sub(x).mul(o.y.sub(o.x));
-        Fe25519 b = y.add(x).mul(o.y.add(o.x));
+        // Lazy field ops (ADR-0028 Phase B): the intermediate adds/subs skip normalization and let
+        // the surrounding muls absorb the loosely-reduced operands (overflow stays ≤ 2 here).
+        Fe25519 a = y.subLazy(x).mul(o.y.subLazy(o.x));
+        Fe25519 b = y.addLazy(x).mul(o.y.addLazy(o.x));
         Fe25519 c = t.mul(twoD(api)).mul(o.t);
         Fe25519 zz = z.mul(o.z);
-        Fe25519 d = zz.add(zz); // Z1·2·Z2 = Z1Z2 + Z1Z2 (one mul, not two)
-        Fe25519 e = b.sub(a);
-        Fe25519 f = d.sub(c);
-        Fe25519 g = d.add(c);
-        Fe25519 h = b.add(a);
+        Fe25519 d = zz.addLazy(zz); // Z1·2·Z2
+        Fe25519 e = b.subLazy(a);
+        Fe25519 f = d.subLazy(c);
+        Fe25519 g = d.addLazy(c);
+        Fe25519 h = b.addLazy(a);
         return new Ed25519Point(api, e.mul(f), g.mul(h), f.mul(g), e.mul(h));
     }
 

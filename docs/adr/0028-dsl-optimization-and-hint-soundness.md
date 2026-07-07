@@ -96,7 +96,7 @@ constraints. Gated on the soundness negative tests (pillar 2), the integer-ident
 | # | Scope | Validation | Status |
 |---|-------|-----------|--------|
 | **A** | Fixed-base windowing for Ed25519 scalar mult | ✅ **DONE** — `Ed25519Point.scalarMulFixedBaseBWindowed` + `Ed25519WindowedTest`; result **bit-identical** to the deterministic `scalarMulFixedBaseB` and to BouncyCastle over edge + random scalars, w∈{1,2,3,4,5}, on BN254 & BLS12-381. **Measured (32-bit): w=4 → 3.97×, w=5 → 4.51×** fewer constraints (⇒ 255-bit scalar mult ~29M → ~7M at w=4). | **DONE** |
-| **B** | `Fe25519` magnitude bounds + lazy reduction | diff vs deterministic `Fe25519`; overflow-boundary tests | planned |
+| **B** | `Fe25519` magnitude bounds + lazy reduction | ✅ **DONE** — `Fe25519` overflow tracking + `addLazy`/`subLazy` + loose-operand `mul` (reduced path bit-identical, still 8,051); `Ed25519Point.add` switched to lazy. `Fe25519LazyTest` validates vs `BigInteger` incl. high-overflow chains past the mul reduce-backstop and canonical on overflow-9 accumulators; Ed25519 point-add vs BouncyCastle and the full ~90M CIP-1852 derivation vs cardano-client still exact. **point-add 107k → 73,859 (~1.45×)**; combined A+B: 255-bit scalar mult ~29M → ~4.7M. | **DONE** |
 | **C** | General trusted hints + CRT non-native mul | soundness negative tests (mutate hints → reject) + integer-identity argument + audit | planned |
 | **D** | Switch the derivation circuit to the optimized gadgets; re-validate vs cardano-client; measure end-to-end reduction; provability check | full-path pkh unchanged; real Groth16 proof at reduced size | planned |
 
