@@ -135,8 +135,13 @@ public final class PippengerFlatBLS381 {
 
     /** MSM over an mmap'd segment: {@code Σ scalars[i]·point_i} → {@link JacobianG1BLS381}. */
     public static JacobianG1BLS381 msmSegment(MemorySegment seg, int n, BigInteger[] scalars) {
+        return msmReader(new SegmentG1Reader(seg), n, scalars);
+    }
+
+    /** MSM over any {@link G1AffineReader} (heap or mmap) → {@link JacobianG1BLS381}. */
+    public static JacobianG1BLS381 msmReader(G1AffineReader reader, int n, BigInteger[] scalars) {
         long[] out = new long[PL];
-        msm(out, 0, new SegmentG1Reader(seg), n, scalars);
+        msm(out, 0, reader, n, scalars);
         return toJacobian(out);
     }
 
