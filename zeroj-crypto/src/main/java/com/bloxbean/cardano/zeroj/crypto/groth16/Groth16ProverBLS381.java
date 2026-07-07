@@ -6,6 +6,8 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
+import com.bloxbean.cardano.zeroj.bls12381.field.FrArith381;
+import com.bloxbean.cardano.zeroj.crypto.poly.FrFFTFlat;
 import com.bloxbean.cardano.zeroj.crypto.msm.PippengerFlatBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
@@ -127,48 +129,47 @@ public final class Groth16ProverBLS381 {
         if (domainSize < 2) domainSize = 2;
         int logN = Integer.numberOfTrailingZeros(domainSize);
 
-        MontFr381[] aEval = new MontFr381[domainSize];
-        MontFr381[] bEval = new MontFr381[domainSize];
+        // ADR-0029 M2c: Fr coefficients held as flat long[] (4 limbs/element) with the allocation-lean
+        // FrFFTFlat, instead of MontFr381[] object arrays — halves the prover's transient FFT memory.
+        long[] aEval = new long[domainSize * 4];
+        long[] bEval = new long[domainSize * 4];
 
         int constraintCount = constraints.size();
         for (int i = 0; i < domainSize; i++) {
             if (i < numConstraints && i < constraintCount) {
                 R1CSConstraint constraint = constraints.get(i);
-                aEval[i] = evalLinComb(constraint.a(), witness, mod);
-                bEval[i] = evalLinComb(constraint.b(), witness, mod);
-            } else {
-                aEval[i] = MontFr381.ZERO;
-                bEval[i] = MontFr381.ZERO;
-            }
+                System.arraycopy(evalLinComb(constraint.a(), witness, mod).toLimbs(), 0, aEval, i * 4, 4);
+                System.arraycopy(evalLinComb(constraint.b(), witness, mod).toLimbs(), 0, bEval, i * 4, 4);
+            } // else zeros (MontFr381.ZERO == all-zero limbs)
         }
 
-        MontFr381[] cEval = new MontFr381[domainSize];
-        for (int i = 0; i < domainSize; i++) {
-            cEval[i] = aEval[i].mul(bEval[i]);
-        }
+        long[] cEval = new long[domainSize * 4];
+        for (int i = 0; i < domainSize; i++) FrArith381.mul(cEval, i * 4, aEval, i * 4, bEval, i * 4);
 
-        MontFr381 inc = FieldFFTBLS381.rootOfUnity(logN + 1);
-
-        var aCoset = cosetFFT(aEval, inc);
-        var bCoset = cosetFFT(bEval, inc);
-        var cCoset = cosetFFT(cEval, inc);
+        long[] inc = FieldFFTBLS381.rootOfUnity(logN + 1).toLimbs();
+        cosetFFT(aEval, domainSize, inc);
+        cosetFFT(bEval, domainSize, inc);
+        cosetFFT(cEval, domainSize, inc);
 
         BigInteger[] result = new BigInteger[domainSize];
+        long[] val = new long[4];
         for (int i = 0; i < domainSize; i++) {
-            var val = aCoset[i].mul(bCoset[i]).sub(cCoset[i]);
-            result[i] = val.toBigInteger();
+            FrArith381.mul(val, 0, aEval, i * 4, bEval, i * 4); // a·b
+            FrArith381.sub(val, 0, val, 0, cEval, i * 4);       // - c
+            result[i] = MontFr381.fromMontLimbs(val[0], val[1], val[2], val[3]).toBigInteger();
         }
         return result;
     }
 
-    private static MontFr381[] cosetFFT(MontFr381[] evals, MontFr381 inc) {
-        var coeffs = FieldFFTBLS381.ifft(evals);
-        MontFr381 power = MontFr381.ONE;
-        for (int i = 0; i < coeffs.length; i++) {
-            coeffs[i] = coeffs[i].mul(power);
-            power = power.mul(inc);
+    /** In-place coset NTT on flat Fr coefficients: ifft → scale by inc^i → fft. */
+    private static void cosetFFT(long[] a, int n, long[] inc) {
+        FrFFTFlat.ifft(a, n);
+        long[] power = MontFr381.ONE.toLimbs();
+        for (int i = 0; i < n; i++) {
+            FrArith381.mul(a, i * 4, a, i * 4, power, 0);
+            FrArith381.mul(power, 0, power, 0, inc, 0);
         }
-        return FieldFFTBLS381.fft(coeffs);
+        FrFFTFlat.fft(a, n);
     }
 
     private static JacobianG1BLS381 computePiA(Groth16ProvingKeyBLS381 pk,

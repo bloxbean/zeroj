@@ -75,12 +75,15 @@ public final class MontFr381 {
         return new MontFr381(val, 0, 0, 0).toMontgomery();
     }
 
-    static MontFr381 fromMontLimbs(long l0, long l1, long l2, long l3) {
+    public static MontFr381 fromMontLimbs(long l0, long l1, long l2, long l3) {
         if (geqMod(l0, l1, l2, l3)) {
             throw new IllegalArgumentException("Montgomery Fr limbs must be canonical");
         }
         return new MontFr381(l0, l1, l2, l3);
     }
+
+    /** The 4 Montgomery-form limbs (little-endian). */
+    public long[] toLimbs() { return new long[]{l0, l1, l2, l3}; }
 
     // --- Arithmetic ---
 
