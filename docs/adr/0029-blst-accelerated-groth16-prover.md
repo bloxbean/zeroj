@@ -319,6 +319,13 @@ as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64
 | M1 flat MSM | pure-Java + flat MSM | ~19M (2²⁵ domain) | ~32.3 h | ~2.2 h | ~389 GB | ✗ (memory) | prove **345 → 234 µs/c (1.47×)**; setup + peak heap unchanged (expected — M1 only touches the prover MSM). |
 | M2a fixed-base G1 | + G1 comb setup | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | (see note) | — | setup **3502 → 2028 µs/c (1.7×)**; residual setup now dominated by G2 `pointsB2` (still object double-and-add). |
 | M2b flat PK | + flat G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK 18 GB** (was ~31 GB as objects) | — | G1 PK is now a flat `long[]` blob (**mmap-able**, M4). Measured PK = 36 MB @ 2¹⁶ → **18 GB @ 2²⁵**. |
+| M4 mmap PK | + mmap'd G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK off-heap** (page cache) | ✓ bit-identical | prover reads the G1 key from an mmap'd file (`Arena`/`MemorySegment`); unblinded mmap-prove == heap-prove bit-for-bit. The ~18 GB key no longer counts against `-Xmx`, so JVM-heap prove footprint drops to the transient working set (FFT arrays) → **fits 16–32 GB**. Auto-engages when the key exceeds a heap fraction. |
+
+**M4 finding.** With the flat G1 key `mmap`'d, the JVM heap no longer holds the proving key — it sits
+in off-heap file-backed memory (OS page cache). So the on-heap prove footprint at 2²⁵ collapses to
+the transient FFT working arrays (M2c will shrink those too). Combined with the M2b memory-metric
+correction, **the derivation is now credibly provable on a 16–32 GB box** in pure Java, no JNI — the
+core ADR-0029 goal for Track A. Remaining validation: the real end-to-end run (M5).
 
 > **⚠ Memory-metric correction (M2b).** The M0/M1/M2a "peak RAM" column above (~384 GB) was a
 > **linear extrapolation of the 2¹⁶ sampled peak heap, which is ~90% fixed JVM baseline** — scaling
