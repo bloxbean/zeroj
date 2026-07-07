@@ -317,6 +317,7 @@ as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64
 |---|---|---|---|---|---|---|---|
 | M0 baseline | pure-Java (current) | ~19M (2²⁵ domain) | ~32.6 h | ~3.2 h | ~384 GB | ✗ infeasible | extrapolated from 2¹⁶ (setup 3502 µs/c, prove 345 µs/c, 12 KB/c). **OOMs the 16–64 GB target.** |
 | M1 flat MSM | pure-Java + flat MSM | ~19M (2²⁵ domain) | ~32.3 h | ~2.2 h | ~389 GB | ✗ (memory) | prove **345 → 234 µs/c (1.47×)**; setup + peak heap unchanged (expected — M1 only touches the prover MSM). |
+| M2a fixed-base G1 | + G1 comb setup | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | ~371 GB | ✗ (memory) | setup **3502 → 2028 µs/c (1.7×)**; residual setup now dominated by G2 `pointsB2` (still object double-and-add). Memory unchanged (M2b/M4). |
 
 **M1 finding.** The allocation-lean flat MSM gives **1.47× on prove time** (less GC churn), proofs
 bit-identical. As predicted it does **not** move peak memory or setup — the proving-key *objects*
