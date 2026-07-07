@@ -4,6 +4,7 @@ import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.crypto.setup.FixedBaseG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
@@ -118,22 +119,22 @@ public final class Groth16SetupBLS381 {
         var g1 = JacobianG1BLS381.GENERATOR;
         var g2 = JacobianG2BLS381.GENERATOR;
 
-        AffineG1 alphaG1 = g1.scalarMul(alpha).toAffine();
-        AffineG1 betaG1 = g1.scalarMul(beta).toAffine();
+        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alpha);
+        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(beta);
         AffineG2 betaG2 = g2.scalarMul(beta).toAffine();
-        AffineG1 deltaG1 = g1.scalarMul(delta).toAffine();
+        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
         AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
 
         // pointsA[s] = u_s(tau) * G1
         AffineG1[] pointsA = new AffineG1[numWires];
         for (int s = 0; s < numWires; s++) {
-            pointsA[s] = us[s].signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(us[s]).toAffine();
+            pointsA[s] = us[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(us[s]);
         }
 
         // pointsB1[s] = v_s(tau) * G1
         AffineG1[] pointsB1 = new AffineG1[numWires];
         for (int s = 0; s < numWires; s++) {
-            pointsB1[s] = vs[s].signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(vs[s]).toAffine();
+            pointsB1[s] = vs[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(vs[s]);
         }
 
         // pointsB2[s] = v_s(tau) * G2
@@ -149,7 +150,7 @@ public final class Groth16SetupBLS381 {
             int s = numPublic + 1 + j;
             BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
                     .multiply(deltaInv).mod(FR);
-            pointsL[j] = lVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(lVal).toAffine();
+            pointsL[j] = lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal);
         }
 
         // H points: odd-indexed Lagrange basis on double-sized domain / delta
@@ -176,7 +177,7 @@ public final class Groth16SetupBLS381 {
                         .multiply(diff.modInverse(FR)).mod(FR);
             }
             BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
-            pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(hVal).toAffine();
+            pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(hVal);
         }
 
         // Verification key components: gamma_G2 and IC points
@@ -187,7 +188,7 @@ public final class Groth16SetupBLS381 {
         for (int s = 0; s <= numPublic; s++) {
             BigInteger icVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
                     .multiply(gammaInv).mod(FR);
-            ic[s] = icVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(icVal).toAffine();
+            ic[s] = icVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(icVal);
         }
 
         // Securely discard toxic waste (best-effort — see PowersOfTauBLS381.java for caveats)
