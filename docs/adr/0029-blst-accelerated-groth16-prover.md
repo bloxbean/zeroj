@@ -202,6 +202,32 @@ Investigating the existing `zeroj-blst` binding surfaced three concrete constrai
 **Recommendation:** M6 starts with a *measurement spike* — a self-contained blst-Pippenger MSM vs the
 pure-Java flat MSM at 2¹⁴–2¹⁸ — to decide Rung A viability before any prover/SPI wiring.
 
+### B0-result. Spike measured (2026-07-08) — Rung A is a wash; go Rung B
+
+`BlstMsmSpikeTest`: a correct blst Pippenger MSM (native per-op `P1.add`, differential-verified ==
+pure-Java) **loses to the optimized pure-Java flat MSM**:
+
+| n | pure-Java (ms) | blst per-op (ms) | speedup |
+|---|---|---|---|
+| 2¹² | 130.7 | 127.1 | 1.03× |
+| 2¹⁴ | 454.5 | 457.7 | 0.99× |
+| 2¹⁶ | 1566.1 | 1650.1 | **0.95×** |
+
+The ~`numWindows·n` per-op JNI calls exactly cancel blst's native compute advantage (worse as n
+grows). **Rung A with the current binding is not worth wiring.** The real win requires **Rung B — a
+single batched-pippenger native call per MSM** (`blst_p1s_mult_pippenger`), which:
+
+- icon-foundation blst-java **0.3.2 does not expose** (no `P1s`) — confirmed.
+- could come from a **newer binding** (e.g. `com.wavesplatform:blst-java:0.3.15-1`) *if* it wraps the
+  swig `P1s` class — worth checking, but still JNI + third-party supply chain; or
+- **[recommended] a custom Java-25 FFM (Panama) binding** to `blst_p1s_mult_pippenger` against the
+  official `libblst` (already bundled in the jar; Linux/Mac × x86_64/aarch64). FFM is
+  native-image-friendlier than JNI (already used for mmap in M4), avoids the flagged
+  icon-foundation-0.3.2 supply-chain concern, and binds exactly the one batched call we need.
+
+So M6's next step is **Rung B via FFM**, not more Rung-A work. The spike did its job: it killed a
+path that would have wasted the wiring effort.
+
 ### B1. blst-backed MSM (the speed win)
 
 A `BlstMsmBLS381` producing G1/G2 multi-scalar multiplications. Two rungs:

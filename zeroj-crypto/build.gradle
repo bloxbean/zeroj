@@ -13,6 +13,19 @@ test {
 // ADR-0027 M7: opt-in prover-scale benchmark. Heavy (minutes, multi-GB); never part of
 // the normal `test` run (the Groth16ScaleBenchmark is gated on -Dzeroj.bench=true, which
 // only this task sets). Run: ./gradlew :zeroj-crypto:benchmark [-Dzeroj.bench.logs=12,14,16,18,20]
+tasks.register('blstSpike', Test) {
+    description = 'ADR-0029 M6 spike: blst MSM vs pure-Java flat MSM timing.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    maxHeapSize = '4g'
+    systemProperty 'zeroj.bench', 'true'
+    filter { includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.msm.BlstMsmSpikeTest' }
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 tasks.register('benchmark', Test) {
     description = 'ADR-0027 M7 pure-Java Groth16 prover-scale benchmark (opt-in, heavy).'
     group = 'verification'
@@ -39,6 +52,7 @@ dependencies {
     testImplementation project(':zeroj-circuit-dsl')
     testImplementation project(':zeroj-verifier-groth16')
     testImplementation project(':zeroj-codec')
+    testImplementation project(':zeroj-blst') // ADR-0029 M6 spike: measure blst MSM vs pure-Java (test-only)
 }
 
 publishing {
