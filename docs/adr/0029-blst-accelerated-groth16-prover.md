@@ -180,6 +180,28 @@ otherwise keep it in RAM (mmap suits read-only data, not the strided read-write 
 
 ## Track B — native blst
 
+### B0. Scoping findings (2026-07-08, before implementation)
+
+Investigating the existing `zeroj-blst` binding surfaced three concrete constraints that shape M6–9:
+
+- **No batched Pippenger in blst-java 0.3.2.** `P1` exposes only per-op `add(P1/P1_Affine)`, `mult`,
+  `aggregate`, `generator`, `is_inf` — **not** `blst_p1s_mult_pippenger`. So Rung A must build
+  Pippenger over per-op native `P1.add` (≈ `numWindows·n` JNI calls per MSM); **per-call JNI overhead
+  may erode the native speedup** and could even lose to the (now-optimized) pure-Java flat MSM. This
+  MUST be **measured first** — it's the go/no-go for Rung A. The real win likely needs **Rung B**
+  (bind native `blst_p1s_mult_pippenger` = one JNI call per MSM), i.e. a JNI extension or a newer
+  binding.
+- **Module boundary.** `zeroj-crypto` (the prover) does **not** depend on `zeroj-blst`, and shouldn't
+  by default (opt-in, native-image-clean). So the blst backend belongs in a **new opt-in module**
+  (e.g. `zeroj-crypto-blst`) depending on both, wired via the `ProverBackend` SPI — not a `crypto →
+  blst` dependency.
+- **Point conversion.** The prover's flat Montgomery limbs / `AffineG1` convert to blst via
+  `fromMontgomery → 96-byte uncompressed (48-B big-endian x‖y) → new P1_Affine(bytes)`; infinity is
+  the `0x40` flag byte.
+
+**Recommendation:** M6 starts with a *measurement spike* — a self-contained blst-Pippenger MSM vs the
+pure-Java flat MSM at 2¹⁴–2¹⁸ — to decide Rung A viability before any prover/SPI wiring.
+
 ### B1. blst-backed MSM (the speed win)
 
 A `BlstMsmBLS381` producing G1/G2 multi-scalar multiplications. Two rungs:
