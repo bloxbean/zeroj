@@ -45,7 +45,7 @@ public final class Cip1852Derivation {
     /** Payment key hash of a leaf: {@code blake2b224(encode(kL·B))}. */
     public static Variable[] leafKeyHash(CircuitAPI api, Variable[] leafKL) {
         Variable[] scalarBits = bytesToBitsLE(api, leafKL);
-        Variable[] pubkey = Ed25519Point.scalarMulFixedBaseB(api, scalarBits).encode(); // 32 bytes
+        Variable[] pubkey = Ed25519Point.scalarMulFixedBaseBWindowed(api, scalarBits, 4).encode(); // 32 bytes
         return Blake2b.hash224(api, pubkey); // 28 bytes
     }
 
