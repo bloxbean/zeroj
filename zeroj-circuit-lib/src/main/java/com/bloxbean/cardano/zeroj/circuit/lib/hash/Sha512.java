@@ -200,25 +200,27 @@ public final class Sha512 {
         return xor(api, xor(api, rotr(x, 19), rotr(x, 61)), shr(api, x, 6));
     }
 
-    /** Ch(e,f,g) = (e AND f) XOR ((NOT e) AND g). */
+    /**
+     * Ch(e,f,g) = e ? f : g, computed as {@code g + e·(f−g)} — 1 mul/bit (vs 3 for AND/AND/XOR).
+     * Sound because e,f,g bits are boolean-constrained (they come from a prior {@code toBinary}),
+     * so the result is exactly {@code f} or {@code g} (boolean).
+     */
     private static Variable[] ch(CircuitAPI api, Variable[] e, Variable[] f, Variable[] g) {
         Variable[] r = new Variable[WORD_BITS];
-        for (int i = 0; i < WORD_BITS; i++) {
-            Variable ef = api.and(e[i], f[i]);
-            Variable ng = api.and(api.not(e[i]), g[i]);
-            r[i] = api.xor(ef, ng);
-        }
+        for (int i = 0; i < WORD_BITS; i++)
+            r[i] = api.add(g[i], api.mul(e[i], api.sub(f[i], g[i])));
         return r;
     }
 
-    /** Maj(a,b,c) = (a AND b) XOR (a AND c) XOR (b AND c). */
+    /**
+     * Maj(a,b,c) = {@code a·b + c·(a⊕b)} — 3 mul/bit (vs 5 for 3×AND + 2×XOR). Equals the majority:
+     * when a=b it is a; when a≠b it is c.
+     */
     private static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
         Variable[] r = new Variable[WORD_BITS];
         for (int i = 0; i < WORD_BITS; i++) {
-            Variable ab = api.and(a[i], b[i]);
-            Variable ac = api.and(a[i], c[i]);
-            Variable bc = api.and(b[i], c[i]);
-            r[i] = api.xor(api.xor(ab, ac), bc);
+            Variable ab = api.mul(a[i], b[i]);
+            r[i] = api.add(ab, api.mul(c[i], api.xor(a[i], b[i])));
         }
         return r;
     }
