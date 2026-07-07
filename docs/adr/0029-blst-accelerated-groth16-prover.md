@@ -316,6 +316,12 @@ as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64
 | milestone | backend | circuit (constraints) | setup time | prove time | peak RAM | verify | notes |
 |---|---|---|---|---|---|---|---|
 | M0 baseline | pure-Java (current) | ~19M (2²⁵ domain) | ~32.6 h | ~3.2 h | ~384 GB | ✗ infeasible | extrapolated from 2¹⁶ (setup 3502 µs/c, prove 345 µs/c, 12 KB/c). **OOMs the 16–64 GB target.** |
+| M1 flat MSM | pure-Java + flat MSM | ~19M (2²⁵ domain) | ~32.3 h | ~2.2 h | ~389 GB | ✗ (memory) | prove **345 → 234 µs/c (1.47×)**; setup + peak heap unchanged (expected — M1 only touches the prover MSM). |
+
+**M1 finding.** The allocation-lean flat MSM gives **1.47× on prove time** (less GC churn), proofs
+bit-identical. As predicted it does **not** move peak memory or setup — the proving-key *objects*
+dominate peak (needs M2 flat storage + M4 mmap) and setup's per-wire scalar-muls are untouched (M2).
+So the derivation is still memory-infeasible; M1 is the prove-speed piece of the puzzle.
 
 **M0 finding.** The current pure-Java prover cannot produce the derivation proof on the target
 hardware — ~384 GB and ~36 h (setup+prove) at 2²⁵. Two things stand out: **memory (~384 GB) is the
