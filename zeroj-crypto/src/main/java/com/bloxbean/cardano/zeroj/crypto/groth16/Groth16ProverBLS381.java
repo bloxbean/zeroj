@@ -28,7 +28,7 @@ public final class Groth16ProverBLS381 {
             BigInteger[] witness,
             List<R1CSConstraint> constraints,
             int numWires) {
-        int domainSize = pk.pointsH().length;
+        int domainSize = Groth16ProvingKeyBLS381.count(pk.pointsH());
         return prove(pk, witness, constraints, numWires, domainSize);
     }
 
@@ -140,13 +140,11 @@ public final class Groth16ProverBLS381 {
     private static JacobianG1BLS381 computePiA(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger r) {
         var result = JacobianG1BLS381.fromAffine(pk.alphaG1().x(), pk.alphaG1().y());
 
-        int n = Math.min(witness.length, pk.pointsA().length);
+        int n = Math.min(witness.length, Groth16ProvingKeyBLS381.count(pk.pointsA()));
         if (n > 0) {
-            AffineG1[] points = new AffineG1[n];
             BigInteger[] scalars = new BigInteger[n];
-            System.arraycopy(pk.pointsA(), 0, points, 0, n);
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerFlatBLS381.msm(points, scalars));
+            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsA(), n, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(r));
@@ -210,13 +208,11 @@ public final class Groth16ProverBLS381 {
     private static JacobianG1BLS381 computePiB_G1(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger s) {
         var result = JacobianG1BLS381.fromAffine(pk.betaG1().x(), pk.betaG1().y());
 
-        int n = Math.min(witness.length, pk.pointsB1().length);
+        int n = Math.min(witness.length, Groth16ProvingKeyBLS381.count(pk.pointsB1()));
         if (n > 0) {
-            AffineG1[] points = new AffineG1[n];
             BigInteger[] scalars = new BigInteger[n];
-            System.arraycopy(pk.pointsB1(), 0, points, 0, n);
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerFlatBLS381.msm(points, scalars));
+            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsB1(), n, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(s));
@@ -230,23 +226,19 @@ public final class Groth16ProverBLS381 {
 
         JacobianG1BLS381 result = JacobianG1BLS381.INFINITY;
 
-        int hLen = Math.min(hCoeffs.length, pk.pointsH().length);
+        int hLen = Math.min(hCoeffs.length, Groth16ProvingKeyBLS381.count(pk.pointsH()));
         if (hLen > 0) {
-            AffineG1[] hPoints = new AffineG1[hLen];
             BigInteger[] hScalars = new BigInteger[hLen];
-            System.arraycopy(pk.pointsH(), 0, hPoints, 0, hLen);
             System.arraycopy(hCoeffs, 0, hScalars, 0, hLen);
-            result = result.add(PippengerFlatBLS381.msm(hPoints, hScalars));
+            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsH(), hLen, hScalars));
         }
 
         int numPrivate = witness.length - pk.numPublic() - 1;
-        if (numPrivate > 0 && pk.pointsL().length > 0) {
-            int lLen = Math.min(numPrivate, pk.pointsL().length);
-            AffineG1[] lPoints = new AffineG1[lLen];
+        if (numPrivate > 0 && Groth16ProvingKeyBLS381.count(pk.pointsL()) > 0) {
+            int lLen = Math.min(numPrivate, Groth16ProvingKeyBLS381.count(pk.pointsL()));
             BigInteger[] lScalars = new BigInteger[lLen];
-            System.arraycopy(pk.pointsL(), 0, lPoints, 0, lLen);
             System.arraycopy(witness, pk.numPublic() + 1, lScalars, 0, lLen);
-            result = result.add(PippengerFlatBLS381.msm(lPoints, lScalars));
+            result = result.add(PippengerFlatBLS381.msmFlat(pk.pointsL(), lLen, lScalars));
         }
 
         result = result.add(piA.scalarMul(s));

@@ -204,7 +204,9 @@ public final class ZkeyImporterBLS381 {
 
         var pk = new Groth16ProvingKeyBLS381(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,
-                pointsA, pointsB1, pointsB2, pointsH, pointsL, nPublic);
+                Groth16ProvingKeyBLS381.flattenG1(pointsA), Groth16ProvingKeyBLS381.flattenG1(pointsB1),
+                pointsB2, Groth16ProvingKeyBLS381.flattenG1(pointsH), Groth16ProvingKeyBLS381.flattenG1(pointsL),
+                nPublic);
 
         return new ZkeyDataBLS381(pk, constraints, actualConstraints, nVars, domainSize);
     }

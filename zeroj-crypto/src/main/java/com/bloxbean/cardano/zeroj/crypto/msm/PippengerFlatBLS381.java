@@ -110,6 +110,17 @@ public final class PippengerFlatBLS381 {
         return toJacobian(out);
     }
 
+    /**
+     * MSM directly over a flat packed-affine array (e.g. a proving-key point array): uses the first
+     * {@code n} points {@code flatAffine[0 .. n*12-1]}. Returns the result as a {@link JacobianG1BLS381}.
+     * No {@code AffineG1[]} allocation — reads the PK's flat storage in place (ADR-0029 M2b).
+     */
+    public static JacobianG1BLS381 msmFlat(long[] flatAffine, int n, BigInteger[] scalars) {
+        long[] out = new long[PL];
+        msm(out, 0, flatAffine, n, scalars);
+        return toJacobian(out);
+    }
+
     /** Flat Jacobian (18 longs) → {@link JacobianG1BLS381} (via affine; one Fp inverse). */
     private static JacobianG1BLS381 toJacobian(long[] p) {
         if (JacobianArith381.isInfinity(p, 0)) return JacobianG1BLS381.INFINITY;
