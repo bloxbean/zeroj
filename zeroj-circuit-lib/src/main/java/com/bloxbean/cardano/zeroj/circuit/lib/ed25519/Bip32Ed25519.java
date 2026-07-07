@@ -68,7 +68,7 @@ public final class Bip32Ed25519 {
     public static ChildKey deriveSoftComputingAp(CircuitAPI api, Variable[] kL, Variable[] kR,
                                                  Variable[] chainCode, long childIndex) {
         Variable[] scalarBits = bytesToBitsLE(api, kL); // 256 bits, LSB-first
-        Variable[] ap = Ed25519Point.scalarMulFixedBaseB(api, scalarBits).encode();
+        Variable[] ap = Ed25519Point.scalarMulFixedBaseBWindowed(api, scalarBits, 4).encode();
         return deriveSoft(api, kL, kR, chainCode, ap, childIndex);
     }
 

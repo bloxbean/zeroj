@@ -97,6 +97,20 @@ class Cip1852DerivationTest {
 
     // ------------------------------------------------------------------
 
+    @Test
+    @EnabledIfSystemProperty(named = "zeroj.heavy", matches = "true")
+    void constraintCount_fullPath_reported() {
+        var builder = CircuitBuilder.create("cip1852-cost");
+        for (int i = 0; i < 32; i++) builder.secretVar("kL" + i).secretVar("kR" + i).secretVar("cc" + i);
+        builder.define(api -> {
+            Variable[] kL = new Variable[32], kR = new Variable[32], cc = new Variable[32];
+            for (int i = 0; i < 32; i++) { kL[i] = api.var("kL" + i); kR[i] = api.var("kR" + i); cc[i] = api.var("cc" + i); }
+            Cip1852Derivation.paymentKeyHash(api, kL, kR, cc, 0, 0, 0);
+        });
+        int c = builder.compileR1CS(CurveId.BN254).numConstraints();
+        System.out.println("[ADR-0028] full CIP-1852 derivation (windowed, deterministic mul) constraints = " + c);
+    }
+
     private HdKeyPair derivePath(byte[] entropy, long account, long role, long index) {
         var root = hd.getRootKeyPairFromEntropy(entropy);
         var n1 = hd.getChildKeyPair(root, 1852L, true);
