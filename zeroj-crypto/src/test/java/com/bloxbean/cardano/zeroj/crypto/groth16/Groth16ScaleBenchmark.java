@@ -72,7 +72,7 @@ class Groth16ScaleBenchmark {
             int n = 1 << logN;
             try {
                 Result r = benchmarkOne(n, tau);
-                samples.add(new double[]{logN, n, r.setupSeconds, r.proveSeconds, r.peakHeapMB});
+                samples.add(new double[]{logN, n, r.setupSeconds, r.proveSeconds, r.peakHeapMB, r.pkMB});
                 System.out.printf("%-8d %12d %12.2f %12.2f %12.0f %12s%n",
                         logN, n, r.setupSeconds, r.proveSeconds, r.peakHeapMB, "ok");
             } catch (OutOfMemoryError oom) {
@@ -87,7 +87,7 @@ class Groth16ScaleBenchmark {
 
     // ------------------------------------------------------------------
 
-    private record Result(double setupSeconds, double proveSeconds, double peakHeapMB) {}
+    private record Result(double setupSeconds, double proveSeconds, double peakHeapMB, double pkMB) {}
 
     private Result benchmarkOne(int n, BigInteger tau) {
         List<R1CSConstraint> constraints = squaringChain(n);
@@ -109,7 +109,19 @@ class Groth16ScaleBenchmark {
         if (proofBox.proof == null || !proofBox.proof.a().isOnCurve())
             throw new AssertionError("prove produced invalid proof at N=" + n);
 
-        return new Result(setupSeconds, proveSeconds, Math.max(peakSetup, peakProve));
+        // Honest memory metric: the RETAINED proving-key bytes (grows linearly, no JVM baseline —
+        // unlike sampled peak heap, which is baseline/transient-dominated at small sizes).
+        double pkMB = provingKeyBytes(setupBox.pk) / (1024.0 * 1024.0);
+        System.out.printf("    (pk flat storage: %.1f MB)%n", pkMB);
+
+        return new Result(setupSeconds, proveSeconds, Math.max(peakSetup, peakProve), pkMB);
+    }
+
+    /** Retained proving-key data bytes: flat G1 arrays (8 B/long) + G2 (24 longs/point) + IC. */
+    private static long provingKeyBytes(Groth16ProvingKeyBLS381 pk) {
+        long g1 = (long) (pk.pointsA().length + pk.pointsB1().length + pk.pointsH().length + pk.pointsL().length) * 8;
+        long g2 = (long) pk.pointsB2().length * 24 * 8; // AffineG2 = 2 Fp2 = 24 longs of data
+        return g1 + g2;
     }
 
     /** Modular-squaring chain: exactly {@code n} constraints, wires [0]=1, [1]=out, [2..n+1]=chain. */
@@ -174,7 +186,10 @@ class Groth16ScaleBenchmark {
 
     private void extrapolate(List<double[]> samples) {
         double[] largest = samples.get(samples.size() - 1);
-        double n = largest[1], setupS = largest[2], proveS = largest[3], heapMB = largest[4];
+        double n = largest[1], setupS = largest[2], proveS = largest[3], heapMB = largest[4], pkMB = largest[5];
+        System.out.printf("%n  proving-key flat storage: %.1f MB at 2^%d  →  %.1f GB at 2^25 (linear, no baseline — "
+                + "the honest memory driver; mmap (M4) puts this on disk)%n",
+                pkMB, (int) largest[0], pkMB * (33_554_432.0 / n) / 1024.0);
         System.out.println();
         System.out.println("--- Per-constraint cost at the largest measured size (2^"
                 + (int) largest[0] + ", " + (long) n + " constraints) ---");
