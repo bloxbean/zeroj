@@ -113,6 +113,12 @@ public final class R1CSCompiler {
                     // The hint output is a base variable.
                     exprMap.put(out.id(), Map.of(out.id(), BigInteger.ONE));
                 }
+
+                case Gate.HintN(var outputs, var kind, var inputs, var params) -> {
+                    // Hints don't create constraints. Each output is a base variable; the caller
+                    // adds the constraints that pin these values down (soundness lives there).
+                    for (var o : outputs) exprMap.put(o.id(), Map.of(o.id(), BigInteger.ONE));
+                }
             }
         }
 

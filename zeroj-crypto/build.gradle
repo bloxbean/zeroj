@@ -10,6 +10,27 @@ test {
     systemProperty 'zeroj.allowLegacyBn254', 'true'
 }
 
+// ADR-0027 M7: opt-in prover-scale benchmark. Heavy (minutes, multi-GB); never part of
+// the normal `test` run (the Groth16ScaleBenchmark is gated on -Dzeroj.bench=true, which
+// only this task sets). Run: ./gradlew :zeroj-crypto:benchmark [-Dzeroj.bench.logs=12,14,16,18,20]
+tasks.register('benchmark', Test) {
+    description = 'ADR-0027 M7 pure-Java Groth16 prover-scale benchmark (opt-in, heavy).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    maxHeapSize = '10g'
+    systemProperty 'zeroj.bench', 'true'
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    systemProperty 'zeroj.allowLegacyBn254', 'true'
+    if (System.getProperty('zeroj.bench.logs') != null) {
+        systemProperty 'zeroj.bench.logs', System.getProperty('zeroj.bench.logs')
+    }
+    filter { includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ScaleBenchmark' }
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 dependencies {
     api project(':zeroj-api')
     api project(':zeroj-bls12381')

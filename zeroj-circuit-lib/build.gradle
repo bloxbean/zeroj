@@ -4,11 +4,37 @@ plugins {
 
 description = 'ZeroJ Circuit Library — reusable ZK circuit components (Poseidon, Merkle, comparators)'
 
+test {
+    // Non-native-field / hash gadgets build large constraint graphs (a single Ed25519 field
+    // inverse is ~3M constraints); give the test JVM headroom so heavy gadget tests don't OOM.
+    maxHeapSize = '4g'
+}
+
+// Opt-in heavy gadget tests (full Ed25519 scalar-mult circuits, ~30M+ constraints). Gated on
+// -Dzeroj.heavy=true so the normal test run stays fast. Run: ./gradlew :zeroj-circuit-lib:heavyGadgetTest
+tasks.register('heavyGadgetTest', Test) {
+    description = 'ADR-0027 heavy gadget tests (full in-circuit Ed25519 scalar mult).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    maxHeapSize = '48g'
+    systemProperty 'zeroj.heavy', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 dependencies {
     api project(':zeroj-circuit-dsl')
     api project(':zeroj-circuit-annotation-api')
 
     testImplementation project(':zeroj-test-vectors')
+    // Test-only oracle for the Blake2b gadget: cardano-client's Blake2bUtil is exactly the
+    // implementation Cardano uses for key hashes, so cross-checking against it proves
+    // Cardano-compatibility of blake2b-224 / -256 directly. Not a compile/runtime dependency.
+    testImplementation 'com.bloxbean.cardano:cardano-client-crypto:0.8.0-pre4'
+    // Authoritative RFC 8032 Ed25519 oracle for the Ed25519 gadget tests.
+    testImplementation 'org.bouncycastle:bcprov-jdk18on:1.83'
 }
 
 /**
