@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # Preview mode: builds the ceremony CLI distributables as workflow ARTIFACTS
+  # (no Maven publish, no release assets) — dry-run the release without a tag.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,6 +18,7 @@ jobs:
 
   build-gnark-native:
     name: gnark native (${{ matrix.os }})
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -49,6 +53,7 @@ jobs:
 
   build-halo2-native:
     name: halo2 native (${{ matrix.os }})
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -91,6 +96,7 @@ jobs:
 
   publish:
     name: Publish to Maven Central
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [ build-gnark-native, build-halo2-native ]
     runs-on: ubuntu-latest
     steps:
@@ -206,9 +212,21 @@ jobs:
           ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
           zeroj-ceremony/build/native/zeroj-ceremony${{ matrix.ext }} --version
 
+      # tag push -> attach to the GitHub release
       - name: Upload to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
+            zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+
+      # manual dispatch (preview) -> workflow artifacts only
+      - name: Upload preview artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceremony-cli-preview-${{ matrix.os }}
+          path: |
             ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
             zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
