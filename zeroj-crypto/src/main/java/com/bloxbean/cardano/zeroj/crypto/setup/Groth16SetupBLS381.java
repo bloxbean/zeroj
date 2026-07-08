@@ -125,36 +125,39 @@ public final class Groth16SetupBLS381 {
         AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
         AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
 
+        // ADR-0029 M5a: the per-wire scalar-muls are independent (each writes its own slot), so run
+        // them in parallel across cores. This — not blst — is the setup-time lever: blst's speedup is
+        // batched pippenger (a sum), but these are independent muls, and per-op blst is a wash.
+
         // pointsA[s] = u_s(tau) * G1  (flat: 12 longs/point)
         long[] pointsA = new long[numWires * Groth16ProvingKeyBLS381.G1_STRIDE];
-        for (int s = 0; s < numWires; s++) {
-            Groth16ProvingKeyBLS381.writeG1(pointsA, s,
-                    us[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(us[s]));
-        }
+        java.util.stream.IntStream.range(0, numWires).parallel().forEach(s ->
+                Groth16ProvingKeyBLS381.writeG1(pointsA, s,
+                        us[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(us[s])));
 
         // pointsB1[s] = v_s(tau) * G1  (flat)
         long[] pointsB1 = new long[numWires * Groth16ProvingKeyBLS381.G1_STRIDE];
-        for (int s = 0; s < numWires; s++) {
-            Groth16ProvingKeyBLS381.writeG1(pointsB1, s,
-                    vs[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(vs[s]));
-        }
+        java.util.stream.IntStream.range(0, numWires).parallel().forEach(s ->
+                Groth16ProvingKeyBLS381.writeG1(pointsB1, s,
+                        vs[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(vs[s])));
 
         // pointsB2[s] = v_s(tau) * G2
         AffineG2[] pointsB2 = new AffineG2[numWires];
-        for (int s = 0; s < numWires; s++) {
-            pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine();
-        }
+        java.util.stream.IntStream.range(0, numWires).parallel().forEach(s ->
+                pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine());
 
         // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
+        // (final aliases: alpha/beta are scrubbed as toxic waste after the PK is built, below)
+        final BigInteger alphaF = alpha, betaF = beta, deltaInvF = deltaInv;
         int numPrivate = numWires - numPublic - 1;
         long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
-        for (int j = 0; j < numPrivate; j++) {
+        java.util.stream.IntStream.range(0, numPrivate).parallel().forEach(j -> {
             int s = numPublic + 1 + j;
-            BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
-                    .multiply(deltaInv).mod(FR);
+            BigInteger lVal = betaF.multiply(us[s]).add(alphaF.multiply(vs[s])).add(ws[s])
+                    .multiply(deltaInvF).mod(FR);
             Groth16ProvingKeyBLS381.writeG1(pointsL, j,
                     lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal));
-        }
+        });
 
         // H points: odd-indexed Lagrange basis on double-sized domain / delta
         // L_{2i+1}^{(2N)}(tau) / delta * G1
@@ -166,7 +169,8 @@ public final class Groth16SetupBLS381 {
         BigInteger nInv2 = BigInteger.valueOf(domainSize2).modInverse(FR);
 
         long[] pointsH = new long[domainSize * Groth16ProvingKeyBLS381.G1_STRIDE];
-        for (int i = 0; i < domainSize; i++) {
+        final int domainSizeF = domainSize;
+        java.util.stream.IntStream.range(0, domainSizeF).parallel().forEach(i -> {
             int lagIdx = 2 * i + 1; // odd index
             // omega2^lagIdx
             BigInteger omegaPow = omega2Bi.modPow(BigInteger.valueOf(lagIdx), FR);
@@ -182,7 +186,7 @@ public final class Groth16SetupBLS381 {
             BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
             Groth16ProvingKeyBLS381.writeG1(pointsH, i,
                     hVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(hVal));
-        }
+        });
 
         // Verification key components: gamma_G2 and IC points
         AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
