@@ -35,8 +35,8 @@ remaining production gates are tracked in
 | PlonK BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Experimental** — full KZG check implemented; labeled testnet trials only |
 | BBS (CFRG draft-10) — verification | `zeroj-bbs` | **Beta** (spec is an IRTF draft, not yet an RFC) |
 | BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — default pure-Java provider is not constant-time; prefer the blst provider for issuer keys |
-| BLS12-381 pure Java primitives | `zeroj-bls12381` | **Beta** — verification-grade; performance work tracked in ADR-0026 |
-| blst native acceleration | `zeroj-blst` | **Beta, opt-in** — upstream binary provenance not yet pinned |
+| BLS12-381 pure Java primitives | `zeroj-bls12381` | **Beta** — verification-grade; prover performance (allocation-lean, mmap'd key) in [ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md) |
+| blst native acceleration | `zeroj-blst` | **Beta, opt-in** — FFM binding; `libblst` built from source, pinned v0.3.15; ~5× Groth16 prover backend ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)) |
 | Cardano anchoring + CCL helpers | `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` | **Beta** |
 | WASM backends | `zeroj-bls12381-wasm`, `zeroj-bbs-wasm` | **Experimental, opt-in** |
 | gnark native prover | `zeroj-prover-gnark` | **Experimental, opt-in** (Go native library) |
@@ -54,7 +54,8 @@ remaining production gates are tracked in
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
-- **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible.
+- **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible. Allocation-lean flat arithmetic + an `mmap`-able proving key mean large circuits (millions of constraints) prove on commodity **16–32 GB** hardware, no JNI ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
+- **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); **~5× faster Groth16 proving**, bit-identical proofs. `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
 - **gnark FFM** — optional in-process Groth16/PlonK proving via Go native library
 - **snarkjs CLI** — external CLI for circom-based circuits
 - **snarkjs key import** — import `.zkey` files, prove with the pure Java prover
@@ -343,6 +344,9 @@ dependencies {
 - [ADR-0007: Module Structure](docs/adr/0007-module-structure-and-boundaries.md)
 - [ADR-0010: Java Circuit DSL](docs/adr/0010-java-circuit-dsl.md)
 - [ADR-0012: Pure Java Provers](docs/adr/0012-pure-java-provers-groth16-plonk.md)
+- [ADR-0027: Real-World Crypto Gadgets (SHA-512/HMAC/Blake2b/Ed25519/BIP32)](docs/adr/0027-real-world-crypto-gadgets-sha512-hmac-blake2b-ed25519.md)
+- [ADR-0028: DSL Optimization & Hint Soundness](docs/adr/0028-dsl-optimization-and-hint-soundness.md)
+- [ADR-0029: Groth16 Prover Performance (memory + blst/FFM)](docs/adr/0029-blst-accelerated-groth16-prover.md)
 
 ## Examples
 

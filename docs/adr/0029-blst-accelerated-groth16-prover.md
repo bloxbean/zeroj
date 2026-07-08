@@ -1,7 +1,17 @@
 # ADR-0029: Groth16 Prover Performance — Memory (mmap) and Speed (blst / Vector API)
 
 ## Status
-Accepted (2026-07-07) — implementation started on `feat/adr_0029_prover_perf`.
+Accepted (2026-07-07); largely implemented on `feat/adr_0029_prover_perf`.
+
+**Delivered:** Track-A pure-Java prover (M1 flat MSM 1.47×, M2a fixed-base setup 1.7×, M2b flat PK,
+M2c flat FFT, M4 mmap'd off-heap key → **provable on 16–32 GB, pure Java, no JNI**) and the blst
+backend (M6 FFM `blst_p1s/p2s_mult_pippenger` binding, M7 `ProverBackend` SPI, M8 full G1+G2 backend
+→ **~5× prove, bit-identical**), plus M9 build-from-source `libblst` (pinned v0.3.15) + GraalVM FFM
+config. All differential-tested against frozen oracles.
+**Remaining (productionization/validation):** native-image build validation + Windows binary; expose
+the blst backend via an opt-in `zeroj-crypto-blst` module (wired in test scope today); the real 2²⁵
+end-to-end run (M5, hours) + usecase practicalization; M10 consolidated matrix. **M3 (Vector API)
+dropped** — measured FFT is ~1.5% of prove, so it would move nothing (and it's an incubator API).
 
 ## Date
 2026-07-07
