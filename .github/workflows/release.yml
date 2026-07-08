@@ -90,6 +90,39 @@ jobs:
           path: incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
           retention-days: 1
 
+  # libblst from source (pinned tag in zeroj-blst/scripts/build-blst.sh) — same per-release
+  # pattern as gnark/halo2, so released jars never ship stale/unverified blst binaries.
+  build-blst-native:
+    name: blst native (${{ matrix.os }}/${{ matrix.arch }})
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: aarch64
+          - runner: macos-13
+            os: mac
+            arch: x86_64
+          - runner: macos-14
+            os: mac
+            arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build libblst from source
+        run: zeroj-blst/scripts/build-blst.sh
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: blst-native-${{ matrix.os }}-${{ matrix.arch }}
+          path: zeroj-blst/src/main/resources/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          retention-days: 1
+
   # ================================================================
   # Stage 2: Build JARs with all native libraries and publish
   # ================================================================
@@ -97,7 +130,7 @@ jobs:
   publish:
     name: Publish to Maven Central
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [ build-gnark-native, build-halo2-native ]
+    needs: [ build-gnark-native, build-halo2-native, build-blst-native ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +156,12 @@ jobs:
           pattern: halo2-native-*
           merge-multiple: false
 
+      - name: Download blst natives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: blst-native-*
+          merge-multiple: false
+
       - name: Place native libraries in resource directories
         run: |
           for platform in linux-x86_64 linux-arm64 macos-arm64; do
@@ -135,10 +174,19 @@ jobs:
             cp halo2-native-$platform/* incubator/zeroj-verifier-halo2/src/main/resources/native/$platform/ || true
           done
 
+          # blst (source-built, replaces the committed dev binaries in the released jars)
+          for target in linux/amd64 linux/aarch64 mac/x86_64 mac/aarch64; do
+            os=${target%/*}; arch=${target#*/}
+            mkdir -p zeroj-blst/src/main/resources/native/$target
+            cp blst-native-$os-$arch/* zeroj-blst/src/main/resources/native/$target/ || true
+          done
+
           echo "=== gnark native libraries ==="
           find zeroj-prover-gnark/src/main/resources/native -type f
           echo "=== halo2 native libraries ==="
           find incubator/zeroj-verifier-halo2/src/main/resources/native -type f
+          echo "=== blst native libraries ==="
+          find zeroj-blst/src/main/resources/native -type f
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

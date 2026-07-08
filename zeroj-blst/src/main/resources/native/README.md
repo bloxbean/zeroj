@@ -19,6 +19,10 @@ drops it here as `native/<os>/<arch>/libblst.<ext>`.
 
 ## All-platform binaries
 
+> **Releases always rebuild these from source**: the `build-blst-native` stage in
+> `.github/workflows/release.yml` builds the pinned tag on every platform at tag-release time and
+> injects the results before publishing — released jars never ship the committed dev binaries below.
+
 `.github/workflows/build-blst.yml` runs the same script per runner (Linux/macOS × x86_64/aarch64,
 + Windows) and assembles the all-platform set that ships in the jar. Bump `BLST_TAG` there and in
 `build-blst.sh` to update the pinned blst version.
