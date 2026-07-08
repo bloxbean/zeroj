@@ -253,13 +253,41 @@ four G1 MSMs; the FFM-blst backend produces **bit-identical proofs**. Full-prove
 | 2¹⁴ | 4462 | 3181 | 1.40× |
 | 2¹⁶ | 14850 | 10515 | **1.41×** |
 
-The G1 MSM's 2.5–3.8× dilutes to ~1.4× on the full prove because **the FFT (`computeH`) and the G2
-MSM are still pure-Java**, plus per-MSM point conversion. Levers to close the gap (M7 cont.):
+> **M8 measure-first finding (this flips the priorities).** Breakdown of the pure-Java prove:
+> **the FFT (`computeH`) is only ~1.5%** (2¹⁶: 230 ms / 14983 ms) — so Vector-API/M3 on the FFT is
+> *worthless*. The ~98% is the MSMs, and since blst-G1 only gave 1.41×, **the pure-Java G2 MSM
+> (`computePiB_G2`'s object-based `g2Msm`, ~8 s of ~15 s) is the dominant remaining cost.** So
+> **blst-ing G2 is the single biggest lever** (~1.4× → ~3× projected), not a minor one. Measure-first
+> saved us from doing M3 first (the FFT lever) — it would have moved nothing.
+
+The G1 MSM's 2.5–3.8× dilutes to ~1.4× on the full prove because **the G2 MSM is still pure-Java**
+(the FFT is negligible; see finding above), plus per-MSM point conversion. Levers to close the gap
+(M8):
 - **G2 MSM** via `blst_p2s_mult_pippenger` (accelerate `computePiB_G2`),
 - **pre-convert the fixed PK** to blst encoding once (drop per-MSM conversion),
 - the FFT is then the remaining pure-Java bottleneck (blst doesn't help it).
 
-Remaining: M9 GraalVM FFM config + `--enable-native-access`; swap in a release `libblst`.
+### B0-result-4. M8: full blst backend (G1 + G2) — ~5× prove
+
+Added `BlstG2Msm` (`blst_p2s_mult_pippenger`, Fp2 c1‖c0 order, validated), a `G2MsmBackend` seam, and
+a `ProverBackend{g1,g2}` bundle (`PURE_JAVA` default). A full blst `ProverBackend` (G1+G2) proves
+**bit-identical** to pure-Java and is **~5× faster**:
+
+| n | pure-Java (ms) | full-blst (ms) | speedup |
+|---|---|---|---|
+| 2¹² | 1503 | 249 | 6.03× |
+| 2¹⁴ | 4299 | 856 | 5.02× |
+| 2¹⁶ | 14970 | 3028 | **4.94×** |
+
+The jump from G1-only's 1.4× to G1+G2's ~5× confirms the breakdown: **the G2 MSM was the dominant
+cost.** On top of Track-A's 1.47×, this is **~7× prove over the original baseline** — pure-FFM,
+bit-identical, no per-op JNI. The blst prover backend (the "provide blst option" goal) is functionally
+delivered.
+
+Remaining (productionization, not speed): M9 GraalVM FFM config + `--enable-native-access`; swap in a
+release/CI-built `libblst`; expose the blst `ProverBackend` as the user-facing opt-in via a small
+`zeroj-crypto-blst` module (currently wired in test scope). Optional: pre-convert the fixed PK to
+blst encoding once (drops the per-MSM conversion — a further small win).
 
 > **libblst provenance:** the bundled binaries are currently lifted from the (old, 2023)
 > icon-foundation jar — **fine for validating the FFM binding** (the pippenger C ABI has been stable

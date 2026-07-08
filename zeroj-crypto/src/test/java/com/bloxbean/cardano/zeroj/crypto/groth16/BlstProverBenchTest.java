@@ -56,16 +56,39 @@ class BlstProverBenchTest {
         return b;
     }
 
-    private static final G1MsmBackend BLST = (reader, n, scalars) -> {
+    private static final com.bloxbean.cardano.zeroj.crypto.msm.G1MsmBackend BLST_G1 = (reader, n, scalars) -> {
         byte[][] enc = new byte[n][];
         long[] buf = new long[12];
         for (int i = 0; i < n; i++) { reader.readInto(i, buf); enc[i] = uncompressed(buf); }
         byte[] res = BlstG1Msm.msm(enc, scalars);
         if ((res[0] & 0x40) != 0) return JacobianG1BLS381.INFINITY;
-        BigInteger x = new BigInteger(1, Arrays.copyOfRange(res, 0, 48));
-        BigInteger y = new BigInteger(1, Arrays.copyOfRange(res, 48, 96));
-        return JacobianG1BLS381.fromAffine(x, y);
+        return JacobianG1BLS381.fromAffine(new BigInteger(1, Arrays.copyOfRange(res, 0, 48)),
+                new BigInteger(1, Arrays.copyOfRange(res, 48, 96)));
     };
+
+    private static byte[] uncompressedG2(com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2 p) {
+        byte[] b = new byte[192];
+        if (p.x().re().isZero() && p.x().im().isZero() && p.y().re().isZero() && p.y().im().isZero()) { b[0] = 0x40; return b; }
+        to48BE(p.x().im().toBigInteger(), b, 0);   to48BE(p.x().re().toBigInteger(), b, 48);
+        to48BE(p.y().im().toBigInteger(), b, 96);  to48BE(p.y().re().toBigInteger(), b, 144);
+        return b;
+    }
+
+    private static final com.bloxbean.cardano.zeroj.crypto.msm.G2MsmBackend BLST_G2 = (points, scalars, n) -> {
+        if (n == 0) return com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.INFINITY;
+        byte[][] enc = new byte[n][];
+        BigInteger[] sc = new BigInteger[n];
+        for (int i = 0; i < n; i++) { enc[i] = uncompressedG2(points[i]); sc[i] = scalars[i]; }
+        byte[] r = com.bloxbean.cardano.zeroj.blst.ffm.BlstG2Msm.msm(enc, sc);
+        if ((r[0] & 0x40) != 0) return com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.INFINITY;
+        var xc1 = new BigInteger(1, Arrays.copyOfRange(r, 0, 48)); var xc0 = new BigInteger(1, Arrays.copyOfRange(r, 48, 96));
+        var yc1 = new BigInteger(1, Arrays.copyOfRange(r, 96, 144)); var yc0 = new BigInteger(1, Arrays.copyOfRange(r, 144, 192));
+        return com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.fromAffine(
+                com.bloxbean.cardano.zeroj.bls12381.field.MontFp2_381.of(xc0, xc1),
+                com.bloxbean.cardano.zeroj.bls12381.field.MontFp2_381.of(yc0, yc1));
+    };
+
+    private static final ProverBackend BLST = new ProverBackend(BLST_G1, BLST_G2);
 
     // ---- circuit ----
 
@@ -102,13 +125,17 @@ class BlstProverBenchTest {
     void blstBackedProof_equalsPureJava() {
         var s = setup(1024);
         var readers = Groth16ProverBLS381.heapReaders(s.pk);
-        var pure = Groth16ProverBLS381.proveUnblindedWithReaders(s.pk, readers, G1MsmBackend.PURE_JAVA, s.w, s.cons, s.domain);
+        var pure = Groth16ProverBLS381.proveUnblindedWithReaders(s.pk, readers, ProverBackend.PURE_JAVA, s.w, s.cons, s.domain);
         var blst = Groth16ProverBLS381.proveUnblindedWithReaders(s.pk, readers, BLST, s.w, s.cons, s.domain);
 
         assertEquals(pure.a().x().toBigInteger(), blst.a().x().toBigInteger(), "piA.x");
         assertEquals(pure.a().y().toBigInteger(), blst.a().y().toBigInteger(), "piA.y");
         assertEquals(pure.c().x().toBigInteger(), blst.c().x().toBigInteger(), "piC.x");
         assertEquals(pure.c().y().toBigInteger(), blst.c().y().toBigInteger(), "piC.y");
+        // piB is G2 (now blst too)
+        assertEquals(pure.b().x().re().toBigInteger(), blst.b().x().re().toBigInteger(), "piB.x.c0");
+        assertEquals(pure.b().x().im().toBigInteger(), blst.b().x().im().toBigInteger(), "piB.x.c1");
+        assertEquals(pure.b().y().re().toBigInteger(), blst.b().y().re().toBigInteger(), "piB.y.c0");
     }
 
     @Test
@@ -121,11 +148,11 @@ class BlstProverBenchTest {
             var s = setup(n);
             var readers = Groth16ProverBLS381.heapReaders(s.pk);
             // warm
-            Groth16ProverBLS381.proveWithReaders(s.pk, readers, G1MsmBackend.PURE_JAVA, s.w, s.cons, n + 2, s.domain);
+            Groth16ProverBLS381.proveWithReaders(s.pk, readers, ProverBackend.PURE_JAVA, s.w, s.cons, n + 2, s.domain);
             Groth16ProverBLS381.proveWithReaders(s.pk, readers, BLST, s.w, s.cons, n + 2, s.domain);
             long t0 = System.nanoTime();
             for (int it = 0; it < 3; it++)
-                Groth16ProverBLS381.proveWithReaders(s.pk, readers, G1MsmBackend.PURE_JAVA, s.w, s.cons, n + 2, s.domain);
+                Groth16ProverBLS381.proveWithReaders(s.pk, readers, ProverBackend.PURE_JAVA, s.w, s.cons, n + 2, s.domain);
             double pureMs = (System.nanoTime() - t0) / 3e6;
             long t1 = System.nanoTime();
             for (int it = 0; it < 3; it++)

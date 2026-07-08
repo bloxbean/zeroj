@@ -68,14 +68,14 @@ public final class Groth16ProverBLS381 {
         BigInteger r = randomScalar(rng);
         BigInteger s = randomScalar(rng);
 
-        return proveInternal(pk, heapReaders(pk), G1MsmBackend.PURE_JAVA, witness, hCoeffs, r, s);
+        return proveInternal(pk, heapReaders(pk), ProverBackend.PURE_JAVA, witness, hCoeffs, r, s);
     }
 
     static Groth16ProofBLS381 proveUnblinded(
             Groth16ProvingKeyBLS381 pk, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
-        return proveInternal(pk, heapReaders(pk), G1MsmBackend.PURE_JAVA, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+        return proveInternal(pk, heapReaders(pk), ProverBackend.PURE_JAVA, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
     }
 
     /** The G1 proving-key point arrays as readers (heap or mmap-backed). */
@@ -84,7 +84,7 @@ public final class Groth16ProverBLS381 {
 
     /** Deterministic (unblinded) prove with reader-supplied G1 key + MSM backend — for differential tests. */
     static Groth16ProofBLS381 proveUnblindedWithReaders(
-            Groth16ProvingKeyBLS381 pk, G1Readers readers, G1MsmBackend backend, BigInteger[] witness,
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
             List<R1CSConstraint> constraints, int domainSize) {
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
         return proveInternal(pk, readers, backend, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
@@ -107,12 +107,12 @@ public final class Groth16ProverBLS381 {
     public static Groth16ProofBLS381 proveWithReaders(
             Groth16ProvingKeyBLS381 pk, G1Readers readers, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
-        return proveWithReaders(pk, readers, G1MsmBackend.PURE_JAVA, witness, constraints, numWires, domainSize);
+        return proveWithReaders(pk, readers, ProverBackend.PURE_JAVA, witness, constraints, numWires, domainSize);
     }
 
     /** Prove with an explicit G1 MSM backend (e.g. the opt-in FFM blst backend, ADR-0029 M7). */
     public static Groth16ProofBLS381 proveWithReaders(
-            Groth16ProvingKeyBLS381 pk, G1Readers readers, G1MsmBackend backend, BigInteger[] witness,
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
         var rng = new SecureRandom();
@@ -120,13 +120,13 @@ public final class Groth16ProverBLS381 {
     }
 
     private static Groth16ProofBLS381 proveInternal(
-            Groth16ProvingKeyBLS381 pk, G1Readers readers, G1MsmBackend backend, BigInteger[] witness,
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
             BigInteger[] hCoeffs, BigInteger r, BigInteger s) {
 
-        var piA = computePiA(pk, readers.a(), backend, witness, r);
-        var piB = computePiB_G2(pk, witness, s);
-        var piB1 = computePiB_G1(pk, readers.b1(), backend, witness, s);
-        var piC = computePiC(pk, readers.h(), readers.l(), backend, hCoeffs, witness, r, s, piA, piB1);
+        var piA = computePiA(pk, readers.a(), backend.g1(), witness, r);
+        var piB = computePiB_G2(pk, backend.g2(), witness, s);
+        var piB1 = computePiB_G1(pk, readers.b1(), backend.g1(), witness, s);
+        var piC = computePiC(pk, readers.h(), readers.l(), backend.g1(), hCoeffs, witness, r, s, piA, piB1);
 
         return new Groth16ProofBLS381(piA.toAffine(), piB.toAffine(), piC.toAffine());
     }
@@ -195,17 +195,18 @@ public final class Groth16ProverBLS381 {
         return result;
     }
 
-    private static JacobianG2BLS381 computePiB_G2(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger s) {
+    private static JacobianG2BLS381 computePiB_G2(Groth16ProvingKeyBLS381 pk,
+            com.bloxbean.cardano.zeroj.crypto.msm.G2MsmBackend g2Backend, BigInteger[] witness, BigInteger s) {
         var result = JacobianG2BLS381.fromAffine(pk.betaG2().x(), pk.betaG2().y());
 
         int n = Math.min(witness.length, pk.pointsB2().length);
-        result = result.add(g2Msm(pk.pointsB2(), witness, n));
+        result = result.add(g2Backend.msm(pk.pointsB2(), witness, n));
 
         result = result.add(JacobianG2BLS381.fromAffine(pk.deltaG2().x(), pk.deltaG2().y()).scalarMul(s));
         return result;
     }
 
-    private static JacobianG2BLS381 g2Msm(AffineG2[] points, BigInteger[] scalars, int n) {
+    static JacobianG2BLS381 g2Msm(AffineG2[] points, BigInteger[] scalars, int n) {
         if (n == 0) return JacobianG2BLS381.INFINITY;
 
         BigInteger fr = MontFr381.modulus();
