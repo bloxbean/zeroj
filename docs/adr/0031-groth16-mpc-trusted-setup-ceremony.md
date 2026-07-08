@@ -148,6 +148,28 @@ that stays with the circuit's ceremony (minimum viable: coordinator contribution
 | M5 | **Option B contributor** | `zeroj-ceremony contribute/verify` producing snarkjs-verifiable contributions; cross-verified against snarkjs on the same transcript; timing measured at 19M |
 | M6 | Dry-run ceremony on the ownership circuit | ≥3 contributors (mixed A/B tooling on the same transcript), beacon, published transcript, `snarkjs zkey verify` green, imported key proves + verifies on-chain (testnet) |
 
+## Results (2026-07-08) — M1–M6 delivered
+
+| milestone | result |
+|---|---|
+| M1 | `R1csExporter` + live snarkjs round-trip **green** (ZeroJ r1cs → snarkjs ceremony → `zkey verify` OK → import → ZeroJ prove → pairing verify vs snarkjs VK) |
+| M2 | `ZkeyPkStoreImporter` — streaming (mmap) ceremony-`.zkey` → `Groth16PkStore`; bit-identical to the strict importer; `snarkjsConstraints()` binding-row synthesis asserted against real zkeys (which store only the A/B matrices — provers derive C=A·B) |
+| M3 | phase-1 decision: **Filecoin PoT primary**, own-ptau fallback (measured table above) |
+| M4 | `zeroj-ceremony` CLI (picocli; GraalVM configs auto-emitted; `contribute`/`finalize` native-friendly) + Option-A runbook; full ceremony driven through the CLI **green** |
+| M5 | **ZeroJ-native contributor, snarkjs-verified**: `contribute` writes snarkjs-format `.zkey`; interop test: zeroj → `snarkjs zkey verify` OK → snarkjs stacks on top → second zeroj contribution → verify OK → proves. Measured **23.3k parallel G1 muls/s → a 19M-circuit contribution ≈ 0.9 h** (vs ~2.5–3 h Node) |
+| M6 | **rehearsal ceremony green** (`docs/ceremony/rehearsal.sh`): mixed tooling (2 ZeroJ + 1 snarkjs), beacon, independent `zkey verify`, finalize → PkStore |
+
+**Bug-compatibility findings** (the two subtleties that make Option B possible, documented in code):
+1. ffjavascript's `fromRng` writes sampled bytes canonically but WASM field ops treat buffers as
+   Montgomery form → the semantic sampled value is `v·R⁻¹ mod p` (`SnarkjsHashToG2.sampleFp`).
+2. The contribution transcript streams each prior record's **raw components** into one running
+   blake2b-512 — not the priors' sub-hashes; the two coincide only for the first contribution.
+
+**Still open for the production ceremony** (by design, not omission): the Filecoin
+challenge→`.ptau` conversion exercised on the real ~50–100 GB files; the one-time 2²⁵
+`prepare phase2` (~60–105 h Node, cached forever); `beacon` in the ZeroJ CLI (use snarkjs's
+meanwhile); and the circuit freeze below.
+
 ## Prerequisite — circuit freeze (sequencing, from ADR-0030)
 
 A ceremony binds to the **exact final R1CS**. Enabling hints post-audit (~19M → ~11–12M), adding the
