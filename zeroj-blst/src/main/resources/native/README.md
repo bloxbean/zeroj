@@ -23,9 +23,12 @@ drops it here as `native/<os>/<arch>/libblst.<ext>`.
 > `.github/workflows/release.yml` builds the pinned tag on every platform at tag-release time and
 > injects the results before publishing — released jars never ship the committed dev binaries below.
 
-`.github/workflows/build-blst.yml` runs the same script per runner (Linux/macOS × x86_64/aarch64,
-+ Windows) and assembles the all-platform set that ships in the jar. Bump `BLST_TAG` there and in
-`build-blst.sh` to update the pinned blst version.
+`.github/workflows/build-blst.yml` runs the same script per runner (Linux amd64/aarch64 on
+`ubuntu-22.04`, macOS arm64, + Windows) and assembles the all-platform set that ships in the jar.
+Bump `BLST_TAG` there and in `build-blst.sh` to update the pinned blst version.
 
 Layout: `native/<os>/<arch>/libblst.<ext>` — `<os>` ∈ {linux, mac, windows},
-`<arch>` ∈ {amd64, x86_64, aarch64}. The FFM loader (`BlstFfm`) picks the matching one at runtime.
+`<arch>` ∈ {amd64, aarch64}. The FFM loader (`BlstFfm`) picks the matching one at runtime. macOS is
+**arm64-only** (GitHub retired the free Intel runner in Dec 2025). blst MSM is opt-in acceleration
+(`zeroj-crypto-blst`); the default prover backend is pure-Java (`G1MsmBackend.PURE_JAVA`), so Intel
+Macs still work — they just can't opt into the blst speedup.

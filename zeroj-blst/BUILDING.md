@@ -61,10 +61,12 @@ main module stays JNI/native-free by default.)
 
 | runner | os / arch |
 |---|---|
-| `ubuntu-latest` | linux / amd64 |
-| `ubuntu-24.04-arm` | linux / aarch64 |
-| `macos-13` | mac / x86_64 |
+| `ubuntu-22.04` | linux / amd64 |
+| `ubuntu-22.04-arm` | linux / aarch64 |
 | `macos-14` | mac / aarch64 |
+
+> Linux runners are pinned to **22.04** (glibc 2.35) so the shared libraries load on older
+> distros. macOS is **arm64-only** — GitHub retired the free Intel runner (`macos-13`) in Dec 2025.
 
 Each `build` job runs `build-blst.sh` and uploads its `libblst.*` as an artifact
 (`libblst-<os>-<arch>`). The `assemble` job downloads all of them into the

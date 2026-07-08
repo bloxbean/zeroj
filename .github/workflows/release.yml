@@ -106,9 +106,6 @@ jobs:
           - runner: ubuntu-24.04-arm
             os: linux
             arch: aarch64
-          - runner: macos-13
-            os: mac
-            arch: x86_64
           - runner: macos-14
             os: mac
             arch: aarch64
@@ -175,7 +172,7 @@ jobs:
           done
 
           # blst (source-built, replaces the committed dev binaries in the released jars)
-          for target in linux/amd64 linux/aarch64 mac/x86_64 mac/aarch64; do
+          for target in linux/amd64 linux/aarch64 mac/aarch64; do
             os=${target%/*}; arch=${target#*/}
             mkdir -p zeroj-blst/src/main/resources/native/$target
             cp blst-native-$os-$arch/* zeroj-blst/src/main/resources/native/$target/ || true
@@ -230,10 +227,6 @@ jobs:
             os: linux-arm64
             ext: ''
             fatjar: false
-          - runner: macos-13
-            os: macos-x86_64
-            ext: ''
-            fatjar: false
           - runner: macos-14
             os: macos-arm64
             ext: ''
@@ -244,6 +237,8 @@ jobs:
             fatjar: false
           # windows-arm64: GraalVM ships no windows-aarch64 native-image toolchain yet —
           # ARM Windows users run the x86_64 binary (emulation) or the fat jar.
+          # macos-x86_64 (Intel): GitHub retired the free Intel runner (macos-13) Dec 2025 and
+          # macOS = arm64-only across this project — Intel Mac users run the fat jar.
     steps:
       - uses: actions/checkout@v4
 

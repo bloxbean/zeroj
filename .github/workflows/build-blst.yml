@@ -19,16 +19,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest      # linux / amd64
+          - runner: ubuntu-22.04       # linux / amd64 (22.04 = glibc 2.35 for broad compat)
             os: linux
             arch: amd64
-          - runner: ubuntu-24.04-arm   # linux / aarch64
+          - runner: ubuntu-22.04-arm   # linux / aarch64
             os: linux
             arch: aarch64
-          - runner: macos-13           # mac / x86_64
-            os: mac
-            arch: x86_64
-          - runner: macos-14           # mac / aarch64
+          - runner: macos-14           # mac / aarch64 (macOS = arm64 only; Intel retired)
             os: mac
             arch: aarch64
     runs-on: ${{ matrix.runner }}
