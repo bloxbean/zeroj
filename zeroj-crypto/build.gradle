@@ -21,7 +21,7 @@ tasks.register('blstSpike', Test) {
     useJUnitPlatform()
     maxHeapSize = '4g'
     systemProperty 'zeroj.bench', 'true'
-    filter { includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.msm.BlstMsmSpikeTest'; includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.msm.BlstFfmMsmTest'; includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.groth16.BlstProverBenchTest' }
+    filter { includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.msm.BlstMsmSpikeTest'; includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.msm.BlstFfmMsmTest'; includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.groth16.BlstProverBenchTest'; includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.groth16.ProveBreakdownTest' }
     outputs.upToDateWhen { false }
     testLogging { showStandardStreams = true }
 }
