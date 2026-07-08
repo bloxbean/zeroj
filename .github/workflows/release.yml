@@ -153,3 +153,50 @@ jobs:
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+
+  # ================================================================
+  # Stage 3: Ceremony CLI distributables -> GitHub release assets
+  # (ADR-0031: contributors download one artifact and run the ceremony)
+  # ================================================================
+
+  ceremony-cli-release:
+    name: ceremony CLI (fat jar + native binaries)
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write   # attach assets to the release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux-x86_64
+            fatjar: true          # the (platform-independent) fat jar is uploaded once, from linux
+          - runner: macos-14
+            os: macos-arm64
+            fatjar: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up GraalVM 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          native-image-job-reports: 'true'
+
+      - name: Build ceremony fat jar
+        run: ./gradlew :zeroj-ceremony:fatJar --no-daemon
+
+      - name: Build native binary
+        run: |
+          JAR=$(ls zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar)
+          native-image -jar "$JAR" --no-fallback --enable-native-access=ALL-UNNAMED \
+            -o zeroj-ceremony-${{ matrix.os }}
+          ./zeroj-ceremony-${{ matrix.os }} --version
+
+      - name: Upload to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
+            zeroj-ceremony-${{ matrix.os }}

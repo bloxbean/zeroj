@@ -28,6 +28,21 @@ jar {
     }
 }
 
+// Standalone distributable: everything bundled (zeroj modules, picocli, BouncyCastle).
+//   java -jar zeroj-ceremony-<v>-all.jar contribute --in key_N.zkey --out key_N+1.zkey
+// Also the input for the GraalVM native binary (see README): native-image -jar ...-all.jar
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Self-contained runnable jar (the ceremony-contributor distributable).'
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli' }
+    from sourceSets.main.output
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    // BC jar signatures don't survive repacking (we use the lightweight digest API, not the JCE provider)
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/versions/*/OSGI-INF/**'
+}
+
 test {
     useJUnitPlatform()
     systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
