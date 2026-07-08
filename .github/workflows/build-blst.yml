@@ -1,0 +1,70 @@
+name: build-blst
+
+# ADR-0029 M9 — build libblst from source for every platform (supranational ships no binaries).
+# Manual/dispatch: produces the all-platform native set for zeroj-blst. Bump BLST_TAG to update.
+on:
+  workflow_dispatch:
+    inputs:
+      blst_tag:
+        description: "supranational/blst tag to build"
+        default: "v0.3.15"
+        required: true
+
+env:
+  BLST_TAG: ${{ github.event.inputs.blst_tag || 'v0.3.15' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest      # linux / amd64
+            os: linux
+            arch: amd64
+          - runner: ubuntu-24.04-arm   # linux / aarch64
+            os: linux
+            arch: aarch64
+          - runner: macos-13           # mac / x86_64
+            os: mac
+            arch: x86_64
+          - runner: macos-14           # mac / aarch64
+            os: mac
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build libblst ${{ env.BLST_TAG }} for ${{ matrix.os }}/${{ matrix.arch }}
+        run: BLST_TAG="${BLST_TAG}" zeroj-blst/scripts/build-blst.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libblst-${{ matrix.os }}-${{ matrix.arch }}
+          path: zeroj-blst/src/main/resources/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          if-no-files-found: error
+
+  # Assemble the all-platform set (download each artifact into the resource tree). Commit or attach
+  # to a release as the project prefers.
+  assemble:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/blst-libs
+      - name: Stage into resources/native
+        run: |
+          set -euo pipefail
+          for d in /tmp/blst-libs/libblst-*; do
+            name="$(basename "$d")"; os="${name#libblst-}"; os="${os%-*}"; arch="${name##*-}"
+            mkdir -p "zeroj-blst/src/main/resources/native/$os/$arch"
+            cp "$d"/libblst.* "zeroj-blst/src/main/resources/native/$os/$arch/"
+          done
+          find zeroj-blst/src/main/resources/native -name 'libblst.*' -printf '%p (%s bytes)\n'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libblst-all-platforms
+          path: zeroj-blst/src/main/resources/native/**/libblst.*
+
+# Windows (.dll) is a follow-up: blst's build.sh runs under MSYS2/git-bash but needs different link
+# flags; add a windows-latest matrix entry + a Windows branch in build-blst.sh when required.
