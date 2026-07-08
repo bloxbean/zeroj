@@ -53,8 +53,8 @@ class CeremonyCliTest {
 
     @Test
     void missingArgs_failCleanly() {
-        assertThrows(IllegalArgumentException.class,
-                () -> CeremonyCli.run(new String[]{"export-r1cs", "--out", "x.r1cs"}));
+        // picocli usage error (missing required --circuit) => exit code 2, no stack trace
+        assertEquals(2, CeremonyCli.run(new String[]{"export-r1cs", "--out", "x.r1cs"}));
     }
 
     @Test

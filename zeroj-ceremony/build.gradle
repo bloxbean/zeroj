@@ -11,8 +11,15 @@ dependencies {
     implementation project(':zeroj-crypto')        // R1csExporter, ZkeyPkStoreImporter, Groth16PkStore
     implementation project(':zeroj-circuit-dsl')   // CircuitBuilder (reflective circuit compile)
     implementation project(':zeroj-bls12381')
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.83' // blake2b-512 ceremony transcripts
+    implementation 'info.picocli:picocli:4.7.6'
+    annotationProcessor 'info.picocli:picocli-codegen:4.7.6' // emits GraalVM reflection configs at compile time
 
     testImplementation project(':zeroj-codec')     // SnarkjsJsonCodec (VK parsing in the E2E test)
+}
+
+compileJava {
+    options.compilerArgs += ['-Aproject=com.bloxbean.cardano/zeroj-ceremony']
 }
 
 jar {
