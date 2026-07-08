@@ -200,22 +200,11 @@ jobs:
           distribution: 'graalvm'
           native-image-job-reports: 'true'
 
-      - name: Build ceremony fat jar
-        shell: bash
-        run: ./gradlew :zeroj-ceremony:fatJar --no-daemon
-
-      - name: Build native binary
+      - name: Build native zip distribution (fatJar -> native-image -> zip)
         shell: bash
         run: |
-          JAR=$(ls zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar)
-          mkdir -p zeroj-ceremony/build/native
-          native-image -jar "$JAR" --no-fallback --enable-native-access=ALL-UNNAMED \
-            -o zeroj-ceremony/build/native/zeroj-ceremony
+          ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
           zeroj-ceremony/build/native/zeroj-ceremony${{ matrix.ext }} --version
-
-      - name: Package zip distribution (gradle nativeDistZip)
-        shell: bash
-        run: ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
 
       - name: Upload to GitHub release
         uses: softprops/action-gh-release@v2

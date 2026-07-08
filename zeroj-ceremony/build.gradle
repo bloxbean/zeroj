@@ -24,7 +24,8 @@ compileJava {
 
 jar {
     manifest {
-        attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli'
+        attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli',
+                   'Implementation-Version': project.version
     }
 }
 
@@ -36,23 +37,55 @@ tasks.register('fatJar', Jar) {
     description = 'Self-contained runnable jar (the ceremony-contributor distributable).'
     archiveClassifier = 'all'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    manifest { attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli' }
+    manifest {
+        attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli',
+                   'Implementation-Version': project.version
+    }
     from sourceSets.main.output
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     // BC jar signatures don't survive repacking (we use the lightweight digest API, not the JCE provider)
     exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/versions/*/OSGI-INF/**'
 }
 
-// ADR-0031: zip distribution around a GraalVM native binary. The binary is built by native-image
-// into build/native/ first, then zipped here (clean `zeroj-ceremony[.exe]` name inside; platform +
-// version in the zip name; unix exec bit preserved; user guide included as README):
-//   native-image -jar build/libs/zeroj-ceremony-<v>-all.jar --no-fallback \
-//       --enable-native-access=ALL-UNNAMED -o build/native/zeroj-ceremony
-//   ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=linux-x86_64
+// GraalVM native binary + zip distribution (ADR-0031). One command builds everything:
+//   ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=macos-arm64
+// (needs a GraalVM JDK, e.g. `sdk use java 25.0.2-graal`; picocli-codegen already emitted the
+//  reflection configs into the jar). Zip layout: clean `zeroj-ceremony[.exe]` inside with the unix
+//  exec bit preserved + the user guide as README; platform + version in the zip's name.
+
+def detectedPlatform = {
+    def os = System.getProperty('os.name').toLowerCase()
+    def arch = System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'x86_64'
+    def name = os.contains('mac') ? 'macos' : os.contains('win') ? 'windows' : 'linux'
+    if (name == 'macos' || name == 'linux') return "${name}-${arch}"
+    return "windows-${arch}"
+}
+
+tasks.register('nativeImage', Exec) {
+    group = 'distribution'
+    description = 'Build the GraalVM native binary into build/native/ (requires a GraalVM JDK).'
+    dependsOn tasks.named('fatJar')
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('win')
+    def niTool = "${System.getProperty('java.home')}/bin/native-image" + (isWindows ? '.cmd' : '')
+    def outDir = layout.buildDirectory.dir('native').get().asFile
+    doFirst {
+        outDir.mkdirs()
+        if (!new File(niTool).exists())
+            throw new GradleException("native-image not found at $niTool — use a GraalVM JDK (e.g. 'sdk use java 25.0.2-graal')")
+    }
+    argumentProviders.add({
+        def jar = tasks.fatJar.archiveFile.get().asFile
+        ['-jar', jar.absolutePath, '--no-fallback', '--enable-native-access=ALL-UNNAMED',
+         '-o', new File(outDir, 'zeroj-ceremony').absolutePath]
+    } as CommandLineArgumentProvider)
+    executable niTool
+}
+
 tasks.register('nativeDistZip', Zip) {
     group = 'distribution'
-    description = 'Package the native-image binary from build/native/ into a platform zip.'
-    def platform = (project.findProperty('platform') ?: 'unknown') as String
+    description = 'Build the native binary (if needed) and package it as a platform zip.'
+    dependsOn tasks.named('nativeImage')
+    def platform = (project.findProperty('platform') ?: detectedPlatform()) as String
     archiveBaseName = 'zeroj-ceremony'
     archiveClassifier = platform
     into("zeroj-ceremony-${project.version}-${platform}") {
@@ -61,11 +94,6 @@ tasks.register('nativeDistZip', Zip) {
             filePermissions { unix(0755) }
         }
         from("${rootDir}/docs/ceremony/USER-GUIDE.md") { rename { 'README.md' } }
-    }
-    doFirst {
-        def bin = layout.buildDirectory.dir('native').get().asFile
-        if (!new File(bin, 'zeroj-ceremony').exists() && !new File(bin, 'zeroj-ceremony.exe').exists())
-            throw new GradleException("No native binary in $bin — run native-image first (see task doc)")
     }
 }
 

@@ -138,11 +138,15 @@ I confirm the entropy was generated fresh and destroyed after use.
 ## 6. Building the tool yourself (instead of downloading)
 
 ```bash
-./gradlew :zeroj-ceremony:fatJar          # -> zeroj-ceremony/build/libs/zeroj-ceremony-<v>-all.jar
+# fat jar (any JDK 25+)
+./gradlew :zeroj-ceremony:fatJar
+#   -> zeroj-ceremony/build/libs/zeroj-ceremony-<v>-all.jar
 
-# optional native binary (GraalVM 25):
-native-image -jar zeroj-ceremony/build/libs/zeroj-ceremony-<v>-all.jar \
-  --no-fallback --enable-native-access=ALL-UNNAMED -o zeroj-ceremony
+# native zip distribution — one command; requires a GraalVM JDK (e.g. `sdk use java 25.0.2-graal`)
+./gradlew :zeroj-ceremony:nativeDistZip
+#   -> zeroj-ceremony/build/distributions/zeroj-ceremony-<v>-<platform>.zip
+#   (platform auto-detected; override with -Pplatform=linux-x86_64 etc.
+#    the binary itself lands at zeroj-ceremony/build/native/zeroj-ceremony)
 ```
 
 ## 7. FAQ

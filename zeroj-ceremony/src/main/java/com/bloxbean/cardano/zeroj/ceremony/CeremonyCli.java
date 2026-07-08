@@ -26,9 +26,10 @@ import java.util.concurrent.Callable;
  * the image; coordinators typically run it on a JVM instead.</p>
  */
 @Command(name = "zeroj-ceremony", mixinStandardHelpOptions = true,
-        description = "Groth16 MPC trusted-setup tooling (ADR-0031). "
-                + "Flow: export-r1cs -> snarkjs groth16 setup -> contribute (zeroj or snarkjs, any mix) "
-                + "-> snarkjs zkey beacon + verify -> finalize. See docs/ceremony/OPTION-A-RUNBOOK.md.",
+        versionProvider = CeremonyCli.ManifestVersion.class,
+        description = "Groth16 MPC trusted-setup ceremony tool for ZeroJ circuits. "
+                + "Flow: export-r1cs -> snarkjs groth16 setup -> contribute (zeroj-ceremony or snarkjs, any mix) "
+                + "-> snarkjs zkey beacon + verify -> finalize. Guide: docs/ceremony/USER-GUIDE.md",
         subcommands = {CeremonyCli.ExportR1cs.class, CeremonyCli.Contribute.class, CeremonyCli.Finalize.class})
 public final class CeremonyCli {
 
@@ -106,7 +107,7 @@ public final class CeremonyCli {
     // ---- contribute (Option B: the ZeroJ-native fast contributor) ----
 
     @Command(name = "contribute", mixinStandardHelpOptions = true,
-            description = "Apply a ZeroJ-native phase-2 contribution (snarkjs-compatible .zkey; "
+            description = "Apply your phase-2 contribution to a ceremony .zkey (snarkjs-compatible; "
                     + "the transcript verifies with 'snarkjs zkey verify').")
     static class Contribute implements Callable<Integer> {
 
@@ -132,6 +133,15 @@ public final class CeremonyCli {
             System.out.println("Publish this hash in your attestation. Verify the transcript with:");
             System.out.println("  snarkjs zkey verify <circuit.r1cs> <pot.ptau> " + out.getFileName());
             return 0;
+        }
+    }
+
+    /** Version from the jar manifest ({@code Implementation-Version}); "dev" when run from classes. */
+    static class ManifestVersion implements CommandLine.IVersionProvider {
+        @Override
+        public String[] getVersion() {
+            String v = CeremonyCli.class.getPackage().getImplementationVersion();
+            return new String[]{"zeroj-ceremony " + (v != null ? v : "dev")};
         }
     }
 
