@@ -1,45 +1,52 @@
 # zeroj-blst
 
-BLS12-381 cryptographic operations via the [blst](https://github.com/supranational/blst) native library.
+BLS12-381 native operations via [supranational/blst](https://github.com/supranational/blst) — the
+standalone "blst for the JVM" module. Usable on its own (verifiers, BBS, or downstream projects like
+julc) without depending on the ZeroJ prover.
 
-This module wraps the `blst-java` library to provide BLS12-381 pairing operations used by `zeroj-verifier-groth16` for high-performance Groth16 verification. It also exposes an explicit `Bls12381Provider` implementation for protocols such as BBS that can opt in to native-backed BLS12-381 operations. BLS12-381 is the curve used by Cardano's Plutus V3 native BLS primitives.
+It hosts **two** bindings during an in-progress migration:
 
-## Key Types
+| binding | package | used for | mechanism |
+|---|---|---|---|
+| **FFM binding** (ADR-0029) | `blst.ffm.*` | native MSM (`blst_p1s/p2s_mult_pippenger`) for the ~5× Groth16 prover backend | Java 25 **FFM** (Panama) — no JNI, no third-party wrapper |
+| `Bls12381Provider` / pairing | `blst.*` | pairing for Groth16 verification + BBS | `foundation.icon:blst-java` (JNI/SWIG) |
+
+The FFM binding is the new, preferred path (native-image-friendlier, source-built `libblst`). The
+JNI provider remains for pairing/BBS until it is migrated to FFM too (the "full swap").
+
+## Native library — built from source
+
+supranational publishes **no precompiled binaries**, so `zeroj-blst` **builds `libblst` from source**
+(no third-party binary), pinned to **v0.3.15**, and bundles the shared libraries as jar resources.
+The FFM loader (`BlstFfm`) extracts the matching one per platform at runtime.
+
+- **Local build / testing + CI + release:** see **[`BUILDING.md`](BUILDING.md)**.
+- Provenance note: [`src/main/resources/native/README.md`](src/main/resources/native/README.md).
+
+## Key types
 
 | Type | Description |
 |------|-------------|
-| `BlstBls12381Provider` | Explicit native-backed `Bls12381Provider` implementation |
-| `BlstPairing` | Wrapper for blst JNI/SWIG pairing operations (multi-pairing, point validation) |
+| `ffm.BlstFfm` | FFM loader — extracts + maps `libblst`, binds `blst_*` downcalls |
+| `ffm.BlstG1Msm` / `ffm.BlstG2Msm` | batched G1/G2 MSM via `blst_p1s/p2s_mult_pippenger` |
+| `BlstBls12381Provider` | native-backed `Bls12381Provider` (pairing, point ops) |
+| `BlstPairing` | multi-pairing / point validation |
 
-## Why blst?
+## Consumers
 
-| Property | Value |
-|----------|-------|
-| Performance | ~1ms verification (vs ~100-300ms pure Java BN254) |
-| Library | `foundation.icon:blst-java:0.3.2` (third-party JNI/SWIG binding) |
-| Platforms | Linux (x86_64, aarch64), macOS (x86_64, arm64) |
-| GraalVM | JNI metadata and packaged native-library resources are included; run an application-specific native-image smoke test before deployment |
+- **Verification / BBS** — pairing via `BlstBls12381Provider` (pulled in transitively by
+  `zeroj-verifier-groth16`).
+- **Faster Groth16 proving** — the FFM MSM is wrapped by **[`zeroj-crypto-blst`](../zeroj-crypto-blst)**
+  (the opt-in prover backend); `zeroj-crypto` itself stays pure-Java by default.
+- **Other JVM projects (e.g. julc)** — depend on `zeroj-blst` directly for native blst.
 
-The exact upstream blst commit embedded in `foundation.icon:blst-java:0.3.2`
-has not yet been independently verified in this repository. Treat this provider
-as beta native acceleration until that provenance is pinned or ZeroJ builds and
-bundles upstream blst directly.
+## Runtime
 
-## Gradle
+FFM downcalls need `--enable-native-access=ALL-UNNAMED`. GraalVM native-image config is bundled
+under `META-INF/native-image/`.
 
 ```gradle
 dependencies {
     implementation 'com.bloxbean.cardano:zeroj-blst'
 }
-```
-
-Most users don't depend on this module directly — it is pulled in transitively by `zeroj-verifier-groth16`.
-
-Provider selection remains explicit:
-
-```java
-var bls = com.bloxbean.cardano.zeroj.blst.BlstBls12381Provider.createDefault();
-var bbs = com.bloxbean.cardano.zeroj.bbs.BbsService.withBlsProvider(
-        com.bloxbean.cardano.zeroj.bbs.BbsCiphersuite.BLS12381_SHA256,
-        bls);
 ```

@@ -83,7 +83,7 @@ public final class Groth16ProverBLS381 {
                             PippengerFlatBLS381.G1AffineReader h, PippengerFlatBLS381.G1AffineReader l) {}
 
     /** Deterministic (unblinded) prove with reader-supplied G1 key + MSM backend — for differential tests. */
-    static Groth16ProofBLS381 proveUnblindedWithReaders(
+    public static Groth16ProofBLS381 proveUnblindedWithReaders(
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
             List<R1CSConstraint> constraints, int domainSize) {
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
