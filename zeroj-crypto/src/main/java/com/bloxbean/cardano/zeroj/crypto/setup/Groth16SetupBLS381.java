@@ -4,6 +4,7 @@ import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import com.bloxbean.cardano.zeroj.crypto.setup.FixedBaseG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
@@ -82,20 +83,21 @@ public final class Groth16SetupBLS381 {
         BigInteger zh = tauN.subtract(BigInteger.ONE).mod(FR); // tau^N - 1
         BigInteger nInv = BigInteger.valueOf(domainSize).modInverse(FR);
 
-        BigInteger[] lagrange = new BigInteger[domainSize];
-        BigInteger omegaI = BigInteger.ONE;
+        // ADR-0029 M5a: the Lagrange evaluations L_i(tau) are independent but each needs a modInverse
+        // (the dominant sequential setup cost — domainSize of them). Precompute omega^i sequentially
+        // (cheap Fr mults, the only serial dependency), then compute all L_i in parallel.
         BigInteger omegaBi = omega.toBigInteger();
-        for (int i = 0; i < domainSize; i++) {
+        BigInteger[] omegaPows = new BigInteger[domainSize];
+        omegaPows[0] = BigInteger.ONE;
+        for (int i = 1; i < domainSize; i++) omegaPows[i] = omegaPows[i - 1].multiply(omegaBi).mod(FR);
+        final BigInteger zhNInv = zh.multiply(nInv).mod(FR);
+        final BigInteger[] lagrange = new BigInteger[domainSize];
+        java.util.stream.IntStream.range(0, domainSize).parallel().forEach(i -> {
             // L_i(tau) = omega^i * (tau^N - 1) / (N * (tau - omega^i))
-            BigInteger diff = tau.subtract(omegaI).mod(FR);
-            if (diff.signum() == 0) {
-                lagrange[i] = BigInteger.ONE;
-            } else {
-                lagrange[i] = omegaI.multiply(zh).mod(FR).multiply(nInv).mod(FR)
-                        .multiply(diff.modInverse(FR)).mod(FR);
-            }
-            omegaI = omegaI.multiply(omegaBi).mod(FR);
-        }
+            BigInteger diff = tau.subtract(omegaPows[i]).mod(FR);
+            lagrange[i] = (diff.signum() == 0) ? BigInteger.ONE
+                    : omegaPows[i].multiply(zhNInv).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
+        });
 
         // For each wire s, compute u_s(tau), v_s(tau), w_s(tau)
         // u_s = sum_c A_c[s] * L_c(tau), etc.
@@ -118,39 +120,45 @@ public final class Groth16SetupBLS381 {
         var g1 = JacobianG1BLS381.GENERATOR;
         var g2 = JacobianG2BLS381.GENERATOR;
 
-        AffineG1 alphaG1 = g1.scalarMul(alpha).toAffine();
-        AffineG1 betaG1 = g1.scalarMul(beta).toAffine();
+        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alpha);
+        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(beta);
         AffineG2 betaG2 = g2.scalarMul(beta).toAffine();
-        AffineG1 deltaG1 = g1.scalarMul(delta).toAffine();
+        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
         AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
 
-        // pointsA[s] = u_s(tau) * G1
-        AffineG1[] pointsA = new AffineG1[numWires];
-        for (int s = 0; s < numWires; s++) {
-            pointsA[s] = us[s].signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(us[s]).toAffine();
-        }
+        // ADR-0029 M5a: the per-wire scalar-muls are independent (each writes its own slot), so run
+        // them in parallel across cores. This — not blst — is the setup-time lever: blst's speedup is
+        // batched pippenger (a sum), but these are independent muls, and per-op blst is a wash.
 
-        // pointsB1[s] = v_s(tau) * G1
-        AffineG1[] pointsB1 = new AffineG1[numWires];
-        for (int s = 0; s < numWires; s++) {
-            pointsB1[s] = vs[s].signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(vs[s]).toAffine();
-        }
+        // pointsA[s] = u_s(tau) * G1  (flat: 12 longs/point)
+        long[] pointsA = new long[numWires * Groth16ProvingKeyBLS381.G1_STRIDE];
+        java.util.stream.IntStream.range(0, numWires).parallel().forEach(s ->
+                Groth16ProvingKeyBLS381.writeG1(pointsA, s,
+                        us[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(us[s])));
+
+        // pointsB1[s] = v_s(tau) * G1  (flat)
+        long[] pointsB1 = new long[numWires * Groth16ProvingKeyBLS381.G1_STRIDE];
+        java.util.stream.IntStream.range(0, numWires).parallel().forEach(s ->
+                Groth16ProvingKeyBLS381.writeG1(pointsB1, s,
+                        vs[s].signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(vs[s])));
 
         // pointsB2[s] = v_s(tau) * G2
         AffineG2[] pointsB2 = new AffineG2[numWires];
-        for (int s = 0; s < numWires; s++) {
-            pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine();
-        }
+        java.util.stream.IntStream.range(0, numWires).parallel().forEach(s ->
+                pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine());
 
         // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
+        // (final aliases: alpha/beta are scrubbed as toxic waste after the PK is built, below)
+        final BigInteger alphaF = alpha, betaF = beta, deltaInvF = deltaInv;
         int numPrivate = numWires - numPublic - 1;
-        AffineG1[] pointsL = new AffineG1[Math.max(0, numPrivate)];
-        for (int j = 0; j < numPrivate; j++) {
+        long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
+        java.util.stream.IntStream.range(0, numPrivate).parallel().forEach(j -> {
             int s = numPublic + 1 + j;
-            BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
-                    .multiply(deltaInv).mod(FR);
-            pointsL[j] = lVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(lVal).toAffine();
-        }
+            BigInteger lVal = betaF.multiply(us[s]).add(alphaF.multiply(vs[s])).add(ws[s])
+                    .multiply(deltaInvF).mod(FR);
+            Groth16ProvingKeyBLS381.writeG1(pointsL, j,
+                    lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal));
+        });
 
         // H points: odd-indexed Lagrange basis on double-sized domain / delta
         // L_{2i+1}^{(2N)}(tau) / delta * G1
@@ -161,8 +169,9 @@ public final class Groth16SetupBLS381 {
         BigInteger zh2 = tauN2.subtract(BigInteger.ONE).mod(FR);
         BigInteger nInv2 = BigInteger.valueOf(domainSize2).modInverse(FR);
 
-        AffineG1[] pointsH = new AffineG1[domainSize];
-        for (int i = 0; i < domainSize; i++) {
+        long[] pointsH = new long[domainSize * Groth16ProvingKeyBLS381.G1_STRIDE];
+        final int domainSizeF = domainSize;
+        java.util.stream.IntStream.range(0, domainSizeF).parallel().forEach(i -> {
             int lagIdx = 2 * i + 1; // odd index
             // omega2^lagIdx
             BigInteger omegaPow = omega2Bi.modPow(BigInteger.valueOf(lagIdx), FR);
@@ -176,8 +185,9 @@ public final class Groth16SetupBLS381 {
                         .multiply(diff.modInverse(FR)).mod(FR);
             }
             BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
-            pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(hVal).toAffine();
-        }
+            Groth16ProvingKeyBLS381.writeG1(pointsH, i,
+                    hVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(hVal));
+        });
 
         // Verification key components: gamma_G2 and IC points
         AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
@@ -187,7 +197,7 @@ public final class Groth16SetupBLS381 {
         for (int s = 0; s <= numPublic; s++) {
             BigInteger icVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
                     .multiply(gammaInv).mod(FR);
-            ic[s] = icVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(icVal).toAffine();
+            ic[s] = icVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(icVal);
         }
 
         // Securely discard toxic waste (best-effort — see PowersOfTauBLS381.java for caveats)

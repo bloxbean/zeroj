@@ -1,10 +1,129 @@
 # ADR-0029: Groth16 Prover Performance — Memory (mmap) and Speed (blst / Vector API)
 
 ## Status
-Proposed
+Accepted (2026-07-07); largely implemented on `feat/adr_0029_prover_perf`.
+
+**Delivered:** Track-A pure-Java prover (M1 flat MSM 1.47×, M2a fixed-base setup 1.7×, M2b flat PK,
+M2c flat FFT, M4 mmap'd off-heap key → **provable on 16–32 GB, pure Java, no JNI**) and the blst
+backend (M6 FFM `blst_p1s/p2s_mult_pippenger` binding, M7 `ProverBackend` SPI, M8 full G1+G2 backend
+→ **~5× prove, bit-identical**), plus M9 build-from-source `libblst` (pinned v0.3.15) + GraalVM FFM
+config. All differential-tested against frozen oracles.
+The blst prover backend is exposed as the opt-in **`zeroj-crypto-blst`** module (`BlstProverBackend`),
+so `zeroj-crypto` stays pure-Java by default and `zeroj-blst` stays a standalone native lib.
+
+**M5 finding (2¹⁸ at-scale, 128 GB box):** setup **1794 µs/c**, prove **180 µs/c** (pure-Java),
+heap **4.25 KB/c**, PK flat 144 MB. Extrapolated to **2²⁵ (33.5 M)**: *prove* ~20 min (blst) + 18 GB
+mmap'd PK → **fine**; but *setup* ~**17 h** and ~**110–125 GB peak heap** → at the 128 GB memory edge,
+i.e. it could OOM after 17 h. **The setup — not the prove — is the real 2²⁵ blocker, on both time and
+memory.** The prover got mmap (M4) + blst (M8); setup did not. So M5 needs a **memory-lean, streamed,
+blst-accelerated setup** before the real run is safe.
+
+**M5a done — parallel setup (this is the setup-time lever, not blst).** The per-wire muls are
+independent, so `IntStream.parallel()` over the 5 point-array loops gives **1794 → 177.9 µs/c
+(~10.1×)** at 2¹⁸, correctness green. **2²⁵ setup: ~17 h → ~1.7 h.** With blst-prove (~20 min) the
+**full real run is now ~2 h, not ~17.5 h.** Caveat: peak heap rose 4.25 → 5.93 KB/c (parallel
+transient churn) → ~198 GB projected at 2²⁵, so the real run needs a large `-Xmx` + GC pressure (or
+thread throttling / disk streaming) — but it's now cheap enough to *attempt* (fail-fast in ~2 h).
+
+**Remaining (productionization/validation):** native-image build validation + Windows binary; the real
+2²⁵ end-to-end run (now ~2 h) + usecase practicalization; optional setup memory-streaming if 2²⁵ OOMs;
+M10 consolidated matrix. **M3 (Vector API) dropped** — measured FFT is ~1.5% of prove, so it would
+move nothing (and it's an incubator API).
+
+## M5 result — the real 19M CIP-1852 derivation proof, end to end (2026-07-08)
+
+Proven on a single 128 GB machine, pure JVM (Java 25 + blst via FFM), **19,075,097 constraints /
+43.7M wires / domain 2²⁵**:
+
+| stage | cold (first proof) | warm (cached PK) |
+|---|---|---|
+| compile → R1CS | 15.9 s | 14.7 s |
+| witness (real root key) | 1.7 s | 1.6 s |
+| key prep | setup **47 min** (148 µs/c) + save 53 s | **load 1.8 min** (mmap) |
+| prove (blst) | **7.1 min** (22 µs/c) | 7.2 min |
+| **total** | **~55 min** | **~9 min** |
+| peak heap | 72.7 GB | 66.5 GB |
+
+- **blst prove is ~7 min** — Pippenger at 43.7M points is very efficient (far better than the ~2.7 h
+  pure-Java estimate; blst gives the practical path).
+- **`Groth16PkStore`** persists the PK (23 GB on disk); a warm proof mmaps it (1.8 min) instead of
+  re-running the 47 min setup → **first proof ~55 min, every proof after ~9 min.**
+- Setup enablers that made it feasible: parallel point-muls + parallel Lagrange (M5a), skip the unused
+  67M-point PlonK SRS (Groth16 needs only tau), and a right-sized heap.
+- **All prior run failures were the gradle daemon** ("stop command received"), not the workload — a
+  plain `java` run at 92 GB completed cleanly with zero swap growth (106-sample CPU/mem profile).
+- **Next prove-speed lever (profiled):** the prove is **single-threaded** (~100% CPU of 12 cores) →
+  parallelizing the MSMs is ~10× of untapped headroom.
+
+### M5b — multi-core prove (2026-07-08): 434 s → 137 s (3.2×)
+
+Two steps, both proof-bit-identical to serial (point addition is associative; same field ops per slot):
+
+| prove @ 19M (blst, warm PK) | time |
+|---|---|
+| serial (M8 baseline) | 434 s |
+| + `ParallelMsm` (chunk MSMs across cores, sum partials) | 286 s |
+| + parallel `computeH`/NTT | **137 s (~2.3 min)** |
+
+- `ProverBackend.PURE_JAVA` and `BlstProverBackend.create()` are **multi-core by default** now
+  (`PURE_JAVA_SERIAL` / `createSerial()` kept). For blst, each chunk converts its points and makes
+  its own native pippenger call concurrently.
+- The MSM-only step exposed a scale artifact: **"FFT ≈ 1.5% of prove" was only true at 2¹⁶.** At
+  domain 2²⁵ the single-threaded `computeH` was ~170 s (~60% of the MSM-parallel prove). Fixed by
+  parallelizing the NTT stages (butterflies are independent within a stage; per-chunk twiddle starts
+  via `FrFFTFlat.pow`) and all element-wise passes (`parallelRange`).
+- **Warm proof end-to-end is now ~4.5 min** (compile 20 s + witness 2 s + load PK 108 s + prove 137 s);
+  the mmap'd-PK load (single-threaded G2 parse of 8.4 GB) is now comparable to the prove itself —
+  the next lever if further speed is wanted.
+- Validated: parallel==serial at MSM level and whole-proof level; parallel NTT vs the object oracle
+  above the engage threshold (2¹⁶) + round-trip; `pow`==`modPow`; full suites green.
+
+### M5 complete — the practical ownership gate, verified ON-CHAIN (2026-07-08)
+
+Goal 3 delivered. The account-ownership usecase's on-chain gate now verifies the **real** ownership
+statement — a Groth16 proof of the full CIP-1852 derivation (root key → `m/1852'/1815'/0'/0/0` →
+address pkh, 19,075,097 constraints) — instead of the Poseidon-commitment stand-in:
+
+- **`OwnershipProofValidator`** (Julc/Plutus V3) parameterized with the derivation circuit's VK;
+  datum = the 28 pkh-byte public inputs.
+- Proven (~2.1 min warm, blst multi-core) and **verified on Yaci DevKit**:
+  tx `73495f35b390caaa62e407a9b97865ca7d04a40ebf12ac3a2ad2f3d74a259703`, **fee ≈ 0.95 ADA** —
+  on-chain cost independent of the 19M constraints (O(#public inputs)).
+- Pipeline: `OwnershipCircuitService` (compile → `Groth16PkStore` load/setup → prove, pluggable
+  backend) + `OnChainOwnershipService` (deploy gate → lock datum=pkh → unlock with proof).
+- Ops lesson (recorded): long heavy-heap runs must be **standalone `java`** — the gradle daemon
+  stops them ("stop command received") regardless of `--no-daemon`/monitor settings.
+
+With M5 done, ADR-0029's three goals are all met: benchmark-driven on the real derivation proof,
+blst as a user-facing prover option (`zeroj-crypto-blst`, now multi-core), and a practical (not
+dummy-secret) account-ownership usecase.
 
 ## Date
-2026-07-07
+2026-07-07 (M5 run 2026-07-08)
+
+## Goals (this effort)
+
+1. **Benchmark-driven.** The **account-ownership CIP-1852 derivation proof** (~19M constraints) is
+   the running benchmark. After *each* milestone, generate that proof the new way and record
+   setup/prove time + peak (heap **and** native/file-backed) memory + verify result in the
+   **Benchmark log** section below.
+2. **Ship blst as a user-facing prover option** for speed (the `BLST` opt-in backend), not just a
+   Track-A internal.
+3. **Make the account-ownership usecase practical.** Once the derivation is provable, the on-chain
+   gate must verify a **real** ownership statement (a Groth16 proof of the CIP-1852 derivation),
+   replacing today's placeholder `Poseidon(secret, addr) == commitment` with its arbitrary,
+   enrollment-time `secret`.
+
+## Finding that reframed M1 (code check, 2026-07-07)
+
+The prover is **already Montgomery long-limb**, not `BigInteger`-based: `MontFp381` (6×64-bit limbs,
+BLS12-381 Fp) exists and `JacobianG1BLS381` uses it; `BigInteger` only appears at boundaries
+(conversions, scalar inputs). So "BigInteger → long[]" is **already done**. The actual bottleneck is
+**immutable per-operation object allocation**: `MontFp381` is an immutable value object and every
+field/point op returns a *new* object — an MSM over ~50M points allocates hundreds of millions of
+short-lived objects, which is the memory ceiling (GC working set + object headers), not the
+representation. **A1 is therefore reframed** from "change representation" to "eliminate per-op
+allocation + pack storage" (below).
 
 > **Scope: the PROVER only.** Verification is a fixed, tiny cost — ~3–4 pairings + one scalar-mul
 > per public input, *independent of circuit size* — so the pure-Java `Groth16BLS12381Verifier` is
@@ -50,11 +169,13 @@ provenance**, and **GraalVM native-image** requires `jni-config` + the `libblst.
 
 **Two independent axes.** Prover cost has *two* separable problems, and they need *different* levers:
 
-- **Memory** — the ~150 GB at 2²⁵ is largely JVM object bloat (`BigInteger` coords, point objects,
-  GC headroom). Fixed by **compact representation** + **`mmap`-ing the read-only proving key** from a
-  file so only the working set is RAM-resident. *This is what makes a big proof `fit`.*
-- **Speed** — the arithmetic throughput of MSM/FFT. Fixed by **native asm (blst)** or, JNI-free, by
-  **packed-limb arithmetic + the Java Vector API (SIMD)**. *This is what makes a proof `fast`.*
+- **Memory** — the ~150 GB at 2²⁵ is JVM object bloat: **immutable per-op `MontFp381`/point object
+  allocation** + GC headroom (the arithmetic is *already* Montgomery long-limb; see the finding
+  above). Fixed by **allocation-free flat `long[]` storage** + **`mmap`-ing the read-only proving
+  key** so only the working set is RAM-resident. *This is what makes a big proof `fit`.*
+- **Speed** — the arithmetic throughput of MSM/FFT. The Montgomery kernels already exist; speed comes
+  from **removing allocation/GC**, then **native asm (blst)** or, JNI-free, the **Java Vector API
+  (SIMD)** on the packed limbs. *This is what makes a proof `fast`.*
 
 `mmap` (memory) composes with *either* speed backend. And AOT/native-image is **not** a speed lever:
 for a minutes-to-hours numeric hot loop a warm JVM JIT matches or beats native image (startup and
@@ -126,13 +247,16 @@ shipping five parallel backends as a maintenance tax:
 
 ## Track A — pure-Java, native-image-clean
 
-### A1. Packed `long[]` Montgomery arithmetic (the prerequisite, biggest single win)
+### A1. Allocation-lean MSM/point path + flat packed storage (the prerequisite, biggest single win)
 
-Replace the prover's `BigInteger`-backed Fp/Fr and point representations with packed `long[]` limbs
-(Montgomery form) and **in-place, allocation-free** field/point ops (reused mutable buffers). This
-alone is ~5–10× (specialization + near-zero GC), shrinks resident memory dramatically, and is the
-representation `mmap` and SIMD both build on. Differential-tested against the frozen `BigInteger`
-path (identical field/point results).
+The Montgomery long-limb *math* already exists (`MontFp381`/`MontFp2_381` + their `montMul` kernels
+and the BN254 `MontFp254` pattern) — A1 does **not** rewrite it. A1 removes the **allocation**: extract
+the montMul/add/sub kernels to operate on `long[]` at offsets, and rework the MSM (`PippengerBLS381`),
+the point add/double hot loop, and proving-key storage to use **flat struct-of-arrays `long[]`**
+(6 longs per Fp, contiguous) with **in-place ops on reused scratch buffers** — no per-op `MontFp381`
+/ `JacobianG1BLS381` allocation. This is the win: near-zero GC, a compact PK (no object headers →
+`mmap`-able), same arithmetic. The immutable `MontFp381`/`JacobianG1BLS381` classes stay as the clean
+public API **and the frozen bit-identical oracle**; the packed path is validated against them.
 
 ### A2. Java Vector API (SIMD) for field multiply
 
@@ -150,6 +274,121 @@ window. If the read-write FFT scratch also must spill, use a cache-oblivious / e
 otherwise keep it in RAM (mmap suits read-only data, not the strided read-write butterflies).
 
 ## Track B — native blst
+
+### B0. Scoping findings (2026-07-08, before implementation)
+
+Investigating the existing `zeroj-blst` binding surfaced three concrete constraints that shape M6–9:
+
+- **No batched Pippenger in blst-java 0.3.2.** `P1` exposes only per-op `add(P1/P1_Affine)`, `mult`,
+  `aggregate`, `generator`, `is_inf` — **not** `blst_p1s_mult_pippenger`. So Rung A must build
+  Pippenger over per-op native `P1.add` (≈ `numWindows·n` JNI calls per MSM); **per-call JNI overhead
+  may erode the native speedup** and could even lose to the (now-optimized) pure-Java flat MSM. This
+  MUST be **measured first** — it's the go/no-go for Rung A. The real win likely needs **Rung B**
+  (bind native `blst_p1s_mult_pippenger` = one JNI call per MSM), i.e. a JNI extension or a newer
+  binding.
+- **Module boundary.** `zeroj-crypto` (the prover) does **not** depend on `zeroj-blst`, and shouldn't
+  by default (opt-in, native-image-clean). So the blst backend belongs in a **new opt-in module**
+  (e.g. `zeroj-crypto-blst`) depending on both, wired via the `ProverBackend` SPI — not a `crypto →
+  blst` dependency.
+- **Point conversion.** The prover's flat Montgomery limbs / `AffineG1` convert to blst via
+  `fromMontgomery → 96-byte uncompressed (48-B big-endian x‖y) → new P1_Affine(bytes)`; infinity is
+  the `0x40` flag byte.
+
+**Recommendation:** M6 starts with a *measurement spike* — a self-contained blst-Pippenger MSM vs the
+pure-Java flat MSM at 2¹⁴–2¹⁸ — to decide Rung A viability before any prover/SPI wiring.
+
+### B0-result. Spike measured (2026-07-08) — Rung A is a wash; go Rung B
+
+`BlstMsmSpikeTest`: a correct blst Pippenger MSM (native per-op `P1.add`, differential-verified ==
+pure-Java) **loses to the optimized pure-Java flat MSM**:
+
+| n | pure-Java (ms) | blst per-op (ms) | speedup |
+|---|---|---|---|
+| 2¹² | 130.7 | 127.1 | 1.03× |
+| 2¹⁴ | 454.5 | 457.7 | 0.99× |
+| 2¹⁶ | 1566.1 | 1650.1 | **0.95×** |
+
+The ~`numWindows·n` per-op JNI calls exactly cancel blst's native compute advantage (worse as n
+grows). **Rung A with the current binding is not worth wiring.** The real win requires **Rung B — a
+single batched-pippenger native call per MSM** (`blst_p1s_mult_pippenger`), which:
+
+- icon-foundation blst-java **0.3.2 does not expose** (no `P1s`) — confirmed.
+- could come from a **newer binding** (e.g. `com.wavesplatform:blst-java:0.3.15-1`) *if* it wraps the
+  swig `P1s` class — worth checking, but still JNI + third-party supply chain; or
+- **[recommended] a custom Java-25 FFM (Panama) binding** to `blst_p1s_mult_pippenger` against the
+  official `libblst` (already bundled in the jar; Linux/Mac × x86_64/aarch64). FFM is
+  native-image-friendlier than JNI (already used for mmap in M4), avoids the flagged
+  icon-foundation-0.3.2 supply-chain concern, and binds exactly the one batched call we need.
+
+So M6's next step is **Rung B via FFM**, not more Rung-A work. The spike did its job: it killed a
+path that would have wasted the wiring effort.
+
+### B0-result-2. Rung B built + measured (FFM) — 2.5–3.8× MSM, the real win
+
+Built a **custom Java-25 FFM binding** (`BlstFfm` loader + `BlstG1Msm`) that calls
+`blst_p1s_mult_pippenger` in **one native call per MSM** against the bundled `libblst` (raw
+`blst_*` symbols confirmed present). Differential-verified == pure-Java for batch sizes (n=2…300;
+n=1 falls back to `blst_p1_mult`, as pippenger is batch-only). Timing vs the pure-Java flat MSM:
+
+| n | pure-Java (ms) | **blst FFM (ms)** | speedup |
+|---|---|---|---|
+| 2¹⁶ | 1595 | **421** | **3.79×** |
+| 2¹⁸ | 3782 | **1497** | **2.53×** |
+
+**Conclusion: Rung B via FFM is worth wiring** (2.5–3.8× on G1 MSM vs ~1.0× for the per-op wrapper).
+
+### B0-result-3. M7: blst G1 backend wired into the prover — 1.4× end-to-end
+
+Added a `G1MsmBackend` SPI seam (`PURE_JAVA` default | injectable blst) threaded through the prover's
+four G1 MSMs; the FFM-blst backend produces **bit-identical proofs**. Full-prove timing:
+
+| n | pure-Java (ms) | blst-G1 (ms) | speedup |
+|---|---|---|---|
+| 2¹² | 1565 | 1187 | 1.32× |
+| 2¹⁴ | 4462 | 3181 | 1.40× |
+| 2¹⁶ | 14850 | 10515 | **1.41×** |
+
+> **M8 measure-first finding (this flips the priorities).** Breakdown of the pure-Java prove:
+> **the FFT (`computeH`) is only ~1.5%** (2¹⁶: 230 ms / 14983 ms) — so Vector-API/M3 on the FFT is
+> *worthless*. The ~98% is the MSMs, and since blst-G1 only gave 1.41×, **the pure-Java G2 MSM
+> (`computePiB_G2`'s object-based `g2Msm`, ~8 s of ~15 s) is the dominant remaining cost.** So
+> **blst-ing G2 is the single biggest lever** (~1.4× → ~3× projected), not a minor one. Measure-first
+> saved us from doing M3 first (the FFT lever) — it would have moved nothing.
+
+The G1 MSM's 2.5–3.8× dilutes to ~1.4× on the full prove because **the G2 MSM is still pure-Java**
+(the FFT is negligible; see finding above), plus per-MSM point conversion. Levers to close the gap
+(M8):
+- **G2 MSM** via `blst_p2s_mult_pippenger` (accelerate `computePiB_G2`),
+- **pre-convert the fixed PK** to blst encoding once (drop per-MSM conversion),
+- the FFT is then the remaining pure-Java bottleneck (blst doesn't help it).
+
+### B0-result-4. M8: full blst backend (G1 + G2) — ~5× prove
+
+Added `BlstG2Msm` (`blst_p2s_mult_pippenger`, Fp2 c1‖c0 order, validated), a `G2MsmBackend` seam, and
+a `ProverBackend{g1,g2}` bundle (`PURE_JAVA` default). A full blst `ProverBackend` (G1+G2) proves
+**bit-identical** to pure-Java and is **~5× faster**:
+
+| n | pure-Java (ms) | full-blst (ms) | speedup |
+|---|---|---|---|
+| 2¹² | 1503 | 249 | 6.03× |
+| 2¹⁴ | 4299 | 856 | 5.02× |
+| 2¹⁶ | 14970 | 3028 | **4.94×** |
+
+The jump from G1-only's 1.4× to G1+G2's ~5× confirms the breakdown: **the G2 MSM was the dominant
+cost.** On top of Track-A's 1.47×, this is **~7× prove over the original baseline** — pure-FFM,
+bit-identical, no per-op JNI. The blst prover backend (the "provide blst option" goal) is functionally
+delivered.
+
+Remaining (productionization, not speed): M9 GraalVM FFM config + `--enable-native-access`; swap in a
+release/CI-built `libblst`; expose the blst `ProverBackend` as the user-facing opt-in via a small
+`zeroj-crypto-blst` module (currently wired in test scope). Optional: pre-convert the fixed PK to
+blst encoding once (drops the per-MSM conversion — a further small win).
+
+> **libblst provenance:** the bundled binaries are currently lifted from the (old, 2023)
+> icon-foundation jar — **fine for validating the FFM binding** (the pippenger C ABI has been stable
+> for years), but **not for release**. For production, replace with a current `libblst` from blst's
+> official release or a **build-from-source CI matrix** (Linux/Mac/Windows × x86_64/aarch64) → one
+> all-platform `zeroj-blst` jar. The FFM binding is identical regardless of the binary version.
 
 ### B1. blst-backed MSM (the speed win)
 
@@ -219,7 +458,8 @@ Track A first (feasibility + native-image), then the shared `mmap`, then Track B
 
 | # | Track | Scope | Validation |
 |---|-------|-------|-----------|
-| **M1** | A | Packed `long[]` Montgomery Fp/Fr + point ops, allocation-free | differential vs frozen `BigInteger` path — identical field/point results over random + edge |
+| **M0** | — | **Benchmark harness**: build the derivation circuit → setup → prove → verify, report constraints / setup+prove time / peak heap+native memory; scalable to sub-sizes | baseline captured (current prover; note where it hits the wall) |
+| **M1** | A | Allocation-lean MSM/point path + flat `long[]` PK storage (reuse existing Montgomery kernels) | differential vs frozen `MontFp381`/`JacobianG1BLS381` oracle — identical points over random + edge; benchmark delta |
 | **M2** | A | Rework MSM/FFT onto the packed representation; benchmark | bit-identical proof vs `BigInteger` prover; prove-time + memory delta |
 | **M3** | A | Java Vector API (SIMD) field multiply (behind a flag) | identical results; **measure** the real speedup (validate/kill the ~1.5–3× estimate) |
 | **M4** | shared | `mmap` the read-only PK (single-pass Pippenger; `Arena`/`MemorySegment`) | identical proof; run a 2²⁵ proof on a modest-RAM box; report resident RAM vs file size |
@@ -277,6 +517,54 @@ Per-milestone branch → the integration branch; the pure-Java `BigInteger` refe
    ship it only if the number is real.
 6. **`mmap` thrashing** if the working set ≫ RAM on slow storage. *Mitigation:* single-pass Pippenger
    (M4) so each PK point is paged once; require NVMe/SSD; treat it as a memory↔time dial, not free.
+
+## Benchmark log
+
+The account-ownership CIP-1852 derivation proof, measured after each milestone (Goal 1). Filled in
+as milestones land; `—` = not yet run, `OOM`/`∞` = infeasible on the 16–64 GB target.
+
+| milestone | backend | circuit (constraints) | setup time | prove time | peak RAM | verify | notes |
+|---|---|---|---|---|---|---|---|
+| M0 baseline | pure-Java (current) | ~19M (2²⁵ domain) | ~32.6 h | ~3.2 h | ~384 GB | ✗ infeasible | extrapolated from 2¹⁶ (setup 3502 µs/c, prove 345 µs/c, 12 KB/c). **OOMs the 16–64 GB target.** |
+| M1 flat MSM | pure-Java + flat MSM | ~19M (2²⁵ domain) | ~32.3 h | ~2.2 h | ~389 GB | ✗ (memory) | prove **345 → 234 µs/c (1.47×)**; setup + peak heap unchanged (expected — M1 only touches the prover MSM). |
+| M2a fixed-base G1 | + G1 comb setup | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | (see note) | — | setup **3502 → 2028 µs/c (1.7×)**; residual setup now dominated by G2 `pointsB2` (still object double-and-add). |
+| M2b flat PK | + flat G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK 18 GB** (was ~31 GB as objects) | — | G1 PK is now a flat `long[]` blob (**mmap-able**, M4). Measured PK = 36 MB @ 2¹⁶ → **18 GB @ 2²⁵**. |
+| M4 mmap PK | + mmap'd G1 PK | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | **PK off-heap** (page cache) | ✓ bit-identical | prover reads the G1 key from an mmap'd file (`Arena`/`MemorySegment`); unblinded mmap-prove == heap-prove bit-for-bit. The ~18 GB key no longer counts against `-Xmx`, so JVM-heap prove footprint drops to the transient working set (FFT arrays) → **fits 16–32 GB**. Auto-engages when the key exceeds a heap fraction. |
+
+| M2c flat FFT | + flat Fr FFT | ~19M (2²⁵ domain) | ~18.9 h | ~2.2 h | transients ~1.5× smaller | ✓ bit-identical | `computeH`'s 6 domain-size Fr arrays are now flat `long[]` via `FrFFTFlat`/`FrArith381` (no `MontFr381[]` object churn). Proofs unchanged. **Completes Track-A's memory story** (PK off-heap + lean transients). |
+
+**Track-A status (M1 + M2 + M4): the pure-Java, native-image-clean prover is done.** Speed: prove
+1.47×, setup 1.7×. Memory: the ~18 GB key is off-heap (mmap), the FFT transients are flat and
+~1.5× smaller — so the 2²⁵ derivation's on-heap footprint is the small flat working set, **provable
+on a 16–32 GB box in pure Java, no JNI**. Remaining: M3 (Vector API speed, measured), M5 (the real
+end-to-end 2²⁵ run — an hours-long job), and the blst backend / G2-flat as further speed.
+
+**M4 finding.** With the flat G1 key `mmap`'d, the JVM heap no longer holds the proving key — it sits
+in off-heap file-backed memory (OS page cache). So the on-heap prove footprint at 2²⁵ collapses to
+the transient FFT working arrays (M2c will shrink those too). Combined with the M2b memory-metric
+correction, **the derivation is now credibly provable on a 16–32 GB box** in pure Java, no JNI — the
+core ADR-0029 goal for Track A. Remaining validation: the real end-to-end run (M5).
+
+> **⚠ Memory-metric correction (M2b).** The M0/M1/M2a "peak RAM" column above (~384 GB) was a
+> **linear extrapolation of the 2¹⁶ sampled peak heap, which is ~90% fixed JVM baseline** — scaling
+> a fixed baseline 512× is simply wrong, and grossly overestimates. Measuring the real driver — the
+> **retained proving key** — gives **~18 GB flat at 2²⁵**. Adding prove transients (FFT working
+> arrays), the honest 2²⁵ prove footprint is on the order of **~30–50 GB, which already fits a 64 GB
+> box**; mmap-ing the flat PK (M4) drops resident RAM toward **~16–32 GB**. So the derivation is
+> far closer to feasible than M0's naive extrapolation implied — the "infeasible" verdict was a bad
+> metric, not reality. (The benchmark now reports PK size directly.)
+
+**M1 finding.** The allocation-lean flat MSM gives **1.47× on prove time** (less GC churn), proofs
+bit-identical. As predicted it does **not** move peak memory or setup — the proving-key *objects*
+dominate peak (needs M2 flat storage + M4 mmap) and setup's per-wire scalar-muls are untouched (M2).
+So the derivation is still memory-infeasible; M1 is the prove-speed piece of the puzzle.
+
+**M0 finding.** The current pure-Java prover cannot produce the derivation proof on the target
+hardware — ~384 GB and ~36 h (setup+prove) at 2²⁵. Two things stand out: **memory (~384 GB) is the
+hard blocker** (the immutable-per-op allocation identified above), and **setup is ~10× prove per
+constraint** — setup's per-wire scalar-muls (`Groth16SetupBLS381`) dominate, so M2 (setup) matters as
+much as M1 (MSM). This validates the whole effort: without ADR-0029 the account-ownership derivation
+proof is simply not generatable on a 16–64 GB machine.
 
 ## References
 

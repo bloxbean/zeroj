@@ -6,7 +6,10 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
-import com.bloxbean.cardano.zeroj.crypto.msm.PippengerBLS381;
+import com.bloxbean.cardano.zeroj.bls12381.field.FrArith381;
+import com.bloxbean.cardano.zeroj.crypto.poly.FrFFTFlat;
+import com.bloxbean.cardano.zeroj.crypto.msm.PippengerFlatBLS381;
+import com.bloxbean.cardano.zeroj.crypto.msm.G1MsmBackend;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
@@ -28,7 +31,7 @@ public final class Groth16ProverBLS381 {
             BigInteger[] witness,
             List<R1CSConstraint> constraints,
             int numWires) {
-        int domainSize = pk.pointsH().length;
+        int domainSize = Groth16ProvingKeyBLS381.count(pk.pointsH());
         return prove(pk, witness, constraints, numWires, domainSize);
     }
 
@@ -65,24 +68,65 @@ public final class Groth16ProverBLS381 {
         BigInteger r = randomScalar(rng);
         BigInteger s = randomScalar(rng);
 
-        return proveInternal(pk, witness, hCoeffs, r, s);
+        return proveInternal(pk, heapReaders(pk), ProverBackend.PURE_JAVA, witness, hCoeffs, r, s);
     }
 
     static Groth16ProofBLS381 proveUnblinded(
             Groth16ProvingKeyBLS381 pk, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
-        return proveInternal(pk, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+        return proveInternal(pk, heapReaders(pk), ProverBackend.PURE_JAVA, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+    }
+
+    /** The G1 proving-key point arrays as readers (heap or mmap-backed). */
+    public record G1Readers(PippengerFlatBLS381.G1AffineReader a, PippengerFlatBLS381.G1AffineReader b1,
+                            PippengerFlatBLS381.G1AffineReader h, PippengerFlatBLS381.G1AffineReader l) {}
+
+    /** Deterministic (unblinded) prove with reader-supplied G1 key + MSM backend — for differential tests. */
+    public static Groth16ProofBLS381 proveUnblindedWithReaders(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
+            List<R1CSConstraint> constraints, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
+        return proveInternal(pk, readers, backend, witness, hCoeffs, BigInteger.ZERO, BigInteger.ZERO);
+    }
+
+    /** In-RAM readers over the PK's flat G1 arrays. */
+    public static G1Readers heapReaders(Groth16ProvingKeyBLS381 pk) {
+        return new G1Readers(
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsA()),
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsB1()),
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsH()),
+                new PippengerFlatBLS381.HeapG1Reader(pk.pointsL()));
+    }
+
+    /**
+     * Prove with the G1 proving key supplied as {@link G1Readers} — pass mmap-backed
+     * {@link PippengerFlatBLS381.SegmentG1Reader}s to prove with the PK off-heap/file-backed
+     * (ADR-0029 M4). Single points + G2 come from {@code pk}.
+     */
+    public static Groth16ProofBLS381 proveWithReaders(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, BigInteger[] witness,
+            List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        return proveWithReaders(pk, readers, ProverBackend.PURE_JAVA, witness, constraints, numWires, domainSize);
+    }
+
+    /** Prove with an explicit G1 MSM backend (e.g. the opt-in FFM blst backend, ADR-0029 M7). */
+    public static Groth16ProofBLS381 proveWithReaders(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
+            List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
+        var rng = new SecureRandom();
+        return proveInternal(pk, readers, backend, witness, hCoeffs, randomScalar(rng), randomScalar(rng));
     }
 
     private static Groth16ProofBLS381 proveInternal(
-            Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger[] hCoeffs,
-            BigInteger r, BigInteger s) {
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
+            BigInteger[] hCoeffs, BigInteger r, BigInteger s) {
 
-        var piA = computePiA(pk, witness, r);
-        var piB = computePiB_G2(pk, witness, s);
-        var piB1 = computePiB_G1(pk, witness, s);
-        var piC = computePiC(pk, hCoeffs, witness, r, s, piA, piB1);
+        var piA = computePiA(pk, readers.a(), backend.g1(), witness, r);
+        var piB = computePiB_G2(pk, backend.g2(), witness, s);
+        var piB1 = computePiB_G1(pk, readers.b1(), backend.g1(), witness, s);
+        var piC = computePiC(pk, readers.h(), readers.l(), backend.g1(), hCoeffs, witness, r, s, piA, piB1);
 
         return new Groth16ProofBLS381(piA.toAffine(), piB.toAffine(), piC.toAffine());
     }
@@ -93,77 +137,88 @@ public final class Groth16ProverBLS381 {
         if (domainSize < 2) domainSize = 2;
         int logN = Integer.numberOfTrailingZeros(domainSize);
 
-        MontFr381[] aEval = new MontFr381[domainSize];
-        MontFr381[] bEval = new MontFr381[domainSize];
+        // ADR-0029 M2c: Fr coefficients held as flat long[] (4 limbs/element) with the allocation-lean
+        // FrFFTFlat, instead of MontFr381[] object arrays — halves the prover's transient FFT memory.
+        long[] aEval = new long[domainSize * 4];
+        long[] bEval = new long[domainSize * 4];
 
+        // ADR-0029 M5b: at domain 2²⁵ these element-wise passes are minutes of single-threaded work
+        // (they dominated the prove once the MSMs went multi-core). Each slot is independent, so fan
+        // them across cores — same ops per slot ⇒ bit-identical results.
         int constraintCount = constraints.size();
-        for (int i = 0; i < domainSize; i++) {
-            if (i < numConstraints && i < constraintCount) {
+        int evalUpper = Math.min(domainSize, Math.min(numConstraints, constraintCount));
+        FrFFTFlat.parallelRange(evalUpper, (lo, hi) -> {
+            for (int i = lo; i < hi; i++) {
                 R1CSConstraint constraint = constraints.get(i);
-                aEval[i] = evalLinComb(constraint.a(), witness, mod);
-                bEval[i] = evalLinComb(constraint.b(), witness, mod);
-            } else {
-                aEval[i] = MontFr381.ZERO;
-                bEval[i] = MontFr381.ZERO;
-            }
-        }
+                System.arraycopy(evalLinComb(constraint.a(), witness, mod).toLimbs(), 0, aEval, i * 4, 4);
+                System.arraycopy(evalLinComb(constraint.b(), witness, mod).toLimbs(), 0, bEval, i * 4, 4);
+            } // beyond evalUpper: zeros (MontFr381.ZERO == all-zero limbs)
+        });
 
-        MontFr381[] cEval = new MontFr381[domainSize];
-        for (int i = 0; i < domainSize; i++) {
-            cEval[i] = aEval[i].mul(bEval[i]);
-        }
+        long[] cEval = new long[domainSize * 4];
+        FrFFTFlat.parallelRange(domainSize, (lo, hi) -> {
+            for (int i = lo; i < hi; i++) FrArith381.mul(cEval, i * 4, aEval, i * 4, bEval, i * 4);
+        });
 
-        MontFr381 inc = FieldFFTBLS381.rootOfUnity(logN + 1);
-
-        var aCoset = cosetFFT(aEval, inc);
-        var bCoset = cosetFFT(bEval, inc);
-        var cCoset = cosetFFT(cEval, inc);
+        long[] inc = FieldFFTBLS381.rootOfUnity(logN + 1).toLimbs();
+        cosetFFT(aEval, domainSize, inc);
+        cosetFFT(bEval, domainSize, inc);
+        cosetFFT(cEval, domainSize, inc);
 
         BigInteger[] result = new BigInteger[domainSize];
-        for (int i = 0; i < domainSize; i++) {
-            var val = aCoset[i].mul(bCoset[i]).sub(cCoset[i]);
-            result[i] = val.toBigInteger();
-        }
+        FrFFTFlat.parallelRange(domainSize, (lo, hi) -> {
+            long[] val = new long[4];
+            for (int i = lo; i < hi; i++) {
+                FrArith381.mul(val, 0, aEval, i * 4, bEval, i * 4); // a·b
+                FrArith381.sub(val, 0, val, 0, cEval, i * 4);       // - c
+                result[i] = MontFr381.fromMontLimbs(val[0], val[1], val[2], val[3]).toBigInteger();
+            }
+        });
         return result;
     }
 
-    private static MontFr381[] cosetFFT(MontFr381[] evals, MontFr381 inc) {
-        var coeffs = FieldFFTBLS381.ifft(evals);
-        MontFr381 power = MontFr381.ONE;
-        for (int i = 0; i < coeffs.length; i++) {
-            coeffs[i] = coeffs[i].mul(power);
-            power = power.mul(inc);
-        }
-        return FieldFFTBLS381.fft(coeffs);
+    /** In-place coset NTT on flat Fr coefficients: ifft → scale by inc^i → fft. */
+    private static void cosetFFT(long[] a, int n, long[] inc) {
+        FrFFTFlat.ifft(a, n);
+        // scale a[i] by inc^i — chunked, each chunk starts its power walk at inc^lo (M5b)
+        FrFFTFlat.parallelRange(n, (lo, hi) -> {
+            long[] power = new long[4];
+            FrFFTFlat.pow(power, inc, lo);
+            for (int i = lo; i < hi; i++) {
+                FrArith381.mul(a, i * 4, a, i * 4, power, 0);
+                FrArith381.mul(power, 0, power, 0, inc, 0);
+            }
+        });
+        FrFFTFlat.fft(a, n);
     }
 
-    private static JacobianG1BLS381 computePiA(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger r) {
+    private static JacobianG1BLS381 computePiA(Groth16ProvingKeyBLS381 pk,
+            PippengerFlatBLS381.G1AffineReader aReader, G1MsmBackend backend, BigInteger[] witness, BigInteger r) {
         var result = JacobianG1BLS381.fromAffine(pk.alphaG1().x(), pk.alphaG1().y());
 
-        int n = Math.min(witness.length, pk.pointsA().length);
+        int n = Math.min(witness.length, aReader.count());
         if (n > 0) {
-            AffineG1[] points = new AffineG1[n];
             BigInteger[] scalars = new BigInteger[n];
-            System.arraycopy(pk.pointsA(), 0, points, 0, n);
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerBLS381.msm(points, scalars));
+            result = result.add(backend.msm(aReader, n, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(r));
         return result;
     }
 
-    private static JacobianG2BLS381 computePiB_G2(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger s) {
+    private static JacobianG2BLS381 computePiB_G2(Groth16ProvingKeyBLS381 pk,
+            com.bloxbean.cardano.zeroj.crypto.msm.G2MsmBackend g2Backend, BigInteger[] witness, BigInteger s) {
         var result = JacobianG2BLS381.fromAffine(pk.betaG2().x(), pk.betaG2().y());
 
         int n = Math.min(witness.length, pk.pointsB2().length);
-        result = result.add(g2Msm(pk.pointsB2(), witness, n));
+        result = result.add(g2Backend.msm(pk.pointsB2(), witness, n));
 
         result = result.add(JacobianG2BLS381.fromAffine(pk.deltaG2().x(), pk.deltaG2().y()).scalarMul(s));
         return result;
     }
 
-    private static JacobianG2BLS381 g2Msm(AffineG2[] points, BigInteger[] scalars, int n) {
+    static JacobianG2BLS381 g2Msm(AffineG2[] points, BigInteger[] scalars, int n) {
         if (n == 0) return JacobianG2BLS381.INFINITY;
 
         BigInteger fr = MontFr381.modulus();
@@ -207,16 +262,15 @@ public final class Groth16ProverBLS381 {
         return result;
     }
 
-    private static JacobianG1BLS381 computePiB_G1(Groth16ProvingKeyBLS381 pk, BigInteger[] witness, BigInteger s) {
+    private static JacobianG1BLS381 computePiB_G1(Groth16ProvingKeyBLS381 pk,
+            PippengerFlatBLS381.G1AffineReader b1Reader, G1MsmBackend backend, BigInteger[] witness, BigInteger s) {
         var result = JacobianG1BLS381.fromAffine(pk.betaG1().x(), pk.betaG1().y());
 
-        int n = Math.min(witness.length, pk.pointsB1().length);
+        int n = Math.min(witness.length, b1Reader.count());
         if (n > 0) {
-            AffineG1[] points = new AffineG1[n];
             BigInteger[] scalars = new BigInteger[n];
-            System.arraycopy(pk.pointsB1(), 0, points, 0, n);
             System.arraycopy(witness, 0, scalars, 0, n);
-            result = result.add(PippengerBLS381.msm(points, scalars));
+            result = result.add(backend.msm(b1Reader, n, scalars));
         }
 
         result = result.add(JacobianG1BLS381.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(s));
@@ -224,29 +278,26 @@ public final class Groth16ProverBLS381 {
     }
 
     private static JacobianG1BLS381 computePiC(
-            Groth16ProvingKeyBLS381 pk, BigInteger[] hCoeffs, BigInteger[] witness,
+            Groth16ProvingKeyBLS381 pk, PippengerFlatBLS381.G1AffineReader hReader,
+            PippengerFlatBLS381.G1AffineReader lReader, G1MsmBackend backend, BigInteger[] hCoeffs, BigInteger[] witness,
             BigInteger r, BigInteger s,
             JacobianG1BLS381 piA, JacobianG1BLS381 piB1) {
 
         JacobianG1BLS381 result = JacobianG1BLS381.INFINITY;
 
-        int hLen = Math.min(hCoeffs.length, pk.pointsH().length);
+        int hLen = Math.min(hCoeffs.length, hReader.count());
         if (hLen > 0) {
-            AffineG1[] hPoints = new AffineG1[hLen];
             BigInteger[] hScalars = new BigInteger[hLen];
-            System.arraycopy(pk.pointsH(), 0, hPoints, 0, hLen);
             System.arraycopy(hCoeffs, 0, hScalars, 0, hLen);
-            result = result.add(PippengerBLS381.msm(hPoints, hScalars));
+            result = result.add(backend.msm(hReader, hLen, hScalars));
         }
 
         int numPrivate = witness.length - pk.numPublic() - 1;
-        if (numPrivate > 0 && pk.pointsL().length > 0) {
-            int lLen = Math.min(numPrivate, pk.pointsL().length);
-            AffineG1[] lPoints = new AffineG1[lLen];
+        if (numPrivate > 0 && lReader.count() > 0) {
+            int lLen = Math.min(numPrivate, lReader.count());
             BigInteger[] lScalars = new BigInteger[lLen];
-            System.arraycopy(pk.pointsL(), 0, lPoints, 0, lLen);
             System.arraycopy(witness, pk.numPublic() + 1, lScalars, 0, lLen);
-            result = result.add(PippengerBLS381.msm(lPoints, lScalars));
+            result = result.add(backend.msm(lReader, lLen, lScalars));
         }
 
         result = result.add(piA.scalarMul(s));

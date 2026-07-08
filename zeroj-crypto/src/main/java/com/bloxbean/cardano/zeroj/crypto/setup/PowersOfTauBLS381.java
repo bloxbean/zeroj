@@ -67,12 +67,15 @@ public final class PowersOfTauBLS381 {
         int numG1 = 2 * n + 1;
         AffineG1[] tauG1 = new AffineG1[numG1];
 
-        var g1 = JacobianG1BLS381.GENERATOR;
-        BigInteger tauPow = BigInteger.ONE;
-        for (int i = 0; i < numG1; i++) {
-            tauG1[i] = g1.scalarMul(tauPow).toAffine();
-            tauPow = tauPow.multiply(tau).mod(FR);
-        }
+        // ADR-0029 M5a: precompute the scalar powers (sequential, cheap Fr mults), then compute each
+        // tau^i * G in parallel via the fixed-base comb. The old loop did numG1 (=2n+1) full
+        // single-threaded scalarMuls — the dominant cost of a large dev SRS. ~10x (parallel) × ~1.7x
+        // (fixed-base). (Production uses an MPC .ptau via PtauImporterBLS381, not this path.)
+        BigInteger[] tauPows = new BigInteger[numG1];
+        tauPows[0] = BigInteger.ONE;
+        for (int i = 1; i < numG1; i++) tauPows[i] = tauPows[i - 1].multiply(tau).mod(FR);
+        java.util.stream.IntStream.range(0, numG1).parallel().forEach(i ->
+                tauG1[i] = FixedBaseG1BLS381.mulAffine(tauPows[i]));
 
         // Compute tau^i * G2 for i = 0..1
         // Only two G2 points needed: G2 and tau*G2
@@ -92,7 +95,7 @@ public final class PowersOfTauBLS381 {
         // use native memory (MemorySegment) with explicit zeroing.
         Arrays.fill(tauBytes, (byte) 0);
         tau = BigInteger.ZERO;
-        tauPow = BigInteger.ZERO;
+        Arrays.fill(tauPows, BigInteger.ZERO);
 
         return new PtauImporterBLS381.SRS(tauG1, tauG2, power, tauForSetup);
     }

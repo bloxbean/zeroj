@@ -19,7 +19,7 @@ tasks.register('benchmark', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform()
-    maxHeapSize = '10g'
+    maxHeapSize = project.findProperty('benchHeap') ?: '10g'
     systemProperty 'zeroj.bench', 'true'
     systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
     systemProperty 'zeroj.allowLegacyBn254', 'true'
