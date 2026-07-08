@@ -1,5 +1,7 @@
 # Bundled libblst — provenance & build
 
+> Full build/CI/release guide: [`zeroj-blst/BUILDING.md`](../../../../BUILDING.md).
+
 These `libblst.{so,dylib}` are **built from source** from supranational/blst at a pinned tag
 (currently **v0.3.15** — the latest release). supranational publishes **no precompiled binaries**
 (source-only), so `zeroj-blst` builds its own — no third-party wrapper, controlled supply chain.
