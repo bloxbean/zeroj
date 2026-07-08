@@ -62,16 +62,28 @@ public final class Groth16PkStore {
         try (var g2 = dos(dir.resolve("pointsB2.bin"))) {
             for (AffineG2 p : pk.pointsB2()) putG2(g2, p);
         }
+        writeAuxAndManifest(dir, pk.alphaG1(), pk.betaG1(), pk.deltaG1(),
+                pk.betaG2(), pk.deltaG2(), sr.gammaG2(), sr.ic(),
+                pk.numPublic(), pk.pointsB2().length, Groth16ProvingKeyBLS381.count(pk.pointsH()));
+    }
+
+    /**
+     * Write the single points + VK (aux.bin) and the manifest — shared by {@link #save} and the
+     * streaming {@code .zkey} importer (ADR-0031 M2), so the store format lives in one place.
+     */
+    static void writeAuxAndManifest(Path dir, AffineG1 alphaG1, AffineG1 betaG1, AffineG1 deltaG1,
+                                    AffineG2 betaG2, AffineG2 deltaG2, AffineG2 gammaG2, AffineG1[] ic,
+                                    int numPublic, int numB2, int domain) throws IOException {
         try (var aux = dos(dir.resolve("aux.bin"))) {
-            putG1(aux, pk.alphaG1()); putG1(aux, pk.betaG1()); putG1(aux, pk.deltaG1());
-            putG2(aux, pk.betaG2()); putG2(aux, pk.deltaG2()); putG2(aux, sr.gammaG2());
-            for (AffineG1 p : sr.ic()) putG1(aux, p);
+            putG1(aux, alphaG1); putG1(aux, betaG1); putG1(aux, deltaG1);
+            putG2(aux, betaG2); putG2(aux, deltaG2); putG2(aux, gammaG2);
+            for (AffineG1 p : ic) putG1(aux, p);
         }
         var m = new Properties();
-        m.setProperty("numPublic", Integer.toString(pk.numPublic()));
-        m.setProperty("numB2", Integer.toString(pk.pointsB2().length));
-        m.setProperty("numIc", Integer.toString(sr.ic().length));
-        m.setProperty("domain", Integer.toString(Groth16ProvingKeyBLS381.count(pk.pointsH())));
+        m.setProperty("numPublic", Integer.toString(numPublic));
+        m.setProperty("numB2", Integer.toString(numB2));
+        m.setProperty("numIc", Integer.toString(ic.length));
+        m.setProperty("domain", Integer.toString(domain));
         try (var out = Files.newOutputStream(dir.resolve(MANIFEST))) {
             m.store(out, "ADR-0029 Groth16 proving key store");
         }
