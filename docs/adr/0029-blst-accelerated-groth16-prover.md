@@ -30,8 +30,33 @@ thread throttling / disk streaming) — but it's now cheap enough to *attempt* (
 M10 consolidated matrix. **M3 (Vector API) dropped** — measured FFT is ~1.5% of prove, so it would
 move nothing (and it's an incubator API).
 
+## M5 result — the real 19M CIP-1852 derivation proof, end to end (2026-07-08)
+
+Proven on a single 128 GB machine, pure JVM (Java 25 + blst via FFM), **19,075,097 constraints /
+43.7M wires / domain 2²⁵**:
+
+| stage | cold (first proof) | warm (cached PK) |
+|---|---|---|
+| compile → R1CS | 15.9 s | 14.7 s |
+| witness (real root key) | 1.7 s | 1.6 s |
+| key prep | setup **47 min** (148 µs/c) + save 53 s | **load 1.8 min** (mmap) |
+| prove (blst) | **7.1 min** (22 µs/c) | 7.2 min |
+| **total** | **~55 min** | **~9 min** |
+| peak heap | 72.7 GB | 66.5 GB |
+
+- **blst prove is ~7 min** — Pippenger at 43.7M points is very efficient (far better than the ~2.7 h
+  pure-Java estimate; blst gives the practical path).
+- **`Groth16PkStore`** persists the PK (23 GB on disk); a warm proof mmaps it (1.8 min) instead of
+  re-running the 47 min setup → **first proof ~55 min, every proof after ~9 min.**
+- Setup enablers that made it feasible: parallel point-muls + parallel Lagrange (M5a), skip the unused
+  67M-point PlonK SRS (Groth16 needs only tau), and a right-sized heap.
+- **All prior run failures were the gradle daemon** ("stop command received"), not the workload — a
+  plain `java` run at 92 GB completed cleanly with zero swap growth (106-sample CPU/mem profile).
+- **Next prove-speed lever (profiled):** the prove is **single-threaded** (~100% CPU of 12 cores) →
+  parallelizing the MSMs is ~10× of untapped headroom.
+
 ## Date
-2026-07-07
+2026-07-07 (M5 run 2026-07-08)
 
 ## Goals (this effort)
 
