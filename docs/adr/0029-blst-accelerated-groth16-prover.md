@@ -78,6 +78,26 @@ Two steps, both proof-bit-identical to serial (point addition is associative; sa
 - Validated: parallel==serial at MSM level and whole-proof level; parallel NTT vs the object oracle
   above the engage threshold (2¹⁶) + round-trip; `pow`==`modPow`; full suites green.
 
+### M5 complete — the practical ownership gate, verified ON-CHAIN (2026-07-08)
+
+Goal 3 delivered. The account-ownership usecase's on-chain gate now verifies the **real** ownership
+statement — a Groth16 proof of the full CIP-1852 derivation (root key → `m/1852'/1815'/0'/0/0` →
+address pkh, 19,075,097 constraints) — instead of the Poseidon-commitment stand-in:
+
+- **`OwnershipProofValidator`** (Julc/Plutus V3) parameterized with the derivation circuit's VK;
+  datum = the 28 pkh-byte public inputs.
+- Proven (~2.1 min warm, blst multi-core) and **verified on Yaci DevKit**:
+  tx `73495f35b390caaa62e407a9b97865ca7d04a40ebf12ac3a2ad2f3d74a259703`, **fee ≈ 0.95 ADA** —
+  on-chain cost independent of the 19M constraints (O(#public inputs)).
+- Pipeline: `OwnershipCircuitService` (compile → `Groth16PkStore` load/setup → prove, pluggable
+  backend) + `OnChainOwnershipService` (deploy gate → lock datum=pkh → unlock with proof).
+- Ops lesson (recorded): long heavy-heap runs must be **standalone `java`** — the gradle daemon
+  stops them ("stop command received") regardless of `--no-daemon`/monitor settings.
+
+With M5 done, ADR-0029's three goals are all met: benchmark-driven on the real derivation proof,
+blst as a user-facing prover option (`zeroj-crypto-blst`, now multi-core), and a practical (not
+dummy-secret) account-ownership usecase.
+
 ## Date
 2026-07-07 (M5 run 2026-07-08)
 
