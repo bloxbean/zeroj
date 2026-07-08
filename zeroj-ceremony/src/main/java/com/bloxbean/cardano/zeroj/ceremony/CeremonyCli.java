@@ -5,83 +5,83 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import com.bloxbean.cardano.zeroj.crypto.groth16.R1csExporter;
 import com.bloxbean.cardano.zeroj.crypto.groth16.ZkeyPkStoreImporter;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.Callable;
 
 /**
- * ZeroJ Groth16 MPC-ceremony CLI (ADR-0031).
+ * ZeroJ Groth16 MPC-ceremony CLI (ADR-0031) — picocli-based; a GraalVM native binary is supported
+ * (picocli-codegen emits the reflection configs at compile time).
  *
- * <pre>
- *   export-r1cs --circuit &lt;FQCN&gt; [--circuit-jar &lt;jar&gt;] --out &lt;file.r1cs&gt;
- *       Compile a ZeroJ circuit and export it to the iden3 .r1cs format consumed by
- *       snarkjs Groth16 ceremonies. &lt;FQCN&gt; is the @ZKCircuit class or its generated
- *       *Circuit companion — any class with a static build() returning CircuitBuilder.
- *
- *   finalize --zkey &lt;final.zkey&gt; --pk-store &lt;dir&gt;
- *       Convert a completed ceremony .zkey into a ZeroJ proving-key store (streaming;
- *       handles multi-GB keys). Prove afterwards with Groth16PkStore.load(dir) and
- *       ZkeyPkStoreImporter.snarkjsConstraints(compiledConstraints, numPublic).
- * </pre>
- *
- * <p>Planned (ADR-0031 M5): {@code contribute}, {@code verify}, {@code beacon} (the ZeroJ-native
- * phase-2 contributor writing snarkjs-compatible .zkey), and {@code phase1 --source filecoin|file|new}.</p>
+ * <p>Native-image note: {@code contribute} and {@code finalize} are fully native-friendly (pure
+ * Java, no dynamic loading) — the commands ceremony <em>contributors</em> run. {@code export-r1cs}
+ * loads circuit classes reflectively, so with a native binary the circuit must be compiled into
+ * the image; coordinators typically run it on a JVM instead.</p>
  */
+@Command(name = "zeroj-ceremony", mixinStandardHelpOptions = true,
+        description = "Groth16 MPC trusted-setup tooling (ADR-0031). "
+                + "Flow: export-r1cs -> snarkjs groth16 setup -> contribute (zeroj or snarkjs, any mix) "
+                + "-> snarkjs zkey beacon + verify -> finalize. See docs/ceremony/OPTION-A-RUNBOOK.md.",
+        subcommands = {CeremonyCli.ExportR1cs.class, CeremonyCli.Contribute.class, CeremonyCli.Finalize.class})
 public final class CeremonyCli {
 
-    private CeremonyCli() {}
-
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         System.exit(run(args));
     }
 
     /** Entry point separated from {@link #main} so tests can invoke it in-process. */
-    public static int run(String[] args) throws Exception {
-        if (args.length == 0) { usage(); return 2; }
-        String cmd = args[0];
-        Map<String, String> opts = parse(args);
-        return switch (cmd) {
-            case "export-r1cs" -> exportR1cs(opts);
-            case "finalize" -> finalizeKey(opts);
-            case "contribute" -> contribute(opts);
-            case "help", "--help", "-h" -> { usage(); yield 0; }
-            default -> {
-                System.err.println("Unknown command: " + cmd);
-                usage();
-                yield 2;
-            }
-        };
+    public static int run(String[] args) {
+        return new CommandLine(new CeremonyCli())
+                .setExecutionExceptionHandler((e, cmd, parseResult) -> {
+                    cmd.getErr().println(cmd.getColorScheme().errorText("Error: " + e.getMessage()));
+                    return 1;
+                })
+                .execute(args);
     }
 
     // ---- export-r1cs ----
 
-    private static int exportR1cs(Map<String, String> o) throws Exception {
-        String fqcn = require(o, "circuit");
-        Path out = Path.of(require(o, "out"));
-        ClassLoader loader = CeremonyCli.class.getClassLoader();
-        if (o.containsKey("circuit-jar")) {
-            Path jar = Path.of(o.get("circuit-jar"));
-            if (!Files.isReadable(jar)) { System.err.println("Cannot read jar: " + jar); return 2; }
-            loader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, loader);
+    @Command(name = "export-r1cs", mixinStandardHelpOptions = true,
+            description = "Compile a ZeroJ circuit and export it to iden3 .r1cs (snarkjs ceremony input).")
+    static class ExportR1cs implements Callable<Integer> {
+
+        @Option(names = "--circuit", required = true,
+                description = "FQCN of the @ZKCircuit class or its generated *Circuit companion "
+                        + "(any class with a static build() returning CircuitBuilder)")
+        String circuit;
+
+        @Option(names = "--circuit-jar", description = "Jar containing the compiled circuit classes")
+        Path circuitJar;
+
+        @Option(names = "--out", required = true, description = "Output .r1cs file")
+        Path out;
+
+        @Override
+        public Integer call() throws Exception {
+            ClassLoader loader = CeremonyCli.class.getClassLoader();
+            if (circuitJar != null) {
+                if (!Files.isReadable(circuitJar)) { System.err.println("Cannot read jar: " + circuitJar); return 2; }
+                loader = new URLClassLoader(new URL[]{circuitJar.toUri().toURL()}, loader);
+            }
+            CircuitBuilder builder = loadCircuit(circuit, loader);
+            System.out.println("Compiling circuit " + circuit + " (BLS12-381) ...");
+            long t0 = System.nanoTime();
+            R1CSConstraintSystem r1cs = builder.compileR1CS(CurveId.BLS12_381);
+            System.out.printf("  %,d constraints | %,d wires | %d public | %.1fs%n",
+                    r1cs.numConstraints(), r1cs.numWires(), r1cs.numPublicInputs(),
+                    (System.nanoTime() - t0) / 1e9);
+            R1csExporter.export(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), out);
+            System.out.printf("Wrote %s (%,d bytes)%n", out, Files.size(out));
+            System.out.println("Next: snarkjs groth16 setup " + out.getFileName() + " <prepared.ptau> key_0000.zkey");
+            return 0;
         }
-
-        CircuitBuilder builder = loadCircuit(fqcn, loader);
-        System.out.println("Compiling circuit " + fqcn + " (BLS12-381) ...");
-        long t0 = System.nanoTime();
-        R1CSConstraintSystem r1cs = builder.compileR1CS(CurveId.BLS12_381);
-        System.out.printf("  %,d constraints | %,d wires | %d public | %.1fs%n",
-                r1cs.numConstraints(), r1cs.numWires(), r1cs.numPublicInputs(),
-                (System.nanoTime() - t0) / 1e9);
-
-        R1csExporter.export(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), out);
-        System.out.printf("Wrote %s (%,d bytes)%n", out, Files.size(out));
-        System.out.println("Next: snarkjs groth16 setup " + out.getFileName() + " <prepared.ptau> key_0000.zkey");
-        return 0;
     }
 
     /** Load {@code fqcn} (or {@code fqcn + "Circuit"}) and call its static {@code build()}. */
@@ -103,85 +103,58 @@ public final class CeremonyCli {
                         + "' (tried " + fqcn + " and " + fqcn + "Circuit)", first);
     }
 
-    // ---- finalize ----
-
-    private static int finalizeKey(Map<String, String> o) throws Exception {
-        Path zkey = Path.of(require(o, "zkey"));
-        Path store = Path.of(require(o, "pk-store"));
-        if (!Files.isReadable(zkey)) { System.err.println("Cannot read .zkey: " + zkey); return 2; }
-
-        System.out.printf("Importing %s (%,d bytes) -> %s ...%n", zkey, Files.size(zkey), store);
-        long t0 = System.nanoTime();
-        var dims = ZkeyPkStoreImporter.importToPkStore(zkey, store);
-        System.out.printf("Done in %.1fs: %,d wires | %d public | domain %,d%n",
-                (System.nanoTime() - t0) / 1e9, dims.numWires(), dims.numPublic(), dims.domainSize());
-        System.out.println("Prove with Groth16PkStore.load(\"" + store + "\") and "
-                + "ZkeyPkStoreImporter.snarkjsConstraints(yourConstraints, " + dims.numPublic() + ").");
-        return 0;
-    }
-
     // ---- contribute (Option B: the ZeroJ-native fast contributor) ----
 
-    private static int contribute(Map<String, String> o) throws Exception {
-        Path in = Path.of(require(o, "in"));
-        Path out = Path.of(require(o, "out"));
-        String name = o.getOrDefault("name", "zeroj contributor");
-        if (!Files.isReadable(in)) { System.err.println("Cannot read .zkey: " + in); return 2; }
+    @Command(name = "contribute", mixinStandardHelpOptions = true,
+            description = "Apply a ZeroJ-native phase-2 contribution (snarkjs-compatible .zkey; "
+                    + "the transcript verifies with 'snarkjs zkey verify').")
+    static class Contribute implements Callable<Integer> {
 
-        System.out.printf("Contributing to %s (%,d bytes) -> %s ...%n", in, Files.size(in), out);
-        long t0 = System.nanoTime();
-        byte[] hash = ZkeyContributor.contribute(in, out, name);
-        System.out.printf("Done in %.1fs.%n", (System.nanoTime() - t0) / 1e9);
-        StringBuilder hex = new StringBuilder("Contribution Hash:\n\t\t");
-        for (int i = 0; i < hash.length; i++) {
-            hex.append(String.format("%02x", hash[i]));
-            if (i % 32 == 31 && i < hash.length - 1) hex.append("\n\t\t");
-            else if (i % 4 == 3) hex.append(' ');
-        }
-        System.out.println(hex);
-        System.out.println("Publish this hash in your attestation. Verify the transcript with:");
-        System.out.println("  snarkjs zkey verify <circuit.r1cs> <pot.ptau> " + out.getFileName());
-        return 0;
-    }
+        @Option(names = "--in", required = true, description = "Input .zkey") Path in;
+        @Option(names = "--out", required = true, description = "Output .zkey") Path out;
+        @Option(names = "--name", defaultValue = "zeroj contributor", description = "Contributor name (in the transcript)")
+        String name;
 
-    // ---- plumbing ----
-
-    private static Map<String, String> parse(String[] args) {
-        Map<String, String> m = new HashMap<>();
-        for (int i = 1; i < args.length; i++) {
-            String a = args[i];
-            if (a.startsWith("--")) {
-                String key = a.substring(2);
-                int eq = key.indexOf('=');
-                if (eq >= 0) m.put(key.substring(0, eq), key.substring(eq + 1));
-                else if (i + 1 < args.length && !args[i + 1].startsWith("--")) m.put(key, args[++i]);
-                else m.put(key, "true");
+        @Override
+        public Integer call() throws Exception {
+            if (!Files.isReadable(in)) { System.err.println("Cannot read .zkey: " + in); return 2; }
+            System.out.printf("Contributing to %s (%,d bytes) -> %s ...%n", in, Files.size(in), out);
+            long t0 = System.nanoTime();
+            byte[] hash = ZkeyContributor.contribute(in, out, name);
+            System.out.printf("Done in %.1fs.%n", (System.nanoTime() - t0) / 1e9);
+            StringBuilder hex = new StringBuilder("Contribution Hash:\n\t\t");
+            for (int i = 0; i < hash.length; i++) {
+                hex.append(String.format("%02x", hash[i]));
+                if (i % 32 == 31 && i < hash.length - 1) hex.append("\n\t\t");
+                else if (i % 4 == 3) hex.append(' ');
             }
+            System.out.println(hex);
+            System.out.println("Publish this hash in your attestation. Verify the transcript with:");
+            System.out.println("  snarkjs zkey verify <circuit.r1cs> <pot.ptau> " + out.getFileName());
+            return 0;
         }
-        return m;
     }
 
-    private static String require(Map<String, String> o, String key) {
-        String v = o.get(key);
-        if (v == null) throw new IllegalArgumentException("Missing required option --" + key);
-        return v;
-    }
+    // ---- finalize ----
 
-    private static void usage() {
-        System.out.println("""
-                zeroj-ceremony — Groth16 MPC trusted-setup tooling (ADR-0031)
+    @Command(name = "finalize", mixinStandardHelpOptions = true,
+            description = "Convert a completed ceremony .zkey into a ZeroJ proving-key store (streaming, multi-GB safe).")
+    static class Finalize implements Callable<Integer> {
 
-                Commands:
-                  export-r1cs --circuit <FQCN> [--circuit-jar <jar>] --out <file.r1cs>
-                  finalize    --zkey <final.zkey> --pk-store <dir>
-                  help
+        @Option(names = "--zkey", required = true, description = "Final ceremony .zkey") Path zkey;
+        @Option(names = "--pk-store", required = true, description = "Output proving-key store directory") Path pkStore;
 
-                Ceremony flow (Option A, snarkjs):
-                  1. zeroj-ceremony export-r1cs --circuit com.example.MyProof --out my.r1cs
-                  2. snarkjs groth16 setup my.r1cs <prepared.ptau> key_0000.zkey
-                  3. contributors: snarkjs zkey contribute key_N.zkey key_N+1.zkey
-                  4. snarkjs zkey beacon ... && snarkjs zkey verify my.r1cs <ptau> final.zkey
-                  5. zeroj-ceremony finalize --zkey final.zkey --pk-store ./pk
-                See docs/ceremony/OPTION-A-RUNBOOK.md.""");
+        @Override
+        public Integer call() throws Exception {
+            if (!Files.isReadable(zkey)) { System.err.println("Cannot read .zkey: " + zkey); return 2; }
+            System.out.printf("Importing %s (%,d bytes) -> %s ...%n", zkey, Files.size(zkey), pkStore);
+            long t0 = System.nanoTime();
+            var dims = ZkeyPkStoreImporter.importToPkStore(zkey, pkStore);
+            System.out.printf("Done in %.1fs: %,d wires | %d public | domain %,d%n",
+                    (System.nanoTime() - t0) / 1e9, dims.numWires(), dims.numPublic(), dims.domainSize());
+            System.out.println("Prove with Groth16PkStore.load(\"" + pkStore + "\") and "
+                    + "ZkeyPkStoreImporter.snarkjsConstraints(yourConstraints, " + dims.numPublic() + ").");
+            return 0;
+        }
     }
 }
