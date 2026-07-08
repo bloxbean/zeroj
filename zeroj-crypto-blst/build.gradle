@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'Opt-in blst-accelerated Groth16 prover backend for zeroj-crypto (FFM, ~5x prove). ' +
+        'Bridges zeroj-crypto (the prover SPI) and zeroj-blst (the native binding).'
+
+dependencies {
+    // The bridge: the prover SPI (ProverBackend / G1MsmBackend / G2MsmBackend) + the FFM blst MSMs.
+    // junit is provided by the root subprojects block.
+    api project(':zeroj-crypto')
+    api project(':zeroj-blst')
+}
+
+test {
+    // FFM downcalls into libblst
+    jvmArgs += ['--enable-native-access=ALL-UNNAMED']
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+}
+
+// ADR-0029 opt-in blst prover benchmark (blst MSM + full-prove speedup vs pure-Java). Heavy.
+tasks.register('blstBench', Test) {
+    description = 'ADR-0029: blst MSM + full-prove speedup vs pure-Java (opt-in, heavy).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    maxHeapSize = '6g'
+    jvmArgs += ['--enable-native-access=ALL-UNNAMED']
+    systemProperty 'zeroj.bench', 'true'
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}

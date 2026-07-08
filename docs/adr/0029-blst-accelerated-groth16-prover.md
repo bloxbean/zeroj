@@ -8,10 +8,12 @@ M2c flat FFT, M4 mmap'd off-heap key → **provable on 16–32 GB, pure Java, no
 backend (M6 FFM `blst_p1s/p2s_mult_pippenger` binding, M7 `ProverBackend` SPI, M8 full G1+G2 backend
 → **~5× prove, bit-identical**), plus M9 build-from-source `libblst` (pinned v0.3.15) + GraalVM FFM
 config. All differential-tested against frozen oracles.
-**Remaining (productionization/validation):** native-image build validation + Windows binary; expose
-the blst backend via an opt-in `zeroj-crypto-blst` module (wired in test scope today); the real 2²⁵
-end-to-end run (M5, hours) + usecase practicalization; M10 consolidated matrix. **M3 (Vector API)
-dropped** — measured FFT is ~1.5% of prove, so it would move nothing (and it's an incubator API).
+The blst prover backend is exposed as the opt-in **`zeroj-crypto-blst`** module (`BlstProverBackend`),
+so `zeroj-crypto` stays pure-Java by default and `zeroj-blst` stays a standalone native lib.
+
+**Remaining (productionization/validation):** native-image build validation + Windows binary; the
+real 2²⁵ end-to-end run (M5, hours) + usecase practicalization; M10 consolidated matrix. **M3 (Vector
+API) dropped** — measured FFT is ~1.5% of prove, so it would move nothing (and it's an incubator API).
 
 ## Date
 2026-07-07
