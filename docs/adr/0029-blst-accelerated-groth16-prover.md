@@ -11,9 +11,24 @@ config. All differential-tested against frozen oracles.
 The blst prover backend is exposed as the opt-in **`zeroj-crypto-blst`** module (`BlstProverBackend`),
 so `zeroj-crypto` stays pure-Java by default and `zeroj-blst` stays a standalone native lib.
 
-**Remaining (productionization/validation):** native-image build validation + Windows binary; the
-real 2²⁵ end-to-end run (M5, hours) + usecase practicalization; M10 consolidated matrix. **M3 (Vector
-API) dropped** — measured FFT is ~1.5% of prove, so it would move nothing (and it's an incubator API).
+**M5 finding (2¹⁸ at-scale, 128 GB box):** setup **1794 µs/c**, prove **180 µs/c** (pure-Java),
+heap **4.25 KB/c**, PK flat 144 MB. Extrapolated to **2²⁵ (33.5 M)**: *prove* ~20 min (blst) + 18 GB
+mmap'd PK → **fine**; but *setup* ~**17 h** and ~**110–125 GB peak heap** → at the 128 GB memory edge,
+i.e. it could OOM after 17 h. **The setup — not the prove — is the real 2²⁵ blocker, on both time and
+memory.** The prover got mmap (M4) + blst (M8); setup did not. So M5 needs a **memory-lean, streamed,
+blst-accelerated setup** before the real run is safe.
+
+**M5a done — parallel setup (this is the setup-time lever, not blst).** The per-wire muls are
+independent, so `IntStream.parallel()` over the 5 point-array loops gives **1794 → 177.9 µs/c
+(~10.1×)** at 2¹⁸, correctness green. **2²⁵ setup: ~17 h → ~1.7 h.** With blst-prove (~20 min) the
+**full real run is now ~2 h, not ~17.5 h.** Caveat: peak heap rose 4.25 → 5.93 KB/c (parallel
+transient churn) → ~198 GB projected at 2²⁵, so the real run needs a large `-Xmx` + GC pressure (or
+thread throttling / disk streaming) — but it's now cheap enough to *attempt* (fail-fast in ~2 h).
+
+**Remaining (productionization/validation):** native-image build validation + Windows binary; the real
+2²⁵ end-to-end run (now ~2 h) + usecase practicalization; optional setup memory-streaming if 2²⁵ OOMs;
+M10 consolidated matrix. **M3 (Vector API) dropped** — measured FFT is ~1.5% of prove, so it would
+move nothing (and it's an incubator API).
 
 ## Date
 2026-07-07
