@@ -1,0 +1,27 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'Groth16 MPC trusted-setup ceremony CLI (ADR-0031): export ZeroJ circuits to .r1cs for ' +
+        'snarkjs ceremonies, and finalize ceremony .zkey files into ZeroJ proving-key stores.'
+
+dependencies {
+    // junit comes from the root subprojects block
+    implementation project(':zeroj-api')
+    implementation project(':zeroj-crypto')        // R1csExporter, ZkeyPkStoreImporter, Groth16PkStore
+    implementation project(':zeroj-circuit-dsl')   // CircuitBuilder (reflective circuit compile)
+    implementation project(':zeroj-bls12381')
+
+    testImplementation project(':zeroj-codec')     // SnarkjsJsonCodec (VK parsing in the E2E test)
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli'
+    }
+}
+
+test {
+    useJUnitPlatform()
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+}
