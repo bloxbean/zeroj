@@ -43,6 +43,32 @@ tasks.register('fatJar', Jar) {
     exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/versions/*/OSGI-INF/**'
 }
 
+// ADR-0031: zip distribution around a GraalVM native binary. The binary is built by native-image
+// into build/native/ first, then zipped here (clean `zeroj-ceremony[.exe]` name inside; platform +
+// version in the zip name; unix exec bit preserved; user guide included as README):
+//   native-image -jar build/libs/zeroj-ceremony-<v>-all.jar --no-fallback \
+//       --enable-native-access=ALL-UNNAMED -o build/native/zeroj-ceremony
+//   ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=linux-x86_64
+tasks.register('nativeDistZip', Zip) {
+    group = 'distribution'
+    description = 'Package the native-image binary from build/native/ into a platform zip.'
+    def platform = (project.findProperty('platform') ?: 'unknown') as String
+    archiveBaseName = 'zeroj-ceremony'
+    archiveClassifier = platform
+    into("zeroj-ceremony-${project.version}-${platform}") {
+        from(layout.buildDirectory.dir('native')) {
+            include 'zeroj-ceremony', 'zeroj-ceremony.exe'
+            filePermissions { unix(0755) }
+        }
+        from("${rootDir}/docs/ceremony/USER-GUIDE.md") { rename { 'README.md' } }
+    }
+    doFirst {
+        def bin = layout.buildDirectory.dir('native').get().asFile
+        if (!new File(bin, 'zeroj-ceremony').exists() && !new File(bin, 'zeroj-ceremony.exe').exists())
+            throw new GradleException("No native binary in $bin — run native-image first (see task doc)")
+    }
+}
+
 test {
     useJUnitPlatform()
     systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'

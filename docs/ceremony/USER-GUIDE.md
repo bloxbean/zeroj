@@ -14,15 +14,20 @@ works; they behave identically:
 | artifact | needs | best for |
 |---|---|---|
 | `zeroj-ceremony-<version>-all.jar` | Java 25+ | anyone with a JVM |
-| `zeroj-ceremony-linux-x86_64` / `zeroj-ceremony-macos-arm64` | nothing (single native binary) | contributors who don't want to install Java |
+| `zeroj-ceremony-<version>-<platform>.zip` | nothing (native binary inside) | contributors who don't want to install Java |
+
+Native zips are published for **linux-x86_64, linux-arm64, macos-x86_64, macos-arm64,
+windows-x86_64**. (Windows-on-ARM: use the x86_64 binary — it runs under Windows' emulation — or
+the jar; GraalVM does not yet ship a windows-aarch64 toolchain.)
 
 ```bash
 # fat jar
 java -jar zeroj-ceremony-<version>-all.jar --help
 
-# native binary
-chmod +x zeroj-ceremony-macos-arm64
-./zeroj-ceremony-macos-arm64 --help
+# native binary (zip contains `zeroj-ceremony`, already executable, plus this guide)
+unzip zeroj-ceremony-<version>-macos-arm64.zip
+cd zeroj-ceremony-<version>-macos-arm64
+./zeroj-ceremony --help
 ```
 
 Below, `zeroj-ceremony` stands for whichever form you use.

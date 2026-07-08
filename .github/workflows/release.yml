@@ -160,7 +160,7 @@ jobs:
   # ================================================================
 
   ceremony-cli-release:
-    name: ceremony CLI (fat jar + native binaries)
+    name: ceremony CLI (${{ matrix.os }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write   # attach assets to the release
@@ -170,10 +170,26 @@ jobs:
         include:
           - runner: ubuntu-latest
             os: linux-x86_64
+            ext: ''
             fatjar: true          # the (platform-independent) fat jar is uploaded once, from linux
+          - runner: ubuntu-24.04-arm
+            os: linux-arm64
+            ext: ''
+            fatjar: false
+          - runner: macos-13
+            os: macos-x86_64
+            ext: ''
+            fatjar: false
           - runner: macos-14
             os: macos-arm64
+            ext: ''
             fatjar: false
+          - runner: windows-latest
+            os: windows-x86_64
+            ext: '.exe'
+            fatjar: false
+          # windows-arm64: GraalVM ships no windows-aarch64 native-image toolchain yet —
+          # ARM Windows users run the x86_64 binary (emulation) or the fat jar.
     steps:
       - uses: actions/checkout@v4
 
@@ -185,18 +201,25 @@ jobs:
           native-image-job-reports: 'true'
 
       - name: Build ceremony fat jar
+        shell: bash
         run: ./gradlew :zeroj-ceremony:fatJar --no-daemon
 
       - name: Build native binary
+        shell: bash
         run: |
           JAR=$(ls zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar)
+          mkdir -p zeroj-ceremony/build/native
           native-image -jar "$JAR" --no-fallback --enable-native-access=ALL-UNNAMED \
-            -o zeroj-ceremony-${{ matrix.os }}
-          ./zeroj-ceremony-${{ matrix.os }} --version
+            -o zeroj-ceremony/build/native/zeroj-ceremony
+          zeroj-ceremony/build/native/zeroj-ceremony${{ matrix.ext }} --version
+
+      - name: Package zip distribution (gradle nativeDistZip)
+        shell: bash
+        run: ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
 
       - name: Upload to GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
-            zeroj-ceremony-${{ matrix.os }}
+            zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
