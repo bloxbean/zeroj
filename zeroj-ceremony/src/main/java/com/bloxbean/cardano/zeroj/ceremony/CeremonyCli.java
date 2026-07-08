@@ -48,6 +48,7 @@ public final class CeremonyCli {
         return switch (cmd) {
             case "export-r1cs" -> exportR1cs(opts);
             case "finalize" -> finalizeKey(opts);
+            case "contribute" -> contribute(opts);
             case "help", "--help", "-h" -> { usage(); yield 0; }
             default -> {
                 System.err.println("Unknown command: " + cmd);
@@ -116,6 +117,30 @@ public final class CeremonyCli {
                 (System.nanoTime() - t0) / 1e9, dims.numWires(), dims.numPublic(), dims.domainSize());
         System.out.println("Prove with Groth16PkStore.load(\"" + store + "\") and "
                 + "ZkeyPkStoreImporter.snarkjsConstraints(yourConstraints, " + dims.numPublic() + ").");
+        return 0;
+    }
+
+    // ---- contribute (Option B: the ZeroJ-native fast contributor) ----
+
+    private static int contribute(Map<String, String> o) throws Exception {
+        Path in = Path.of(require(o, "in"));
+        Path out = Path.of(require(o, "out"));
+        String name = o.getOrDefault("name", "zeroj contributor");
+        if (!Files.isReadable(in)) { System.err.println("Cannot read .zkey: " + in); return 2; }
+
+        System.out.printf("Contributing to %s (%,d bytes) -> %s ...%n", in, Files.size(in), out);
+        long t0 = System.nanoTime();
+        byte[] hash = ZkeyContributor.contribute(in, out, name);
+        System.out.printf("Done in %.1fs.%n", (System.nanoTime() - t0) / 1e9);
+        StringBuilder hex = new StringBuilder("Contribution Hash:\n\t\t");
+        for (int i = 0; i < hash.length; i++) {
+            hex.append(String.format("%02x", hash[i]));
+            if (i % 32 == 31 && i < hash.length - 1) hex.append("\n\t\t");
+            else if (i % 4 == 3) hex.append(' ');
+        }
+        System.out.println(hex);
+        System.out.println("Publish this hash in your attestation. Verify the transcript with:");
+        System.out.println("  snarkjs zkey verify <circuit.r1cs> <pot.ptau> " + out.getFileName());
         return 0;
     }
 
