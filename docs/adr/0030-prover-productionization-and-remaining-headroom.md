@@ -40,6 +40,11 @@ point further work hit diminishing returns; this ADR records what was left on th
 - **Run the `build-blst` CI matrix and commit the all-platform set** — only the mac/aarch64 binary
   was rebuilt from source (v0.3.15) locally; the other platforms still carry the old testing-only
   binaries flagged in `zeroj-blst/src/main/resources/native/README.md`.
+- **Align zeroj-blst with the gnark/halo2 native pattern** (repo consistency): stop committing
+  binaries — build libblst in `ci.yml`/`snapshot.yml` like the release already does, delete the
+  committed dev binaries, and make blst tests skip gracefully when the lib is absent (local devs
+  run `build-blst.sh` once). Releases are already clean either way (`build-blst-native` stage
+  rebuilds from source at tag time).
 
 ## Non-goals (measured, deliberately dropped)
 
