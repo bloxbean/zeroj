@@ -142,17 +142,23 @@ public final class Groth16ProverBLS381 {
         long[] aEval = new long[domainSize * 4];
         long[] bEval = new long[domainSize * 4];
 
+        // ADR-0029 M5b: at domain 2²⁵ these element-wise passes are minutes of single-threaded work
+        // (they dominated the prove once the MSMs went multi-core). Each slot is independent, so fan
+        // them across cores — same ops per slot ⇒ bit-identical results.
         int constraintCount = constraints.size();
-        for (int i = 0; i < domainSize; i++) {
-            if (i < numConstraints && i < constraintCount) {
+        int evalUpper = Math.min(domainSize, Math.min(numConstraints, constraintCount));
+        FrFFTFlat.parallelRange(evalUpper, (lo, hi) -> {
+            for (int i = lo; i < hi; i++) {
                 R1CSConstraint constraint = constraints.get(i);
                 System.arraycopy(evalLinComb(constraint.a(), witness, mod).toLimbs(), 0, aEval, i * 4, 4);
                 System.arraycopy(evalLinComb(constraint.b(), witness, mod).toLimbs(), 0, bEval, i * 4, 4);
-            } // else zeros (MontFr381.ZERO == all-zero limbs)
-        }
+            } // beyond evalUpper: zeros (MontFr381.ZERO == all-zero limbs)
+        });
 
         long[] cEval = new long[domainSize * 4];
-        for (int i = 0; i < domainSize; i++) FrArith381.mul(cEval, i * 4, aEval, i * 4, bEval, i * 4);
+        FrFFTFlat.parallelRange(domainSize, (lo, hi) -> {
+            for (int i = lo; i < hi; i++) FrArith381.mul(cEval, i * 4, aEval, i * 4, bEval, i * 4);
+        });
 
         long[] inc = FieldFFTBLS381.rootOfUnity(logN + 1).toLimbs();
         cosetFFT(aEval, domainSize, inc);
@@ -160,23 +166,29 @@ public final class Groth16ProverBLS381 {
         cosetFFT(cEval, domainSize, inc);
 
         BigInteger[] result = new BigInteger[domainSize];
-        long[] val = new long[4];
-        for (int i = 0; i < domainSize; i++) {
-            FrArith381.mul(val, 0, aEval, i * 4, bEval, i * 4); // a·b
-            FrArith381.sub(val, 0, val, 0, cEval, i * 4);       // - c
-            result[i] = MontFr381.fromMontLimbs(val[0], val[1], val[2], val[3]).toBigInteger();
-        }
+        FrFFTFlat.parallelRange(domainSize, (lo, hi) -> {
+            long[] val = new long[4];
+            for (int i = lo; i < hi; i++) {
+                FrArith381.mul(val, 0, aEval, i * 4, bEval, i * 4); // a·b
+                FrArith381.sub(val, 0, val, 0, cEval, i * 4);       // - c
+                result[i] = MontFr381.fromMontLimbs(val[0], val[1], val[2], val[3]).toBigInteger();
+            }
+        });
         return result;
     }
 
     /** In-place coset NTT on flat Fr coefficients: ifft → scale by inc^i → fft. */
     private static void cosetFFT(long[] a, int n, long[] inc) {
         FrFFTFlat.ifft(a, n);
-        long[] power = MontFr381.ONE.toLimbs();
-        for (int i = 0; i < n; i++) {
-            FrArith381.mul(a, i * 4, a, i * 4, power, 0);
-            FrArith381.mul(power, 0, power, 0, inc, 0);
-        }
+        // scale a[i] by inc^i — chunked, each chunk starts its power walk at inc^lo (M5b)
+        FrFFTFlat.parallelRange(n, (lo, hi) -> {
+            long[] power = new long[4];
+            FrFFTFlat.pow(power, inc, lo);
+            for (int i = lo; i < hi; i++) {
+                FrArith381.mul(a, i * 4, a, i * 4, power, 0);
+                FrArith381.mul(power, 0, power, 0, inc, 0);
+            }
+        });
         FrFFTFlat.fft(a, n);
     }
 

@@ -70,4 +70,29 @@ class FrFFTFlatTest {
         FrFFTFlat.ifft(flat, n);
         assertMatches(coeffs, flat);
     }
+
+    /** ADR-0029 M5b: above PAR_MIN (2¹⁶) the multi-core path engages — must match the oracle too. */
+    @Test
+    void parallelFft_aboveThreshold_matchesObjectFFT() {
+        int n = 1 << 17;
+        MontFr381[] coeffs = randomCoeffs(n);
+        MontFr381[] expected = FieldFFTBLS381.fft(coeffs);
+        long[] flat = toFlat(coeffs);
+        FrFFTFlat.fft(flat, n);
+        assertMatches(expected, flat);
+        FrFFTFlat.ifft(flat, n);
+        assertMatches(coeffs, flat); // and round-trips
+    }
+
+    /** {@link FrFFTFlat#pow} must match BigInteger modPow (spot exponents incl. 0 and 1). */
+    @Test
+    void pow_matchesModPow() {
+        MontFr381 base = MontFr381.fromBigInteger(new BigInteger(255, RND).mod(R));
+        for (int e : new int[]{0, 1, 2, 3, 7, 100, 65535, 1 << 20}) {
+            long[] out = new long[4];
+            FrFFTFlat.pow(out, base.toLimbs(), e);
+            MontFr381 expected = MontFr381.fromBigInteger(base.toBigInteger().modPow(BigInteger.valueOf(e), R));
+            assertArrayEquals(expected.toLimbs(), out, "base^" + e);
+        }
+    }
 }

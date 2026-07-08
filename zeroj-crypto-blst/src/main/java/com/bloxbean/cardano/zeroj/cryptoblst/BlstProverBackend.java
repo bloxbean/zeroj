@@ -10,6 +10,7 @@ import com.bloxbean.cardano.zeroj.blst.ffm.BlstG2Msm;
 import com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend;
 import com.bloxbean.cardano.zeroj.crypto.msm.G1MsmBackend;
 import com.bloxbean.cardano.zeroj.crypto.msm.G2MsmBackend;
+import com.bloxbean.cardano.zeroj.crypto.msm.ParallelMsm;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -36,8 +37,17 @@ public final class BlstProverBackend {
 
     private BlstProverBackend() {}
 
-    /** A full G1+G2 blst prover backend. */
+    /**
+     * A full G1+G2 blst prover backend, multi-core (ADR-0029 M5b): large MSMs are chunked across
+     * cores — each chunk converts its points and makes its own native pippenger call concurrently,
+     * partials are summed. Proof identical to the serial path.
+     */
     public static ProverBackend create() {
+        return new ProverBackend(ParallelMsm.parallel(g1()), ParallelMsm.parallel(g2()));
+    }
+
+    /** The single-native-call-per-MSM variant (pre-M5b behavior). */
+    public static ProverBackend createSerial() {
         return new ProverBackend(g1(), g2());
     }
 
