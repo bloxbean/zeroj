@@ -83,20 +83,21 @@ public final class Groth16SetupBLS381 {
         BigInteger zh = tauN.subtract(BigInteger.ONE).mod(FR); // tau^N - 1
         BigInteger nInv = BigInteger.valueOf(domainSize).modInverse(FR);
 
-        BigInteger[] lagrange = new BigInteger[domainSize];
-        BigInteger omegaI = BigInteger.ONE;
+        // ADR-0029 M5a: the Lagrange evaluations L_i(tau) are independent but each needs a modInverse
+        // (the dominant sequential setup cost — domainSize of them). Precompute omega^i sequentially
+        // (cheap Fr mults, the only serial dependency), then compute all L_i in parallel.
         BigInteger omegaBi = omega.toBigInteger();
-        for (int i = 0; i < domainSize; i++) {
+        BigInteger[] omegaPows = new BigInteger[domainSize];
+        omegaPows[0] = BigInteger.ONE;
+        for (int i = 1; i < domainSize; i++) omegaPows[i] = omegaPows[i - 1].multiply(omegaBi).mod(FR);
+        final BigInteger zhNInv = zh.multiply(nInv).mod(FR);
+        final BigInteger[] lagrange = new BigInteger[domainSize];
+        java.util.stream.IntStream.range(0, domainSize).parallel().forEach(i -> {
             // L_i(tau) = omega^i * (tau^N - 1) / (N * (tau - omega^i))
-            BigInteger diff = tau.subtract(omegaI).mod(FR);
-            if (diff.signum() == 0) {
-                lagrange[i] = BigInteger.ONE;
-            } else {
-                lagrange[i] = omegaI.multiply(zh).mod(FR).multiply(nInv).mod(FR)
-                        .multiply(diff.modInverse(FR)).mod(FR);
-            }
-            omegaI = omegaI.multiply(omegaBi).mod(FR);
-        }
+            BigInteger diff = tau.subtract(omegaPows[i]).mod(FR);
+            lagrange[i] = (diff.signum() == 0) ? BigInteger.ONE
+                    : omegaPows[i].multiply(zhNInv).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
+        });
 
         // For each wire s, compute u_s(tau), v_s(tau), w_s(tau)
         // u_s = sum_c A_c[s] * L_c(tau), etc.
