@@ -1,17 +1,25 @@
-# Bundled libblst — provenance
+# Bundled libblst — provenance & build
 
-These `libblst.{so,dylib}` binaries are **temporary, for validating the FFM binding only**
-(ADR-0029 M6 / Rung B). They were lifted from the old (2023) `foundation.icon:blst-java:0.3.2`
-jar. The raw `blst_*` C symbols they export are stable, so they correctly validate
-`BlstG1Msm` / `blst_p1s_mult_pippenger` and its ~2.5–3.8× MSM speedup.
+These `libblst.{so,dylib}` are **built from source** from supranational/blst at a pinned tag
+(currently **v0.3.15** — the latest release). supranational publishes **no precompiled binaries**
+(source-only), so `zeroj-blst` builds its own — no third-party wrapper, controlled supply chain.
 
-**Do NOT ship these for release.** Before `zeroj-blst` is published as a standalone dependency:
+## Rebuild locally (for the current OS/arch)
 
-1. Replace with a **current `libblst`** — either blst's official release binaries, or (preferred)
-   **built from source in a CI matrix** (Linux/Mac/Windows × x86_64/aarch64), assembled into one
-   all-platform jar. This gives release-grade supply-chain provenance and Windows/aarch64 coverage.
-2. The FFM binding (`BlstFfm`, `BlstG1Msm`, …) is **unchanged** by the binary version — only these
-   files get swapped.
+```bash
+zeroj-blst/scripts/build-blst.sh                 # host arch
+BLST_TAG=v0.3.15 zeroj-blst/scripts/build-blst.sh
+```
 
-Layout: `native/<os>/<arch>/libblst.<ext>` where `<os>` ∈ {linux, mac, windows},
-`<arch>` ∈ {amd64, x86_64, aarch64}.
+Requires `git` + a C toolchain (clang/gcc). The script clones the pinned blst tag, runs its
+`build.sh`, links the static archive into a shared library exporting the raw `blst_*` symbols, and
+drops it here as `native/<os>/<arch>/libblst.<ext>`.
+
+## All-platform binaries
+
+`.github/workflows/build-blst.yml` runs the same script per runner (Linux/macOS × x86_64/aarch64,
++ Windows) and assembles the all-platform set that ships in the jar. Bump `BLST_TAG` there and in
+`build-blst.sh` to update the pinned blst version.
+
+Layout: `native/<os>/<arch>/libblst.<ext>` — `<os>` ∈ {linux, mac, windows},
+`<arch>` ∈ {amd64, x86_64, aarch64}. The FFM loader (`BlstFfm`) picks the matching one at runtime.
