@@ -97,6 +97,46 @@ variable-base muls, embarrassingly parallel. Expected ~1 h-class per contributio
 `blst_p1_mult` per point is per-op (the M6 lesson: ~wash vs pure Java) — the win here is
 parallelism, not blst batching.
 
+## M3 result — phase-1 source decision (2026-07-08)
+
+**Measured** (snarkjs 0.7.6 / Node, this machine):
+
+| power | `new` | `contribute` | `prepare phase2` |
+|---|---|---|---|
+| 2¹⁴ | 1 s | 5 s | 77 s |
+| 2¹⁶ | 1 s | 19 s | 342 s |
+| 2¹⁸ | 5 s | 74 s | 1676 s |
+
+Scaling ≈ ×4 per +2 powers → at **2²⁵**: contribution ≈ **2.5–3 h each**, `prepare phase2` ≈
+**60–105 h** (one-time), final `.ptau` ≈ 32 GB.
+
+**Decision: adopt Filecoin's phase 1 as the primary source; own-ptau as fallback.**
+- Filecoin's BLS12-381 ceremony (2²⁷, ~20 independent publicly-attested participants + beacon;
+  files at `trusted-setup.filecoin.io`, attestations in the perpetualpowersoftau repo) gives far
+  stronger phase-1 trust than any small ceremony we could run, at zero contributor cost. Reusing a
+  large public phase 1 is the ecosystem norm (all of circom/bn254 reuses PPoT/Hermez; Avail derived
+  their BLS12-381 SRS from Filecoin's — direct precedent).
+- Conversion (Rust challenge/response format → `.ptau`) is plausible — snarkjs's
+  `powersoftau challenge contribute <curve>` / `import response` are curve-parameterized and
+  `truncate` cuts 2²⁷ → 2²⁵ — but must be proven on the real (~50–100 GB) files: an M6-adjacent
+  verification item. **The pairing-structure check (`snarkjs powersoftau verify`) validates the
+  converted accumulator independently of the conversion tool**, so a broken converter cannot slip
+  through.
+- The one-time `prepare phase2` (~60–105 h Node) is required for **either** source; it is
+  circuit-independent, so it is paid once and the prepared `.ptau` is cached and reused for every
+  future circuit ≤ 2²⁵. A ZeroJ-native parallel `prepare` (our NTT/EC stack, est. ~5–10× faster) is
+  recorded as an optimization, not a blocker.
+
+**CLI shape** — phase-1 source is a pluggable option (user preference, extensible):
+
+```
+zeroj-ceremony phase1 --source filecoin|file|new --power 25 --out pot25.ptau
+```
+Every source funnels through the same non-negotiable pipeline:
+**acquire → `powersoftau verify` → `truncate` → `prepare phase2` → cache** (`~/.zeroj/ptau/`).
+Note: the phase-1 source choice never removes the need for ≥1 honest **phase-2** contribution —
+that stays with the circuit's ceremony (minimum viable: coordinator contribution + public beacon).
+
 ## Milestones
 
 | # | milestone | exit criteria |
