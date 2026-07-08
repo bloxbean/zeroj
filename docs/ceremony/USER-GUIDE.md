@@ -16,9 +16,10 @@ works; they behave identically:
 | `zeroj-ceremony-<version>-all.jar` | Java 25+ | anyone with a JVM |
 | `zeroj-ceremony-<version>-<platform>.zip` | nothing (native binary inside) | contributors who don't want to install Java |
 
-Native zips are published for **linux-x86_64, linux-arm64, macos-x86_64, macos-arm64,
-windows-x86_64**. (Windows-on-ARM: use the x86_64 binary — it runs under Windows' emulation — or
-the jar; GraalVM does not yet ship a windows-aarch64 toolchain.)
+Native zips are published for **linux-x86_64, linux-arm64, macos-arm64,
+windows-x86_64**. (Intel Macs: use the fat jar. Windows-on-ARM: use the x86_64 binary —
+it runs under Windows' emulation — or the jar; GraalVM does not yet ship a windows-aarch64
+toolchain.)
 
 ```bash
 # fat jar

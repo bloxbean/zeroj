@@ -21,10 +21,10 @@ jobs:
       matrix:
         include:
           - os: linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             lib: libzeroj_gnark.so
           - os: linux-arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-22.04-arm
             lib: libzeroj_gnark.so
           - os: macos-arm64
             runner: macos-14
@@ -55,10 +55,10 @@ jobs:
       matrix:
         include:
           - os: linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             lib: libzeroj_halo2.so
           - os: linux-arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-22.04-arm
             lib: libzeroj_halo2.so
           - os: macos-arm64
             runner: macos-14
@@ -93,7 +93,7 @@ jobs:
   build-and-test:
     name: Build & Test
     needs: [ build-gnark-native, build-halo2-native ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -177,7 +177,7 @@ jobs:
       matrix:
         include:
           - os: linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
           - os: macos-arm64
             runner: macos-14
     steps:
