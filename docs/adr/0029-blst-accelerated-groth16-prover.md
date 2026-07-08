@@ -55,6 +55,29 @@ Proven on a single 128 GB machine, pure JVM (Java 25 + blst via FFM), **19,075,0
 - **Next prove-speed lever (profiled):** the prove is **single-threaded** (~100% CPU of 12 cores) →
   parallelizing the MSMs is ~10× of untapped headroom.
 
+### M5b — multi-core prove (2026-07-08): 434 s → 137 s (3.2×)
+
+Two steps, both proof-bit-identical to serial (point addition is associative; same field ops per slot):
+
+| prove @ 19M (blst, warm PK) | time |
+|---|---|
+| serial (M8 baseline) | 434 s |
+| + `ParallelMsm` (chunk MSMs across cores, sum partials) | 286 s |
+| + parallel `computeH`/NTT | **137 s (~2.3 min)** |
+
+- `ProverBackend.PURE_JAVA` and `BlstProverBackend.create()` are **multi-core by default** now
+  (`PURE_JAVA_SERIAL` / `createSerial()` kept). For blst, each chunk converts its points and makes
+  its own native pippenger call concurrently.
+- The MSM-only step exposed a scale artifact: **"FFT ≈ 1.5% of prove" was only true at 2¹⁶.** At
+  domain 2²⁵ the single-threaded `computeH` was ~170 s (~60% of the MSM-parallel prove). Fixed by
+  parallelizing the NTT stages (butterflies are independent within a stage; per-chunk twiddle starts
+  via `FrFFTFlat.pow`) and all element-wise passes (`parallelRange`).
+- **Warm proof end-to-end is now ~4.5 min** (compile 20 s + witness 2 s + load PK 108 s + prove 137 s);
+  the mmap'd-PK load (single-threaded G2 parse of 8.4 GB) is now comparable to the prove itself —
+  the next lever if further speed is wanted.
+- Validated: parallel==serial at MSM level and whole-proof level; parallel NTT vs the object oracle
+  above the engage threshold (2¹⁶) + round-trip; `pow`==`modPow`; full suites green.
+
 ## Date
 2026-07-07 (M5 run 2026-07-08)
 
