@@ -47,6 +47,22 @@ revisit if per-circuit ceremonies become a recurring cost).
 Both paths converge on: **final `.zkey` → `ZkeyImporterBLS381` → `Groth16PkStore.save` (one-time) →
 prove exactly as today**; the VK is extracted from the same import for the on-chain validator.
 
+### CLI packaging (`zeroj-ceremony`)
+
+The ceremony tooling ships as a **CLI** (new module), because contributors and coordinators are not
+Java developers calling APIs — each role gets one command:
+
+| command | who | what | milestone |
+|---|---|---|---|
+| `export-r1cs --circuit <FQCN of @ZKCircuit> --out c.r1cs` | coordinator | compile the ZeroJ circuit → iden3 `.r1cs` (used by **both** options) | M4 |
+| `contribute in.zkey out.zkey` | contributor | Option B phase-2 contribution (entropy prompt + hash printout) | M5 |
+| `verify c.r1cs pot.ptau final.zkey` | anyone | convenience wrapper; **independent check remains `snarkjs zkey verify`** | M5 |
+| `beacon in.zkey out.zkey --hash <pub randomness>` | coordinator | final beacon contribution | M5 |
+| `finalize final.zkey --pk-store <dir>` | coordinator | import + persist via `Groth16PkStore`, export the VK for the validator | M2/M4 |
+
+Same module family later hosts the planned end-user proving CLI (seed phrase → ownership proof) —
+the ceremony CLI is its trust-side counterpart.
+
 ## Shared foundation (needed by both paths)
 
 1. **`R1csExporter`** (new, `zeroj-crypto` or a small tool module): ZeroJ `R1CSConstraintSystem` →
