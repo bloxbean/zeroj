@@ -18,6 +18,17 @@ dependencies {
     testImplementation project(':zeroj-codec')     // SnarkjsJsonCodec (VK parsing in the E2E test)
 }
 
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Ceremony'
+                description = 'Groth16 MPC trusted-setup ceremony CLI for ZeroJ circuits'
+            }
+        }
+    }
+}
+
 compileJava {
     options.compilerArgs += ['-Aproject=com.bloxbean.cardano/zeroj-ceremony']
 }

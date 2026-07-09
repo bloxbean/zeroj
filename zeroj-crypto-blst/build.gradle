@@ -12,6 +12,17 @@ dependencies {
     api project(':zeroj-blst')
 }
 
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Crypto BLST'
+                description = 'Opt-in blst-accelerated Groth16 prover backend for zeroj-crypto'
+            }
+        }
+    }
+}
+
 test {
     // FFM downcalls into libblst
     jvmArgs += ['--enable-native-access=ALL-UNNAMED']
