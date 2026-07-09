@@ -52,6 +52,9 @@ tasks.register('fatJar', Jar) {
         attributes 'Main-Class': 'com.bloxbean.cardano.zeroj.ceremony.CeremonyCli',
                    'Implementation-Version': project.version
     }
+    // .collect { zipTree(it) } flattens the configuration into a plain list, dropping the implicit
+    // task deps on the sibling project jar tasks — declare them explicitly so those jars are built first.
+    dependsOn configurations.runtimeClasspath
     from sourceSets.main.output
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     // BC jar signatures don't survive repacking (we use the lightweight digest API, not the JCE provider)
