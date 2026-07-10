@@ -148,5 +148,14 @@ single field element.
 
 **M4 outcome: warm floor 7 GB, warm total ~2.1 min (compile off the prove path).** The frontier
 is now witness generation (graph build + evaluation): the target of a future witness-program
-workstream if a sub-7 GB floor is ever needed. M5 (hard-capped Docker validation of the 16 GB
-claim with real page-cache pressure on the 23 GB key) remains.
+workstream if a sub-7 GB floor is ever needed.
+
+| **M5 (hard-capped validation, Docker `--memory=16g --memory-swap=16g`)** | **16 GiB cap PASS, pure Java** | **2.6 min total** (147.8 s prove) | 2026-07-10: a true cgroup limit with the 23 GB key bind-mounted (VirtioFS — the worst-case I/O path). The container rode the cap at 15.6/16 GiB with the kernel evicting/refaulting key pages the whole MSM phase (Regime A) and finished barely slower than uncapped. The pure-Java multi-pass window reads did **not** thrash — the per-chunk working set (~4 GB) fits the remaining cache. |
+| M5 | 16 GiB cap **OOM-kill (exit 137), blst** | — | **The cap exposed what `-Xmx` cannot:** blst's per-MSM native FFM arenas — all parallel chunks deserialize concurrently, ~8.4 GB native during the G2 MSM (43.7M × 192 B) + ~4.2 GB G1 — on top of the 10 GB heap. Fine on a big host, fatal under 16 GiB. Fix applied: the CLI's `--backend` default is now **`java`** (measured same-speed at this circuit size, no native memory, native-image-clean); `--backend blst` is the explicit opt-in for big-memory machines, with a warning when total (cgroup-aware) memory is under ~24 GB. This also resolves the long-open "pick the default backend" question — pure Java won on safety at equal speed. Future zeroj item: bound blst's concurrent arena footprint (execute chunks K-at-a-time through a semaphored pool → native ≈ K × chunk size) so blst can run capped too. |
+
+**M5 outcome: the "16 GB machine" claim is validated end-to-end** — hard cap, real eviction
+pressure, worst-case bind-mount I/O, ~2.6 min, self-check PASS — with the pure-Java backend,
+which the CLI now auto-selects on such machines. The same day, a proof from this fully-optimized
+prover (CSR + flat scalars + cached constraints) was **verified on-chain** against the running
+Yaci DevKit validator (4.9 s, unchanged VK) — closing the E2E loop for the whole
+ADR-0033/0034 arc.
