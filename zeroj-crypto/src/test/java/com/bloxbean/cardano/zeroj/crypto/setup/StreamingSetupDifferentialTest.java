@@ -94,4 +94,77 @@ class StreamingSetupDifferentialTest {
         for (int i = 0; i < legacy.ic().length; i++)
             assertEquals(legacy.ic()[i].xBigInt(), stream.ic()[i].xBigInt(), "ic[" + i + "]");
     }
+
+    /**
+     * ADR-0035 M6a: the sparse store must load into readers that are point-for-point identical
+     * to the dense store's, and produce the identical deterministic proof.
+     */
+    @Test
+    void sparseStore_readersAndProof_equalDense(@TempDir Path dir) throws Exception {
+        int n = 300, numWires = n + 2, numPublic = 1;
+        var cons = chain(n);
+        var flat = toFlat(cons);
+        BigInteger tau = BigInteger.valueOf(0xBEEF);
+        BigInteger a = BigInteger.valueOf(11111), b = BigInteger.valueOf(22222),
+                g = BigInteger.valueOf(33333), d = BigInteger.valueOf(44444);
+
+        Path dense = dir.resolve("dense"), sparse = dir.resolve("sparse");
+        Groth16SetupBLS381.setupToStore(flat, numWires, numPublic, tau, a, b, g, d, dense, false);
+        Groth16SetupBLS381.setupToStore(flat, numWires, numPublic, tau, a, b, g, d, sparse, true);
+
+        // sparse must actually be smaller (the chain circuit has infinity points in A/B1/B2/L)
+        long denseBytes = Files.size(dense.resolve("pointsB1.bin"));
+        long sparseBytes = Files.size(sparse.resolve("pointsB1.bin"));
+        assertTrue(sparseBytes < denseBytes, "sparse B1 should be smaller: " + sparseBytes + " vs " + denseBytes);
+
+        try (var dl = Groth16PkStore.load(dense); var sl = Groth16PkStore.load(sparse)) {
+            long[] db = new long[12], sb = new long[12];
+            for (int i = 0; i < numWires; i++) {
+                dl.readers().a().readInto(i, db);
+                sl.readers().a().readInto(i, sb);
+                assertArrayEquals(db, sb, "A[" + i + "]");
+                dl.readers().b1().readInto(i, db);
+                sl.readers().b1().readInto(i, sb);
+                assertArrayEquals(db, sb, "B1[" + i + "]");
+            }
+            for (int i = 0; i < dl.readers().h().count(); i++) {
+                dl.readers().h().readInto(i, db);
+                sl.readers().h().readInto(i, sb);
+                assertArrayEquals(db, sb, "H[" + i + "]");
+            }
+            for (int i = 0; i < dl.readers().l().count(); i++) {
+                dl.readers().l().readInto(i, db);
+                sl.readers().l().readInto(i, sb);
+                assertArrayEquals(db, sb, "L[" + i + "]");
+            }
+            byte[] dbe = new byte[192], sbe = new byte[192];
+            for (int i = 0; i < numWires; i++) {
+                dl.readers().b2().readBE(i, dbe, 0);
+                sl.readers().b2().readBE(i, sbe, 0);
+                assertArrayEquals(dbe, sbe, "B2[" + i + "]");
+                assertEquals(dl.readers().b2().get(i).x().reBigInt(), sl.readers().b2().get(i).x().reBigInt(), "B2.get[" + i + "]");
+            }
+
+            // identical deterministic proof from both stores
+            BigInteger[] w = witness(n);
+            var pd = com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381.proveUnblindedWithReaders(
+                    dl.pk(), dl.readers(), com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend.PURE_JAVA,
+                    w, cons, dl.domain());
+            var ps = com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381.proveUnblindedWithReaders(
+                    sl.pk(), sl.readers(), com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend.PURE_JAVA,
+                    w, cons, sl.domain());
+            assertEquals(pd.a().x().toBigInteger(), ps.a().x().toBigInteger(), "piA");
+            assertEquals(pd.b().x().re().toBigInteger(), ps.b().x().re().toBigInteger(), "piB");
+            assertEquals(pd.c().x().toBigInteger(), ps.c().x().toBigInteger(), "piC");
+        }
+    }
+
+    private static BigInteger[] witness(int n) {
+        BigInteger[] w = new BigInteger[n + 2];
+        w[0] = BigInteger.ONE;
+        BigInteger a = BigInteger.valueOf(5);
+        for (int i = 0; i < n; i++) { w[2 + i] = a; a = a.multiply(a).mod(FR); }
+        w[1] = w[n + 1];
+        return w;
+    }
 }

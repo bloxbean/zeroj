@@ -78,6 +78,14 @@ public final class Groth16PkStore {
     public static void writeAuxAndManifest(Path dir, AffineG1 alphaG1, AffineG1 betaG1, AffineG1 deltaG1,
                                     AffineG2 betaG2, AffineG2 deltaG2, AffineG2 gammaG2, AffineG1[] ic,
                                     int numPublic, int numB2, int domain) throws IOException {
+        writeAuxAndManifest(dir, alphaG1, betaG1, deltaG1, betaG2, deltaG2, gammaG2, ic,
+                numPublic, numB2, domain, null);
+    }
+
+    /** {@code format}: {@code null} = dense (default), or {@code "sparse-v1"} (ADR-0035 M6a). */
+    public static void writeAuxAndManifest(Path dir, AffineG1 alphaG1, AffineG1 betaG1, AffineG1 deltaG1,
+                                    AffineG2 betaG2, AffineG2 deltaG2, AffineG2 gammaG2, AffineG1[] ic,
+                                    int numPublic, int numB2, int domain, String format) throws IOException {
         try (var aux = dos(dir.resolve("aux.bin"))) {
             putG1(aux, alphaG1); putG1(aux, betaG1); putG1(aux, deltaG1);
             putG2(aux, betaG2); putG2(aux, deltaG2); putG2(aux, gammaG2);
@@ -88,6 +96,7 @@ public final class Groth16PkStore {
         m.setProperty("numB2", Integer.toString(numB2));
         m.setProperty("numIc", Integer.toString(ic.length));
         m.setProperty("domain", Integer.toString(domain));
+        if (format != null) m.setProperty("format", format);
         try (var out = Files.newOutputStream(dir.resolve(MANIFEST))) {
             m.store(out, "ADR-0029 Groth16 proving key store");
         }
@@ -101,6 +110,7 @@ public final class Groth16PkStore {
         int numB2 = Integer.parseInt(m.getProperty("numB2"));
         int numIc = Integer.parseInt(m.getProperty("numIc"));
         int domain = Integer.parseInt(m.getProperty("domain"));
+        boolean sparse = "sparse-v1".equals(m.getProperty("format")); // absent = dense (ADR-0035 M6a)
 
         AffineG1 alphaG1, betaG1, deltaG1; AffineG2 betaG2, deltaG2, gammaG2; AffineG1[] ic = new AffineG1[numIc];
         try (var aux = dis(dir.resolve("aux.bin"))) {
@@ -113,14 +123,18 @@ public final class Groth16PkStore {
         try {
             // ADR-0033 M3: pointsB2.bin (fixed 192 B/point) is mmap'd like the G1 files — the G2
             // key (~15.7 GB on-heap at 19M constraints) now stays file-backed/off-heap too.
-            var b2 = new G2AffineReader.SegmentG2Reader(MmapG1File.map(dir.resolve("pointsB2.bin"), arena));
+            // ADR-0035 M6a: the sparse format packs only non-infinity points behind the same
+            // reader seams (manifest `format=sparse-v1`); dense stays supported forever.
+            G2AffineReader b2 = sparse
+                    ? new SparsePointFile.SparseG2Reader(MmapG1File.map(dir.resolve("pointsB2.bin"), arena))
+                    : new G2AffineReader.SegmentG2Reader(MmapG1File.map(dir.resolve("pointsB2.bin"), arena));
             if (b2.count() != numB2)
                 throw new IOException("pointsB2.bin holds " + b2.count() + " points but manifest says " + numB2);
             var readers = new Groth16ProverBLS381.G1Readers(
-                    new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsA.bin"), arena)),
-                    new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsB1.bin"), arena)),
-                    new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsH.bin"), arena)),
-                    new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsL.bin"), arena)),
+                    g1Reader(dir.resolve("pointsA.bin"), arena, sparse),
+                    g1Reader(dir.resolve("pointsB1.bin"), arena, sparse),
+                    g1Reader(dir.resolve("pointsH.bin"), arena, sparse),
+                    g1Reader(dir.resolve("pointsL.bin"), arena, sparse),
                     b2);
             // G1 + G2 key arrays are read via the mmap readers, so the PK holds empty arrays.
             long[] empty = new long[0];
@@ -131,6 +145,13 @@ public final class Groth16PkStore {
             arena.close();
             throw e;
         }
+    }
+
+    private static PippengerFlatBLS381.G1AffineReader g1Reader(Path p, Arena arena, boolean sparse)
+            throws IOException {
+        var seg = MmapG1File.map(p, arena);
+        return sparse ? new SparsePointFile.SparseG1Reader(seg)
+                      : new PippengerFlatBLS381.SegmentG1Reader(seg);
     }
 
     // ---- fixed 48-byte big-endian field elements ----

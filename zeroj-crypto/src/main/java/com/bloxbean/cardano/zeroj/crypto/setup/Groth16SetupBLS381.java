@@ -12,6 +12,7 @@ import com.bloxbean.cardano.zeroj.bls12381.field.FrArith381;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16PkStore;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
+import com.bloxbean.cardano.zeroj.crypto.groth16.SparsePointFile;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FrFFTFlat;
 
@@ -261,16 +262,31 @@ public final class Groth16SetupBLS381 {
     public static SetupResult setupToStore(R1CSFlat flat,
                                            int numWires, int numPublic, BigInteger tau,
                                            Path dir) throws IOException {
-        var rng = new SecureRandom();
-        return setupToStore(flat, numWires, numPublic, tau,
-                randomScalar(rng), randomScalar(rng), randomScalar(rng), randomScalar(rng), dir);
+        return setupToStore(flat, numWires, numPublic, tau, dir, false);
     }
 
-    /** Deterministic {@link #setupToStore} — differential tests only. */
+    /** {@link #setupToStore} choosing the store format: dense, or sparse (ADR-0035 M6a, ~2.6× smaller). */
+    public static SetupResult setupToStore(R1CSFlat flat,
+                                           int numWires, int numPublic, BigInteger tau,
+                                           Path dir, boolean sparse) throws IOException {
+        var rng = new SecureRandom();
+        return setupToStore(flat, numWires, numPublic, tau,
+                randomScalar(rng), randomScalar(rng), randomScalar(rng), randomScalar(rng), dir, sparse);
+    }
+
+    /** Deterministic {@link #setupToStore} (dense) — differential tests only. */
     public static SetupResult setupToStore(R1CSFlat flat,
                                            int numWires, int numPublic, BigInteger tau,
                                            BigInteger alpha, BigInteger beta, BigInteger gamma, BigInteger delta,
                                            Path dir) throws IOException {
+        return setupToStore(flat, numWires, numPublic, tau, alpha, beta, gamma, delta, dir, false);
+    }
+
+    /** Deterministic {@link #setupToStore} with format choice — differential tests only. */
+    public static SetupResult setupToStore(R1CSFlat flat,
+                                           int numWires, int numPublic, BigInteger tau,
+                                           BigInteger alpha, BigInteger beta, BigInteger gamma, BigInteger delta,
+                                           Path dir, boolean sparse) throws IOException {
         TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381, streaming) — "
                 + "for DEVELOPMENT and TESTING only. "
@@ -365,26 +381,30 @@ public final class Groth16SetupBLS381 {
 
         // ---- streamed point files (ADR-0035 M3): mapped READ_WRITE, pre-zeroed = infinity.
         //      All writers work in blocks with batched affine normalization (M4) — one field
-        //      inversion per block instead of one per point.
+        //      inversion per block instead of one per point. In sparse mode (M6a) each file gets
+        //      a bitmap + rank index and only non-infinity points are stored (~2.6× smaller).
         Files.createDirectories(dir);
         try (var arena = Arena.ofShared()) {
-            var segA = mapOut(dir.resolve("pointsA.bin"), (long) numWires * 96, arena);
-            streamG1(segA, numWires, (s, canon, scratch) -> {
+            ScalarAt aScalars = (s, canon, scratch) -> {
                 FrArith381.mul(canon, 0, usM, s * 4, ONE_LIMBS, 0);
                 return (canon[0] | canon[1] | canon[2] | canon[3]) != 0;
-            });
-            segA.force();
+            };
+            var segA = mapG1Out(dir.resolve("pointsA.bin"), numWires, sparse, aScalars, arena);
+            streamG1(segA.seg, numWires, aScalars, segA.offsets);
+            segA.seg.force();
 
-            var segB1 = mapOut(dir.resolve("pointsB1.bin"), (long) numWires * 96, arena);
-            streamG1(segB1, numWires, (s, canon, scratch) -> {
+            ScalarAt b1Scalars = (s, canon, scratch) -> {
                 FrArith381.mul(canon, 0, vsM, s * 4, ONE_LIMBS, 0);
                 return (canon[0] | canon[1] | canon[2] | canon[3]) != 0;
-            });
-            segB1.force();
+            };
+            var segB1 = mapG1Out(dir.resolve("pointsB1.bin"), numWires, sparse, b1Scalars, arena);
+            streamG1(segB1.seg, numWires, b1Scalars, segB1.offsets);
+            segB1.seg.force();
 
             // pointsB2[s] = v_s(tau) * G2 — comb table + batched Fp2 normalization (M4);
             // BE coords, same layout as PkStore.putG2
-            var segB2 = mapOut(dir.resolve("pointsB2.bin"), (long) numWires * 192, arena);
+            var segB2 = mapOut(dir.resolve("pointsB2.bin"), sparse, numWires, 192, b1Scalars, arena);
+            final OffsetAt b2Off = segB2.offsets;
             FrFFTFlat.parallelRange(numWires, (lo, hi) -> {
                 long[] canon = new long[4];
                 byte[] coord = new byte[48];
@@ -396,28 +416,27 @@ public final class Groth16SetupBLS381 {
                     for (int s = base; s < end; s++) {
                         FrArith381.mul(canon, 0, vsM, s * 4, ONE_LIMBS, 0);
                         JacobianG2BLS381 p = FixedBaseG2BLS381.mulJacobian(canon, 0);
-                        if (p == null) continue; // infinity = zeros in the mapped file
+                        if (p == null) continue; // infinity = zeros/bitmap-absent
                         block[k] = p;
                         slot[k] = s;
                         k++;
                     }
                     AffineG2[] aff = JacobianG2BLS381.batchToAffine(block, k);
                     for (int j = 0; j < k; j++) {
-                        long o = slot[j] * 192L;
-                        putBe48(segB2, o, aff[j].x().re().toBigInteger(), coord);
-                        putBe48(segB2, o + 48, aff[j].x().im().toBigInteger(), coord);
-                        putBe48(segB2, o + 96, aff[j].y().re().toBigInteger(), coord);
-                        putBe48(segB2, o + 144, aff[j].y().im().toBigInteger(), coord);
+                        long o = b2Off.offset(slot[j]);
+                        putBe48(segB2.seg, o, aff[j].x().re().toBigInteger(), coord);
+                        putBe48(segB2.seg, o + 48, aff[j].x().im().toBigInteger(), coord);
+                        putBe48(segB2.seg, o + 96, aff[j].y().re().toBigInteger(), coord);
+                        putBe48(segB2.seg, o + 144, aff[j].y().im().toBigInteger(), coord);
                     }
                 }
             });
-            segB2.force();
+            segB2.seg.force();
 
             // pointsL[j] = (beta*u_s + alpha*v_s + w_s)/delta * G1, s = numPublic+1+j
             int numPrivate = Math.max(0, numWires - numPublic - 1);
-            var segL = mapOut(dir.resolve("pointsL.bin"), (long) numPrivate * 96, arena);
             final int npub = numPublic;
-            streamG1(segL, numPrivate, (j, canon, scratch) -> {
+            ScalarAt lScalars = (j, canon, scratch) -> {
                 // scratch8: [0..4) = acc, [4..8) = t — per-chunk, no shared state (thread-safe)
                 int s = npub + 1 + j;
                 FrArith381.mul(scratch, 0, betaMont, 0, usM, s * 4);
@@ -427,8 +446,10 @@ public final class Groth16SetupBLS381 {
                 FrArith381.mul(scratch, 0, scratch, 0, deltaInvMont, 0);
                 FrArith381.mul(canon, 0, scratch, 0, ONE_LIMBS, 0);
                 return (canon[0] | canon[1] | canon[2] | canon[3]) != 0;
-            });
-            segL.force();
+            };
+            var segL = mapG1Out(dir.resolve("pointsL.bin"), numPrivate, sparse, lScalars, arena);
+            streamG1(segL.seg, numPrivate, lScalars, segL.offsets);
+            segL.seg.force();
             // QAP arrays done (H needs none of them) — scrub: they are tau-derived secrets
             Arrays.fill(usM, 0L);
             Arrays.fill(vsM, 0L);
@@ -442,7 +463,26 @@ public final class Groth16SetupBLS381 {
             BigInteger tauN2 = tau.modPow(BigInteger.valueOf(2L * domain), FR);
             BigInteger zh2NInv2 = tauN2.subtract(BigInteger.ONE).mod(FR)
                     .multiply(BigInteger.valueOf(2L * domain).modInverse(FR)).mod(FR);
-            var segH = mapOut(dir.resolve("pointsH.bin"), (long) domain * 96, arena);
+            // H is dense by nature (its Lagrange values are never zero for a random tau), so its
+            // sparse form uses an all-present bitmap; a measure-zero zero scalar leaves zero limbs
+            // in its packed slot, which every reader decodes as infinity.
+            MemorySegment segH;
+            OffsetAt hOff;
+            if (sparse) {
+                long[] hBitmap = new long[(domain + 63) >>> 6];
+                Arrays.fill(hBitmap, -1L);
+                int rem = domain & 63;
+                if (rem != 0) hBitmap[hBitmap.length - 1] = (1L << rem) - 1;
+                segH = mapOut(dir.resolve("pointsH.bin"), SparsePointFile.fileSize(domain, domain, 96), arena);
+                SparsePointFile.writeIndex(segH, hBitmap, domain, domain, 96);
+                long ptsOff = SparsePointFile.pointsOffset(domain);
+                hOff = s -> ptsOff + s * 96L;
+            } else {
+                segH = mapOut(dir.resolve("pointsH.bin"), (long) domain * 96, arena);
+                hOff = s -> s * 96L;
+            }
+            final MemorySegment segHF = segH;
+            final OffsetAt hOffF = hOff;
             FrFFTFlat.parallelRange(domain, (lo, hi) -> {
                 long[] canon = new long[BATCH * 4];
                 long[] jacBlock = new long[BATCH * 18];
@@ -475,7 +515,7 @@ public final class Groth16SetupBLS381 {
                     FixedBaseG1BLS381.batchNormalize(jacBlock, m, present, affBlock);
                     for (int k = 0; k < m; k++)
                         if (present[k])
-                            MemorySegment.copy(affBlock, k * 12, segH, ValueLayout.JAVA_LONG, (base + k) * 96L, 12);
+                            MemorySegment.copy(affBlock, k * 12, segHF, ValueLayout.JAVA_LONG, hOffF.offset(base + k), 12);
                 }
             });
             segH.force();
@@ -483,7 +523,7 @@ public final class Groth16SetupBLS381 {
 
         Groth16PkStore.writeAuxAndManifest(
                 dir, alphaG1, betaG1, deltaG1, betaG2, deltaG2, gammaG2, ic,
-                numPublic, numWires, domain);
+                numPublic, numWires, domain, sparse ? "sparse-v1" : null);
 
         // empty-array PK (the store on disk is the key), like Groth16PkStore.load
         long[] empty = new long[0];
@@ -550,7 +590,7 @@ public final class Groth16SetupBLS381 {
      * in blocks: comb multiplications in Jacobian form, then ONE batched normalization per block
      * (ADR-0035 M4) instead of a field inversion per point.
      */
-    private static void streamG1(MemorySegment seg, int n, ScalarAt scalars) {
+    private static void streamG1(MemorySegment seg, int n, ScalarAt scalars, OffsetAt offsets) {
         FrFFTFlat.parallelRange(n, (lo, hi) -> {
             long[] canon = new long[4];
             long[] scratch8 = new long[8];
@@ -567,9 +607,77 @@ public final class Groth16SetupBLS381 {
                 FixedBaseG1BLS381.batchNormalize(jacBlock, m, present, affBlock);
                 for (int k = 0; k < m; k++)
                     if (present[k])
-                        MemorySegment.copy(affBlock, k * 12, seg, ValueLayout.JAVA_LONG, (base + k) * 96L, 12);
+                        MemorySegment.copy(affBlock, k * 12, seg, ValueLayout.JAVA_LONG, offsets.offset(base + k), 12);
             }
         });
+    }
+
+    /** Resolves point {@code s}'s byte offset in the output file (dense stride or sparse rank). */
+    private interface OffsetAt {
+        long offset(int s);
+    }
+
+    /** A mapped output file + its point-offset resolver. */
+    private record MappedOut(MemorySegment seg, OffsetAt offsets) {}
+
+    /** Map a G1 output file — dense stride, or sparse with a bitmap scan of the scalars (M6a). */
+    private static MappedOut mapG1Out(Path p, int n, boolean sparse, ScalarAt scalars, Arena arena)
+            throws IOException {
+        return mapOut(p, sparse, n, 96, scalars, arena);
+    }
+
+    private static MappedOut mapOut(Path p, boolean sparse, int n, int stride, ScalarAt scalars, Arena arena)
+            throws IOException {
+        if (!sparse) {
+            var seg = mapOut(p, (long) n * stride, arena);
+            return new MappedOut(seg, s -> (long) s * stride);
+        }
+        // Bitmap pass (exact: a zero scalar is exactly an infinity point). Each parallelRange
+        // chunk owns a contiguous index range, but ranges can share a boundary bitmap word —
+        // build per-chunk into the shared array with atomic OR via VarHandle-free synchronization
+        // on the two boundary words only: simplest correct form, OR whole words locally then
+        // merge under lock per word span.
+        long[] bitmap = new long[(n + 63) >>> 6];
+        java.util.concurrent.atomic.AtomicLongArray atomicBitmap =
+                new java.util.concurrent.atomic.AtomicLongArray(bitmap.length);
+        FrFFTFlat.parallelRange(n, (lo, hi) -> {
+            long[] canon = new long[4];
+            long[] scratch8 = new long[8];
+            for (int s = lo; s < hi; s++) {
+                if (scalars.canon(s, canon, scratch8)) {
+                    int w = s >>> 6;
+                    long bit = 1L << (s & 63);
+                    long prev;
+                    do { prev = atomicBitmap.get(w); } while (!atomicBitmap.compareAndSet(w, prev, prev | bit));
+                }
+            }
+        });
+        long nnz = 0;
+        for (int w = 0; w < bitmap.length; w++) {
+            bitmap[w] = atomicBitmap.get(w);
+            nnz += Long.bitCount(bitmap[w]);
+        }
+        var seg = mapOut(p, SparsePointFile.fileSize(n, nnz, stride), arena);
+        SparsePointFile.writeIndex(seg, bitmap, n, nnz, stride);
+        long ptsOff = SparsePointFile.pointsOffset(n);
+        // heap rank for write offsets: per-block prefix + ≤8 word popcounts
+        int blocks = (n + SparsePointFile.BLOCK - 1) / SparsePointFile.BLOCK;
+        int[] blockRank = new int[blocks];
+        int running = 0;
+        for (int b = 0; b < blocks; b++) {
+            blockRank[b] = running;
+            int from = b * (SparsePointFile.BLOCK / 64);
+            int to = Math.min(bitmap.length, (b + 1) * (SparsePointFile.BLOCK / 64));
+            for (int w = from; w < to; w++) running += Long.bitCount(bitmap[w]);
+        }
+        OffsetAt offsets = s -> {
+            int block = s >>> 9;
+            long r = blockRank[block];
+            for (int w = block << 3, e = s >>> 6; w < e; w++) r += Long.bitCount(bitmap[w]);
+            r += Long.bitCount(bitmap[s >>> 6] & ((1L << (s & 63)) - 1));
+            return ptsOff + r * stride;
+        };
+        return new MappedOut(seg, offsets);
     }
 
     /**
