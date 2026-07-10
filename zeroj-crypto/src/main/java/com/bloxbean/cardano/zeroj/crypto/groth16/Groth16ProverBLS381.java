@@ -161,6 +161,63 @@ public final class Groth16ProverBLS381 {
     }
 
     /**
+     * {@link #computeH(List, BigInteger[], int, int)} over the packed CSR matrices (ADR-0034 M2)
+     * — no map iteration, no boxed keys; the coefficient dictionary is converted to Montgomery
+     * form once. Only the A and B matrices are read (C is derived pointwise on satisfied rows).
+     *
+     * @param snarkjsBindingRows number of public-input binding rows a snarkjs ceremony setup
+     *                           appends after the circuit rows ({@code numPublic + 1}, one per
+     *                           public signal including the ONE wire; each is {@code A={s:1},
+     *                           B={}, C={}}), or 0 for a local setup. Row {@code flat.rows()+s}
+     *                           evaluates to {@code aEval=witness[s], bEval=0} — equivalent to
+     *                           {@code ZkeyPkStoreImporter.snarkjsConstraints} without
+     *                           materializing 19M map rows.
+     */
+    public static BigInteger[] computeH(com.bloxbean.cardano.zeroj.api.R1CSFlat flat, BigInteger[] witness,
+                                  int snarkjsBindingRows, int domainSize) {
+        if (domainSize < 2) domainSize = 2;
+        int logN = Integer.numberOfTrailingZeros(domainSize);
+
+        MontFr381[] dict = new MontFr381[flat.dictionary().length];
+        for (int i = 0; i < dict.length; i++) dict[i] = MontFr381.fromBigInteger(flat.dictionary()[i]);
+
+        long[] aEval = new long[domainSize * 4];
+        long[] bEval = new long[domainSize * 4];
+
+        int circuitRows = flat.rows();
+        int evalUpper = Math.min(domainSize, circuitRows + snarkjsBindingRows);
+        var aM = flat.a();
+        var bM = flat.b();
+        FrFFTFlat.parallelRange(evalUpper, (lo, hi) -> {
+            for (int i = lo; i < hi; i++) {
+                if (i < circuitRows) {
+                    System.arraycopy(evalRowFlat(aM, dict, i, witness).toLimbs(), 0, aEval, i * 4, 4);
+                    System.arraycopy(evalRowFlat(bM, dict, i, witness).toLimbs(), 0, bEval, i * 4, 4);
+                } else {
+                    // snarkjs binding row s: A={s:1}, B={} — aEval = witness[s], bEval stays 0
+                    int s = i - circuitRows;
+                    if (s < witness.length)
+                        System.arraycopy(MontFr381.fromBigInteger(witness[s]).toLimbs(), 0, aEval, i * 4, 4);
+                }
+            } // beyond evalUpper: zeros (MontFr381.ZERO == all-zero limbs)
+        });
+
+        return computeHFromEvals(aEval, bEval, domainSize, logN);
+    }
+
+    private static MontFr381 evalRowFlat(com.bloxbean.cardano.zeroj.api.R1CSFlat.Matrix m,
+                                         MontFr381[] dict, int row, BigInteger[] witness) {
+        MontFr381 sum = MontFr381.ZERO;
+        for (int k = m.start(row), e = m.end(row); k < e; k++) {
+            int wire = m.wire(k);
+            if (wire < witness.length) {
+                sum = sum.add(dict[m.coeffIndex(k)].mul(MontFr381.fromBigInteger(witness[wire])));
+            }
+        }
+        return sum;
+    }
+
+    /**
      * The Groth16 H polynomial {@code (A·B − C)/Z} over the coset (ADR-0029 M2c flat FFT path).
      * Public (ADR-0033 M2) so callers can compute it and then release the constraints/circuit
      * before proving. See {@link #proveWithHCoeffs}.
@@ -189,6 +246,11 @@ public final class Groth16ProverBLS381 {
             } // beyond evalUpper: zeros (MontFr381.ZERO == all-zero limbs)
         });
 
+        return computeHFromEvals(aEval, bEval, domainSize, logN);
+    }
+
+    /** Shared computeH tail: {@code c = a·b} pointwise, three coset FFTs, {@code (a·b − c)} extraction. */
+    private static BigInteger[] computeHFromEvals(long[] aEval, long[] bEval, int domainSize, int logN) {
         long[] cEval = new long[domainSize * 4];
         FrFFTFlat.parallelRange(domainSize, (lo, hi) -> {
             for (int i = lo; i < hi; i++) FrArith381.mul(cEval, i * 4, aEval, i * 4, bEval, i * 4);

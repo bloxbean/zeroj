@@ -126,3 +126,13 @@ _(appended as milestones land)_
 | baseline (ADR-0033) | 20 GB (16 GB OOMs in compile) | ~2.2–2.9 min | peak B 16.8 GB live; attribution above |
 | M1.1+M1.2 (graph-release + no base entries) | 18 GB still OOMs | — | 16 GB dies in `subExprs`, 18 GB dies at `constraints.add` → `ArrayList.grow` — the un-pre-sized 19M-element backing array re-copies (old+new humongous arrays live at once) near the cap. Led to M1.3. |
 | M1.3 (pre-size constraints list + exprMap from a gate-count pass) | 18 GB still OOMs; **20 GB PASS** (2.8 min, self-check PASS, same 19,075,097 constraints) | ~2.8 min | **M1 verdict: headroom, not floor.** The live derived-expression maps + constraints + graph are structurally ~13–14 GB; G1 needs ~25 % headroom under this allocation rate, so the floor stays 20 GB until the representation changes. M1 stays in (less GC pressure at 20–24 GB, groundwork for M2) — but **M2 (CSR) is the decisive milestone**. |
+| **M2 (CSR + expression liveness eviction)** | **16 GB PASS** | **2.0 min blst** (2.4 min total) | 2026-07-10: constraints emitted straight into packed CSR (`R1CSFlat`, ~12 B/term, shared coefficient dictionary); exprMap evicts each derived expression on its pre-counted last read (live frontier only); `computeH` reads CSR with a Montgomery-converted dictionary and handles snarkjs binding rows as a count. Same 19,075,097 constraints, self-check PASS, compile 19.9 s (pre-pass included). Prove also got faster (121 s — no map iteration in the H eval). |
+| M2 | **12 GB PASS** | 2.4 min total | No GC tax. Peak footprint 28.1 GB (incl. touched file-backed mmap key pages). |
+| M2 | **10 GB PASS — the floor** | **2.3 min total** (119 s prove) | Still no slowdown at the floor. |
+| M2 | 8 GB **OOM** | — | Compile (16.8 s) and witness (2.1 s) now pass easily; the OOM is in `computeH`'s parallel workers — the remaining live set is witness `BigInteger[]` (~2.6 GB) + boxed hCoeffs (~2.6 GB) + flat FFT (3.2 GB) + CSR (~1 GB). Exactly the M3 target (flat witness + flat hCoeffs → projected ~5 GB floor). |
+
+**M2 outcome: floor 20 GB → 10 GB (2×; 70 GB → 10 GB, 7× across the two ADRs).** Prove is the
+fastest yet (119–127 s blst), compile time unchanged (~16–20 s, arithmetic-bound), identical
+constraint system (fingerprint match), self-check + verify PASS against the untouched key
+bundle/VK. A 16 GB machine can now prove (heap 10–12 GB; the 23 GB key is file-backed —
+hard-cap eviction behaviour is the pending M5 validation).
