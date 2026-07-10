@@ -19,11 +19,19 @@ import java.math.BigInteger;
 @FunctionalInterface
 public interface G2MsmBackend {
 
-    /** {@code Σ scalars[i] · point_i} over the first {@code n} points of {@code points}. */
-    JacobianG2BLS381 msm(G2AffineReader points, BigInteger[] scalars, int n);
+    /**
+     * {@code Σ scalars[i] · point_i} over the first {@code n} points of {@code points}, scalars
+     * from packed canonical limbs (ADR-0034 M3).
+     */
+    JacobianG2BLS381 msm(G2AffineReader points, FlatScalars scalars, int n);
+
+    /** Boxed-scalar form: packs once (reducing out-of-range values), then runs the flat path. */
+    default JacobianG2BLS381 msm(G2AffineReader points, BigInteger[] scalars, int n) {
+        return msm(points, FlatScalars.pack(scalars, n), n);
+    }
 
     /** {@code Σ scalars[i] · points[i]} over the first {@code n} points of an on-heap array. */
     default JacobianG2BLS381 msm(AffineG2[] points, BigInteger[] scalars, int n) {
-        return msm(new G2AffineReader.HeapG2Reader(points), scalars, n);
+        return msm(new G2AffineReader.HeapG2Reader(points), FlatScalars.pack(scalars, n), n);
     }
 }

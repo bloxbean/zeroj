@@ -29,8 +29,6 @@ public final class PippengerFlatBLS381 {
     private PippengerFlatBLS381() {}
 
     private static final int SCALAR_BITS = 255;
-    private static final BigInteger FR = new BigInteger(
-            "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16);
 
     private static final int PL = JacobianArith381.POINT_LONGS; // 18
     private static final int AFF = 12;                          // affine longs per point
@@ -51,23 +49,25 @@ public final class PippengerFlatBLS381 {
     }
 
     /**
-     * Core MSM reading points through a {@link G1AffineReader} — a heap {@code long[]} or an mmap'd
-     * {@link MemorySegment} (ADR-0029 M4). Each point is copied into a small reusable buffer, so the
-     * proving key can live off-heap / file-backed without changing the arithmetic.
+     * {@link #msm(long[], int, G1AffineReader, int, FlatScalars)} with boxed scalars — packs them
+     * once (reducing out-of-range values) and runs the flat-scalar core.
      */
     public static void msm(long[] out, int oo, G1AffineReader reader, int n, BigInteger[] scalars) {
+        msm(out, oo, reader, n, FlatScalars.pack(scalars, n));
+    }
+
+    /**
+     * Core MSM reading points through a {@link G1AffineReader} — a heap {@code long[]} or an mmap'd
+     * {@link MemorySegment} (ADR-0029 M4) — and scalars from packed canonical limbs (ADR-0034 M3;
+     * no per-scalar byte-array decode). Each point is copied into a small reusable buffer, so the
+     * proving key can live off-heap / file-backed without changing the arithmetic.
+     */
+    public static void msm(long[] out, int oo, G1AffineReader reader, int n, FlatScalars scalars) {
         JacobianArith381.setInfinity(out, oo);
         if (n == 0) return;
 
         long[] s = new long[JacobianArith381.SCRATCH_LONGS];
         long[] pbuf = new long[AFF];
-
-        byte[][] sb = new byte[n][];
-        for (int i = 0; i < n; i++) {
-            BigInteger v = scalars[i];
-            if (v.signum() < 0 || v.compareTo(FR) >= 0) v = v.mod(FR);
-            sb[i] = leBytes32(v);
-        }
 
         int c = windowSize(n);
         int numBuckets = (1 << c) - 1;
@@ -85,7 +85,7 @@ public final class PippengerFlatBLS381 {
 
             int bitOffset = w * c;
             for (int i = 0; i < n; i++) {
-                int digit = extractWindow(sb[i], bitOffset, c);
+                int digit = scalars.window(i, bitOffset, c);
                 if (digit == 0) continue;
                 reader.readInto(i, pbuf);
                 if (isAffineInfinity(pbuf, 0)) continue;
@@ -145,6 +145,13 @@ public final class PippengerFlatBLS381 {
         return toJacobian(out);
     }
 
+    /** MSM over any {@link G1AffineReader} with packed flat scalars (ADR-0034 M3). */
+    public static JacobianG1BLS381 msmReader(G1AffineReader reader, int n, FlatScalars scalars) {
+        long[] out = new long[PL];
+        msm(out, 0, reader, n, scalars);
+        return toJacobian(out);
+    }
+
     /**
      * Drop-in for {@link PippengerBLS381#msm}: packs {@code AffineG1[]} into flat storage, runs the
      * allocation-lean MSM, and returns the result as a {@link JacobianG1BLS381}. Same result (see
@@ -196,26 +203,4 @@ public final class PippengerFlatBLS381 {
         return true;
     }
 
-    private static int extractWindow(byte[] le, int bitOffset, int windowBits) {
-        int digit = 0;
-        for (int b = 0; b < windowBits; b++) {
-            int bitPos = bitOffset + b;
-            int byteIdx = bitPos >>> 3;
-            if (byteIdx < le.length) {
-                int bit = (le[byteIdx] >>> (bitPos & 7)) & 1;
-                digit |= bit << b;
-            }
-        }
-        return digit;
-    }
-
-    /** 32-byte little-endian encoding of a non-negative value < 2^256. */
-    private static byte[] leBytes32(BigInteger v) {
-        byte[] be = v.toByteArray(); // big-endian, may have a leading sign byte
-        byte[] le = new byte[32];
-        for (int i = 0; i < be.length && i < 32; i++) {
-            le[i] = be[be.length - 1 - i];
-        }
-        return le;
-    }
 }

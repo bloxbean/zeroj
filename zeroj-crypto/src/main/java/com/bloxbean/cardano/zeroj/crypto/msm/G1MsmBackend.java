@@ -16,8 +16,16 @@ import java.math.BigInteger;
 @FunctionalInterface
 public interface G1MsmBackend {
 
-    /** {@code Σ scalars[i] · point_i}, reading points from {@code reader} (heap or mmap-backed). */
-    JacobianG1BLS381 msm(PippengerFlatBLS381.G1AffineReader reader, int n, BigInteger[] scalars);
+    /**
+     * {@code Σ scalars[i] · point_i}, reading points from {@code reader} (heap or mmap-backed)
+     * and scalars from packed canonical limbs (ADR-0034 M3).
+     */
+    JacobianG1BLS381 msm(PippengerFlatBLS381.G1AffineReader reader, int n, FlatScalars scalars);
+
+    /** Boxed-scalar form: packs once (reducing out-of-range values), then runs the flat path. */
+    default JacobianG1BLS381 msm(PippengerFlatBLS381.G1AffineReader reader, int n, BigInteger[] scalars) {
+        return msm(reader, n, FlatScalars.pack(scalars, n));
+    }
 
     /** The default pure-Java, allocation-lean flat Pippenger (native-image-clean). */
     G1MsmBackend PURE_JAVA = PippengerFlatBLS381::msmReader;

@@ -136,3 +136,10 @@ fastest yet (119–127 s blst), compile time unchanged (~16–20 s, arithmetic-b
 constraint system (fingerprint match), self-check + verify PASS against the untouched key
 bundle/VK. A 16 GB machine can now prove (heap 10–12 GB; the 23 GB key is file-backed —
 hard-cap eviction behaviour is the pending M5 validation).
+
+| **M3 (flat witness + flat hCoeffs — `FlatScalars`)** | **8 GB PASS** | **1.9 min blst** (2.2 min total, 111 s prove) | 2026-07-10: witness and hCoeffs are packed canonical 4-limb `long[]` (32 B/scalar) end-to-end — `computeH` runs entirely on `FrArith381` flat limbs (dictionary Montgomery-converted once, witness limbs Montgomery-converted in place via R²), MSM window digits and blst LE scalar bytes read straight from the limbs, `ParallelMsm` chunks are O(1) slice views, and the pure-Java Pippenger's per-MSM 32-byte-per-scalar decode is gone. First 8 GB attempt OOM'd *packing* the witness (boxed array + flat array + circuit graph coexisted): fixed by releasing the graph before packing and consuming the boxed array element-by-element (`packConsuming`). Same 19,075,097 constraints, self-check PASS. |
+| M3 | 6 GB **OOM** | — | Back in the R1CS frontend compile (CSR builder + live expression frontier + graph). The next floor lever is M4 (`r1cs.bin` cache — skip compile entirely at prove time). |
+
+**M3 outcome: floor 10 GB → 8 GB — and 70 GB → 8 GB (~9×) across the two ADRs.** Prove
+111 s (was ~283 s + ~100 s key load at the ADR-0033 baseline). The prove path no longer boxes a
+single field element.

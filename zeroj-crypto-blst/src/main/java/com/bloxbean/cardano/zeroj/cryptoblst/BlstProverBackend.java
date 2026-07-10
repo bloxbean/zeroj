@@ -53,13 +53,13 @@ public final class BlstProverBackend {
     /** The blst G1 MSM backend (reads the prover's flat Montgomery key, calls native pippenger). */
     public static G1MsmBackend g1() {
         return (reader, n, scalars) -> {
-            // ADR-0033 M2: points stream through one reusable buffer into the native array —
-            // no byte[][] of all encodings on heap.
+            // ADR-0033 M2 / ADR-0034 M3: points and scalars stream through reusable buffers into
+            // the native arrays — no byte[][] of encodings, no per-scalar byte arrays on heap.
             long[] buf = new long[12];
             byte[] r = BlstG1Msm.msm(n, (i, dst) -> {
                 reader.readInto(i, buf);
                 g1Uncompressed(buf, dst);
-            }, scalars);
+            }, scalars::leBytes);
             if ((r[0] & 0x40) != 0) return JacobianG1BLS381.INFINITY;
             return JacobianG1BLS381.fromAffine(be(r, 0, 48), be(r, 48, 96));
         };
@@ -82,7 +82,7 @@ public final class BlstProverBackend {
                 System.arraycopy(raw, 0, dst, 48, 48);    // x.re → x.c0
                 System.arraycopy(raw, 144, dst, 96, 48);  // y.im → y.c1
                 System.arraycopy(raw, 96, dst, 144, 48);  // y.re → y.c0
-            }, scalars);
+            }, scalars::leBytes);
             if ((r[0] & 0x40) != 0) return JacobianG2BLS381.INFINITY;
             // 192B: x.c1 | x.c0 | y.c1 | y.c0 ; MontFp2_381.of(re=c0, im=c1)
             return JacobianG2BLS381.fromAffine(

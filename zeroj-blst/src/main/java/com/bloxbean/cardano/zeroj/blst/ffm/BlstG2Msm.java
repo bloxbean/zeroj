@@ -58,16 +58,36 @@ public final class BlstG2Msm {
                 (i, dst) -> System.arraycopy(uncompressedPoints[i], 0, dst, 0, 192), scalars);
     }
 
+    /** Supplies scalar {@code i} as 32 little-endian bytes into a reusable buffer (ADR-0034 M3). */
+    @FunctionalInterface
+    public interface ScalarEncoder {
+        /** Write scalar {@code i} (LE, all 32 bytes) into {@code dst[0..32)}. */
+        void encode(int i, byte[] dst);
+    }
+
     /**
-     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points → 192-byte uncompressed
-     * result. Streaming variant (ADR-0033 M2): each point is encoded into one reusable buffer and
-     * deserialized straight into the native array — no {@code byte[][]} of all encodings on heap
-     * (~8.4 GB at 43.7M points).
+     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points with boxed scalars —
+     * delegates to the scalar-encoder core.
      */
     public static byte[] msm(int n, G2Encoder points, BigInteger[] scalars) {
+        return msm(n, points, (i, dst) -> BlstG1Msm.leBytes32Into(scalars[i], dst));
+    }
+
+    /**
+     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points and scalars → 192-byte
+     * uncompressed result. Streaming variant (ADR-0033 M2 / ADR-0034 M3): each point and scalar is
+     * encoded into one reusable buffer straight into the native arrays — no {@code byte[][]} of
+     * encodings, no per-scalar byte arrays on heap.
+     */
+    public static byte[] msm(int n, G2Encoder points, ScalarEncoder scalars) {
         if (n == 0) return infinity();
         byte[] buf = new byte[(int) P2_AFFINE];
-        if (n == 1) { points.encode(0, buf); return singleMul(buf, scalars[0]); }
+        byte[] sbuf = new byte[32];
+        if (n == 1) {
+            points.encode(0, buf);
+            scalars.encode(0, sbuf);
+            return singleMul(buf, BlstG1Msm.beFromLe(sbuf));
+        }
         try (Arena a = Arena.ofConfined()) {
             MemorySegment pts = a.allocate(P2_AFFINE * n);
             MemorySegment inBuf = a.allocate(P2_AFFINE);
@@ -78,8 +98,10 @@ public final class BlstG2Msm {
                 if (err != 0) throw new IllegalArgumentException("blst_p2_deserialize failed at " + i + " (err=" + err + ")");
             }
             MemorySegment scal = a.allocate(SCALAR * n);
-            for (int i = 0; i < n; i++)
-                MemorySegment.copy(leBytes32(scalars[i]), 0, scal, BYTE, i * SCALAR, 32);
+            for (int i = 0; i < n; i++) {
+                scalars.encode(i, sbuf);
+                MemorySegment.copy(sbuf, 0, scal, BYTE, i * SCALAR, 32);
+            }
 
             MemorySegment ptsPtr = a.allocate(ValueLayout.ADDRESS, n);
             MemorySegment scalPtr = a.allocate(ValueLayout.ADDRESS, n);

@@ -4,9 +4,6 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 
-import java.math.BigInteger;
-import java.util.Arrays;
-
 /**
  * Multi-core MSM combinator (ADR-0029 M5b). Profiling the real 19M-constraint derivation prove
  * showed it running on <b>one</b> of 12 cores — the five MSMs dominate prove time and each ran
@@ -43,8 +40,8 @@ public final class ParallelMsm {
             java.util.stream.IntStream.range(0, t).parallel().forEach(k -> {
                 int lo = k * per, hi = Math.min(n, lo + per);
                 if (lo >= hi) { partial[k] = JacobianG1BLS381.INFINITY; return; }
-                partial[k] = base.msm(offset(reader, lo), hi - lo,
-                        Arrays.copyOfRange(scalars, lo, hi));
+                // scalars chunk is an O(1) view (ADR-0034 M3) — no per-chunk copy
+                partial[k] = base.msm(offset(reader, lo), hi - lo, scalars.slice(lo, hi - lo));
             });
             JacobianG1BLS381 acc = JacobianG1BLS381.INFINITY;
             for (JacobianG1BLS381 p : partial) acc = acc.add(p);
@@ -62,8 +59,7 @@ public final class ParallelMsm {
             java.util.stream.IntStream.range(0, t).parallel().forEach(k -> {
                 int lo = k * per, hi = Math.min(n, lo + per);
                 if (lo >= hi) { partial[k] = JacobianG2BLS381.INFINITY; return; }
-                BigInteger[] sc = Arrays.copyOfRange(scalars, lo, hi);
-                partial[k] = base.msm(offset(points, lo), sc, hi - lo);
+                partial[k] = base.msm(offset(points, lo), scalars.slice(lo, hi - lo), hi - lo);
             });
             JacobianG2BLS381 acc = JacobianG2BLS381.INFINITY;
             for (JacobianG2BLS381 p : partial) acc = acc.add(p);
