@@ -71,10 +71,11 @@ public final class Groth16PkStore {
     }
 
     /**
-     * Write the single points + VK (aux.bin) and the manifest — shared by {@link #save} and the
-     * streaming {@code .zkey} importer (ADR-0031 M2), so the store format lives in one place.
+     * Write the single points + VK (aux.bin) and the manifest — shared by {@link #save}, the
+     * streaming {@code .zkey} importer (ADR-0031 M2), and the streaming setup (ADR-0035 M3),
+     * so the store format lives in one place.
      */
-    static void writeAuxAndManifest(Path dir, AffineG1 alphaG1, AffineG1 betaG1, AffineG1 deltaG1,
+    public static void writeAuxAndManifest(Path dir, AffineG1 alphaG1, AffineG1 betaG1, AffineG1 deltaG1,
                                     AffineG2 betaG2, AffineG2 deltaG2, AffineG2 gammaG2, AffineG1[] ic,
                                     int numPublic, int numB2, int domain) throws IOException {
         try (var aux = dos(dir.resolve("aux.bin"))) {

@@ -63,6 +63,50 @@ public final class FixedBaseG1BLS381 {
         return mul(s).toAffine();
     }
 
+    /**
+     * {@code s·G} from four canonical little-endian limbs, written as affine limbs
+     * ({@code x[6],y[6]}) into {@code dst[dstOff..dstOff+12)} — the streaming setup's shape
+     * (ADR-0035 M3): no boxed scalar, no point objects, output goes straight into the mmap'd
+     * key file. A zero scalar writes nothing (the mapped file is pre-zeroed = infinity).
+     *
+     * @param jacBuf  caller-provided {@code long[JacobianArith381.POINT_LONGS]}
+     * @param scratch caller-provided {@code long[JacobianArith381.SCRATCH_LONGS]}
+     * @return false when the scalar is zero (nothing written)
+     */
+    public static boolean mulAffineLimbs(long[] canonLe4, int off, long[] dst, int dstOff,
+                                         long[] jacBuf, long[] scratch) {
+        if ((canonLe4[off] | canonLe4[off + 1] | canonLe4[off + 2] | canonLe4[off + 3]) == 0) return false;
+        long[] tab = table();
+        JacobianArith381.setInfinity(jacBuf, 0);
+        for (int w = 0; w < NUM_WINDOWS; w++) {
+            int digit = windowOfLimbs(canonLe4, off, w * W);
+            if (digit == 0) continue;
+            int eo = (w * (DIGITS - 1) + (digit - 1)) * AFF;
+            JacobianArith381.addAffine(jacBuf, 0, jacBuf, 0, tab, eo, tab, eo + 6, scratch);
+        }
+        writeAffineTo(dst, dstOff, jacBuf);
+        return true;
+    }
+
+    /** Window digit from canonical LE limbs (mirrors the byte-array extraction). */
+    private static int windowOfLimbs(long[] limbs, int off, int bitOffset) {
+        int limb = bitOffset >>> 6, shift = bitOffset & 63;
+        if (limb >= 4) return 0;
+        long acc = limbs[off + limb] >>> shift;
+        if (shift + W > 64 && limb + 1 < 4) acc |= limbs[off + limb + 1] << (64 - shift);
+        return (int) (acc & ((1L << W) - 1));
+    }
+
+    /** Flat Jacobian → affine limbs into {@code dst[dstOff..dstOff+12)} (one Fp inversion). */
+    private static void writeAffineTo(long[] dst, int dstOff, long[] jac) {
+        MontFp381 x = MontFp381.fromMontLimbs(jac[0], jac[1], jac[2], jac[3], jac[4], jac[5]);
+        MontFp381 y = MontFp381.fromMontLimbs(jac[6], jac[7], jac[8], jac[9], jac[10], jac[11]);
+        MontFp381 z = MontFp381.fromMontLimbs(jac[12], jac[13], jac[14], jac[15], jac[16], jac[17]);
+        MontFp381 zi = z.inverse(), zi2 = zi.square(), zi3 = zi2.mul(zi);
+        System.arraycopy(x.mul(zi2).toLimbs(), 0, dst, dstOff, 6);
+        System.arraycopy(y.mul(zi3).toLimbs(), 0, dst, dstOff + 6, 6);
+    }
+
     // ------------------------------------------------------------------
 
     private static final BigInteger ORDER = new BigInteger(

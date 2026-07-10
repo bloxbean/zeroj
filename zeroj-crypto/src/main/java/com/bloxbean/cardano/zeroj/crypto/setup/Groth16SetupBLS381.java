@@ -1,17 +1,29 @@
 package com.bloxbean.cardano.zeroj.crypto.setup;
 
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+import com.bloxbean.cardano.zeroj.api.R1CSFlat;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
+import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianArith381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
-import com.bloxbean.cardano.zeroj.crypto.setup.FixedBaseG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
+import com.bloxbean.cardano.zeroj.bls12381.field.FrArith381;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16PkStore;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
 import com.bloxbean.cardano.zeroj.crypto.poly.FieldFFTBLS381;
+import com.bloxbean.cardano.zeroj.crypto.poly.FrFFTFlat;
 
+import java.io.IOException;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 import java.math.BigInteger;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
@@ -52,12 +64,24 @@ public final class Groth16SetupBLS381 {
      */
     public static SetupResult setup(List<R1CSConstraint> constraints, int numWires,
                                      int numPublic, BigInteger tau) {
+        var rng = new SecureRandom();
+        return setup(constraints, numWires, numPublic, tau,
+                randomScalar(rng), randomScalar(rng), randomScalar(rng), randomScalar(rng));
+    }
+
+    /**
+     * {@link #setup(List, int, int, BigInteger)} with explicit phase-2 randomness —
+     * <b>deterministic; differential tests only</b> (the streaming setup must byte-equal this
+     * path's saved store for fixed randomness, ADR-0035 M3).
+     */
+    public static SetupResult setup(List<R1CSConstraint> constraints, int numWires,
+                                     int numPublic, BigInteger tau,
+                                     BigInteger alpha, BigInteger beta, BigInteger gamma, BigInteger delta) {
         TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
 
-        var rng = new SecureRandom();
         int nConstraints = constraints.size();
 
         // Domain size: next power of 2 >= nConstraints
@@ -65,12 +89,6 @@ public final class Groth16SetupBLS381 {
         if (domainSize < nConstraints) domainSize <<= 1;
         if (domainSize < 4) domainSize = 4;
         int logN = Integer.numberOfTrailingZeros(domainSize);
-
-        // Sample random toxic waste for Phase 2
-        BigInteger alpha = randomScalar(rng);
-        BigInteger beta = randomScalar(rng);
-        BigInteger gamma = randomScalar(rng);
-        BigInteger delta = randomScalar(rng);
 
         BigInteger gammaInv = gamma.modInverse(FR);
         BigInteger deltaInv = delta.modInverse(FR);
@@ -222,6 +240,281 @@ public final class Groth16SetupBLS381 {
             AffineG2 gammaG2,
             AffineG1[] ic
     ) {}
+
+    // ==================================================================================
+    // Streaming setup (ADR-0035 M2/M3): CSR constraints in, PkStore layout out — the QAP
+    // evaluations live as flat Montgomery limbs and every point is written straight into
+    // the mmap'd key files, so no output array is ever heap-resident.
+    // ==================================================================================
+
+    private static final long[] ONE_LIMBS = {1, 0, 0, 0};
+
+    /**
+     * {@link #setup(List, int, int, BigInteger)} over packed CSR constraints, streaming the
+     * proving key straight into the {@code Groth16PkStore} layout at {@code dir} (ADR-0035
+     * M2/M3). Output is byte-identical to {@code setup(...)} + {@code Groth16PkStore.save}
+     * for the same randomness; peak heap is the flat QAP scalars (~4.2 GB at 43.7M wires)
+     * instead of ~55 GB. The returned {@link SetupResult}'s proving key holds the single
+     * points and <b>empty</b> big arrays (the store on disk is the key), like
+     * {@code Groth16PkStore.load}.
+     */
+    public static SetupResult setupToStore(R1CSFlat flat,
+                                           int numWires, int numPublic, BigInteger tau,
+                                           Path dir) throws IOException {
+        var rng = new SecureRandom();
+        return setupToStore(flat, numWires, numPublic, tau,
+                randomScalar(rng), randomScalar(rng), randomScalar(rng), randomScalar(rng), dir);
+    }
+
+    /** Deterministic {@link #setupToStore} — differential tests only. */
+    public static SetupResult setupToStore(R1CSFlat flat,
+                                           int numWires, int numPublic, BigInteger tau,
+                                           BigInteger alpha, BigInteger beta, BigInteger gamma, BigInteger delta,
+                                           Path dir) throws IOException {
+        TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
+        System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381, streaming) — "
+                + "for DEVELOPMENT and TESTING only. "
+                + "Use snarkjs multi-party ceremony for production.");
+
+        int nConstraints = flat.rows();
+        int domainSize = Integer.highestOneBit(nConstraints);
+        if (domainSize < nConstraints) domainSize <<= 1;
+        if (domainSize < 4) domainSize = 4;
+        int logN = Integer.numberOfTrailingZeros(domainSize);
+        final int domain = domainSize;
+
+        BigInteger gammaInv = gamma.modInverse(FR);
+        BigInteger deltaInv = delta.modInverse(FR);
+
+        // ---- Lagrange basis L_i(tau) as flat Montgomery limbs; omega powers are walked
+        //      per-chunk (omega^lo by modPow, then one multiply per step) — no boxed arrays.
+        BigInteger omegaBi = FieldFFTBLS381.rootOfUnity(logN).toBigInteger();
+        BigInteger tauN = tau.modPow(BigInteger.valueOf(domain), FR);
+        BigInteger zhNInv = tauN.subtract(BigInteger.ONE).mod(FR)
+                .multiply(BigInteger.valueOf(domain).modInverse(FR)).mod(FR);
+        long[] lagMont = new long[domain * 4];
+        FrFFTFlat.parallelRange(domain, (lo, hi) -> {
+            BigInteger om = omegaBi.modPow(BigInteger.valueOf(lo), FR);
+            for (int i = lo; i < hi; i++) {
+                BigInteger diff = tau.subtract(om).mod(FR);
+                BigInteger li = diff.signum() == 0 ? BigInteger.ONE
+                        : om.multiply(zhNInv).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
+                System.arraycopy(MontFr381.fromBigInteger(li).toLimbs(), 0, lagMont, i * 4, 4);
+                om = om.multiply(omegaBi).mod(FR);
+            }
+        });
+
+        // ---- QAP evaluations u_s/v_s/w_s(tau) as flat Montgomery limbs (ADR-0035 M2):
+        //      one pass over the CSR rows, dictionary Montgomery-converted once.
+        BigInteger[] dictVals = flat.dictionary();
+        long[] dictMont = new long[dictVals.length * 4];
+        for (int i = 0; i < dictVals.length; i++)
+            System.arraycopy(MontFr381.fromBigInteger(dictVals[i]).toLimbs(), 0, dictMont, i * 4, 4);
+
+        long[] usM = new long[numWires * 4];
+        long[] vsM = new long[numWires * 4];
+        long[] wsM = new long[numWires * 4];
+        var aM = flat.a();
+        var bM = flat.b();
+        var cM = flat.c();
+        long[] term = new long[4];
+        int rows = Math.min(nConstraints, domain);
+        for (int c = 0; c < rows; c++) {
+            int lc = c * 4;
+            for (int k = aM.start(c), e = aM.end(c); k < e; k++) {
+                int w = aM.wire(k);
+                if (w < numWires) {
+                    FrArith381.mul(term, 0, dictMont, aM.coeffIndex(k) * 4, lagMont, lc);
+                    FrArith381.add(usM, w * 4, usM, w * 4, term, 0);
+                }
+            }
+            for (int k = bM.start(c), e = bM.end(c); k < e; k++) {
+                int w = bM.wire(k);
+                if (w < numWires) {
+                    FrArith381.mul(term, 0, dictMont, bM.coeffIndex(k) * 4, lagMont, lc);
+                    FrArith381.add(vsM, w * 4, vsM, w * 4, term, 0);
+                }
+            }
+            for (int k = cM.start(c), e = cM.end(c); k < e; k++) {
+                int w = cM.wire(k);
+                if (w < numWires) {
+                    FrArith381.mul(term, 0, dictMont, cM.coeffIndex(k) * 4, lagMont, lc);
+                    FrArith381.add(wsM, w * 4, wsM, w * 4, term, 0);
+                }
+            }
+        }
+
+        // ---- single points + VK bits (tiny)
+        var g2 = JacobianG2BLS381.GENERATOR;
+        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alpha);
+        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(beta);
+        AffineG2 betaG2 = g2.scalarMul(beta).toAffine();
+        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
+        AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
+        AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
+
+        long[] alphaMont = MontFr381.fromBigInteger(alpha).toLimbs();
+        long[] betaMont = MontFr381.fromBigInteger(beta).toLimbs();
+        long[] deltaInvMont = MontFr381.fromBigInteger(deltaInv).toLimbs();
+        long[] gammaInvMont = MontFr381.fromBigInteger(gammaInv).toLimbs();
+
+        // IC[s] = (beta*u_s + alpha*v_s + w_s) / gamma * G1 for public wires (numPublic+1 points)
+        AffineG1[] ic = new AffineG1[numPublic + 1];
+        {
+            long[] t = new long[4], acc = new long[4], canon = new long[4];
+            for (int s = 0; s <= numPublic; s++) {
+                icLcMont(acc, t, usM, vsM, wsM, s, betaMont, alphaMont);
+                FrArith381.mul(acc, 0, acc, 0, gammaInvMont, 0);
+                FrArith381.mul(canon, 0, acc, 0, ONE_LIMBS, 0);
+                ic[s] = (canon[0] | canon[1] | canon[2] | canon[3]) == 0 ? AffineG1.INFINITY
+                        : FixedBaseG1BLS381.mulAffine(new BigInteger(1, beFromCanon(canon)));
+            }
+        }
+
+        // ---- streamed point files (ADR-0035 M3): mapped READ_WRITE, pre-zeroed = infinity
+        Files.createDirectories(dir);
+        try (var arena = Arena.ofShared()) {
+            var segA = mapOut(dir.resolve("pointsA.bin"), (long) numWires * 96, arena);
+            streamG1(segA, numWires, usM);
+            segA.force();
+
+            var segB1 = mapOut(dir.resolve("pointsB1.bin"), (long) numWires * 96, arena);
+            streamG1(segB1, numWires, vsM);
+            segB1.force();
+
+            // pointsB2[s] = v_s(tau) * G2 — BE coords, same layout as PkStore.putG2
+            var segB2 = mapOut(dir.resolve("pointsB2.bin"), (long) numWires * 192, arena);
+            FrFFTFlat.parallelRange(numWires, (lo, hi) -> {
+                long[] canon = new long[4];
+                byte[] coord = new byte[48];
+                for (int s = lo; s < hi; s++) {
+                    FrArith381.mul(canon, 0, vsM, s * 4, ONE_LIMBS, 0);
+                    if ((canon[0] | canon[1] | canon[2] | canon[3]) == 0) continue; // infinity = zeros
+                    AffineG2 p = JacobianG2BLS381.GENERATOR
+                            .scalarMul(new BigInteger(1, beFromCanon(canon))).toAffine();
+                    long o = s * 192L;
+                    putBe48(segB2, o, p.x().re().toBigInteger(), coord);
+                    putBe48(segB2, o + 48, p.x().im().toBigInteger(), coord);
+                    putBe48(segB2, o + 96, p.y().re().toBigInteger(), coord);
+                    putBe48(segB2, o + 144, p.y().im().toBigInteger(), coord);
+                }
+            });
+            segB2.force();
+
+            // pointsL[j] = (beta*u_s + alpha*v_s + w_s)/delta * G1, s = numPublic+1+j
+            int numPrivate = Math.max(0, numWires - numPublic - 1);
+            var segL = mapOut(dir.resolve("pointsL.bin"), (long) numPrivate * 96, arena);
+            final int npub = numPublic;
+            FrFFTFlat.parallelRange(numPrivate, (lo, hi) -> {
+                long[] t = new long[4], acc = new long[4], canon = new long[4];
+                long[] dst = new long[12];
+                long[] jac = new long[JacobianArith381.POINT_LONGS];
+                long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
+                for (int j = lo; j < hi; j++) {
+                    int s = npub + 1 + j;
+                    icLcMont(acc, t, usM, vsM, wsM, s, betaMont, alphaMont);
+                    FrArith381.mul(acc, 0, acc, 0, deltaInvMont, 0);
+                    FrArith381.mul(canon, 0, acc, 0, ONE_LIMBS, 0);
+                    if (FixedBaseG1BLS381.mulAffineLimbs(canon, 0, dst, 0, jac, scr))
+                        MemorySegment.copy(dst, 0, segL, ValueLayout.JAVA_LONG, j * 96L, 12);
+                }
+            });
+            segL.force();
+            // QAP arrays done (H needs none of them) — scrub: they are tau-derived secrets
+            Arrays.fill(usM, 0L);
+            Arrays.fill(vsM, 0L);
+            Arrays.fill(wsM, 0L);
+
+            // pointsH[i] = L_{2i+1}^{(2N)}(tau)/delta * G1 — per-chunk omega2 walk
+            MontFr381 omega2 = FieldFFTBLS381.rootOfUnity(logN + 1);
+            BigInteger omega2Bi = omega2.toBigInteger();
+            BigInteger omega2Sq = omega2Bi.multiply(omega2Bi).mod(FR);
+            BigInteger tauN2 = tau.modPow(BigInteger.valueOf(2L * domain), FR);
+            BigInteger zh2NInv2 = tauN2.subtract(BigInteger.ONE).mod(FR)
+                    .multiply(BigInteger.valueOf(2L * domain).modInverse(FR)).mod(FR);
+            var segH = mapOut(dir.resolve("pointsH.bin"), (long) domain * 96, arena);
+            FrFFTFlat.parallelRange(domain, (lo, hi) -> {
+                long[] canon = new long[4];
+                long[] dst = new long[12];
+                long[] jac = new long[JacobianArith381.POINT_LONGS];
+                long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
+                BigInteger omPow = omega2Bi.modPow(BigInteger.valueOf(2L * lo + 1), FR);
+                for (int i = lo; i < hi; i++) {
+                    BigInteger diff = tau.subtract(omPow).mod(FR);
+                    BigInteger hLagrange = diff.signum() == 0 ? BigInteger.ONE
+                            : omPow.multiply(zh2NInv2).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
+                    BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
+                    System.arraycopy(MontFr381.fromBigInteger(hVal).toLimbs(), 0, canon, 0, 4);
+                    FrArith381.mul(canon, 0, canon, 0, ONE_LIMBS, 0);
+                    if (FixedBaseG1BLS381.mulAffineLimbs(canon, 0, dst, 0, jac, scr))
+                        MemorySegment.copy(dst, 0, segH, ValueLayout.JAVA_LONG, i * 96L, 12);
+                    omPow = omPow.multiply(omega2Sq).mod(FR);
+                }
+            });
+            segH.force();
+        }
+
+        Groth16PkStore.writeAuxAndManifest(
+                dir, alphaG1, betaG1, deltaG1, betaG2, deltaG2, gammaG2, ic,
+                numPublic, numWires, domain);
+
+        // empty-array PK (the store on disk is the key), like Groth16PkStore.load
+        long[] empty = new long[0];
+        var pk = new Groth16ProvingKeyBLS381(alphaG1, betaG1, betaG2, deltaG1, deltaG2,
+                empty, empty, new AffineG2[0], empty, empty, numPublic);
+        return new SetupResult(pk, gammaG2, ic);
+    }
+
+    /** acc = beta*u_s + alpha*v_s + w_s (Montgomery). */
+    private static void icLcMont(long[] acc, long[] t, long[] usM, long[] vsM, long[] wsM,
+                                 int s, long[] betaMont, long[] alphaMont) {
+        FrArith381.mul(acc, 0, betaMont, 0, usM, s * 4);
+        FrArith381.mul(t, 0, alphaMont, 0, vsM, s * 4);
+        FrArith381.add(acc, 0, acc, 0, t, 0);
+        FrArith381.add(acc, 0, acc, 0, wsM, s * 4);
+    }
+
+    /** Stream {@code point[s] = scalarMont[s]·G1} into a mapped segment (12 native-order longs/point). */
+    private static void streamG1(MemorySegment seg, int n, long[] scalarMont) {
+        FrFFTFlat.parallelRange(n, (lo, hi) -> {
+            long[] canon = new long[4];
+            long[] dst = new long[12];
+            long[] jac = new long[JacobianArith381.POINT_LONGS];
+            long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
+            for (int s = lo; s < hi; s++) {
+                FrArith381.mul(canon, 0, scalarMont, s * 4, ONE_LIMBS, 0);
+                if (FixedBaseG1BLS381.mulAffineLimbs(canon, 0, dst, 0, jac, scr))
+                    MemorySegment.copy(dst, 0, seg, ValueLayout.JAVA_LONG, s * 96L, 12);
+            }
+        });
+    }
+
+    private static MemorySegment mapOut(Path p, long size, Arena arena) throws IOException {
+        try (var ch = FileChannel.open(p, StandardOpenOption.CREATE, StandardOpenOption.READ,
+                StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            return ch.map(FileChannel.MapMode.READ_WRITE, 0, size, arena);
+        }
+    }
+
+    /** Canonical BE bytes of 4 LE limbs (for BigInteger interop). */
+    private static byte[] beFromCanon(long[] canon) {
+        byte[] be = new byte[32];
+        for (int j = 0; j < 4; j++) {
+            long l = canon[j];
+            int o = 24 - j * 8;
+            for (int k = 0; k < 8; k++) be[o + 7 - k] = (byte) (l >>> (8 * k));
+        }
+        return be;
+    }
+
+    /** canonical BigInteger → 48-byte BE at {@code off} (the PkStore G2 coordinate encoding). */
+    private static void putBe48(MemorySegment seg, long off, BigInteger v, byte[] scratch48) {
+        Arrays.fill(scratch48, (byte) 0);
+        byte[] be = v.toByteArray();
+        int s = Math.max(0, be.length - 48), len = be.length - s;
+        System.arraycopy(be, s, scratch48, 48 - len, len);
+        MemorySegment.copy(scratch48, 0, seg, ValueLayout.JAVA_BYTE, off, 48);
+    }
 
     private static void accumulate(BigInteger[] target, Map<Integer, BigInteger> sparse, BigInteger lagrange) {
         for (var entry : sparse.entrySet()) {
