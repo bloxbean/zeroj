@@ -259,16 +259,17 @@ public final class Groth16ProverBLS381 {
         cosetFFT(bEval, domain, inc);
         cosetFFT(cEval, domain, inc);
 
-        long[] result = new long[domain * 4];
+        // ADR-0034 M6b: the (a·b − c) extraction is elementwise, so the canonical result is
+        // written back into aEval in place — no separate 1 GB result array at the peak.
         FrFFTFlat.parallelRange(domain, (lo, hi) -> {
             long[] val = new long[4];
             for (int i = lo; i < hi; i++) {
                 FrArith381.mul(val, 0, aEval, i * 4, bEval, i * 4);   // a·b
                 FrArith381.sub(val, 0, val, 0, cEval, i * 4);         // - c
-                FrArith381.mul(result, i * 4, val, 0, ONE_LIMBS, 0);  // Montgomery → canonical
+                FrArith381.mul(aEval, i * 4, val, 0, ONE_LIMBS, 0);   // Montgomery → canonical
             }
         });
-        return FlatScalars.wrap(result, domain);
+        return FlatScalars.wrap(aEval, domain);
     }
 
     /** Accumulate row {@code row} of {@code m} · witness into {@code out[outOff..]} (flat Montgomery). */

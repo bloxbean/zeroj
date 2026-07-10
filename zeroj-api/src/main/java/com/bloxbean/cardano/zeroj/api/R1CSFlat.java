@@ -28,22 +28,31 @@ import java.util.RandomAccess;
 public final class R1CSFlat {
 
     /** One CSR matrix: row {@code i}'s terms are entries {@code rowOffsets[i] .. rowOffsets[i+1]}. */
-    public static final class Matrix {
+    public sealed interface Matrix permits HeapMatrix, SegmentMatrix {
+        int start(int row);
+        int end(int row);
+        int wire(int k);
+        int coeffIndex(int k);
+        int nnz();
+    }
+
+    /** On-heap CSR matrix (fresh compiles, heap-loaded caches). */
+    public static final class HeapMatrix implements Matrix {
         private final int[] rowOffsets; // rows + 1
         private final int[] wireIdx;    // nnz
         private final int[] coeffIdx;   // nnz, index into the shared dictionary
 
-        Matrix(int[] rowOffsets, int[] wireIdx, int[] coeffIdx) {
+        HeapMatrix(int[] rowOffsets, int[] wireIdx, int[] coeffIdx) {
             this.rowOffsets = rowOffsets;
             this.wireIdx = wireIdx;
             this.coeffIdx = coeffIdx;
         }
 
-        public int start(int row) { return rowOffsets[row]; }
-        public int end(int row) { return rowOffsets[row + 1]; }
-        public int wire(int k) { return wireIdx[k]; }
-        public int coeffIndex(int k) { return coeffIdx[k]; }
-        public int nnz() { return wireIdx.length; }
+        @Override public int start(int row) { return rowOffsets[row]; }
+        @Override public int end(int row) { return rowOffsets[row + 1]; }
+        @Override public int wire(int k) { return wireIdx[k]; }
+        @Override public int coeffIndex(int k) { return coeffIdx[k]; }
+        @Override public int nnz() { return wireIdx.length; }
 
         // raw arrays for serialization (R1CSFlatIO)
         int[] rowOffsets() { return rowOffsets; }
@@ -51,7 +60,35 @@ public final class R1CSFlat {
         int[] coeffIdx() { return coeffIdx; }
     }
 
-    /** Reconstruct from raw CSR arrays (deserialization — see {@code R1CSFlatIO}). */
+    /**
+     * CSR matrix over slices of an mmap'd {@code r1cs.bin} (ADR-0034 M6a) — the constraint
+     * arrays stay file-backed/off-heap, like the proving key. Little-endian ints, unaligned
+     * (the file header's variable-length fingerprint shifts the array offsets).
+     */
+    public static final class SegmentMatrix implements Matrix {
+        private static final java.lang.foreign.ValueLayout.OfInt LE_INT =
+                java.lang.foreign.ValueLayout.JAVA_INT_UNALIGNED.withOrder(java.nio.ByteOrder.LITTLE_ENDIAN);
+
+        private final java.lang.foreign.MemorySegment rowOffsets, wireIdx, coeffIdx;
+        private final int nnz;
+
+        SegmentMatrix(java.lang.foreign.MemorySegment rowOffsets,
+                      java.lang.foreign.MemorySegment wireIdx,
+                      java.lang.foreign.MemorySegment coeffIdx, int nnz) {
+            this.rowOffsets = rowOffsets;
+            this.wireIdx = wireIdx;
+            this.coeffIdx = coeffIdx;
+            this.nnz = nnz;
+        }
+
+        @Override public int start(int row) { return rowOffsets.get(LE_INT, (long) row * 4); }
+        @Override public int end(int row) { return rowOffsets.get(LE_INT, (long) (row + 1) * 4); }
+        @Override public int wire(int k) { return wireIdx.get(LE_INT, (long) k * 4); }
+        @Override public int coeffIndex(int k) { return coeffIdx.get(LE_INT, (long) k * 4); }
+        @Override public int nnz() { return nnz; }
+    }
+
+    /** Reconstruct from CSR matrices (deserialization — see {@code R1CSFlatIO}). */
     static R1CSFlat fromArrays(int rows, Matrix a, Matrix b, Matrix c, BigInteger[] dict) {
         return new R1CSFlat(rows, a, b, c, dict);
     }
@@ -156,9 +193,9 @@ public final class R1CSFlat {
 
         public R1CSFlat build() {
             var flat = new R1CSFlat(rows,
-                    new Matrix(aOff.toArray(), aWire.toArray(), aCoeff.toArray()),
-                    new Matrix(bOff.toArray(), bWire.toArray(), bCoeff.toArray()),
-                    new Matrix(cOff.toArray(), cWire.toArray(), cCoeff.toArray()),
+                    new HeapMatrix(aOff.toArray(), aWire.toArray(), aCoeff.toArray()),
+                    new HeapMatrix(bOff.toArray(), bWire.toArray(), bCoeff.toArray()),
+                    new HeapMatrix(cOff.toArray(), cWire.toArray(), cCoeff.toArray()),
                     dictValues.toArray(new BigInteger[0]));
             dictIndex.clear();
             return flat;

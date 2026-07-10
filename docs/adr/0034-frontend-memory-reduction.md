@@ -97,6 +97,37 @@ removes the graph build too is a future ADR, à la snarkjs's calculator.)
 Docker `mem_limit=16g` (the 128 GB box exerts no eviction pressure): the mmap'd 23 GB key must
 refault cleanly (ADR-0033 "Regime A"); record wall-clock degradation vs unconstrained.
 
+## Phase 2 — the 8 GB machine (M6–M7)
+
+With the 16 GB claim validated, the next hardware tier is an **8 GB machine**: usable heap
+~5–5.5 GB after OS + JVM overhead, key streaming from disk. At the 7 GB floor both remaining
+phases sit at ~5.5–6.5 GB; three storage-level changes (no algorithm changes, all
+differential-testable) close the gap:
+
+- **M6a — mmap the CSR.** `r1cs.bin` already holds the packed matrices; a segment-backed
+  `R1CSFlat.Matrix` reads them off-heap (like the proving key), so a warm prove never heap-loads
+  the ~0.9 GB arrays. Read-only path; the H polynomial must be bit-equal to the heap-backed read.
+- **M6b — computeH writes its result in place.** The final `(a·b − c)` extraction is elementwise;
+  writing canonical limbs back into `aEval` instead of a fresh array saves the 1.07 GB result
+  buffer at the peak. computeH → ~4.6 GB.
+- **M7 — flat witness storage.** `WitnessCalculator` keeps its exact `BigInteger` arithmetic and
+  single evaluation path behind a storage interface (boxed array vs canonical-limb chunks, with a
+  `BitSet` unset-guard so reads-before-writes still fail loud).
+
+**Measured phase-2 outcome (2026-07-10):**
+
+| result | detail |
+|---|---|
+| **Floor: 7 GB, unchanged** | A mid-witness `jmap -histo:live` shows the circuit graph's true live set is **~5.7 GB** — not the ~3 GB earlier compile-time attribution suggested: 1.6 GB of `BigInteger` gate *constants* (28M `Term`/`Const` coefficient objects), 1.05 GB `Variable`s, ~1 GB list backings, ~1.7 GB gate records. No storage trick beats that while the graph exists. |
+| **M7 verdict: kept in zeroj, NOT used by the CLI** | The born-flat witness (always 32 B/wire = 1.4 GB) **lost** to the boxed array it replaced: this circuit is bit-heavy, so most wires alias the shared `ONE`/`ZERO` singletons (~0.4 GB extra beside the graph) — flat pushed the witness peak to 7.1 GB and 7 GB OOM'd. The CLI reverted to boxed + `packConsuming` after graph release. The store seam + chunked/flat APIs stay (differential-tested; groundwork for the phase-3 evaluator, and a win for non-bit-heavy circuits). |
+| **Prove nearly halved: 57–71 s** (was 110–127 s), warm total **1.2–1.4 min** | M6a+M6b cut the computeH live set from ~6.5 GB to ~4.6 GB — at a 7–8 GB heap the GC pressure that was throttling the MSM phase essentially vanished. Constraints map in 0.0 s. |
+
+**Phase-3 (recorded, not started) — the real 8 GB unlock:** a witness-program artifact — compile
+the graph once into a compact instruction stream + constant pool, cached beside `r1cs.bin` (and
+mmap-able); witness generation then runs with zero graph objects. Floor → computeH-bound
+≈ 5 GB. Below that only an out-of-core FFT helps (research-grade). The `WitnessCalculator` store
+seam introduced here is the natural attachment point for that evaluator.
+
 ## Projected outcome
 
 | stage | projected peak | binding phase |

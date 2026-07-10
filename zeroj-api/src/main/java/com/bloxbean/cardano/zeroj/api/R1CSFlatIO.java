@@ -132,20 +132,69 @@ public final class R1CSFlatIO {
         }
     }
 
+    /**
+     * Map a cache written by {@link #write} into {@code arena} and read the matrices <b>off-heap</b>
+     * (ADR-0034 M6a): the CSR arrays stay file-backed {@link R1CSFlat.SegmentMatrix} slices — only
+     * the small coefficient dictionary is materialized. The returned flat is valid for the arena's
+     * lifetime. Returns {@code null} on missing/malformed/foreign-fingerprint files (cache miss).
+     */
+    public static R1CSFlat readMapped(Path file, String expectedFingerprint, Arena arena) {
+        if (!Files.isRegularFile(file)) return null;
+        try (FileChannel ch = FileChannel.open(file, StandardOpenOption.READ)) {
+            var seg = ch.map(FileChannel.MapMode.READ_ONLY, 0, ch.size(), arena);
+            ByteBuffer header = seg.asSlice(0, Math.min(seg.byteSize(), 1 << 16))
+                    .asByteBuffer().order(ByteOrder.LITTLE_ENDIAN);
+            if (header.remaining() < 16 || header.getInt() != MAGIC || header.getInt() != VERSION) return null;
+            byte[] fp = new byte[header.getShort() & 0xffff];
+            header.get(fp);
+            if (!new String(fp, StandardCharsets.UTF_8).equals(expectedFingerprint)) return null;
+            int rows = header.getInt();
+            int dictSize = header.getInt();
+            if (rows < 0 || dictSize < 0) return null;
+
+            long pos = header.position();
+            R1CSFlat.Matrix[] ms = new R1CSFlat.Matrix[3];
+            for (int m = 0; m < 3; m++) {
+                int nnz = seg.get(java.lang.foreign.ValueLayout.JAVA_INT_UNALIGNED
+                        .withOrder(ByteOrder.LITTLE_ENDIAN), pos);
+                pos += 4;
+                long offBytes = (long) (rows + 1) * 4, idxBytes = (long) nnz * 4;
+                ms[m] = new R1CSFlat.SegmentMatrix(
+                        seg.asSlice(pos, offBytes),
+                        seg.asSlice(pos + offBytes, idxBytes),
+                        seg.asSlice(pos + offBytes + idxBytes, idxBytes), nnz);
+                pos += offBytes + 2 * idxBytes;
+            }
+
+            BigInteger[] dict = new BigInteger[dictSize];
+            byte[] be32 = new byte[32];
+            for (int i = 0; i < dictSize; i++) {
+                java.lang.foreign.MemorySegment.copy(seg, pos + (long) i * 32,
+                        java.lang.foreign.MemorySegment.ofArray(be32), 0, 32);
+                dict[i] = new BigInteger(1, be32);
+            }
+            return R1CSFlat.fromArrays(rows, ms[0], ms[1], ms[2], dict);
+        } catch (IOException | RuntimeException e) {
+            return null; // treat any corruption as a miss
+        }
+    }
+
     private static long matrixBytes(R1CSFlat.Matrix m, int rows) {
         return 4 + (long) (rows + 1) * 4 + (long) m.nnz() * 8;
     }
 
     private static void putMatrix(ByteBuffer buf, R1CSFlat.Matrix m) {
-        buf.putInt(m.nnz());
-        putInts(buf, m.rowOffsets());
-        putInts(buf, m.wireIdx());
-        putInts(buf, m.coeffIdx());
+        if (!(m instanceof R1CSFlat.HeapMatrix h))
+            throw new IllegalArgumentException("only heap-backed R1CSFlat can be written (got " + m.getClass() + ")");
+        buf.putInt(h.nnz());
+        putInts(buf, h.rowOffsets());
+        putInts(buf, h.wireIdx());
+        putInts(buf, h.coeffIdx());
     }
 
     private static R1CSFlat.Matrix getMatrix(ByteBuffer buf, int rows) {
         int nnz = buf.getInt();
-        return new R1CSFlat.Matrix(getInts(buf, rows + 1), getInts(buf, nnz), getInts(buf, nnz));
+        return new R1CSFlat.HeapMatrix(getInts(buf, rows + 1), getInts(buf, nnz), getInts(buf, nnz));
     }
 
     private static void putInts(ByteBuffer buf, int[] a) {

@@ -123,6 +123,27 @@ public final class CircuitBuilder {
         return WitnessCalculator.calculate(graph, inputs, FieldConfig.forCurve(curve));
     }
 
+    /**
+     * {@link #calculateWitness} into flat storage (ADR-0034 M7): wire {@code i}'s value is four
+     * canonical little-endian 64-bit limbs at {@code i*4} — 32 B/wire, no boxed field elements.
+     */
+    public long[] calculateWitnessFlat(Map<String, List<BigInteger>> inputs, CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return WitnessCalculator.calculateFlat(graph, inputs, FieldConfig.forCurve(curve));
+    }
+
+    /**
+     * {@link #calculateWitnessFlat} into 4 MB chunks — for memory-tight callers that must not
+     * hold a ~GB contiguous array while the graph is alive; release the graph, then consolidate
+     * (ADR-0034 M7).
+     */
+    public long[][] calculateWitnessFlatChunked(Map<String, List<BigInteger>> inputs, CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return WitnessCalculator.calculateFlatChunked(graph, inputs, FieldConfig.forCurve(curve));
+    }
+
     private void requireDefined() {
         if (graph == null) throw new IllegalStateException("Circuit not defined yet. Call define() first.");
     }

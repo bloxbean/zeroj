@@ -116,5 +116,18 @@ class ComputeHFlatDifferentialTest {
         BigInteger[] hOrig = Groth16ProverBLS381.computeH(flat, w, 0, domain);
         BigInteger[] hBack = Groth16ProverBLS381.computeH(back, w, 0, domain);
         assertArrayEquals(hOrig, hBack, "cached constraints must produce the identical H polynomial");
+
+        // ADR-0034 M6a: the mmap'd (segment-backed) read must be identical too
+        try (var arena = java.lang.foreign.Arena.ofShared()) {
+            var mapped = com.bloxbean.cardano.zeroj.api.R1CSFlatIO.readMapped(file, "c300-w302-p1", arena);
+            assertNotNull(mapped, "matching fingerprint must map");
+            assertNull(com.bloxbean.cardano.zeroj.api.R1CSFlatIO.readMapped(file, "c1-w2-p3", arena),
+                    "fingerprint mismatch must be a mapped-read miss too");
+            assertEquals(flat.rows(), mapped.rows());
+            for (int i = 0; i < flat.rows(); i++)
+                assertEquals(flat.row(i), mapped.row(i), "mapped row " + i);
+            BigInteger[] hMapped = Groth16ProverBLS381.computeH(mapped, w, 0, domain);
+            assertArrayEquals(hOrig, hMapped, "mapped constraints must produce the identical H polynomial");
+        }
     }
 }
