@@ -26,20 +26,30 @@ public final class R1CSCompiler {
         // Build expression map: for each variable, its linear combination in terms of base variables.
         // Base variables: inputs, constants (wire 0), and multiplication outputs.
         // Derived variables: outputs of Add, LinComb, Neg gates.
-        Map<Integer, Map<Integer, BigInteger>> exprMap = new HashMap<>();
-
-        // Wire 0 (constant 1) is a base variable
-        exprMap.put(graph.oneWire().id(), Map.of(graph.oneWire().id(), BigInteger.ONE));
-
-        // All input variables are base variables
-        for (var v : graph.publicInputs()) {
-            exprMap.put(v.id(), Map.of(v.id(), BigInteger.ONE));
+        //
+        // ADR-0034 M1: base variables are NOT stored — getExpr() defaults absent wires to
+        // Map.of(id, ONE), which is exactly what a base entry would hold. At 43.7M wires the
+        // ~19M base entries (node + boxed key + Map1 each) were ~1.5-2 GB of the compile peak.
+        // Only derived expressions (Const/Add/LinComb outputs) live in the map.
+        //
+        // Pre-size both containers from a cheap gate-count pass: at 19M constraints the
+        // constraints ArrayList otherwise re-copies a hundreds-of-MB humongous Object[] on every
+        // grow (old + new arrays live simultaneously — an OOM trigger near the heap cap), and the
+        // exprMap table (tens of millions of slots) re-hashes the same way.
+        int constraintCount = 0, derivedCount = 0;
+        for (var gate : graph.gates()) {
+            switch (gate) {
+                case Gate.Mul g -> constraintCount++;
+                case Gate.AssertEq g -> constraintCount++; // upper bound: empty diffs emit nothing
+                case Gate.Add g -> derivedCount++;
+                case Gate.LinComb g -> derivedCount++;
+                case Gate.Const g -> derivedCount++;
+                default -> { }
+            }
         }
-        for (var v : graph.secretInputs()) {
-            exprMap.put(v.id(), Map.of(v.id(), BigInteger.ONE));
-        }
+        Map<Integer, Map<Integer, BigInteger>> exprMap = HashMap.newHashMap(derivedCount + 8);
 
-        List<R1CSConstraint> constraints = new ArrayList<>();
+        List<R1CSConstraint> constraints = new ArrayList<>(constraintCount);
 
         for (var gate : graph.gates()) {
             switch (gate) {
@@ -75,8 +85,8 @@ public final class R1CSCompiler {
                     var b = getExpr(exprMap, right.id());
                     var c = Map.of(out.id(), BigInteger.ONE);
                     constraints.add(new R1CSConstraint(a, b, c));
-                    // Multiplication output is a new base variable
-                    exprMap.put(out.id(), Map.of(out.id(), BigInteger.ONE));
+                    // Multiplication output is a new base variable (getExpr default)
+                    exprMap.remove(out.id());
                 }
 
                 case Gate.AssertEq(var left, var right) -> {
@@ -97,27 +107,27 @@ public final class R1CSCompiler {
                     // Handled by the expanded gates (assertBoolean + mul + add)
                     // The Select gate itself is not emitted by CircuitAPIImpl —
                     // it's decomposed into Add/Mul/AssertEq gates.
-                    // If we encounter it, treat output as base variable.
-                    exprMap.put(out.id(), Map.of(out.id(), BigInteger.ONE));
+                    // If we encounter it, treat output as base variable (getExpr default).
+                    exprMap.remove(out.id());
                 }
 
                 case Gate.BitDecompose(var outputs, var input, var nBits) -> {
-                    // Hints don't create constraints. Each bit output is a base variable.
-                    for (var o : outputs) {
-                        exprMap.put(o.id(), Map.of(o.id(), BigInteger.ONE));
-                    }
+                    // Hints don't create constraints. Each bit output is a base variable
+                    // (getExpr default).
+                    for (var o : outputs) exprMap.remove(o.id());
                 }
 
                 case Gate.Hint(var out, var type, var input) -> {
                     // Hints don't create constraints — they guide witness calculation.
-                    // The hint output is a base variable.
-                    exprMap.put(out.id(), Map.of(out.id(), BigInteger.ONE));
+                    // The hint output is a base variable (getExpr default).
+                    exprMap.remove(out.id());
                 }
 
                 case Gate.HintN(var outputs, var kind, var inputs, var params) -> {
-                    // Hints don't create constraints. Each output is a base variable; the caller
-                    // adds the constraints that pin these values down (soundness lives there).
-                    for (var o : outputs) exprMap.put(o.id(), Map.of(o.id(), BigInteger.ONE));
+                    // Hints don't create constraints. Each output is a base variable (getExpr
+                    // default); the caller adds the constraints that pin these values down
+                    // (soundness lives there).
+                    for (var o : outputs) exprMap.remove(o.id());
                 }
             }
         }
