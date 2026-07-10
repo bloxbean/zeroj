@@ -292,17 +292,7 @@ public final class Groth16SetupBLS381 {
         BigInteger tauN = tau.modPow(BigInteger.valueOf(domain), FR);
         BigInteger zhNInv = tauN.subtract(BigInteger.ONE).mod(FR)
                 .multiply(BigInteger.valueOf(domain).modInverse(FR)).mod(FR);
-        long[] lagMont = new long[domain * 4];
-        FrFFTFlat.parallelRange(domain, (lo, hi) -> {
-            BigInteger om = omegaBi.modPow(BigInteger.valueOf(lo), FR);
-            for (int i = lo; i < hi; i++) {
-                BigInteger diff = tau.subtract(om).mod(FR);
-                BigInteger li = diff.signum() == 0 ? BigInteger.ONE
-                        : om.multiply(zhNInv).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
-                System.arraycopy(MontFr381.fromBigInteger(li).toLimbs(), 0, lagMont, i * 4, 4);
-                om = om.multiply(omegaBi).mod(FR);
-            }
-        });
+        long[] lagMont = computeLagrangeMont(domain, tau, omegaBi, zhNInv);
 
         // ---- QAP evaluations u_s/v_s/w_s(tau) as flat Montgomery limbs (ADR-0035 M2):
         //      one pass over the CSR rows, dictionary Montgomery-converted once.
@@ -317,6 +307,7 @@ public final class Groth16SetupBLS381 {
         var aM = flat.a();
         var bM = flat.b();
         var cM = flat.c();
+        long[] lag = lagMont; // QAP loop reads via `lag`; lagMont is nulled after (−1 GB at point gen)
         long[] term = new long[4];
         int rows = Math.min(nConstraints, domain);
         for (int c = 0; c < rows; c++) {
@@ -324,25 +315,26 @@ public final class Groth16SetupBLS381 {
             for (int k = aM.start(c), e = aM.end(c); k < e; k++) {
                 int w = aM.wire(k);
                 if (w < numWires) {
-                    FrArith381.mul(term, 0, dictMont, aM.coeffIndex(k) * 4, lagMont, lc);
+                    FrArith381.mul(term, 0, dictMont, aM.coeffIndex(k) * 4, lag, lc);
                     FrArith381.add(usM, w * 4, usM, w * 4, term, 0);
                 }
             }
             for (int k = bM.start(c), e = bM.end(c); k < e; k++) {
                 int w = bM.wire(k);
                 if (w < numWires) {
-                    FrArith381.mul(term, 0, dictMont, bM.coeffIndex(k) * 4, lagMont, lc);
+                    FrArith381.mul(term, 0, dictMont, bM.coeffIndex(k) * 4, lag, lc);
                     FrArith381.add(vsM, w * 4, vsM, w * 4, term, 0);
                 }
             }
             for (int k = cM.start(c), e = cM.end(c); k < e; k++) {
                 int w = cM.wire(k);
                 if (w < numWires) {
-                    FrArith381.mul(term, 0, dictMont, cM.coeffIndex(k) * 4, lagMont, lc);
+                    FrArith381.mul(term, 0, dictMont, cM.coeffIndex(k) * 4, lag, lc);
                     FrArith381.add(wsM, w * 4, wsM, w * 4, term, 0);
                 }
             }
         }
+        lagMont = null; // main-domain Lagrange values are done — free ~1 GB before point generation
 
         // ---- single points + VK bits (tiny)
         var g2 = JacobianG2BLS381.GENERATOR;
@@ -371,32 +363,52 @@ public final class Groth16SetupBLS381 {
             }
         }
 
-        // ---- streamed point files (ADR-0035 M3): mapped READ_WRITE, pre-zeroed = infinity
+        // ---- streamed point files (ADR-0035 M3): mapped READ_WRITE, pre-zeroed = infinity.
+        //      All writers work in blocks with batched affine normalization (M4) — one field
+        //      inversion per block instead of one per point.
         Files.createDirectories(dir);
         try (var arena = Arena.ofShared()) {
             var segA = mapOut(dir.resolve("pointsA.bin"), (long) numWires * 96, arena);
-            streamG1(segA, numWires, usM);
+            streamG1(segA, numWires, (s, canon, scratch) -> {
+                FrArith381.mul(canon, 0, usM, s * 4, ONE_LIMBS, 0);
+                return (canon[0] | canon[1] | canon[2] | canon[3]) != 0;
+            });
             segA.force();
 
             var segB1 = mapOut(dir.resolve("pointsB1.bin"), (long) numWires * 96, arena);
-            streamG1(segB1, numWires, vsM);
+            streamG1(segB1, numWires, (s, canon, scratch) -> {
+                FrArith381.mul(canon, 0, vsM, s * 4, ONE_LIMBS, 0);
+                return (canon[0] | canon[1] | canon[2] | canon[3]) != 0;
+            });
             segB1.force();
 
-            // pointsB2[s] = v_s(tau) * G2 — BE coords, same layout as PkStore.putG2
+            // pointsB2[s] = v_s(tau) * G2 — comb table + batched Fp2 normalization (M4);
+            // BE coords, same layout as PkStore.putG2
             var segB2 = mapOut(dir.resolve("pointsB2.bin"), (long) numWires * 192, arena);
             FrFFTFlat.parallelRange(numWires, (lo, hi) -> {
                 long[] canon = new long[4];
                 byte[] coord = new byte[48];
-                for (int s = lo; s < hi; s++) {
-                    FrArith381.mul(canon, 0, vsM, s * 4, ONE_LIMBS, 0);
-                    if ((canon[0] | canon[1] | canon[2] | canon[3]) == 0) continue; // infinity = zeros
-                    AffineG2 p = JacobianG2BLS381.GENERATOR
-                            .scalarMul(new BigInteger(1, beFromCanon(canon))).toAffine();
-                    long o = s * 192L;
-                    putBe48(segB2, o, p.x().re().toBigInteger(), coord);
-                    putBe48(segB2, o + 48, p.x().im().toBigInteger(), coord);
-                    putBe48(segB2, o + 96, p.y().re().toBigInteger(), coord);
-                    putBe48(segB2, o + 144, p.y().im().toBigInteger(), coord);
+                JacobianG2BLS381[] block = new JacobianG2BLS381[BATCH];
+                int[] slot = new int[BATCH];
+                for (int base = lo; base < hi; base += BATCH) {
+                    int end = Math.min(base + BATCH, hi);
+                    int k = 0;
+                    for (int s = base; s < end; s++) {
+                        FrArith381.mul(canon, 0, vsM, s * 4, ONE_LIMBS, 0);
+                        JacobianG2BLS381 p = FixedBaseG2BLS381.mulJacobian(canon, 0);
+                        if (p == null) continue; // infinity = zeros in the mapped file
+                        block[k] = p;
+                        slot[k] = s;
+                        k++;
+                    }
+                    AffineG2[] aff = JacobianG2BLS381.batchToAffine(block, k);
+                    for (int j = 0; j < k; j++) {
+                        long o = slot[j] * 192L;
+                        putBe48(segB2, o, aff[j].x().re().toBigInteger(), coord);
+                        putBe48(segB2, o + 48, aff[j].x().im().toBigInteger(), coord);
+                        putBe48(segB2, o + 96, aff[j].y().re().toBigInteger(), coord);
+                        putBe48(segB2, o + 144, aff[j].y().im().toBigInteger(), coord);
+                    }
                 }
             });
             segB2.force();
@@ -405,19 +417,16 @@ public final class Groth16SetupBLS381 {
             int numPrivate = Math.max(0, numWires - numPublic - 1);
             var segL = mapOut(dir.resolve("pointsL.bin"), (long) numPrivate * 96, arena);
             final int npub = numPublic;
-            FrFFTFlat.parallelRange(numPrivate, (lo, hi) -> {
-                long[] t = new long[4], acc = new long[4], canon = new long[4];
-                long[] dst = new long[12];
-                long[] jac = new long[JacobianArith381.POINT_LONGS];
-                long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
-                for (int j = lo; j < hi; j++) {
-                    int s = npub + 1 + j;
-                    icLcMont(acc, t, usM, vsM, wsM, s, betaMont, alphaMont);
-                    FrArith381.mul(acc, 0, acc, 0, deltaInvMont, 0);
-                    FrArith381.mul(canon, 0, acc, 0, ONE_LIMBS, 0);
-                    if (FixedBaseG1BLS381.mulAffineLimbs(canon, 0, dst, 0, jac, scr))
-                        MemorySegment.copy(dst, 0, segL, ValueLayout.JAVA_LONG, j * 96L, 12);
-                }
+            streamG1(segL, numPrivate, (j, canon, scratch) -> {
+                // scratch8: [0..4) = acc, [4..8) = t — per-chunk, no shared state (thread-safe)
+                int s = npub + 1 + j;
+                FrArith381.mul(scratch, 0, betaMont, 0, usM, s * 4);
+                FrArith381.mul(scratch, 4, alphaMont, 0, vsM, s * 4);
+                FrArith381.add(scratch, 0, scratch, 0, scratch, 4);
+                FrArith381.add(scratch, 0, scratch, 0, wsM, s * 4);
+                FrArith381.mul(scratch, 0, scratch, 0, deltaInvMont, 0);
+                FrArith381.mul(canon, 0, scratch, 0, ONE_LIMBS, 0);
+                return (canon[0] | canon[1] | canon[2] | canon[3]) != 0;
             });
             segL.force();
             // QAP arrays done (H needs none of them) — scrub: they are tau-derived secrets
@@ -425,7 +434,8 @@ public final class Groth16SetupBLS381 {
             Arrays.fill(vsM, 0L);
             Arrays.fill(wsM, 0L);
 
-            // pointsH[i] = L_{2i+1}^{(2N)}(tau)/delta * G1 — per-chunk omega2 walk
+            // pointsH[i] = L_{2i+1}^{(2N)}(tau)/delta * G1 — per-chunk omega2 walk, batched
+            // inversions (M4)
             MontFr381 omega2 = FieldFFTBLS381.rootOfUnity(logN + 1);
             BigInteger omega2Bi = omega2.toBigInteger();
             BigInteger omega2Sq = omega2Bi.multiply(omega2Bi).mod(FR);
@@ -434,21 +444,38 @@ public final class Groth16SetupBLS381 {
                     .multiply(BigInteger.valueOf(2L * domain).modInverse(FR)).mod(FR);
             var segH = mapOut(dir.resolve("pointsH.bin"), (long) domain * 96, arena);
             FrFFTFlat.parallelRange(domain, (lo, hi) -> {
-                long[] canon = new long[4];
-                long[] dst = new long[12];
-                long[] jac = new long[JacobianArith381.POINT_LONGS];
+                long[] canon = new long[BATCH * 4];
+                long[] jacBlock = new long[BATCH * 18];
+                long[] affBlock = new long[BATCH * 12];
+                boolean[] present = new boolean[BATCH];
                 long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
+                BigInteger[] omPows = new BigInteger[BATCH];
+                BigInteger[] diffs = new BigInteger[BATCH];
+                BigInteger[] invs = new BigInteger[BATCH];
                 BigInteger omPow = omega2Bi.modPow(BigInteger.valueOf(2L * lo + 1), FR);
-                for (int i = lo; i < hi; i++) {
-                    BigInteger diff = tau.subtract(omPow).mod(FR);
-                    BigInteger hLagrange = diff.signum() == 0 ? BigInteger.ONE
-                            : omPow.multiply(zh2NInv2).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
-                    BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
-                    System.arraycopy(MontFr381.fromBigInteger(hVal).toLimbs(), 0, canon, 0, 4);
-                    FrArith381.mul(canon, 0, canon, 0, ONE_LIMBS, 0);
-                    if (FixedBaseG1BLS381.mulAffineLimbs(canon, 0, dst, 0, jac, scr))
-                        MemorySegment.copy(dst, 0, segH, ValueLayout.JAVA_LONG, i * 96L, 12);
-                    omPow = omPow.multiply(omega2Sq).mod(FR);
+                for (int base = lo; base < hi; base += BATCH) {
+                    int m = Math.min(BATCH, hi - base);
+                    boolean zeroDiff = false;
+                    for (int k = 0; k < m; k++) {
+                        omPows[k] = omPow;
+                        diffs[k] = tau.subtract(omPow).mod(FR);
+                        if (diffs[k].signum() == 0) zeroDiff = true;
+                        omPow = omPow.multiply(omega2Sq).mod(FR);
+                    }
+                    if (!zeroDiff) batchModInverse(diffs, invs, m);
+                    for (int k = 0; k < m; k++) {
+                        BigInteger hLagrange = diffs[k].signum() == 0 ? BigInteger.ONE
+                                : omPows[k].multiply(zh2NInv2).mod(FR)
+                                        .multiply(zeroDiff ? diffs[k].modInverse(FR) : invs[k]).mod(FR);
+                        BigInteger hVal = hLagrange.multiply(deltaInv).mod(FR);
+                        System.arraycopy(MontFr381.fromBigInteger(hVal).toLimbs(), 0, canon, k * 4, 4);
+                        FrArith381.mul(canon, k * 4, canon, k * 4, ONE_LIMBS, 0);
+                        present[k] = FixedBaseG1BLS381.mulJacobianLimbs(canon, k * 4, jacBlock, k * 18, scr);
+                    }
+                    FixedBaseG1BLS381.batchNormalize(jacBlock, m, present, affBlock);
+                    for (int k = 0; k < m; k++)
+                        if (present[k])
+                            MemorySegment.copy(affBlock, k * 12, segH, ValueLayout.JAVA_LONG, (base + k) * 96L, 12);
                 }
             });
             segH.force();
@@ -474,19 +501,93 @@ public final class Groth16SetupBLS381 {
         FrArith381.add(acc, 0, acc, 0, wsM, s * 4);
     }
 
-    /** Stream {@code point[s] = scalarMont[s]·G1} into a mapped segment (12 native-order longs/point). */
-    private static void streamG1(MemorySegment seg, int n, long[] scalarMont) {
-        FrFFTFlat.parallelRange(n, (lo, hi) -> {
-            long[] canon = new long[4];
-            long[] dst = new long[12];
-            long[] jac = new long[JacobianArith381.POINT_LONGS];
-            long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
-            for (int s = lo; s < hi; s++) {
-                FrArith381.mul(canon, 0, scalarMont, s * 4, ONE_LIMBS, 0);
-                if (FixedBaseG1BLS381.mulAffineLimbs(canon, 0, dst, 0, jac, scr))
-                    MemorySegment.copy(dst, 0, seg, ValueLayout.JAVA_LONG, s * 96L, 12);
+    /** Block size for batched normalization / batched inversion (ADR-0035 M4). */
+    private static final int BATCH = 512;
+
+    /**
+     * Lagrange basis {@code L_i(tau)} for the whole domain as flat Montgomery limbs: per-chunk
+     * omega walks (one {@code modPow} per chunk) and per-block batched inversions (ADR-0035 M4).
+     */
+    private static long[] computeLagrangeMont(int domain, BigInteger tau, BigInteger omegaBi, BigInteger zhNInv) {
+        long[] lagMont = new long[domain * 4];
+        FrFFTFlat.parallelRange(domain, (lo, hi) -> {
+            BigInteger om = omegaBi.modPow(BigInteger.valueOf(lo), FR);
+            BigInteger[] oms = new BigInteger[BATCH];
+            BigInteger[] diffs = new BigInteger[BATCH];
+            BigInteger[] invs = new BigInteger[BATCH];
+            for (int base = lo; base < hi; base += BATCH) {
+                int m = Math.min(BATCH, hi - base);
+                boolean zeroDiff = false;
+                for (int k = 0; k < m; k++) {
+                    oms[k] = om;
+                    diffs[k] = tau.subtract(om).mod(FR);
+                    if (diffs[k].signum() == 0) zeroDiff = true;
+                    om = om.multiply(omegaBi).mod(FR);
+                }
+                if (!zeroDiff) batchModInverse(diffs, invs, m);
+                for (int k = 0; k < m; k++) {
+                    BigInteger li = diffs[k].signum() == 0 ? BigInteger.ONE
+                            : oms[k].multiply(zhNInv).mod(FR)
+                                    .multiply(zeroDiff ? diffs[k].modInverse(FR) : invs[k]).mod(FR);
+                    System.arraycopy(MontFr381.fromBigInteger(li).toLimbs(), 0, lagMont, (base + k) * 4, 4);
+                }
             }
         });
+        return lagMont;
+    }
+
+    /**
+     * Produces point {@code s}'s canonical scalar limbs; false for a zero scalar. Called from
+     * multiple chunks concurrently — implementations must keep all state in {@code scratch8}
+     * (per-chunk, caller-provided), never in captured mutable fields.
+     */
+    private interface ScalarAt {
+        boolean canon(int s, long[] canonOut4, long[] scratch8);
+    }
+
+    /**
+     * Stream {@code point[s] = scalar(s)·G1} into a mapped segment (12 native-order longs/point)
+     * in blocks: comb multiplications in Jacobian form, then ONE batched normalization per block
+     * (ADR-0035 M4) instead of a field inversion per point.
+     */
+    private static void streamG1(MemorySegment seg, int n, ScalarAt scalars) {
+        FrFFTFlat.parallelRange(n, (lo, hi) -> {
+            long[] canon = new long[4];
+            long[] scratch8 = new long[8];
+            long[] jacBlock = new long[BATCH * 18];
+            long[] affBlock = new long[BATCH * 12];
+            boolean[] present = new boolean[BATCH];
+            long[] scr = new long[JacobianArith381.SCRATCH_LONGS];
+            for (int base = lo; base < hi; base += BATCH) {
+                int m = Math.min(BATCH, hi - base);
+                for (int k = 0; k < m; k++) {
+                    present[k] = scalars.canon(base + k, canon, scratch8)
+                            && FixedBaseG1BLS381.mulJacobianLimbs(canon, 0, jacBlock, k * 18, scr);
+                }
+                FixedBaseG1BLS381.batchNormalize(jacBlock, m, present, affBlock);
+                for (int k = 0; k < m; k++)
+                    if (present[k])
+                        MemorySegment.copy(affBlock, k * 12, seg, ValueLayout.JAVA_LONG, (base + k) * 96L, 12);
+            }
+        });
+    }
+
+    /**
+     * {@code dst[i] = src[i]^{-1} mod r} for {@code n} nonzero values with ONE {@code modInverse}
+     * total (Montgomery's trick, ADR-0035 M4).
+     */
+    private static void batchModInverse(BigInteger[] src, BigInteger[] dst, int n) {
+        BigInteger[] prefix = new BigInteger[n];
+        BigInteger acc = BigInteger.ONE;
+        for (int i = 0; i < n; i++) {
+            acc = acc.multiply(src[i]).mod(FR);
+            prefix[i] = acc;
+        }
+        BigInteger inv = acc.modInverse(FR);
+        for (int i = n - 1; i >= 0; i--) {
+            dst[i] = i == 0 ? inv : inv.multiply(prefix[i - 1]).mod(FR);
+            inv = inv.multiply(src[i]).mod(FR);
+        }
     }
 
     private static MemorySegment mapOut(Path p, long size, Arena arena) throws IOException {

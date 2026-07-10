@@ -22,12 +22,14 @@ public final class FixedBaseG1BLS381 {
 
     private FixedBaseG1BLS381() {}
 
-    static final int W = 4;                     // window bits
-    static final int DIGITS = 1 << W;           // 16 (digit 0 skipped)
-    static final int NUM_WINDOWS = (255 + W - 1) / W; // 64
+    // W=8 (ADR-0035 M5): 32 windows × 255 digits ≈ 780 KB table, built once in ~1 s — halves
+    // the additions per scalar-mul vs W=4 (the dominant setup cost after batching).
+    static final int W = 8;                     // window bits
+    static final int DIGITS = 1 << W;           // 256 (digit 0 skipped)
+    static final int NUM_WINDOWS = (255 + W - 1) / W; // 32
     private static final int AFF = 12;          // affine longs per entry (x[6],y[6])
 
-    // TABLE[(w*(DIGITS-1) + (d-1)) * AFF ...] = affine limbs of d·2^(W·w)·G, for d in 1..15.
+    // TABLE[(w*(DIGITS-1) + (d-1)) * AFF ...] = affine limbs of d·2^(W·w)·G, for d in 1..DIGITS-1.
     private static volatile long[] TABLE;
 
     private static long[] table() {
@@ -86,6 +88,61 @@ public final class FixedBaseG1BLS381 {
         }
         writeAffineTo(dst, dstOff, jacBuf);
         return true;
+    }
+
+    /**
+     * {@code s·G} in flat <b>Jacobian</b> form (18 longs) into {@code dstJac[dstOff..dstOff+18)}
+     * — no normalization, so a caller streaming millions of points can batch the affine
+     * conversion ({@link #batchNormalize}) with one Fp inversion per block (ADR-0035 M4).
+     *
+     * @return false when the scalar is zero (nothing written)
+     */
+    public static boolean mulJacobianLimbs(long[] canonLe4, int off, long[] dstJac, int dstOff, long[] scratch) {
+        if ((canonLe4[off] | canonLe4[off + 1] | canonLe4[off + 2] | canonLe4[off + 3]) == 0) return false;
+        long[] tab = table();
+        JacobianArith381.setInfinity(dstJac, dstOff);
+        for (int w = 0; w < NUM_WINDOWS; w++) {
+            int digit = windowOfLimbs(canonLe4, off, w * W);
+            if (digit == 0) continue;
+            int eo = (w * (DIGITS - 1) + (digit - 1)) * AFF;
+            JacobianArith381.addAffine(dstJac, dstOff, dstJac, dstOff, tab, eo, tab, eo + 6, scratch);
+        }
+        return true;
+    }
+
+    /**
+     * Normalize a block of flat Jacobians ({@code jac[i*18..)}) to affine limbs
+     * ({@code affOut[i*12..)}) with <b>one</b> Fp inversion total (Montgomery's trick,
+     * ADR-0035 M4). Entries with {@code present[i] == false} are skipped. Results equal the
+     * individual {@code toAffine} conversion exactly.
+     */
+    public static void batchNormalize(long[] jac, int count, boolean[] present, long[] affOut) {
+        MontFp381[] zs = new MontFp381[count];
+        MontFp381[] before = new MontFp381[count];
+        MontFp381 acc = null;
+        for (int i = 0; i < count; i++) {
+            if (!present[i]) continue;
+            int o = i * 18;
+            MontFp381 z = MontFp381.fromMontLimbs(jac[o + 12], jac[o + 13], jac[o + 14],
+                    jac[o + 15], jac[o + 16], jac[o + 17]);
+            zs[i] = z;
+            before[i] = acc;
+            acc = acc == null ? z : acc.mul(z);
+        }
+        if (acc == null) return;
+
+        MontFp381 inv = acc.inverse(); // the only inversion
+        for (int i = count - 1; i >= 0; i--) {
+            if (!present[i]) continue;
+            MontFp381 zInv = before[i] == null ? inv : inv.mul(before[i]);
+            MontFp381 zInv2 = zInv.square(), zInv3 = zInv2.mul(zInv);
+            int o = i * 18;
+            MontFp381 x = MontFp381.fromMontLimbs(jac[o], jac[o + 1], jac[o + 2], jac[o + 3], jac[o + 4], jac[o + 5]);
+            MontFp381 y = MontFp381.fromMontLimbs(jac[o + 6], jac[o + 7], jac[o + 8], jac[o + 9], jac[o + 10], jac[o + 11]);
+            System.arraycopy(x.mul(zInv2).toLimbs(), 0, affOut, i * 12, 6);
+            System.arraycopy(y.mul(zInv3).toLimbs(), 0, affOut, i * 12 + 6, 6);
+            inv = inv.mul(zs[i]);
+        }
     }
 
     /** Window digit from canonical LE limbs (mirrors the byte-array extraction). */
