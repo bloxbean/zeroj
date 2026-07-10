@@ -11,9 +11,19 @@ import java.math.BigInteger;
  * <p>The prover's single G2 MSM ({@code computePiB_G2}) is its dominant cost in pure Java, so routing
  * it through this seam lets the object-based {@code g2Msm} be swapped for the FFM blst
  * {@code blst_p2s_mult_pippenger} binding.</p>
+ *
+ * <p>Points come from a {@link G2AffineReader} (ADR-0033 M3) so the G2 proving key can stay
+ * mmap'd/off-heap like the G1 arrays; {@link #msm(AffineG2[], BigInteger[], int)} adapts an
+ * on-heap array for in-RAM PKs and tests.</p>
  */
 @FunctionalInterface
 public interface G2MsmBackend {
-    /** {@code Σ scalars[i] · points[i]} over the first {@code n} points. */
-    JacobianG2BLS381 msm(AffineG2[] points, BigInteger[] scalars, int n);
+
+    /** {@code Σ scalars[i] · point_i} over the first {@code n} points of {@code points}. */
+    JacobianG2BLS381 msm(G2AffineReader points, BigInteger[] scalars, int n);
+
+    /** {@code Σ scalars[i] · points[i]} over the first {@code n} points of an on-heap array. */
+    default JacobianG2BLS381 msm(AffineG2[] points, BigInteger[] scalars, int n) {
+        return msm(new G2AffineReader.HeapG2Reader(points), scalars, n);
+    }
 }

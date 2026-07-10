@@ -70,6 +70,13 @@ public final class BlstG1Msm {
         } catch (RuntimeException e) { throw e; } catch (Throwable t) { throw new RuntimeException(t); }
     }
 
+    /** Supplies point {@code i}'s 96-byte uncompressed encoding into a reusable buffer (ADR-0033 M2). */
+    @FunctionalInterface
+    public interface G1Encoder {
+        /** Write point {@code i} (big-endian x‖y, {@code 0x40} = infinity) into {@code dst[0..96)}. */
+        void encode(int i, byte[] dst);
+    }
+
     /**
      * {@code Σ scalars[i] · points[i]} → 96-byte uncompressed result.
      *
@@ -77,15 +84,27 @@ public final class BlstG1Msm {
      * @param scalars            {@code n} scalars
      */
     public static byte[] msm(byte[][] uncompressedPoints, BigInteger[] scalars) {
-        int n = uncompressedPoints.length;
+        return msm(uncompressedPoints.length,
+                (i, dst) -> System.arraycopy(uncompressedPoints[i], 0, dst, 0, 96), scalars);
+    }
+
+    /**
+     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points → 96-byte uncompressed
+     * result. Streaming variant (ADR-0033 M2): each point is encoded into one reusable buffer and
+     * deserialized straight into the native array — no {@code byte[][]} of all encodings on heap
+     * (~4.2 GB at 43.7M points).
+     */
+    public static byte[] msm(int n, G1Encoder points, BigInteger[] scalars) {
         if (n == 0) return infinity();
-        if (n == 1) return singleMul(uncompressedPoints[0], scalars[0]); // pippenger is batch-only
+        byte[] buf = new byte[96];
+        if (n == 1) { points.encode(0, buf); return singleMul(buf, scalars[0]); } // pippenger is batch-only
         try (Arena a = Arena.ofConfined()) {
             // Deserialize each point into a contiguous internal blst_p1_affine array.
             MemorySegment pts = a.allocate(P1_AFFINE * n);
             MemorySegment inBuf = a.allocate(P1_AFFINE);
             for (int i = 0; i < n; i++) {
-                MemorySegment.copy(uncompressedPoints[i], 0, inBuf, BYTE, 0, 96);
+                points.encode(i, buf);
+                MemorySegment.copy(buf, 0, inBuf, BYTE, 0, 96);
                 int err = (int) DESERIALIZE.invoke(pts.asSlice(i * P1_AFFINE, P1_AFFINE), inBuf);
                 if (err != 0) throw new IllegalArgumentException("blst_p1_deserialize failed at " + i + " (err=" + err + ")");
             }

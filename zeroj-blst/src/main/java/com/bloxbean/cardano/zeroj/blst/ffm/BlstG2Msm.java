@@ -45,16 +45,35 @@ public final class BlstG2Msm {
     private static final MethodHandle P2_MULT = BlstFfm.downcall(
             "blst_p2_mult", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, I64));
 
+    /** Supplies point {@code i}'s 192-byte uncompressed encoding into a reusable buffer (ADR-0033 M2). */
+    @FunctionalInterface
+    public interface G2Encoder {
+        /** Write point {@code i} ({@code x.c1‖x.c0‖y.c1‖y.c0} BE, {@code 0x40} = infinity) into {@code dst[0..192)}. */
+        void encode(int i, byte[] dst);
+    }
+
     /** {@code Σ scalars[i] · points[i]} → 192-byte uncompressed result. */
     public static byte[] msm(byte[][] uncompressedPoints, BigInteger[] scalars) {
-        int n = uncompressedPoints.length;
+        return msm(uncompressedPoints.length,
+                (i, dst) -> System.arraycopy(uncompressedPoints[i], 0, dst, 0, 192), scalars);
+    }
+
+    /**
+     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points → 192-byte uncompressed
+     * result. Streaming variant (ADR-0033 M2): each point is encoded into one reusable buffer and
+     * deserialized straight into the native array — no {@code byte[][]} of all encodings on heap
+     * (~8.4 GB at 43.7M points).
+     */
+    public static byte[] msm(int n, G2Encoder points, BigInteger[] scalars) {
         if (n == 0) return infinity();
-        if (n == 1) return singleMul(uncompressedPoints[0], scalars[0]);
+        byte[] buf = new byte[(int) P2_AFFINE];
+        if (n == 1) { points.encode(0, buf); return singleMul(buf, scalars[0]); }
         try (Arena a = Arena.ofConfined()) {
             MemorySegment pts = a.allocate(P2_AFFINE * n);
             MemorySegment inBuf = a.allocate(P2_AFFINE);
             for (int i = 0; i < n; i++) {
-                MemorySegment.copy(uncompressedPoints[i], 0, inBuf, BYTE, 0, (int) P2_AFFINE);
+                points.encode(i, buf);
+                MemorySegment.copy(buf, 0, inBuf, BYTE, 0, (int) P2_AFFINE);
                 int err = (int) DESERIALIZE.invoke(pts.asSlice(i * P2_AFFINE, P2_AFFINE), inBuf);
                 if (err != 0) throw new IllegalArgumentException("blst_p2_deserialize failed at " + i + " (err=" + err + ")");
             }

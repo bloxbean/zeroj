@@ -72,9 +72,12 @@ class ZkeyPkStoreImporterTest {
             }
             assertEquals(memPk.alphaG1().xBigInt(), loaded.pk().alphaG1().xBigInt(), "alpha");
             assertEquals(memPk.deltaG2().x().reBigInt(), loaded.pk().deltaG2().x().reBigInt(), "deltaG2");
+            // pointsB2 is mmap'd (ADR-0033 M3) — read back through the segment reader
             for (int i = 0; i < numWires; i++) {
-                assertEquals(memPk.pointsB2()[i].x().reBigInt(), loaded.pk().pointsB2()[i].x().reBigInt(),
+                assertEquals(memPk.pointsB2()[i].x().reBigInt(), loaded.readers().b2().get(i).x().reBigInt(),
                         "pointsB2[" + i + "].x.re");
+                assertEquals(memPk.pointsB2()[i].y().imBigInt(), loaded.readers().b2().get(i).y().imBigInt(),
+                        "pointsB2[" + i + "].y.im");
             }
 
             // 3. the binding-row synthesis matches the zkey's own coefficient section.

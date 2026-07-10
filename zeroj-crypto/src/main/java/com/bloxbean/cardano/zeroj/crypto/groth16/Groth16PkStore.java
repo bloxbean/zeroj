@@ -4,6 +4,7 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFp2_381;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFp381;
+import com.bloxbean.cardano.zeroj.crypto.msm.G2AffineReader;
 import com.bloxbean.cardano.zeroj.crypto.msm.MmapG1File;
 import com.bloxbean.cardano.zeroj.crypto.msm.PippengerFlatBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381.SetupResult;
@@ -27,7 +28,9 @@ import java.util.Properties;
  * so subsequent proofs just load it — no re-setup. The four flat G1 arrays are written in the
  * {@link MmapG1File} format so the prover reads them <b>memory-mapped, off-heap</b> (small prove
  * heap, and keys larger than RAM). G2 ({@code pointsB2}), the single points, and the VK are written
- * as fixed 48-byte big-endian field elements.</p>
+ * as fixed 48-byte big-endian field elements; {@code pointsB2.bin} (192 B/point) is also
+ * memory-mapped on load and read through a {@link G2AffineReader} (ADR-0033 M3), so the G2 key
+ * stays off-heap too.</p>
  *
  * <p>This is the persistent analogue of an snarkjs {@code .zkey}: setup → {@link #save} once,
  * then {@link #load} + prove many times.</p>
@@ -98,10 +101,6 @@ public final class Groth16PkStore {
         int numIc = Integer.parseInt(m.getProperty("numIc"));
         int domain = Integer.parseInt(m.getProperty("domain"));
 
-        AffineG2[] pointsB2 = new AffineG2[numB2];
-        try (var g2 = dis(dir.resolve("pointsB2.bin"))) {
-            for (int i = 0; i < numB2; i++) pointsB2[i] = getG2(g2);
-        }
         AffineG1 alphaG1, betaG1, deltaG1; AffineG2 betaG2, deltaG2, gammaG2; AffineG1[] ic = new AffineG1[numIc];
         try (var aux = dis(dir.resolve("aux.bin"))) {
             alphaG1 = getG1(aux); betaG1 = getG1(aux); deltaG1 = getG1(aux);
@@ -111,15 +110,21 @@ public final class Groth16PkStore {
 
         Arena arena = Arena.ofShared();
         try {
+            // ADR-0033 M3: pointsB2.bin (fixed 192 B/point) is mmap'd like the G1 files — the G2
+            // key (~15.7 GB on-heap at 19M constraints) now stays file-backed/off-heap too.
+            var b2 = new G2AffineReader.SegmentG2Reader(MmapG1File.map(dir.resolve("pointsB2.bin"), arena));
+            if (b2.count() != numB2)
+                throw new IOException("pointsB2.bin holds " + b2.count() + " points but manifest says " + numB2);
             var readers = new Groth16ProverBLS381.G1Readers(
                     new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsA.bin"), arena)),
                     new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsB1.bin"), arena)),
                     new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsH.bin"), arena)),
-                    new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsL.bin"), arena)));
-            // G1 arrays are read via the mmap readers, so the PK holds empty G1 arrays.
+                    new PippengerFlatBLS381.SegmentG1Reader(MmapG1File.map(dir.resolve("pointsL.bin"), arena)),
+                    b2);
+            // G1 + G2 key arrays are read via the mmap readers, so the PK holds empty arrays.
             long[] empty = new long[0];
             var pk = new Groth16ProvingKeyBLS381(alphaG1, betaG1, betaG2, deltaG1, deltaG2,
-                    empty, empty, pointsB2, empty, empty, numPublic);
+                    empty, empty, new AffineG2[0], empty, empty, numPublic);
             return new Loaded(pk, readers, gammaG2, ic, domain, arena);
         } catch (RuntimeException | IOException e) {
             arena.close();
