@@ -143,3 +143,10 @@ hard-cap eviction behaviour is the pending M5 validation).
 **M3 outcome: floor 10 GB → 8 GB — and 70 GB → 8 GB (~9×) across the two ADRs.** Prove
 111 s (was ~283 s + ~100 s key load at the ADR-0033 baseline). The prove path no longer boxes a
 single field element.
+
+| **M4 (`r1cs.bin` compile-once cache)** | **7 GB PASS (warm)** / 8 GB (first run) | **2.1 min total (warm)** | 2026-07-10: `R1CSFlatIO` writes the packed CSR + coefficient dictionary beside the key bundle, fingerprint-keyed (923 MB, 0.4 s write, 0.1–0.2 s load). A matching cache skips `compileR1CS` entirely; only the header is probed up front and the full load is **deferred until after the witness is packed**, so the constraints never coexist with the witness-generation peak (that deferral is what unlocked 7 GB — an eager load OOM'd). The preflight heap check is cache-aware (7 GB warm / 8 GB cold). 6 GB still OOMs building the circuit graph for the witness — the remaining frontend structure; removing it needs a witness-program artifact (future ADR). Integrity: a stale/foreign cache is ignored via the fingerprint; a tampered one cannot yield a false proof (fails the pairing self-check against the bundle VK) — worst case is a wasted run. |
+
+**M4 outcome: warm floor 7 GB, warm total ~2.1 min (compile off the prove path).** The frontier
+is now witness generation (graph build + evaluation): the target of a future witness-program
+workstream if a sub-7 GB floor is ever needed. M5 (hard-capped Docker validation of the 16 GB
+claim with real page-cache pressure on the 23 GB key) remains.

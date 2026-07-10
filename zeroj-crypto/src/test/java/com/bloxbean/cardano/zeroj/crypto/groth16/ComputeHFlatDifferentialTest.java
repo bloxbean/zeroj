@@ -91,4 +91,30 @@ class ComputeHFlatDifferentialTest {
             assertEquals(cons.get(i).c(), view.get(i).c(), "C row " + i);
         }
     }
+
+    /** ADR-0034 M4: the r1cs.bin cache must round-trip to an identical H polynomial. */
+    @Test
+    void flatIO_roundTrip(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        int n = 300, domain = 512;
+        var cons = chain(n);
+        var w = witness(n);
+        var flat = toFlat(cons);
+        var file = dir.resolve("r1cs.bin");
+
+        com.bloxbean.cardano.zeroj.api.R1CSFlatIO.write(flat, "c300-w302-p1", file);
+        var back = com.bloxbean.cardano.zeroj.api.R1CSFlatIO.readIfMatches(file, "c300-w302-p1");
+        assertNotNull(back, "matching fingerprint must load");
+        assertNull(com.bloxbean.cardano.zeroj.api.R1CSFlatIO.readIfMatches(file, "c1-w2-p3"),
+                "fingerprint mismatch must be a cache miss");
+        assertNull(com.bloxbean.cardano.zeroj.api.R1CSFlatIO.readIfMatches(dir.resolve("absent.bin"), "x"),
+                "missing file must be a cache miss");
+
+        // structural equality via the adapter view + identical H polynomial
+        assertEquals(flat.rows(), back.rows());
+        for (int i = 0; i < flat.rows(); i++)
+            assertEquals(flat.row(i), back.row(i), "row " + i);
+        BigInteger[] hOrig = Groth16ProverBLS381.computeH(flat, w, 0, domain);
+        BigInteger[] hBack = Groth16ProverBLS381.computeH(back, w, 0, domain);
+        assertArrayEquals(hOrig, hBack, "cached constraints must produce the identical H polynomial");
+    }
 }

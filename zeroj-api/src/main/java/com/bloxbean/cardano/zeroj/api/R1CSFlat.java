@@ -33,7 +33,7 @@ public final class R1CSFlat {
         private final int[] wireIdx;    // nnz
         private final int[] coeffIdx;   // nnz, index into the shared dictionary
 
-        private Matrix(int[] rowOffsets, int[] wireIdx, int[] coeffIdx) {
+        Matrix(int[] rowOffsets, int[] wireIdx, int[] coeffIdx) {
             this.rowOffsets = rowOffsets;
             this.wireIdx = wireIdx;
             this.coeffIdx = coeffIdx;
@@ -44,6 +44,16 @@ public final class R1CSFlat {
         public int wire(int k) { return wireIdx[k]; }
         public int coeffIndex(int k) { return coeffIdx[k]; }
         public int nnz() { return wireIdx.length; }
+
+        // raw arrays for serialization (R1CSFlatIO)
+        int[] rowOffsets() { return rowOffsets; }
+        int[] wireIdx() { return wireIdx; }
+        int[] coeffIdx() { return coeffIdx; }
+    }
+
+    /** Reconstruct from raw CSR arrays (deserialization — see {@code R1CSFlatIO}). */
+    static R1CSFlat fromArrays(int rows, Matrix a, Matrix b, Matrix c, BigInteger[] dict) {
+        return new R1CSFlat(rows, a, b, c, dict);
     }
 
     private final int rows;
