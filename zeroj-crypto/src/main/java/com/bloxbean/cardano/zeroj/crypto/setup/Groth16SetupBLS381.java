@@ -45,6 +45,10 @@ import java.util.Map;
  *   <li>Compute proving key points via scalar multiplication on G1/G2 generators</li>
  *   <li>Compute H points as odd-indexed Lagrange basis on double-sized domain / delta</li>
  * </ol>
+ *
+ * <p><b>New integrations: start at {@link com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Keys}</b>
+ * — {@code setupInMemory} / {@code setupToStore} wrap the entry points below and return a single
+ * handle that proves against any key home.</p>
  */
 public final class Groth16SetupBLS381 {
 

@@ -34,6 +34,9 @@ import java.util.Properties;
  *
  * <p>This is the persistent analogue of an snarkjs {@code .zkey}: setup → {@link #save} once,
  * then {@link #load} + prove many times.</p>
+ *
+ * <p><b>New integrations: start at {@link Groth16Keys}</b> — {@code Groth16Keys.load(dir)} wraps
+ * {@link #load} and pairs the result with a uniform {@code prove}.</p>
  */
 public final class Groth16PkStore {
 
