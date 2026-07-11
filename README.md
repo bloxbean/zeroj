@@ -263,8 +263,9 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-verifier-plonk`](zeroj-verifier-plonk/) | PlonK verification — BLS12-381 pure Java; BN254 legacy verifier disabled by default |
 | [`zeroj-bls12381`](zeroj-bls12381/) | Pure Java BLS12-381 field, curve, and pairing primitives |
 | [`zeroj-blst`](zeroj-blst/) | Native BLS12-381 via blst — FFM MSM binding (`libblst` built from source) + pairing; standalone, reusable by other JVM projects |
-| [`zeroj-crypto`](zeroj-crypto/) | **Pure Java prover** — Montgomery field arithmetic, EC operations, Groth16 + PlonK for BLS12-381; allocation-lean + mmap'd key (ADR-0029); no native deps; BN254 high-level proving APIs require legacy opt-in |
-| [`zeroj-crypto-blst`](zeroj-crypto-blst/) | **Opt-in ~5× blst prover backend** — thin bridge wiring `zeroj-blst`'s native MSM into the `zeroj-crypto` prover SPI (keeps `zeroj-crypto` pure-Java by default) |
+| [`zeroj-crypto`](zeroj-crypto/) | **Pure Java prover** — Montgomery field arithmetic, EC operations, Groth16 + PlonK for BLS12-381; big-circuit ready: mmap'd sparse/dense key stores, streaming ~8 GB setup, ~7 GB prove at 19M constraints (ADR-0029/0033/0034/0035). Start at `Groth16Keys` + `Groth16Pipeline` ([dev guide](docs/groth16-dev-guide.md)); no native deps; BN254 high-level proving APIs require legacy opt-in |
+| [`zeroj-crypto-blst`](zeroj-crypto-blst/) | **Opt-in blst prover backend** — thin bridge wiring `zeroj-blst`'s native MSM into the `zeroj-crypto` prover SPI (keeps `zeroj-crypto` pure-Java by default; pure Java matches blst at large sizes since ADR-0033/0034) |
+| [`zeroj-tools`](zeroj-tools/) | Reusable operator tools (library, no CLI) — snarkjs-compatible Groth16 phase-2 contributor (`ZkeyContributor`), hash-to-G2 challenge derivation; embeddable in coordinator services and wallets |
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
 | [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck, symbolic adapters, and [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
 | [`zeroj-prover-spi`](zeroj-prover-spi/) | Minimal prover request/response SPI shared by prover implementations |
