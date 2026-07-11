@@ -167,6 +167,39 @@ public final class JacobianG2BLS381 {
         return new AffineG2(x.mul(zInv2), y.mul(zInv3));
     }
 
+    /**
+     * {@link #toAffine()} for a block of points with <b>one</b> Fp2 inversion total
+     * (Montgomery's trick, ADR-0035 M4) — the per-point inversion dominates bulk affine
+     * conversion (e.g. trusted-setup key generation). Result {@code i} equals
+     * {@code points[i].toAffine()} exactly; {@code null}/infinity entries yield
+     * {@link AffineG2#INFINITY}.
+     */
+    public static AffineG2[] batchToAffine(JacobianG2BLS381[] points, int n) {
+        AffineG2[] out = new AffineG2[n];
+        MontFp2_381[] before = new MontFp2_381[n]; // product of non-infinity z's preceding i
+        MontFp2_381 acc = null;
+        for (int i = 0; i < n; i++) {
+            if (points[i] == null || points[i].isInfinity()) {
+                out[i] = AffineG2.INFINITY;
+                continue;
+            }
+            before[i] = acc;
+            acc = acc == null ? points[i].z : acc.mul(points[i].z);
+        }
+        if (acc == null) return out; // all infinity
+
+        MontFp2_381 inv = acc.inverse(); // the only inversion
+        for (int i = n - 1; i >= 0; i--) {
+            if (out[i] != null) continue; // infinity slot, already filled
+            MontFp2_381 zInv = before[i] == null ? inv : inv.mul(before[i]);
+            MontFp2_381 zInv2 = zInv.square();
+            MontFp2_381 zInv3 = zInv2.mul(zInv);
+            out[i] = new AffineG2(points[i].x.mul(zInv2), points[i].y.mul(zInv3));
+            inv = inv.mul(points[i].z);
+        }
+        return out;
+    }
+
     /** Affine G2 point. */
     public record AffineG2(MontFp2_381 x, MontFp2_381 y) {
         public static final AffineG2 INFINITY = new AffineG2(MontFp2_381.ZERO, MontFp2_381.ZERO);

@@ -23,6 +23,11 @@ import java.util.Map;
  * Pure Java Groth16 prover for BLS12-381.
  *
  * <p>Same algorithm as {@link Groth16Prover} but using BLS12-381 curve types.</p>
+ *
+ * <p><b>New integrations: start at {@link Groth16Keys}</b> — one handle + one {@code prove} for
+ * heap, dense-store, and sparse-store keys alike. The entry points below are the expert layer
+ * (reader seams, split H computation, packed scalars) for differential tests and memory-tuned
+ * pipelines.</p>
  */
 public final class Groth16ProverBLS381 {
 
