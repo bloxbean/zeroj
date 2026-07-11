@@ -70,6 +70,20 @@ public final class BlstG1Msm {
         } catch (RuntimeException e) { throw e; } catch (Throwable t) { throw new RuntimeException(t); }
     }
 
+    /** Supplies point {@code i}'s 96-byte uncompressed encoding into a reusable buffer (ADR-0033 M2). */
+    @FunctionalInterface
+    public interface G1Encoder {
+        /** Write point {@code i} (big-endian x‖y, {@code 0x40} = infinity) into {@code dst[0..96)}. */
+        void encode(int i, byte[] dst);
+    }
+
+    /** Supplies scalar {@code i} as 32 little-endian bytes into a reusable buffer (ADR-0034 M3). */
+    @FunctionalInterface
+    public interface ScalarEncoder {
+        /** Write scalar {@code i} (LE, all 32 bytes) into {@code dst[0..32)}. */
+        void encode(int i, byte[] dst);
+    }
+
     /**
      * {@code Σ scalars[i] · points[i]} → 96-byte uncompressed result.
      *
@@ -77,15 +91,40 @@ public final class BlstG1Msm {
      * @param scalars            {@code n} scalars
      */
     public static byte[] msm(byte[][] uncompressedPoints, BigInteger[] scalars) {
-        int n = uncompressedPoints.length;
+        return msm(uncompressedPoints.length,
+                (i, dst) -> System.arraycopy(uncompressedPoints[i], 0, dst, 0, 96), scalars);
+    }
+
+    /**
+     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points with boxed scalars —
+     * delegates to the scalar-encoder core.
+     */
+    public static byte[] msm(int n, G1Encoder points, BigInteger[] scalars) {
+        return msm(n, points, (i, dst) -> leBytes32Into(scalars[i], dst));
+    }
+
+    /**
+     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points and scalars → 96-byte
+     * uncompressed result. Streaming variant (ADR-0033 M2 / ADR-0034 M3): each point and scalar is
+     * encoded into one reusable buffer straight into the native arrays — no {@code byte[][]} of
+     * encodings, no per-scalar byte arrays on heap.
+     */
+    public static byte[] msm(int n, G1Encoder points, ScalarEncoder scalars) {
         if (n == 0) return infinity();
-        if (n == 1) return singleMul(uncompressedPoints[0], scalars[0]); // pippenger is batch-only
+        byte[] buf = new byte[96];
+        byte[] sbuf = new byte[32];
+        if (n == 1) { // pippenger is batch-only
+            points.encode(0, buf);
+            scalars.encode(0, sbuf);
+            return singleMul(buf, beFromLe(sbuf));
+        }
         try (Arena a = Arena.ofConfined()) {
             // Deserialize each point into a contiguous internal blst_p1_affine array.
             MemorySegment pts = a.allocate(P1_AFFINE * n);
             MemorySegment inBuf = a.allocate(P1_AFFINE);
             for (int i = 0; i < n; i++) {
-                MemorySegment.copy(uncompressedPoints[i], 0, inBuf, BYTE, 0, 96);
+                points.encode(i, buf);
+                MemorySegment.copy(buf, 0, inBuf, BYTE, 0, 96);
                 int err = (int) DESERIALIZE.invoke(pts.asSlice(i * P1_AFFINE, P1_AFFINE), inBuf);
                 if (err != 0) throw new IllegalArgumentException("blst_p1_deserialize failed at " + i + " (err=" + err + ")");
             }
@@ -93,8 +132,8 @@ public final class BlstG1Msm {
             // Contiguous little-endian scalars.
             MemorySegment scal = a.allocate(SCALAR * n);
             for (int i = 0; i < n; i++) {
-                byte[] le = leBytes32(scalars[i]);
-                MemorySegment.copy(le, 0, scal, BYTE, i * SCALAR, 32);
+                scalars.encode(i, sbuf);
+                MemorySegment.copy(sbuf, 0, scal, BYTE, i * SCALAR, 32);
             }
 
             // points[]/scalars[] are arrays of n pointers into the contiguous buffers.
@@ -137,5 +176,19 @@ public final class BlstG1Msm {
         byte[] le = new byte[32];
         for (int i = 0; i < be.length && i < 32; i++) le[i] = be[be.length - 1 - i];
         return le;
+    }
+
+    /** {@link #leBytes32} into a reusable buffer (all 32 bytes written). */
+    static void leBytes32Into(BigInteger v, byte[] dst) {
+        java.util.Arrays.fill(dst, (byte) 0);
+        byte[] be = v.toByteArray();
+        for (int i = 0; i < be.length && i < 32; i++) dst[i] = be[be.length - 1 - i];
+    }
+
+    /** LE 32 bytes → non-negative BigInteger (single-mul edge). */
+    static BigInteger beFromLe(byte[] le32) {
+        byte[] be = new byte[32];
+        for (int i = 0; i < 32; i++) be[i] = le32[31 - i];
+        return new BigInteger(1, be);
     }
 }
