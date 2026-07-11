@@ -44,6 +44,28 @@ public final class Bip32Ed25519 {
     }
 
     /**
+     * {@link #deriveHardened(CircuitAPI, Variable[], Variable[], Variable[], long)} with the
+     * child <b>number</b> as an in-circuit witness: four little-endian bytes of the plain
+     * (soft-range) value {@code n < 2^31} — the gadget applies the hardening itself
+     * ({@code n' = n + 2^31}) by setting the top bit in-circuit, so a prover can neither reach
+     * the soft index space here nor pass an already-hardened value.
+     */
+    public static ChildKey deriveHardened(CircuitAPI api, Variable[] kL, Variable[] kR,
+                                          Variable[] chainCode, Variable[] numLE4) {
+        rangeCheckBytes(api, kL, 32);
+        rangeCheckBytes(api, kR, 32);
+        rangeCheckBytes(api, chainCode, 32);
+        if (numLE4.length != 4) throw new IllegalArgumentException("child number must be 4 LE bytes");
+        for (int i = 0; i < 3; i++) api.assertInRange(numLE4[i], 8);
+        api.assertInRange(numLE4[3], 7); // n < 2^31, so the hardened bit below cannot carry
+        Variable[] idx = {numLE4[0], numLE4[1], numLE4[2],
+                api.add(numLE4[3], api.constant(0x80))}; // set the hardened bit in-circuit
+        Variable[] dataZ = concat(api.constant(0x00), kL, kR, idx);
+        Variable[] dataC = concat(api.constant(0x01), kL, kR, idx);
+        return finishDerive(api, chainCode, dataZ, dataC, kL, kR);
+    }
+
+    /**
      * Soft derivation with the parent public key {@code apEncoded} (32-byte encoded {@code kL·B})
      * supplied directly. Compose with {@link Ed25519Point#scalarMulFixedBaseB}+{@code encode} to
      * obtain {@code apEncoded}; kept separate so the (cheap) HMAC+bignum logic can be validated
@@ -62,6 +84,27 @@ public final class Bip32Ed25519 {
     }
 
     /**
+     * {@link #deriveSoft(CircuitAPI, Variable[], Variable[], Variable[], Variable[], long)} with
+     * the child index as an <b>in-circuit witness</b>: four little-endian bytes. The gadget
+     * constrains it to a valid soft index (bytes in range, top bit of the most significant byte
+     * zero, i.e. {@code index < 2^31}) — a hardened index cannot be smuggled through the soft
+     * path.
+     */
+    public static ChildKey deriveSoft(CircuitAPI api, Variable[] kL, Variable[] kR,
+                                      Variable[] chainCode, Variable[] apEncoded, Variable[] idxLE4) {
+        rangeCheckBytes(api, kL, 32);
+        rangeCheckBytes(api, kR, 32);
+        rangeCheckBytes(api, chainCode, 32);
+        rangeCheckBytes(api, apEncoded, 32);
+        if (idxLE4.length != 4) throw new IllegalArgumentException("index must be 4 LE bytes");
+        for (int i = 0; i < 3; i++) api.assertInRange(idxLE4[i], 8);
+        api.assertInRange(idxLE4[3], 7); // MSB < 0x80 => soft index (< 2^31)
+        Variable[] dataZ = concat(api.constant(0x02), apEncoded, idxLE4);
+        Variable[] dataC = concat(api.constant(0x03), apEncoded, idxLE4);
+        return finishDerive(api, chainCode, dataZ, dataC, kL, kR);
+    }
+
+    /**
      * Full soft derivation computing {@code A = encode(kL·B)} in-circuit (adds ~29M constraints).
      * The scalar is {@code kL} interpreted as a 256-bit little-endian integer.
      */
@@ -70,6 +113,15 @@ public final class Bip32Ed25519 {
         Variable[] scalarBits = bytesToBitsLE(api, kL); // 256 bits, LSB-first
         Variable[] ap = Ed25519Point.scalarMulFixedBaseBWindowed(api, scalarBits, 4).encode();
         return deriveSoft(api, kL, kR, chainCode, ap, childIndex);
+    }
+
+    /** {@link #deriveSoftComputingAp(CircuitAPI, Variable[], Variable[], Variable[], long)} with
+     *  the child index as an in-circuit witness (four LE bytes, soft-constrained). */
+    public static ChildKey deriveSoftComputingAp(CircuitAPI api, Variable[] kL, Variable[] kR,
+                                                 Variable[] chainCode, Variable[] idxLE4) {
+        Variable[] scalarBits = bytesToBitsLE(api, kL); // 256 bits, LSB-first
+        Variable[] ap = Ed25519Point.scalarMulFixedBaseBWindowed(api, scalarBits, 4).encode();
+        return deriveSoft(api, kL, kR, chainCode, ap, idxLE4);
     }
 
     // ------------------------------------------------------------------

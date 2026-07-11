@@ -70,6 +70,87 @@ class Bip32Ed25519Test {
     }
 
     // ------------------------------------------------------------------
+    // Hardened step with the child NUMBER as an in-circuit WITNESS (4 LE bytes;
+    // the gadget applies the hardening bit in-circuit)
+    // ------------------------------------------------------------------
+
+    @Test
+    void hardened_variableNumber_matchesCardanoClient_andRejectsHardenedInput() {
+        for (long n : new long[]{0L, 1L, 5L, 1000L, 0x7fffffffL}) {
+            var root = hd.getRootKeyPairFromEntropy(entropy(40 + n));
+            var child = hd.getChildKeyPair(root, n, true); // hardened derive of number n
+            byte[] kL = Arrays.copyOfRange(root.getPrivateKey().getKeyData(), 0, 32);
+            byte[] kR = Arrays.copyOfRange(root.getPrivateKey().getKeyData(), 32, 64);
+            byte[] cc = root.getPrivateKey().getChainCode();
+
+            int[][] ids = new int[3][];
+            var builder = CircuitBuilder.create("bip32-hard-varnum-" + n);
+            declareBytes(builder, "kL"); declareBytes(builder, "kR"); declareBytes(builder, "cc");
+            for (int i = 0; i < 4; i++) builder.secretVar("num" + i);
+            builder.define(api -> {
+                Variable[] num = new Variable[4];
+                for (int i = 0; i < 4; i++) num[i] = api.var("num" + i);
+                var out = Bip32Ed25519.deriveHardened(api,
+                        vars(api, "kL"), vars(api, "kR"), vars(api, "cc"), num);
+                captureIds(out, ids);
+            });
+            Map<String, List<BigInteger>> in = new HashMap<>();
+            putBytes(in, "kL", kL); putBytes(in, "kR", kR); putBytes(in, "cc", cc);
+            for (int i = 0; i < 4; i++)
+                in.put("num" + i, List.of(BigInteger.valueOf((n >>> (8 * i)) & 0xff)));
+            BigInteger[] w = builder.calculateWitness(in, CurveId.BN254);
+            assertChildMatches(w, ids, child);
+
+            // an already-hardened value (MSB >= 0x80) must be rejected — hardening is the gadget's job
+            in.put("num3", List.of(BigInteger.valueOf(0x80)));
+            assertThrows(RuntimeException.class, () -> builder.calculateWitness(in, CurveId.BN254),
+                    "pre-hardened number must violate the range constraint");
+        }
+        System.out.println("[account witness] variable hardened number validated vs cardano-client + pre-hardened rejected");
+    }
+
+    // ------------------------------------------------------------------
+    // Soft step with the child index as an in-circuit WITNESS (4 LE bytes)
+    // ------------------------------------------------------------------
+
+    @Test
+    void soft_variableIndex_matchesCardanoClient_andRejectsHardened() {
+        for (long childIndex : new long[]{0L, 1L, 5L, 1000L, 0x7fffffffL}) {
+            var root = hd.getRootKeyPairFromEntropy(entropy(20 + childIndex));
+            var child = hd.getChildKeyPair(root, childIndex, false);
+            byte[] kL = Arrays.copyOfRange(root.getPrivateKey().getKeyData(), 0, 32);
+            byte[] kR = Arrays.copyOfRange(root.getPrivateKey().getKeyData(), 32, 64);
+            byte[] cc = root.getPrivateKey().getChainCode();
+            byte[] ap = root.getPublicKey().getKeyData();
+
+            int[][] ids = new int[3][];
+            var builder = CircuitBuilder.create("bip32-soft-varidx-" + childIndex);
+            declareBytes(builder, "kL"); declareBytes(builder, "kR"); declareBytes(builder, "cc");
+            declareBytes(builder, "ap");
+            for (int i = 0; i < 4; i++) builder.secretVar("idx" + i);
+            builder.define(api -> {
+                Variable[] idx = new Variable[4];
+                for (int i = 0; i < 4; i++) idx[i] = api.var("idx" + i);
+                var out = Bip32Ed25519.deriveSoft(api,
+                        vars(api, "kL"), vars(api, "kR"), vars(api, "cc"), vars(api, "ap"), idx);
+                captureIds(out, ids);
+            });
+            Map<String, List<BigInteger>> in = new HashMap<>();
+            putBytes(in, "kL", kL); putBytes(in, "kR", kR); putBytes(in, "cc", cc); putBytes(in, "ap", ap);
+            for (int i = 0; i < 4; i++)
+                in.put("idx" + i, List.of(BigInteger.valueOf((childIndex >>> (8 * i)) & 0xff)));
+            BigInteger[] w = builder.calculateWitness(in, CurveId.BN254);
+            assertChildMatches(w, ids, child);
+
+            // a hardened index (MSB >= 0x80) must be rejected by the soft-index constraint
+            in.put("idx3", List.of(BigInteger.valueOf(0x80)));
+            assertThrows(RuntimeException.class, () -> builder.calculateWitness(in, CurveId.BN254),
+                    "hardened index must violate the soft-index range constraint");
+        }
+        System.out.println("[role/index witness] variable soft index validated vs cardano-client + hardened rejected");
+    }
+
+    // ------------------------------------------------------------------
     // Full soft step computing AP in-circuit (~29M constraints) — heavy, gated
     // ------------------------------------------------------------------
 
