@@ -42,6 +42,45 @@ public final class Cip1852Derivation {
         return leafKeyHash(api, leaf.kL());
     }
 
+    /**
+     * {@link #paymentKeyHash(CircuitAPI, Variable[], Variable[], Variable[], long, long, long)}
+     * with the two <b>soft</b> path components ({@code role}, {@code index}) as in-circuit
+     * witnesses — four little-endian bytes each, gadget-constrained to soft indices
+     * ({@code < 2^31}). The hardened components stay compile-time constants: they are fixed by
+     * CIP-1852 ({@code 1852'}, {@code 1815'}) or by the statement ({@code account'}), and a
+     * hardened step's index is mixed into an HMAC over the <em>secret</em> parent key, so
+     * parameterising it needs no public-input change either — kept constant until a use case
+     * requires it.
+     */
+    public static Variable[] paymentKeyHash(CircuitAPI api, Variable[] rootKL, Variable[] rootKR,
+                                            Variable[] rootChainCode, long account,
+                                            Variable[] roleLE4, Variable[] indexLE4) {
+        Bip32Ed25519.ChildKey n1 = Bip32Ed25519.deriveHardened(api, rootKL, rootKR, rootChainCode, PURPOSE);
+        Bip32Ed25519.ChildKey n2 = Bip32Ed25519.deriveHardened(api, n1.kL(), n1.kR(), n1.chainCode(), COIN);
+        Bip32Ed25519.ChildKey n3 = Bip32Ed25519.deriveHardened(api, n2.kL(), n2.kR(), n2.chainCode(), HARDENED + account);
+        Bip32Ed25519.ChildKey n4 = Bip32Ed25519.deriveSoftComputingAp(api, n3.kL(), n3.kR(), n3.chainCode(), roleLE4);
+        Bip32Ed25519.ChildKey leaf = Bip32Ed25519.deriveSoftComputingAp(api, n4.kL(), n4.kR(), n4.chainCode(), indexLE4);
+        return leafKeyHash(api, leaf.kL());
+    }
+
+    /**
+     * Fully path-parameterised variant: {@code account}, {@code role} and {@code index} are all
+     * in-circuit witnesses (four little-endian bytes each, values {@code < 2^31}). The account is
+     * supplied as its plain number — the gadget applies the CIP-1852 hardening ({@code account'})
+     * in-circuit. Purpose {@code 1852'} and coin type {@code 1815'} stay constants: they are
+     * fixed by the standard, not by any statement.
+     */
+    public static Variable[] paymentKeyHash(CircuitAPI api, Variable[] rootKL, Variable[] rootKR,
+                                            Variable[] rootChainCode,
+                                            Variable[] accountLE4, Variable[] roleLE4, Variable[] indexLE4) {
+        Bip32Ed25519.ChildKey n1 = Bip32Ed25519.deriveHardened(api, rootKL, rootKR, rootChainCode, PURPOSE);
+        Bip32Ed25519.ChildKey n2 = Bip32Ed25519.deriveHardened(api, n1.kL(), n1.kR(), n1.chainCode(), COIN);
+        Bip32Ed25519.ChildKey n3 = Bip32Ed25519.deriveHardened(api, n2.kL(), n2.kR(), n2.chainCode(), accountLE4);
+        Bip32Ed25519.ChildKey n4 = Bip32Ed25519.deriveSoftComputingAp(api, n3.kL(), n3.kR(), n3.chainCode(), roleLE4);
+        Bip32Ed25519.ChildKey leaf = Bip32Ed25519.deriveSoftComputingAp(api, n4.kL(), n4.kR(), n4.chainCode(), indexLE4);
+        return leafKeyHash(api, leaf.kL());
+    }
+
     /** Payment key hash of a leaf: {@code blake2b224(encode(kL·B))}. */
     public static Variable[] leafKeyHash(CircuitAPI api, Variable[] leafKL) {
         Variable[] scalarBits = bytesToBitsLE(api, leafKL);
