@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.ceremony;
+package com.bloxbean.cardano.zeroj.tools.zkey;
 
 import java.math.BigInteger;
 

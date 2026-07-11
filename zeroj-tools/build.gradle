@@ -1,0 +1,29 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'Reusable ceremony/interop tools (library, no CLI): the snarkjs-compatible Groth16 ' +
+        'phase-2 contributor (ZkeyContributor), its hash-to-G2 challenge derivation, and the ' +
+        'ffjavascript ChaCha stream — embeddable in coordinator services, wallets, and CLIs.'
+
+dependencies {
+    // junit comes from the root subprojects block
+    api project(':zeroj-bls12381')                 // AffineG1/G2 appear in public signatures
+    implementation project(':zeroj-crypto')        // FrFFTFlat.parallelRange (multi-core rescale)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.83' // blake2b-512 ceremony transcripts
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Tools'
+                description = 'Reusable ceremony/interop tools for ZeroJ (snarkjs-compatible zkey contributor)'
+            }
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -5,6 +5,7 @@ import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
 import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import com.bloxbean.cardano.zeroj.crypto.groth16.R1csExporter;
 import com.bloxbean.cardano.zeroj.crypto.groth16.ZkeyPkStoreImporter;
+import com.bloxbean.cardano.zeroj.tools.zkey.ZkeyContributor;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;

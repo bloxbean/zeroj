@@ -1,4 +1,4 @@
-package com.bloxbean.cardano.zeroj.ceremony;
+package com.bloxbean.cardano.zeroj.tools.zkey;
 
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
