@@ -36,7 +36,7 @@ remaining production gates are tracked in
 | BBS (CFRG draft-10) — verification | `zeroj-bbs` | **Beta** (spec is an IRTF draft, not yet an RFC) |
 | BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — default pure-Java provider is not constant-time; prefer the blst provider for issuer keys |
 | BLS12-381 pure Java primitives | `zeroj-bls12381` | **Beta** — verification-grade; prover performance (allocation-lean, mmap'd key) in [ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md) |
-| blst native acceleration | `zeroj-blst` | **Beta, opt-in** — FFM binding; `libblst` built from source, pinned v0.3.15; ~5× Groth16 prover backend ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)) |
+| blst native acceleration | `zeroj-blst` | **Beta, opt-in** — FFM binding; `libblst` built from source, pinned v0.3.15; a faster Groth16 prover backend ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)) |
 | Cardano anchoring + CCL helpers | `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` | **Beta** |
 | WASM backends | `zeroj-bls12381-wasm`, `zeroj-bbs-wasm` | **Experimental, opt-in** |
 | gnark native prover | `zeroj-prover-gnark` | **Experimental, opt-in** (Go native library) |
@@ -50,12 +50,12 @@ remaining production gates are tracked in
 - **CircuitSpec Java DSL** (recommended) — define circuits as reusable Java classes with `CircuitSpec`
 - **Inline lambda DSL** — quick prototyping with `CircuitBuilder.define(api -> ...)`
 - **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`; `.wasm` witness calculation in incubator)
-- **Standard library** — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck, symbolic `Zk*` adapters, and a per-gadget status table in [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md)
+- **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, and a per-gadget status table in [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md)
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
-- **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible. Allocation-lean flat arithmetic + an `mmap`-able proving key mean large circuits (millions of constraints) prove on commodity **16–32 GB** hardware, no JNI ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
-- **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); **~5× faster Groth16 proving**, bit-identical proofs. `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
+- **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible. Allocation-lean flat arithmetic, an `mmap`-able proving key, and a streaming trusted setup keep large circuits (millions of constraints) within commodity memory, no JNI (ADR-0029/0033/0034/0035).
+- **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); a faster Groth16 proving backend, bit-identical proofs. `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
 - **gnark FFM** — optional in-process Groth16/PlonK proving via Go native library
 - **snarkjs CLI** — external CLI for circom-based circuits
 - **snarkjs key import** — import `.zkey` files, prove with the pure Java prover
@@ -165,6 +165,11 @@ For setup beyond local tests, use an MPC ceremony `.zkey` instead of
 `PowersOfTauBLS381.generate()`. See the
 [Pure Java Prover Guide](docs/pure-java-prover-guide.md).
 
+For large circuits, prefer the `Groth16Keys` / `Groth16Pipeline` facade — it streams
+the trusted setup to a disk-backed, `mmap`-loaded proving key rather than holding it
+in heap, so proving stays within commodity memory. See the
+[Groth16 Dev Guide](docs/groth16-dev-guide.md).
+
 ### Alternative: gnark FFM
 
 ```java
@@ -263,11 +268,11 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-verifier-plonk`](zeroj-verifier-plonk/) | PlonK verification — BLS12-381 pure Java; BN254 legacy verifier disabled by default |
 | [`zeroj-bls12381`](zeroj-bls12381/) | Pure Java BLS12-381 field, curve, and pairing primitives |
 | [`zeroj-blst`](zeroj-blst/) | Native BLS12-381 via blst — FFM MSM binding (`libblst` built from source) + pairing; standalone, reusable by other JVM projects |
-| [`zeroj-crypto`](zeroj-crypto/) | **Pure Java prover** — Montgomery field arithmetic, EC operations, Groth16 + PlonK for BLS12-381; big-circuit ready: mmap'd sparse/dense key stores, streaming ~8 GB setup, ~7 GB prove at 19M constraints (ADR-0029/0033/0034/0035). Start at `Groth16Keys` + `Groth16Pipeline` ([dev guide](docs/groth16-dev-guide.md)); no native deps; BN254 high-level proving APIs require legacy opt-in |
+| [`zeroj-crypto`](zeroj-crypto/) | **Pure Java prover** — Montgomery field arithmetic, EC operations, Groth16 + PlonK for BLS12-381; big-circuit ready: mmap'd sparse/dense key stores + a streaming trusted setup keep proving of large circuits (millions of constraints — e.g. the ~19M-constraint account-ownership circuit) within commodity memory (ADR-0029/0033/0034/0035). Start at `Groth16Keys` + `Groth16Pipeline` ([dev guide](docs/groth16-dev-guide.md)); no native deps; BN254 high-level proving APIs require legacy opt-in |
 | [`zeroj-crypto-blst`](zeroj-crypto-blst/) | **Opt-in blst prover backend** — thin bridge wiring `zeroj-blst`'s native MSM into the `zeroj-crypto` prover SPI (keeps `zeroj-crypto` pure-Java by default; pure Java matches blst at large sizes since ADR-0033/0034) |
 | [`zeroj-tools`](zeroj-tools/) | Reusable operator tools (library, no CLI) — snarkjs-compatible Groth16 phase-2 contributor (`ZkeyContributor`), hash-to-G2 challenge derivation; embeddable in coordinator services and wallets |
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
-| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, PoseidonN, MiMC, MiMCSponge, Merkle, Comparators, Binary, Mux, AliasCheck, symbolic adapters, and [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
+| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit Blake2b / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
 | [`zeroj-prover-spi`](zeroj-prover-spi/) | Minimal prover request/response SPI shared by prover implementations |
 | [`zeroj-prover-gnark`](zeroj-prover-gnark/) | gnark native prover (Groth16 + PlonK) via FFM |
 | [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
@@ -326,12 +331,16 @@ dependencies {
 
 ## Documentation
 
+**Full index: [`docs/README.md`](docs/README.md).** Highlights:
+
 ### Guides
 - **[Getting Started](docs/getting-started.md)** — end-to-end: circuit to on-chain verification
 - **[ZK Trusted Setup Beginner Guide](docs/zk-trusted-setup-beginner-guide.md)** — tau, SRS, Powers of Tau, Groth16 phases, and PlonK setup
 - **[Pure Java Prover Guide](docs/pure-java-prover-guide.md)** — zero-dependency proving pipeline
+- **[Groth16 Dev Guide](docs/groth16-dev-guide.md)** — the `Groth16Keys` / `Groth16Pipeline` facade for large circuits
 - **[Circuit DSL User Guide](docs/circuit-dsl-user-guide.md)** — CircuitSpec, Signal API, standard library
-- **[Circuit Library Gadget Status](zeroj-circuit-lib/README.md#gadget-status)** — current curve, symbolic, and Cardano-readiness status for each reusable gadget
+- **[Circuit Annotation User Guide](docs/circuit-annotation-user-guide.md)** — the `@ZKCircuit` symbolic DSL
+- **[Circuit Library Gadget Status](zeroj-circuit-lib/README.md#gadget-status)** — the gadget catalog: curve, symbolic, and Cardano-readiness status for each reusable gadget (incl. the Blake2b / Ed25519 / CIP-1852 key-derivation family)
 - **[Alternate Prover Backends](docs/alternate-prover-backends.md)** — gnark FFM and snarkjs
 - **[Architecture Overview](docs/architecture-overview.md)** — module design and layer separation
 - **[PlonK Support](docs/plonk-support.md)** — PlonK proving, off-chain verification, and the experimental Julc validators
@@ -341,6 +350,7 @@ dependencies {
 - **[Private Voting — Detailed Design](docs/usecases/private-voting.md)** — nullifiers, UTXO patterns, Julc contracts, architecture
 
 ### Architecture Decision Records
+A full, self-maintaining list lives in [`docs/adr/`](docs/adr/). Highlights:
 - [ADR-0001: Verifier-First Architecture](docs/adr/0001-verifier-first-architecture.md)
 - [ADR-0003: Hybrid Crypto Backend](docs/adr/0003-pure-java-mvp.md)
 - [ADR-0007: Module Structure](docs/adr/0007-module-structure-and-boundaries.md)
@@ -349,6 +359,10 @@ dependencies {
 - [ADR-0027: Real-World Crypto Gadgets (SHA-512/HMAC/Blake2b/Ed25519/BIP32)](docs/adr/0027-real-world-crypto-gadgets-sha512-hmac-blake2b-ed25519.md)
 - [ADR-0028: DSL Optimization & Hint Soundness](docs/adr/0028-dsl-optimization-and-hint-soundness.md)
 - [ADR-0029: Groth16 Prover Performance (memory + blst/FFM)](docs/adr/0029-blst-accelerated-groth16-prover.md)
+- [ADR-0033: Prover Memory Reduction](docs/adr/0033-prover-memory-reduction.md)
+- [ADR-0034: Frontend Memory Reduction](docs/adr/0034-frontend-memory-reduction.md)
+- [ADR-0035: Setup Memory & Time Reduction](docs/adr/0035-setup-memory-time-reduction.md)
+- [ADR-0036: Groth16 API Facade & Pipeline](docs/adr/0036-groth16-api-facade-and-pipeline.md)
 
 ## Examples
 

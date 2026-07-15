@@ -12,7 +12,8 @@ shared Fiat-Shamir transcript utilities used by PlonK.
 | Area | Key Types |
 |------|-----------|
 | Legacy BN254 arithmetic | `MontFp254`, `MontFp2_254`, `MontFr254`, `JacobianG1BN254`, `JacobianG2BN254` |
-| BLS12-381 proving | `Groth16ProverBLS381`, `PlonKProverBLS381`, `KZGCommitmentBLS381`, `PippengerBLS381` |
+| BLS12-381 Groth16 (start here) | `Groth16Keys`, `Groth16Pipeline` — facade over setup + prove with a disk-backed, `mmap`'d key store so large circuits prove within commodity memory |
+| BLS12-381 proving (low level) | `Groth16ProverBLS381`, `Groth16SetupBLS381`, `Groth16PkStore` (sparse/dense store, `setupToStore`/`load`), `PlonKProverBLS381`, `KZGCommitmentBLS381`, `PippengerBLS381` |
 | Legacy BN254 Groth16 | `Groth16Setup`, `Groth16Prover`, `ZkeyImporter` (requires `-Dzeroj.allowLegacyBn254=true`) |
 | Legacy BN254 PlonK | `PlonKSetup`, `PlonKProver`, `PlonKZkeyImporter`, `PtauImporter` (requires `-Dzeroj.allowLegacyBn254=true`) |
 | R1CS import | `R1CSImporter` |
@@ -23,7 +24,9 @@ shared Fiat-Shamir transcript utilities used by PlonK.
 ## Why It Is Useful
 
 - Provides a portable proving path with no Go, Node.js, Rust, or native library
-  dependency.
+  dependency by default. An optional native blst backend (`ProverBackend`, via the
+  separate `zeroj-crypto-blst` module) can be opted into for extra speed; pure Java
+  matches it at large circuit sizes.
 - Keeps the default privacy stack local-first and JVM-native.
 - Shares transcript and polynomial code across provers and verifiers, avoiding
   verifier-to-prover dependency inversions.

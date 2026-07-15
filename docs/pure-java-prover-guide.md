@@ -156,6 +156,13 @@ BigInteger[] witness = circuit.calculateWitness(Map.of(
 
 ### Step 3: Trusted Setup
 
+> **Large circuits:** the in-heap `Groth16SetupBLS381` / `Groth16ProverBLS381` calls in this guide
+> hold the whole proving key on the heap, which is fine for the small demo circuits here. For large
+> circuits, use the **`Groth16Keys` / `Groth16Pipeline`** facade instead — it streams the setup to a
+> disk-backed, `mmap`'d proving key so proving stays within commodity memory. See the
+> [Groth16 Dev Guide](groth16-dev-guide.md). The pure-Java prover is the default; an optional native
+> **blst** backend (`ProverBackend`, `zeroj-crypto-blst`) can be opted into for extra speed.
+
 **For development/testing — single-party setup (pure Java):**
 
 ```java

@@ -46,7 +46,7 @@ zeroj-api                  (foundation types)
   |     |
   |     +-- zeroj-crypto   (→ zeroj-api, zeroj-bls12381)
   |
-  +-- zeroj-blst           (→ zeroj-api, blst-java)
+  +-- zeroj-blst           (→ zeroj-api, libblst via FFM)
   |
   +-- zeroj-circuit-dsl    (→ zeroj-api, zeroj-codec)
   |     |
@@ -145,13 +145,15 @@ Reusable Plutus V3 spending validators compiled via Julc:
 
 | Proof System | Curve | Backend | Implementation | Native Deps |
 |-------------|-------|---------|----------------|-------------|
-| Groth16 | BLS12-381 | Pure Java | `zeroj-verifier-groth16` | None |
-| Groth16 | BLS12-381 | blst native (JNI/SWIG) | `zeroj-verifier-groth16` | blst |
+| Groth16 | BLS12-381 | Pure Java (default) | `zeroj-verifier-groth16`, `zeroj-crypto` | None |
+| Groth16 | BLS12-381 | blst native (opt-in) | `zeroj-crypto-blst` (bridges `zeroj-blst`) | `libblst` via FFM |
 | PlonK | BLS12-381 | Pure Java | `zeroj-verifier-plonk` | None |
 
-- BLS12-381 pure Java verifier uses field arithmetic validated against gnark
-- BN254 pure Java arithmetic remains for legacy/off-chain tests, but BN254 verifiers are disabled by default and are not ServiceLoader-registered
-- blst option available for BLS12-381 when a native verifier backend is acceptable
+- **Pure Java is the default** for both proving and verification; it matches blst's speed at large circuit sizes (ADR-0033/0034), so blst is opt-in acceleration, not a requirement.
+- `zeroj-blst` binds `libblst` (built from source) via the Java **FFM** API — not JNI/SWIG.
+- BLS12-381 pure Java verifier uses field arithmetic validated against gnark.
+- BN254 pure Java arithmetic remains for legacy/off-chain tests, but BN254 verifiers are disabled by default and are not ServiceLoader-registered.
+- **In-circuit crypto gadgets** (Blake2b, SHA-512, HMAC-SHA512, Ed25519, BIP32, CIP-1852 — ADR-0027) let circuits reproduce Cardano key derivation; large circuits (millions of constraints) prove within commodity memory via a streaming setup + `mmap`'d key (ADR-0033/0034/0035), driven by the `Groth16Keys`/`Groth16Pipeline` facade (ADR-0036).
 
 ## On-Chain Verification
 
@@ -179,10 +181,16 @@ Best-effort compatibility from the start; hardened in later milestones.
 | ADR | Decision |
 |-----|----------|
 | [0001](adr/0001-verifier-first-architecture.md) | Verifier-first, no prover in core |
-| [0003](adr/0003-pure-java-mvp.md) | Hybrid: blst for BLS12-381, pure Java for BN254 |
+| [0003](adr/0003-pure-java-mvp.md) | Pure-Java MVP; blst native is opt-in acceleration |
 | [0006](adr/0006-separation-of-crypto-and-policy-verification.md) | Separate crypto and policy verification |
 | [0007](adr/0007-module-structure-and-boundaries.md) | Multi-module structure |
 | [0008](adr/0008-plonk-support-via-gnark.md) | PlonK support via gnark |
 | [0010](adr/0010-java-circuit-dsl.md) | Java Circuit DSL |
 | [0012](adr/0012-pure-java-provers-groth16-plonk.md) | Pure Java Groth16 and PlonK provers |
 | [0020](adr/0020-module-cleanup-and-core-restructure.md) | Module cleanup and core restructure |
+| [0027](adr/0027-real-world-crypto-gadgets-sha512-hmac-blake2b-ed25519.md) | Real-world crypto gadgets (SHA-512/HMAC/Blake2b/Ed25519/BIP32/CIP-1852) |
+| [0029](adr/0029-blst-accelerated-groth16-prover.md) | Groth16 prover performance (blst/FFM + memory) |
+| [0033](adr/0033-prover-memory-reduction.md)–[0035](adr/0035-setup-memory-time-reduction.md) | Prover & setup memory/time reduction |
+| [0036](adr/0036-groth16-api-facade-and-pipeline.md) | Groth16 API facade & pipeline |
+
+The full ADR history lives in [`adr/`](adr/).

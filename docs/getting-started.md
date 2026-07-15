@@ -20,7 +20,7 @@
 
 This guide walks through the complete ZeroJ flow: define a ZK circuit in Java, generate a proof, verify it off-chain, and execute on-chain verification on Cardano via Yaci DevKit.
 
-We'll build a **private multiplier** circuit where the prover shows they know a secret factor `b` such that `a * b = c`, while `a` and `c` remain public. This small circuit matches the reusable Groth16 on-chain verifier, which currently accepts two public inputs.
+We'll build a **private multiplier** circuit where the prover shows they know a secret factor `b` such that `a * b = c`, while `a` and `c` remain public. This small circuit has two public inputs (`a`, `c`); the reusable Groth16 on-chain verifier accepts an arbitrary number of public inputs.
 
 ## Prerequisites
 
@@ -112,6 +112,11 @@ var proof = Groth16ProverBLS381.prove(
 
 For setup beyond local tests, import MPC-generated `.zkey` artifacts instead of
 using `PowersOfTauBLS381.generate(...)`.
+
+The in-heap `Groth16SetupBLS381` / `Groth16ProverBLS381` calls above are fine for
+small demo circuits. For large circuits, use the `Groth16Keys` / `Groth16Pipeline`
+facade, which streams the setup to a disk-backed, `mmap`-loaded proving key — see the
+[Groth16 Dev Guide](groth16-dev-guide.md).
 
 ## Step 4: Verify Off-Chain (Pure Java)
 
