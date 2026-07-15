@@ -16,6 +16,14 @@ Java-first zero-knowledge proof toolkit for Cardano.
 
 ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify** them off-chain, and **execute on-chain verification** on Cardano. The Java DSL and pure-Java proving path require no native libraries or external CLIs.
 
+> [!TIP]
+> **New to ZeroJ? Start with the runnable examples.**
+> [**zeroj-usecases**](https://github.com/bloxbean/zeroj-usecases) has complete, end-to-end
+> applications built on ZeroJ — account-ownership recovery, private voting, selective disclosure, and
+> more — that you can build and run to see the whole flow (circuit → prove → verify off-chain and
+> on-chain). **Try those first** to get a feel for what ZeroJ does before diving into the library
+> APIs below.
+
 ## Support Matrix
 
 **Beta** means feature-complete and correctness-tested (3,500+ tests; the full
@@ -346,6 +354,7 @@ dependencies {
 - **[PlonK Support](docs/plonk-support.md)** — PlonK proving, off-chain verification, and the experimental Julc validators
 
 ### Use Cases
+- **[▶ zeroj-usecases (runnable example apps)](https://github.com/bloxbean/zeroj-usecases)** — complete, end-to-end applications built on ZeroJ (account-ownership recovery, private voting, selective disclosure, …). **The best place to start — build and run these first to see ZeroJ in action.**
 - **[ZK Use Cases on Cardano](docs/usecases/README.md)** — 8 real-world applications with secret/public input breakdowns
 - **[Private Voting — Detailed Design](docs/usecases/private-voting.md)** — nullifiers, UTXO patterns, Julc contracts, architecture
 
