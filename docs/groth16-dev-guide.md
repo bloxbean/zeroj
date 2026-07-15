@@ -6,12 +6,12 @@ This is the programmatic counterpart of the account-ownership CLI: how to run a 
 and one `prove` that works identically against all of them. The only decision you make is *where
 the proving key lives*, once, at setup time:
 
-| key home | when | setup heap (19M circuit) | prove heap (19M) |
-|---|---|---|---|
-| heap (`setupInMemory`) | tests, small circuits | ~key size on heap (~24 GB at 19M — don't) | key on heap |
-| key store, sparse (`setupToStore(..., true)`) | **the default for real circuits** | **~8 GB** (ADR-0035) | **~7–8 GB**, mmap'd (ADR-0033/0034) |
-| key store, dense (`setupToStore(..., false)`) | interchange with pre-sparse tools | ~8 GB | ~7–8 GB, mmap'd |
-| snarkjs ceremony import | production keys | n/a (external ceremony) | ~7–8 GB, mmap'd |
+| key home | when | memory profile |
+|---|---|---|
+| heap (`setupInMemory`) | tests, small circuits | whole proving key on heap — impractical for large circuits |
+| key store, sparse (`setupToStore(..., true)`) | **the default for real circuits** | streamed setup + `mmap`'d key (page cache, not heap) — keeps large circuits within commodity memory (ADR-0033/0034/0035) |
+| key store, dense (`setupToStore(..., false)`) | interchange with pre-sparse tools | same profile; larger on-disk key |
+| snarkjs ceremony import | production keys | external ceremony; `mmap`'d key at prove time |
 
 All flows below assume the single-party dev setup opt-in (never in production):
 
@@ -41,9 +41,9 @@ constraints — beyond that, use Flow 2.
 ## Flow 2 — real circuits (key store on disk)
 
 Setup **streams** every proving-key point straight into memory-mapped store files
-(ADR-0035: ~8 GB heap and ~6–7 min for a 19M-constraint circuit), then proves from the same
-handle. `sparse = true` (recommended) stores infinity points as one bit each — ~2.6× smaller
-on disk at 19M (9.3 GB vs 24 GB):
+(ADR-0035: a 19M-constraint circuit's setup fits within commodity memory), then proves from the
+same handle. `sparse = true` (recommended) stores infinity points as one bit each — a much smaller
+on-disk key than dense:
 
 ```java
 R1CSFlat flat = ...;                          // packed CSR constraints (R1CSFlat.builder(), or
@@ -62,7 +62,7 @@ try (var keys = Groth16Keys.load(keysDir)) {
 ```
 
 The store files are mmap'd, so the key occupies page cache, not heap — a 19M-constraint proof
-runs in ~7–8 GB of heap (ADR-0033/0034). Close the handle (try-with-resources) to unmap.
+stays within commodity heap (ADR-0033/0034). Close the handle (try-with-resources) to unmap.
 
 For very large circuits, the packed prove overload avoids boxing 43M+ `BigInteger`s
 (ADR-0034 — this is what the account-ownership CLI uses):
@@ -72,8 +72,8 @@ FlatScalars w = FlatScalars.pack(witness, witness.length);
 Groth16ProofBLS381 proof = keys.prove(ProverBackend.PURE_JAVA, w, flat, /*bindingRows*/ 0);
 ```
 
-`ProverBackend.PURE_JAVA` is the default and matches blst's speed at large sizes without the
-~10 GB of native MSM buffers; pass `ProverBackend` explicitly only to opt into blst on big-RAM
+`ProverBackend.PURE_JAVA` is the default and matches blst's speed at large sizes without blst's
+extra native MSM buffers; pass `ProverBackend` explicitly only to opt into blst on big-RAM
 machines.
 
 ## Flow 3 — production keys from a snarkjs ceremony

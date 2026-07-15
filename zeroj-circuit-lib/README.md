@@ -11,13 +11,14 @@ or Jubjub-style primitives.
 
 | Area | Key Types |
 |------|-----------|
-| Hashes | `Poseidon`, `PoseidonN`, `MiMC`, `MiMCSponge` |
+| Hashes | `Poseidon`, `PoseidonN`, `MiMC`, `MiMCSponge`, `Blake2b`, `Sha512`, `HmacSha512` |
+| Cardano key derivation | `Cip1852Derivation`, `Bip32Ed25519`, `Ed25519Point`, `Fe25519` — in-circuit root key → payment key hash |
 | Merkle proofs | `Merkle`, `SignalMerkle` |
 | Comparisons | `Comparators`, `SignalComparators` |
 | Binary gadgets | `Binary`, `SignalBinary`, `AliasCheck` |
 | Selection | `Mux` |
 | Signal helpers | `SignalPoseidon`, `SignalMiMC` |
-| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkMpf`, `ZkMpfProof`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub` |
+| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkMpf`, `ZkMpfProof`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
 | Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
@@ -49,6 +50,20 @@ final proof, verification key data, and public inputs.
 | Pedersen commitment | `InCircuitPedersen`, `PedersenCommitment` | `ZkPedersen` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16 | Symbolic scalar inputs are capped at `ZkPedersen.MAX_SCALAR_BITS = 252`. |
 | EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16 | Identity public keys are rejected in-circuit; affine inputs are still trusted for curve/subgroup membership unless separately checked. |
 | Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR` | Used by `ZkPoseidon*`, `ZkMerkle`, `ZkMpf` | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. The in-circuit `Poseidon` gadget currently supports T3/alpha-5 only. |
+
+**Real-world crypto (Cardano key derivation).** These gadgets reproduce standard wallet/key
+primitives *inside* the circuit, so a proof can attest to Cardano key ownership without revealing the
+seed. They compose into `Cip1852Derivation` (root key → address payment key hash).
+
+| Gadget | DSL APIs | Symbolic APIs | Field / curve status | Cardano status | Notes |
+|--------|----------|---------------|----------------------|----------------|-------|
+| BLAKE2b | `Blake2b` | `ZkBlake2b` | Field-agnostic (bit-oriented) | Ready on BLS12-381 Groth16 | RFC 7693. `ZkBlake2b.hash224` is the Cardano address key-hash function (blake2b-224); 256 also available. |
+| SHA-512 | `Sha512` | `ZkSha512` | Field-agnostic (bit-oriented) | Ready as a building block | FIPS 180-4. Used inside HMAC and BIP32 key derivation. |
+| HMAC-SHA512 | `HmacSha512` | `ZkHmacSha512` | Field-agnostic | Ready as a building block | RFC 2104, built on `Sha512`. Used by BIP32-Ed25519 derivation. |
+| Ed25519 base field | `Fe25519` | — | Emulated GF(2²⁵⁵−19) | Building block | Non-native field arithmetic (5×51-bit limbs) underpinning Ed25519. |
+| Ed25519 point ops | `Ed25519Point`, `Ed25519Host` | — | Ed25519 curve | Building block | Fixed-base scalar multiplication in-circuit; `Ed25519Host` provides constants and a correctness oracle. |
+| BIP32-Ed25519 derivation | `Bip32Ed25519` | — | Ed25519 | Ready as a building block | Child-key derivation (HMAC-SHA512 + scalar mult), Cardano/Icarus style. |
+| CIP-1852 → payment key hash | `Cip1852Derivation` | `ZkCip1852` | Ed25519 + BLAKE2b | Ready on BLS12-381 Groth16 | Full `m/1852'/1815'/account'/role/index` derivation, root key → 28-byte pkh. A complete path is a large circuit (on the order of ~19M constraints). Basis of the account-ownership proof; see ADR-0027. |
 
 For the broader Cardano/annotation matrix, see
 [`docs/adr/circuit-annotation/cardano-gadget-support-matrix.md`](../docs/adr/circuit-annotation/cardano-gadget-support-matrix.md).
@@ -203,13 +218,21 @@ Curve and parameter guidance:
   off-circuit for curve membership, subgroup membership, and non-identity where
   the protocol requires it. `ZkEdDSAJubjub.verify(...)` rejects identity public
   keys in-circuit.
+- **Cardano key derivation** — `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, and
+  `ZkCip1852` are bit-oriented and field-agnostic (they don't depend on the
+  circuit's scalar field), so they run on BLS12-381 Groth16. `ZkCip1852`
+  composes them (with in-circuit Ed25519 / BIP32 key derivation) into a full
+  root-key → payment-key-hash derivation — the primitive behind proving Cardano
+  address ownership. See ADR-0027.
 
 The Cardano-oriented support matrix is maintained in
 [`docs/adr/circuit-annotation/cardano-gadget-support-matrix.md`](../docs/adr/circuit-annotation/cardano-gadget-support-matrix.md).
 
 The status table above was checked against the current implementation in
 `src/main/java`, especially `MiMC`, `Poseidon`, `PoseidonN`, `ZkMerkle`,
-`ZkMpf`, `ZkPedersen`, `ZkEdDSAJubjub`, and the adapter coverage in
+`ZkMpf`, `ZkPedersen`, `ZkEdDSAJubjub`, the `hash/`, `field/`, and `ed25519/`
+crypto gadgets (`Blake2b`, `Sha512`, `HmacSha512`, `Ed25519Point`,
+`Bip32Ed25519`, `Cip1852Derivation`), and the adapter coverage in
 `src/test/java/com/bloxbean/cardano/zeroj/circuit/lib/zk/ZkGadgetAdaptersTest.java`.
 
 ## Gradle
