@@ -31,8 +31,17 @@ class OnChainFeasibilityTest {
     }
 
     @Test
-    void unknownCombinationDefaultsToNotFeasible() {
+    void bbsOnBls12381IsExperimental() {
         var entry = OnChainFeasibility.lookup(ProofSystemId.BBS, CurveId.BLS12_381);
+
+        assertEquals(OnChainFeasibility.Status.EXPERIMENTAL, entry.status());
+        assertFalse(OnChainFeasibility.isFeasible(ProofSystemId.BBS, CurveId.BLS12_381));
+        assertTrue(OnChainFeasibility.isFeasibleWithExperimentalOptIn(ProofSystemId.BBS, CurveId.BLS12_381));
+    }
+
+    @Test
+    void unknownCombinationDefaultsToNotFeasible() {
+        var entry = OnChainFeasibility.lookup(ProofSystemId.BBS, CurveId.BN254);
 
         assertEquals(OnChainFeasibility.Status.NOT_FEASIBLE, entry.status());
     }

@@ -44,6 +44,14 @@ public final class OnChainFeasibility {
                         ScriptBudgetEstimator.estimateMemory(ProofSystemId.PLONK, CurveId.BLS12_381, 1),
                         "Full Cardano-profile verifier implemented and measured for the current one-public-input shape; remains opt-in until audit/release gates close."),
 
+                // Budget literals are MEASURED in the Julc VM (BbsProofVerifyVmTest), not estimated —
+                // ScriptBudgetEstimator has no BBS model; re-measure if the gadget changes.
+                new Entry(ProofSystemId.BBS, CurveId.BLS12_381, Status.EXPERIMENTAL,
+                        2_440_619_165L, 183_509L,
+                        "Native BBS selective-disclosure ProofVerify via Julc (BbsProofVerify); "
+                                + "measured for the 5-message disclose-2 profile, differential-tested in the "
+                                + "Julc VM. Opt-in: fixed disclosure profile, BBS is an IRTF draft, no audit."),
+
                 new Entry(ProofSystemId.HALO2, CurveId.BLS12_381, Status.ASSESSMENT_ONLY,
                         -1, -1,
                         "Research only; expected high cost due to MSM-heavy verification."),

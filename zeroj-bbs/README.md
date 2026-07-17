@@ -73,6 +73,27 @@ Use proof format:
 bbs-cfrg-draft10-presentation-cbor-v1
 ```
 
+## On-Chain Verification (Cardano)
+
+`com.bloxbean.cardano.zeroj.bbs.cardano.BbsToCardano` bridges a presentation to a
+Cardano on-chain BBS verifier. It is plain off-chain Java (runs in the application
+JVM, no Julc/Plutus dependency) and produces the two things an on-chain validator
+needs:
+
+```java
+// issuer verification material → validator @Param bytes
+var params = BbsToCardano.verifierParams(issuerPublicKey, header, messageCount);
+// a presentation flattened → redeemer fields (points, scalars, revealed messages, ph)
+var proof  = BbsToCardano.onChainProof(presentation);
+```
+
+The matching on-chain gadget — a native Plutus V3 BBS `ProofVerify` that the
+Cardano ledger runs itself — is `BbsProofVerify` (with the `BbsHashToScalar`
+primitive) in the **`zeroj-onchain-julc`** module. Together they let a validator
+verify a BBS selective-disclosure proof entirely on-chain. See that module's
+README for a worked validator; `zeroj-usecases` reusable-kyc is a full example
+(lock a voucher, claim it only against a valid on-chain-verified presentation).
+
 ## ZeroJ Verifier
 
 `BbsZkVerifier` verifies `ZkProofEnvelope` values with:
