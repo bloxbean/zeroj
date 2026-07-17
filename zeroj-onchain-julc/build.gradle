@@ -60,6 +60,10 @@ dependencies {
     // Test — circuit DSL for on-chain verification tests
     testImplementation project(':zeroj-circuit-dsl')
     testImplementation 'com.bloxbean.cardano:cardano-client-crypto:0.8.0-pre4'
+
+    // Test — off-chain BBS (build real presentations to differential-test the on-chain BBS gadgets).
+    // Test-scope only: the on-chain BBS gadgets themselves have no zeroj-bbs dependency.
+    testImplementation project(':zeroj-bbs')
 }
 
 //tasks.named('bundleJulcSources') {
