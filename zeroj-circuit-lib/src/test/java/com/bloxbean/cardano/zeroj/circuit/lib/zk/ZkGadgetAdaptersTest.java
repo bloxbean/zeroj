@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZkGadgetAdaptersTest {
     private static final BigInteger EDDSA_SK = new BigInteger(
@@ -817,30 +818,32 @@ class ZkGadgetAdaptersTest {
                 "blinding", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
     }
 
+    /**
+     * ADR-0037 M1 withdrew {@code ZkEdDSAJubjub.verify}: the relation it called was forgeable.
+     * M3 replaces it with {@code verifyStrict} / {@code verifyWithRegisteredKey}, at which
+     * point the accept/reject coverage this test used to provide is restored against those
+     * named entry points. Until then the only correct behaviour is a loud refusal.
+     */
     @Test
-    void eddsaJubjubAdapterAcceptsValidSignatureAndRejectsTamperedMessage() {
-        EdDSAJubjub.Keypair keypair = EdDSAJubjub.keypairFromSecret(EDDSA_SK);
-        EdDSAJubjub.Signature signature = EdDSAJubjub.sign(EDDSA_SK, EDDSA_MSG);
-        var circuit = buildEddsaVerifyCircuit();
-
-        assertDoesNotThrow(() -> circuit.calculateWitness(
-                eddsaWitness(keypair, signature, EDDSA_MSG), CurveId.BLS12_381));
-        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(
-                eddsaWitness(keypair, signature, EDDSA_MSG.add(BigInteger.ONE)), CurveId.BLS12_381));
+    void eddsaJubjubAdapterVerifyIsWithdrawnPendingM3() {
+        var ex = assertThrows(UnsupportedOperationException.class,
+                () -> buildEddsaVerifyCircuit());
+        assertTrue(ex.getMessage().contains("withdrawn"), ex.getMessage());
     }
 
+    /**
+     * Identity-public-key rejection moves to the M3 entry points, which enforce it via the
+     * {@code [8]·pk != O} backstop rather than an ad-hoc {@code assertNotIdentity}. Tracked
+     * by {@code JubjubVerifierM3Test}; this placeholder keeps the requirement visible here.
+     */
     @Test
+    @org.junit.jupiter.api.Disabled("ADR-0037 M1 withdrew the adapter verifier; restored in M3")
     void eddsaJubjubAdapterRejectsIdentityPublicKey() {
-        BigInteger s = BigInteger.valueOf(5);
-        EdDSAJubjub.Keypair identityKey = new EdDSAJubjub.Keypair(BigInteger.ONE, JubjubPoint.IDENTITY);
-        EdDSAJubjub.Signature forged = new EdDSAJubjub.Signature(
-                JubjubPoint.SUBGROUP_GENERATOR.scalarMul(s), s);
-
-        assertThrows(ArithmeticException.class, () -> buildEddsaVerifyCircuit()
-                .calculateWitness(eddsaWitness(identityKey, forged, EDDSA_MSG), CurveId.BLS12_381));
+        // Intentionally empty while the adapter verifier is withdrawn.
     }
 
     @Test
+    @org.junit.jupiter.api.Disabled("ADR-0037 M1 withdrew the adapter verifier; width validation returns in M3")
     void eddsaJubjubAdapterRejectsOversizedScalarMetadata() {
         assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-eddsa-width")
                 .publicVar("pkU").publicVar("pkV")

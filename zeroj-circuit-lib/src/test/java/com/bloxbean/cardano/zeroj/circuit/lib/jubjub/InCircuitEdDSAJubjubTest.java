@@ -76,21 +76,17 @@ class InCircuitEdDSAJubjubTest {
     // ------------------------------------------------------------------
 
     private static CircuitBuilder buildVerifyCircuit() {
+        // ADR-0037 M1: the raw-Point overload is gone; the relation now takes affine wires
+        // and binds/curve-checks both points itself.
         return CircuitBuilder.create("eddsa_verify")
                 .publicVar("pkU").publicVar("pkV")
                 .publicVar("rU").publicVar("rV")
                 .publicVar("msg").publicVar("s")
                 .secretVar("kModL").secretVar("kQuotient")
-                .define(api -> {
-                    var pk = new InCircuitJubjub.Point(
-                            api.var("pkU"), api.var("pkV"), api.constant(1),
-                            api.mul(api.var("pkU"), api.var("pkV")));
-                    var rPoint = new InCircuitJubjub.Point(
-                            api.var("rU"), api.var("rV"), api.constant(1),
-                            api.mul(api.var("rU"), api.var("rV")));
-                    InCircuitEdDSAJubjub.verify(api, pk, api.var("msg"), rPoint,
-                            api.var("s"), api.var("kModL"), api.var("kQuotient"));
-                });
+                .define(api -> InCircuitEdDSAJubjub.verifyCore(api,
+                        api.var("pkU"), api.var("pkV"), api.var("msg"),
+                        api.var("rU"), api.var("rV"),
+                        api.var("s"), api.var("kModL"), api.var("kQuotient")));
     }
 
     private static Map<String, List<BigInteger>> witnessMap(

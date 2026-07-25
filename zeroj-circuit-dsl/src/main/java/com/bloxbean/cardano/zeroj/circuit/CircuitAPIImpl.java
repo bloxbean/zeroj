@@ -20,6 +20,23 @@ class CircuitAPIImpl implements CircuitAPI {
     private final List<Variable> publicInputs = new ArrayList<>();
     private final List<Variable> secretInputs = new ArrayList<>();
     private final List<Variable> intermediateVars = new ArrayList<>();
+
+    /**
+     * Wire id -> constant value, for every wire this circuit created as a constant,
+     * including {@link #oneWire}. Keyed by <b>wire id</b>, never by name: {@link Variable}
+     * is a public record, so a caller can fabricate one carrying any name it likes, while
+     * every emitted constraint references the id. See ADR-0037 Decision 4.
+     */
+    private final Map<Integer, BigInteger> constantWireValues = new HashMap<>();
+
+    /**
+     * Wire id -> the smallest {@code n} for which this circuit has already emitted a proof
+     * that the wire is {@code < 2^n}. Used to avoid re-emitting a range constraint that is
+     * already implied. A recorded bound of {@code n} discharges any request for {@code m >= n};
+     * a request for a strictly tighter {@code m < n} must still emit.
+     */
+    private final Map<Integer, Integer> rangeBounds = new HashMap<>();
+
     private final Variable oneWire;
     private int nextId;
     private FieldConfig expectedField;
@@ -29,6 +46,7 @@ class CircuitAPIImpl implements CircuitAPI {
         this.oneWire = new Variable(0, "_one");
         this.nextId = 1;
         gates.add(new Gate.Const(oneWire, BigInteger.ONE));
+        constantWireValues.put(oneWire.id(), BigInteger.ONE);
 
         // Public inputs
         for (String name : publicVarNames) {
@@ -151,6 +169,7 @@ class CircuitAPIImpl implements CircuitAPI {
         return constantCache.computeIfAbsent(value, v -> {
             var out = newIntermediate();
             gates.add(new Gate.Const(out, v));
+            constantWireValues.put(out.id(), v);
             return out;
         });
     }
@@ -159,6 +178,11 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public Variable[] toBinary(Variable a, int nBits) {
+        return decompose(a, nBits).bitsNoCopy();
+    }
+
+    @Override
+    public BitDecomposition decompose(Variable a, int nBits) {
         if (nBits <= 0 || nBits > MAX_SAFE_BITS)
             throw new IllegalArgumentException("nBits must be in [1, " + MAX_SAFE_BITS + "], got " + nBits);
         var bits = new Variable[nBits];
@@ -174,7 +198,41 @@ class CircuitAPIImpl implements CircuitAPI {
         // Constraint: sum(bits[i] * 2^i) == a
         var reconstructed = fromBinary(bits);
         assertEqual(reconstructed, a);
-        return bits;
+        // These constraints prove a < 2^nBits; record it so range-checked operations on the
+        // same wire need not re-emit an implied bound.
+        recordRangeBound(a, nBits);
+        return new BitDecomposition(a, nBits, bits);
+    }
+
+    /** Note that the circuit now proves {@code v < 2^nBits}, keeping the tightest known bound. */
+    private void recordRangeBound(Variable v, int nBits) {
+        rangeBounds.merge(v.id(), nBits, Math::min);
+    }
+
+    /**
+     * Ensure the circuit proves {@code v < 2^nBits}, emitting a decomposition only if that is
+     * not already established.
+     *
+     * <p>A constant operand is never decomposed: its value is known at definition time, so we
+     * validate it statically and fail loudly rather than emit constraints that would encode a
+     * wrong comparison.
+     */
+    private void requireRange(Variable v, int nBits, String role) {
+        BigInteger constValue = constantWireValues.get(v.id());
+        if (constValue != null) {
+            if (constValue.signum() < 0 || constValue.bitLength() > nBits) {
+                throw new IllegalArgumentException(
+                        "lessThan " + role + " operand is the constant " + constValue
+                                + ", which does not fit in " + nBits + " bits; the comparison "
+                                + "would wrap modulo the field prime and return a wrong result");
+            }
+            return;
+        }
+        Integer existing = rangeBounds.get(v.id());
+        if (existing != null && existing <= nBits) {
+            return; // already proven < 2^existing <= 2^nBits
+        }
+        decompose(v, nBits);
     }
 
     @Override
@@ -261,13 +319,40 @@ class CircuitAPIImpl implements CircuitAPI {
         if (nBits <= 0 || nBits >= MAX_SAFE_BITS)
             throw new IllegalArgumentException(
                     "lessThan nBits must be in [1, " + (MAX_SAFE_BITS - 1) + "], got " + nBits);
+        // Soundness precondition: both operands must fit in nBits. Without it the subtraction
+        // below wraps modulo p and the comparison is forgeable in BOTH directions --
+        // an unbounded left operand forges a < b, an unbounded right operand forges a >= b.
+        // See ADR-0037 Context item 11.
+        requireRange(a, nBits, "left");
+        requireRange(b, nBits, "right");
+        return lessThanUnchecked(a, b, nBits);
+    }
+
+    @Override
+    public Variable lessThan(BitDecomposition a, BitDecomposition b) {
+        Objects.requireNonNull(a, "a");
+        Objects.requireNonNull(b, "b");
+        int nBits = Math.max(a.width(), b.width());
+        if (nBits >= MAX_SAFE_BITS)
+            throw new IllegalArgumentException(
+                    "lessThan width must be at most " + (MAX_SAFE_BITS - 1) + ", got " + nBits);
+        // Each operand already carries a proof that it is < 2^width <= 2^nBits, so the
+        // precondition is discharged by the types and no new range constraints are needed.
+        return lessThanUnchecked(a.source(), b.source(), nBits);
+    }
+
+    /**
+     * The comparison itself. Callers are responsible for having established that both
+     * operands fit in {@code nBits}.
+     */
+    private Variable lessThanUnchecked(Variable a, Variable b, int nBits) {
         // diff = (2^nBits - 1) + b - a.
         // If a < b: diff >= 2^nBits, MSB of (nBits+1)-bit decomposition is 1
         // If a == b: diff = 2^nBits - 1 < 2^nBits, MSB is 0
         // If a > b: diff < 2^nBits, MSB is 0
         var offset = constant(BigInteger.ONE.shiftLeft(nBits).subtract(BigInteger.ONE));
         var diff = add(offset, sub(b, a));
-        var bits = toBinary(diff, nBits + 1);
+        var bits = decompose(diff, nBits + 1).bitsNoCopy();
         return bits[nBits]; // MSB
     }
 

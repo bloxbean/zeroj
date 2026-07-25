@@ -48,8 +48,34 @@ public interface CircuitAPI {
 
     // --- Binary operations ---
 
-    /** Decompose a field element to nBits binary variables (LSB first). */
+    /**
+     * Decompose a field element to nBits binary variables (LSB first).
+     *
+     * @deprecated Prefer {@link #decompose(Variable, int)}, which returns a
+     *         {@link BitDecomposition} binding the source variable, the width, and the bits
+     *         together. The raw array returned here carries no evidence of which variable it
+     *         decomposes or that its elements are boolean, so gadgets that consume it cannot
+     *         verify their own soundness precondition. This method emits exactly the same
+     *         constraints and remains supported; it is deprecated for expressiveness, not
+     *         because it is unsound. See ADR-0037 Decision 2.
+     */
+    @Deprecated(since = "0.1.0")
     Variable[] toBinary(Variable a, int nBits);
+
+    /**
+     * Decompose {@code a} into {@code nBits} bits (LSB first), returning a
+     * {@link BitDecomposition} that proves {@code a < 2^nBits}.
+     *
+     * <p>Emits the same constraints as {@link #toBinary(Variable, int)} — booleanity per bit
+     * plus {@code sum(bits[i]*2^i) == a} — but returns a value that carries the range
+     * guarantee with it, so downstream gadgets whose soundness depends on that bound can
+     * demand the evidence rather than trust the caller.
+     *
+     * <p>Calling this repeatedly on the same variable and width is safe but wasteful; the
+     * implementation records the resulting bound so that later range-checked operations on
+     * the same wire do not re-emit it.
+     */
+    BitDecomposition decompose(Variable a, int nBits);
 
     /** Recompose a field element from binary variables (LSB first). */
     Variable fromBinary(Variable[] bits);
@@ -85,8 +111,41 @@ public interface CircuitAPI {
     /** Returns 1 if a == b, else 0. */
     Variable isEqual(Variable a, Variable b);
 
-    /** Returns 1 if a < b (unsigned, nBits-bit comparison), else 0. */
+    /**
+     * Returns 1 if {@code a < b} (unsigned, nBits-bit comparison), else 0.
+     *
+     * <p><b>Both operands must fit in {@code nBits} bits, and this method enforces that.</b>
+     * The comparison forms {@code diff = (2^nBits - 1) + b - a} and inspects the top bit of an
+     * {@code (nBits+1)}-bit decomposition; if either operand can exceed {@code 2^nBits}, the
+     * subtraction wraps modulo the field prime and the result is meaningless. Both directions
+     * are affected — an unconstrained left operand forges {@code a < b}, an unconstrained
+     * right operand forges {@code a >= b}.
+     *
+     * <p>Therefore each <em>variable</em> operand is range-constrained to {@code nBits} here.
+     * An operand that is a circuit constant is exempt and is instead validated statically:
+     * a constant that does not fit in {@code nBits} throws at circuit-definition time rather
+     * than producing a silently wrong comparison. Wires already proven to fit in
+     * {@code nBits} or fewer — via {@link #decompose(Variable, int)},
+     * {@link #toBinary(Variable, int)}, or {@link #assertInRange(Variable, int)} — are not
+     * constrained twice.
+     *
+     * <p>Use {@link #lessThan(BitDecomposition, BitDecomposition)} when you already hold
+     * decompositions and want to reuse them explicitly.
+     *
+     * @throws IllegalArgumentException if a constant operand does not fit in {@code nBits}
+     * @see <a href="../../../../../../../../docs/adr/0037-jubjub-soundness-and-hardening.md">ADR-0037</a>
+     */
     Variable lessThan(Variable a, Variable b, int nBits);
+
+    /**
+     * Returns 1 if {@code a.source() < b.source()}, else 0, reusing decompositions the caller
+     * already holds instead of emitting fresh range constraints.
+     *
+     * <p>The comparison is performed at {@code max(a.width(), b.width())} bits. Both operands
+     * already carry a proof that they fit within their own widths, so the soundness
+     * precondition of {@link #lessThan(Variable, Variable, int)} is discharged by the types.
+     */
+    Variable lessThan(BitDecomposition a, BitDecomposition b);
 
     // --- Array ---
 

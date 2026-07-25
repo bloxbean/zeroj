@@ -22,6 +22,25 @@ public final class ZkEdDSAJubjub {
 
     public record KReduction(BigInteger kModL, BigInteger kQuotient) {}
 
+    /**
+     * @deprecated <b>Withdrawn — this verifier was forgeable.</b> Nothing constrained the
+     *         {@code Z}/{@code T} wires of the bound points, so a prover could solve them
+     *         against the verification equation and obtain an accepted proof for a message
+     *         that was never signed. There was also no small-order check on the public key,
+     *         making {@code pk = IDENTITY} a universal forgery.
+     *
+     *         <p>The fixed relation exists but is deliberately not public yet: verification
+     *         depends on a trust assumption about {@code pk} that this API cannot infer.
+     *         ADR-0037 M3 replaces this method with two entry points named for that
+     *         assumption — {@code verifyStrict} (subgroup-checks {@code pk} in-circuit; use
+     *         when {@code pk} is prover-supplied) and {@code verifyWithRegisteredKey}
+     *         (requires {@code pk} to be a public input or constant). An unqualified
+     *         {@code verify} is not coming back.
+     *
+     *         <p>{@link #witnessComputeKReduction} is unaffected and still correct.
+     * @throws UnsupportedOperationException always
+     */
+    @Deprecated(forRemoval = true, since = "0.1.0")
     public static void verify(
             ZkContext zk,
             ZkJubjubPoint publicKey,
@@ -30,16 +49,10 @@ public final class ZkEdDSAJubjub {
             ZkUInt s,
             ZkUInt kModL,
             ZkUInt kQuotient) {
-        validateInputs(zk, publicKey, message, rPoint, s, kModL, kQuotient);
-        publicKey.assertNotIdentity(zk);
-        InCircuitEdDSAJubjub.verify(
-                zk.builder().api(),
-                publicKey.asPoint(),
-                message.signal().variable(),
-                rPoint.asPoint(),
-                s.signal().variable(),
-                kModL.signal().variable(),
-                kQuotient.signal().variable());
+        throw new UnsupportedOperationException(
+                "ZkEdDSAJubjub.verify is withdrawn: the in-circuit verifier it called was "
+                        + "forgeable (ADR-0037 Decision 1). Use verifyStrict(...) or "
+                        + "verifyWithRegisteredKey(...), landing in ADR-0037 M3.");
     }
 
     public static KReduction witnessComputeKReduction(

@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.circuit.lib.jubjub;
 
+import com.bloxbean.cardano.zeroj.circuit.BitDecomposition;
 import com.bloxbean.cardano.zeroj.circuit.CircuitAPI;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
@@ -7,6 +8,7 @@ import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3
 import java.math.BigInteger;
 
 import static com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve.A;
+import static com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve.D;
 import static com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve.TWO_D;
 
 /**
@@ -27,18 +29,27 @@ import static com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve.TWO_D;
  * meaningful over BLS12-381 scalar field; pairing with BN254 would produce
  * a syntactically valid but cryptographically nonsense circuit.
  *
- * <h2>Security caveats</h2>
+ * <h2>Security contract</h2>
  * <ul>
- *   <li>Input points from untrusted sources must be subgroup-checked
- *       <b>before</b> being passed to these gadgets. There is no implicit
- *       subgroup check here; adding one per operation would be
- *       unacceptably expensive.</li>
- *   <li>Scalar inputs used with {@link #scalarMulFixedBase} must be bit-
- *       decomposed <b>with range-check</b> (use {@link CircuitAPI#toBinary}
- *       on the scalar wire first).</li>
- *   <li>These gadgets do not enforce the scalar is reduced modulo
- *       {@link JubjubCurve#SUBGROUP_ORDER}. For EdDSA verification this
- *       must be enforced at the higher layer.</li>
+ *   <li><b>Every prover-supplied point must be bound with
+ *       {@link #witnessAffine(CircuitAPI, Variable, Variable)}</b> (or, for genuinely
+ *       projective inputs, checked with {@link #assertWellFormed(CircuitAPI, Point)}).
+ *       The raw {@link Point} constructor asserts nothing. "Validate off-circuit, then
+ *       trust in-circuit" is not a usable contract for witness values — the caller never
+ *       sees the prover's witness, so no off-circuit check constrains it. This replaces
+ *       the contract documented here before ADR-0037.</li>
+ *   <li>Subgroup membership is <b>not</b> established by either binder. It costs a full
+ *       {@code [l]·P} scalar multiplication (~8.5k constraints) and is applied only where
+ *       the threat model needs it — see {@code InCircuitEdDSAJubjub.verifyStrict}.</li>
+ *   <li>Scalar inputs are range-constrained by the gadget itself: the
+ *       {@link Variable}-plus-width overloads of {@link #scalarMulFixedBase} and
+ *       {@link #scalarMulVariableBase} call {@link CircuitAPI#decompose}. The
+ *       {@link BitDecomposition} overloads consume a decomposition the caller already
+ *       holds, which is how a scalar used for both a range check and a multiplication
+ *       avoids being decomposed twice.</li>
+ *   <li>These gadgets do not enforce that a scalar is reduced modulo
+ *       {@link JubjubCurve#SUBGROUP_ORDER}. For EdDSA verification that is enforced at
+ *       the higher layer.</li>
  * </ul>
  */
 public final class InCircuitJubjub {
@@ -47,8 +58,86 @@ public final class InCircuitJubjub {
 
     /**
      * A Jubjub point as four circuit wires in extended-coordinate form.
+     *
+     * <p><b>Unchecked.</b> This constructor asserts nothing: the four wires may hold any
+     * field elements at all, including values that are not a curve point, do not satisfy
+     * {@code T·Z == U·V}, or have {@code Z = 0}. It exists for gadget-internal values that
+     * are well-formed by construction (outputs of {@link #add}, {@link #doubled},
+     * {@link #constant}, …).
+     *
+     * <p>For a <b>prover-supplied</b> point, never build one of these directly — use
+     * {@link #witnessAffine(CircuitAPI, Variable, Variable)}, or apply
+     * {@link #assertWellFormed(CircuitAPI, Point)} if you genuinely need projective input.
+     * A witness point that carries no constraints is not validated by anything the caller
+     * checks off-circuit, because the caller never sees the prover's witness. See ADR-0037
+     * Decision 1.
      */
     public record Point(Variable u, Variable v, Variable z, Variable t) {}
+
+    /**
+     * Binds a prover-supplied point given by its <b>affine</b> coordinates, emitting every
+     * constraint needed to make it a usable curve point.
+     *
+     * <p>This is the supported way to bring an untrusted point into a circuit. It:
+     * <ul>
+     *   <li>pins {@code Z} to the constant-1 wire, so {@code Z != 0} holds by construction
+     *       and the extended coordinates <em>are</em> the affine ones — which also means a
+     *       downstream hash over {@code u}/{@code v} cannot be ground by rescaling
+     *       {@code (λU, λV, λZ, λT)};</li>
+     *   <li>constrains {@code T == u·v}, the extended-coordinate invariant at {@code Z = 1};</li>
+     *   <li>asserts the affine curve equation {@code v² − u² == 1 + d·u²·v²}.</li>
+     * </ul>
+     *
+     * <p>Cost: 5 constraints.
+     *
+     * <p>This does <b>not</b> establish prime-order subgroup membership, which is a separate
+     * and much more expensive check — see {@code InCircuitEdDSAJubjub.verifyStrict}.
+     */
+    public static Point witnessAffine(CircuitAPI api, Variable u, Variable v) {
+        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+        // v^2 - u^2 == 1 + d*u^2*v^2
+        Variable uu = api.mul(u, u);
+        Variable vv = api.mul(v, v);
+        Variable uuvv = api.mul(uu, vv);
+        api.assertEqual(
+                api.sub(vv, uu),
+                api.add(api.constant(BigInteger.ONE), api.mul(uuvv, api.constant(D))));
+        return new Point(u, v, api.constant(BigInteger.ONE), api.mul(u, v));
+    }
+
+    /**
+     * Asserts that a point in <b>projective</b> extended coordinates is well-formed:
+     * all three of
+     * <ul>
+     *   <li>{@code V² − U² == Z² + d·T²} — the projective curve equation;</li>
+     *   <li>{@code T·Z == U·V} — the extended-coordinate invariant ({@code T = U·V/Z});</li>
+     *   <li>{@code Z != 0}.</li>
+     * </ul>
+     *
+     * <p><b>All three are required.</b> The all-zero point {@code (0,0,0,0)} satisfies the
+     * first two identically — each reduces to {@code 0 == 0} — propagates through the
+     * addition formula to an all-zero sum, and makes any projective-equality assertion read
+     * {@code 0 == 0}, which is vacuously true. A check set carrying only the curve equation
+     * and the {@code T} invariant leaves that forgery fully intact.
+     *
+     * <p>This method deliberately <b>accepts any nonzero rescaling</b> {@code (λU, λV, λZ, λT)}
+     * of a valid point, since those are legitimate representations of the same point. It is
+     * therefore <b>not sufficient at a hashing boundary</b>, where the representation itself
+     * must be canonical — use {@link #witnessAffine} there.
+     */
+    public static void assertWellFormed(CircuitAPI api, Point p) {
+        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+        Variable uu = api.mul(p.u(), p.u());
+        Variable vv = api.mul(p.v(), p.v());
+        Variable zz = api.mul(p.z(), p.z());
+        Variable tt = api.mul(p.t(), p.t());
+        // V^2 - U^2 == Z^2 + d*T^2
+        api.assertEqual(api.sub(vv, uu), api.add(zz, api.mul(tt, api.constant(D))));
+        // T*Z == U*V
+        api.assertEqual(api.mul(p.t(), p.z()), api.mul(p.u(), p.v()));
+        // Z != 0
+        api.assertEqual(api.isZero(p.z()), api.constant(0));
+    }
 
     /**
      * Wraps an off-circuit {@link JubjubPoint} as four circuit constants.
@@ -215,8 +304,16 @@ public final class InCircuitJubjub {
      */
     public static Point scalarMulFixedBase(CircuitAPI api, JubjubPoint basePoint,
                                            Variable scalar, int numBits) {
-        Variable[] bits = api.toBinary(scalar, numBits);
-        return scalarMulFixedBase(api, basePoint, bits);
+        return scalarMulFixedBase(api, basePoint, api.decompose(scalar, numBits));
+    }
+
+    /**
+     * Overload consuming a {@link BitDecomposition} the caller already holds, so a scalar
+     * that was decomposed for a range check is not decomposed a second time here.
+     */
+    public static Point scalarMulFixedBase(CircuitAPI api, JubjubPoint basePoint,
+                                           BitDecomposition scalar) {
+        return scalarMulFixedBase(api, basePoint, scalar.bits());
     }
 
     /**
@@ -270,7 +367,15 @@ public final class InCircuitJubjub {
      */
     public static Point scalarMulVariableBase(CircuitAPI api, Point base,
                                               Variable scalar, int numBits) {
-        Variable[] bits = api.toBinary(scalar, numBits);
-        return scalarMulVariableBase(api, base, bits);
+        return scalarMulVariableBase(api, base, api.decompose(scalar, numBits));
+    }
+
+    /**
+     * Overload consuming a {@link BitDecomposition} the caller already holds, so a scalar
+     * that was decomposed for a range check is not decomposed a second time here.
+     */
+    public static Point scalarMulVariableBase(CircuitAPI api, Point base,
+                                              BitDecomposition scalar) {
+        return scalarMulVariableBase(api, base, scalar.bits());
     }
 }
