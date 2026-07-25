@@ -251,29 +251,24 @@ commitment.assertAffineEquals(zk, expectedU, expectedV);
 Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
 `< l`; range-limit any application amount separately when it has a smaller
 business-domain bound.
-> ⚠️ **The Jubjub adapters are not production-ready, and in-circuit EdDSA
-> verification is forgeable.** See
-> [ADR-0037](adr/0037-jubjub-soundness-and-hardening.md).
->
-> A prover can supply an in-circuit point whose `Z`/`T` wires carry no
-> constraint, solve them against the verification equation, and obtain an
-> accepted proof for a message that was **never signed**. There is also no
-> identity or small-order check on `pk` in-circuit, so `pk = IDENTITY` verifies
-> for any message.
->
-> Earlier revisions of this guide told you to bind points with
-> `ZkJubjubPoint.fromTrustedAffine(...)` "after off-circuit curve validity,
-> subgroup membership, and non-identity checks". **That guidance was wrong and is
-> withdrawn.** You never see the prover's witness, so no off-circuit check you
-> perform constrains it. `fromTrustedAffine` happens to pin `z = 1` and
-> `t = u·v`, which blocks one exploit shape, but it does not check curve
-> membership and it is not an enforced invariant of the gadget.
->
-> Do not use these adapters for value-bearing credentials until ADR-0037 M1–M4
-> land. The off-circuit `JubjubPoint`, `EdDSAJubjub`, and `PedersenCommitment`
-> classes are sound and safe to use host-side.
+Jubjub adapters use BLS12-381. Every prover-supplied point is bound and curve-checked by
+the gadget itself — `ZkJubjubPoint.fromTrustedAffine(...)` no longer relies on you having
+validated anything off-circuit, because a witness value is not constrained by checks the
+caller performs on data it cannot see.
 
-`ZkEdDSAJubjub.verify(...)` also needs two reduction witnesses,
+`ZkEdDSAJubjub` exposes two entry points rather than one `verify`, because whether the public
+key needs an in-circuit subgroup check depends on your protocol:
+
+- `verifyStrict(...)` — proves `[l]·pk == O` in-circuit. Use whenever `pk` is a private
+  witness or is chosen by the prover. ~14,500 constraints.
+- `verifyWithRegisteredKey(...)` — requires `pk` to be a public input or circuit constant,
+  enforced by the DSL. Binding it to a subgroup-checked registry entry remains your
+  verifier's job. ~8,962 constraints.
+
+Both reject small-order public keys, including the identity. The normative scheme is
+[`docs/specs/jubjub-eddsa-v1.md`](specs/jubjub-eddsa-v1.md).
+
+Both entry points also need two reduction witnesses,
 `kModL` and `kQuotient`, so the circuit can prove the Poseidon challenge was
 reduced modulo the Jubjub subgroup order. Compute those host values with
 `ZkEdDSAJubjub.witnessComputeKReduction(signature.r(), publicKey, message)` and

@@ -1,7 +1,54 @@
 # ADR-0037: Jubjub Soundness Fixes and Production-Readiness Hardening
 
 ## Status
-Proposed
+Accepted — M0–M5 implemented 2026-07-25.
+
+### Implementation outcome
+
+All six milestones landed. What changed against the plan, and the final measurements:
+
+**Decision 5 was implemented in full rather than in the sanctioned interim.** The plan
+allowed shipping domain separation as an extra folded `t=3` permutation (+828) and deferring
+`t=6` to M5. Measurement made that unnecessary: a tagged `t=6` challenge costs *less* than the
+previous untagged four-fold `t=3` chain, so the interim would have invalidated signatures
+twice for no benefit. `t=6` shipped in M3.
+
+**Decision 7's `t=6` saving estimate rested on an assumption the compiler did not meet.** The
+predicted `~−2,500` per verify assumed constant multiplications were free. They were not: the
+R1CS compiler emitted a constraint for each, so a Poseidon MDS step cost `t²` constraints per
+round. M5 item 2 fixed that in the compiler, which is where most of the performance gain
+actually came from — Poseidon `t=3` fell from 828 to 240 constraints, benefiting every gadget
+in the repository, not just Jubjub.
+
+**Final measured constraint counts** (original → final):
+
+| Gadget | Before | After |
+|---|---:|---:|
+| `add` / `doubled` | 10 / 10 | 8 / 8 |
+| `witnessAffine` (new) | — | 5 |
+| `assertWellFormed` (new) | — | 13 |
+| fixed-base scalar-mul, 252-bit | 6,049 | **1,506** |
+| variable-base scalar-mul, 252-bit | 8,559 | 5,533 |
+| Pedersen commit, 252-bit | 12,108 | **3,020** |
+| Poseidon `t=3`, 2-input | 828 | **240** |
+| EdDSA challenge (5-input, tagged) | 3,312 untagged | **321** |
+| `verifyWithRegisteredKey` | 19,000 | **8,962** |
+| `verifyStrict` | 27,569 | **14,500** |
+
+For scale: the original **forgeable** verifier cost 18,965. The fixed one — affine-bound,
+canonically reduced, domain-separated, small-order-safe — is 8,962 with a registered key.
+
+The Decision 7 targets were `verifyWithRegisteredKey ≤ ~8k` and `verifyStrict ≤ ~14k`. Both
+are missed, by 12% and 4%. The remaining cost is dominated by the variable-base multiplication
+for `[k]·pk`, which the windowed multilinear-selector trick does not help because its table is
+not constant. Recorded as missed rather than rounded to "met".
+
+**Still open before production use**, unchanged from the original assessment: the public-key
+binding model wired into a consuming protocol and verified end to end, a migration path for
+artifacts invalidated by Decisions 2 and 5, a constant-time signing path or acceptance of the
+Decision 8 restriction, and an external cryptographic review.
+
+The original plan follows unchanged below.
 
 ## Date
 2026-07-25

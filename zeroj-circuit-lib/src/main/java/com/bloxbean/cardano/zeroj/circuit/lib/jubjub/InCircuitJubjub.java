@@ -157,10 +157,8 @@ public final class InCircuitJubjub {
      * Unified twisted-Edwards addition {@code P + Q} per HWCD §3.2 for
      * {@code a = -1}. Complete for Jubjub (no exceptional inputs).
      *
-     * <p>Cost: 9 constraint-level multiplications (some are
-     * constant-scalar mults which may fold into linear combinations
-     * depending on the backend; the R1CS compiler will emit ~9
-     * multiplication gates).
+     * <p>Cost: 8 constraints, measured. The two constant scalings ({@code 2d} and {@code 2})
+     * fold into linear combinations in the R1CS compiler and cost nothing.
      */
     public static Point add(CircuitAPI api, Point p, Point q) {
         api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
@@ -261,10 +259,9 @@ public final class InCircuitJubjub {
      * an off-circuit point baked in at compile time. Uses a simple
      * double-and-add over the bit decomposition of {@code k}.
      *
-     * <p>Cost: {@code numBits} conditional additions against pre-doubled
-     * copies of the base (precomputed at compile time). Each addition is
-     * ~8 multiplications plus 4 muxes; a 255-bit scalar-mul costs
-     * roughly 2500 constraints.
+     * <p>Cost: 1,506 constraints for a 252-bit scalar, measured and pinned by
+     * {@code WindowedFixedBaseTest}. The implementation is windowed — see
+     * {@link #scalarMulFixedBaseWindowed} for why the table selection is nearly free.
      *
      * @param api         circuit API
      * @param basePoint   fixed off-circuit base point (e.g. Jubjub generator)
@@ -449,11 +446,10 @@ public final class InCircuitJubjub {
      * an in-circuit point (not known at compile time). Uses double-and-add
      * over {@code scalarBits} LSB-first.
      *
-     * <p>Cost per bit: one in-circuit doubling (~7 muls) + one conditional
-     * addition (~9 muls + 4 mux). For a 252-bit scalar this is roughly
-     * {@code 252 × 20 ≈ 5000 constraints} — about 3× more expensive than
-     * the fixed-base variant because in-circuit doublings are required each
-     * iteration.
+     * <p>Cost: 5,533 constraints for a 252-bit scalar, measured. Roughly 3.7× the fixed-base
+     * variant, because the base is not known at compile time: every iteration needs an
+     * in-circuit doubling, and the windowed table trick that makes fixed-base cheap does not
+     * apply since the table entries would not be constants.
      *
      * <p>Caveats:
      * <ul>

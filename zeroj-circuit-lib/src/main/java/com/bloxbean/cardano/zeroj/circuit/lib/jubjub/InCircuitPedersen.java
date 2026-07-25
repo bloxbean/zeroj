@@ -21,9 +21,10 @@ import com.bloxbean.cardano.zeroj.circuit.Variable;
  * </ul>
  *
  * <h2>Performance</h2>
- * One {@link #commit} call emits two fixed-base scalar-muls (~2·5000 =
- * 10000 constraints at 252-bit scalars). This is the dominant cost in any
- * Pedersen-heavy circuit; pre-commit wherever possible.
+ * One {@link #commit} call emits two windowed fixed-base scalar multiplications plus an
+ * addition: 3,020 constraints at 252-bit scalars, measured. If the application's values have
+ * a smaller domain bound, pass a smaller {@code numBits} — cost is close to linear in it.
+ *
  */
 public final class InCircuitPedersen {
 

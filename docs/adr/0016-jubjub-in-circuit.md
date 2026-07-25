@@ -1,7 +1,28 @@
 # ADR-0016: Jubjub-in-Circuit for BLS12-381 Cardano Proofs
 
 ## Status
-Accepted
+Accepted — **partially superseded by [ADR-0037](0037-jubjub-soundness-and-hardening.md)**
+
+### Amendments from ADR-0037 (2026-07-25)
+
+A correctness/security/performance review found that several statements below describe
+intentions that the implementation never met. They are corrected here rather than left to
+mislead:
+
+| Section | What this ADR claimed | What actually shipped |
+|---|---|---|
+| §4, Risk 1 | "the high-level `EdDSAJubjub.verify(api, sig, pk, msg)` gadget *always* performs subgroup checks internally" | It never did. The gadget explicitly delegated to callers, and the resulting in-circuit verifier was **forgeable** — a prover could obtain an accepted proof for a never-signed message. See ADR-0037 Context item 1. |
+| §3 | fixed-base scalar-mul uses "a 3-bit windowed lookup table" | Plain bit-by-bit double-and-add. The windowed table was finally implemented in ADR-0037 M5. |
+| §3, Risks 5 | "~255 constraints per 255-bit scalar"; "~3000 constraints" per EdDSA verify | Measured 6,049 and 18,965 respectively — the verify estimate was 6× low. Current measured values are in ADR-0037. |
+| Risk 4 | mitigated by a `JubjubCurveTest.assertParameterSquareness` test | That test did not exist. It does now (`JubjubCurveParametersTest`), and the property holds. |
+| M6 | "consolidated cross-verification suite" | Never landed. Partially addressed by ADR-0037's regression, conformance and spec-vector suites. |
+| §5 | verification per RFC 8032 with subgroup enforcement | Verification is **cofactorless** and the key-trust model is now explicit in the API (`verifyStrict` / `verifyWithRegisteredKey`). See ADR-0037 Decision 4. |
+| §6 | `hashToCurve` via "Elligator 2 (or … try-and-increment)" | Try-and-increment, as the fallback allowed. Unchanged. |
+| §8 | `BLS12_381_T5` for Jubjub-Pedersen hashing | The t=5 preset was generated but never usable — `PoseidonHash` accepted only t=3. ADR-0037 added a Sage-validated **t=6** preset (rate 5) for the EdDSA challenge; t=5 remains unused. |
+
+The normative scheme definition is now
+[`docs/specs/jubjub-eddsa-v1.md`](../specs/jubjub-eddsa-v1.md). Where this ADR and that
+specification disagree, the specification wins.
 
 ## Date
 2026-04-18
