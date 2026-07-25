@@ -176,16 +176,41 @@ public final class PoseidonHash {
         Objects.requireNonNull(params, "params");
         Objects.requireNonNull(capacity, "capacity");
         int t = params.t();
-        if (inputs.length > t - 1) {
-            throw new IllegalArgumentException(
-                    "rate is " + (t - 1) + " but " + inputs.length + " inputs were supplied");
-        }
+        requireExactRate(t, inputs.length);
         BigInteger[] state = new BigInteger[t];
         state[0] = capacity;
-        for (int i = 0; i < t - 1; i++) {
-            state[i + 1] = i < inputs.length ? inputs[i] : BigInteger.ZERO;
-        }
+        System.arraycopy(inputs, 0, state, 1, t - 1);
         return permute(params, state)[0];
+    }
+
+    /**
+     * Requires exactly {@code t-1} inputs — the full rate — rather than zero-padding a short
+     * vector.
+     *
+     * <p>Zero-padding would make this construction length-ambiguous: with no length encoding
+     * or padding delimiter, {@code H(x1..xm)} and {@code H(x1..xm, 0)} are the same value for
+     * any {@code m < t-1}. That is harmless for the fixed-arity uses in this codebase, but it
+     * is a collision waiting for the first caller who absorbs a variable-length vector, and
+     * such a caller would get no warning.
+     *
+     * <p>Rejecting short input costs nothing today (every call site already passes exactly the
+     * rate) and forces any future variable-length use to choose an explicit, unambiguous
+     * encoding — length-prefixing the vector, or folding the length into the capacity tag —
+     * rather than inheriting a silent one.
+     *
+     * <p>Public so the in-circuit {@code Poseidon.spongeHash} in the sibling package shares
+     * this exact definition. A duplicated copy is how the two sides would drift, and a value
+     * computed on one side would then fail to reproduce on the other.
+     */
+    public static void requireExactRate(int t, int suppliedInputs) {
+        if (suppliedInputs != t - 1) {
+            throw new IllegalArgumentException(
+                    "spongeHash requires exactly " + (t - 1) + " inputs for t=" + t
+                            + " (the full rate), got " + suppliedInputs
+                            + ". Short input is rejected rather than zero-padded, because "
+                            + "zero-padding is length-ambiguous: H(x) would equal H(x, 0). "
+                            + "Pad explicitly, or use a wider/narrower preset.");
+        }
     }
 
     private static BigInteger sbox(BigInteger x, BigInteger p) {

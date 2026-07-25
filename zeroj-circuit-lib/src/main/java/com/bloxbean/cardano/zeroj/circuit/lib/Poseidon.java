@@ -193,16 +193,14 @@ public final class Poseidon {
     public static Variable spongeHash(CircuitAPI api, PoseidonParams params,
                                       Variable capacity, Variable... inputs) {
         int t = params.t();
-        if (inputs.length > t - 1) {
-            throw new IllegalArgumentException(
-                    "rate is " + (t - 1) + " but " + inputs.length + " inputs were supplied; "
-                            + "use a wider preset or absorb in multiple permutations");
-        }
+        // Exactly the rate, never zero-padded — see PoseidonHash.requireExactRate for why.
+        // The in-circuit and off-circuit spongeHash must agree on this, or a value computed
+        // on one side would not reproduce on the other.
+        com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash.requireExactRate(
+                t, inputs.length);
         Variable[] state = new Variable[t];
         state[0] = capacity;
-        for (int i = 0; i < t - 1; i++) {
-            state[i + 1] = i < inputs.length ? inputs[i] : api.constant(0);
-        }
+        System.arraycopy(inputs, 0, state, 1, t - 1);
         return permute(api, params, state)[0];
     }
 

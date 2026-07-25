@@ -18,6 +18,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -106,11 +107,51 @@ class JubjubEdDSASuiteTest {
         // Different tag AND different width, so there is no input assignment under which one
         // construction reproduces the other's output for the same data.
         BigInteger x = BigInteger.valueOf(7), y = BigInteger.valueOf(9);
+        BigInteger z = BigInteger.ZERO;
         BigInteger nonce = PoseidonHash.spongeHash(
                 JubjubEdDSASuite.nonceParams(), JubjubEdDSASuite.NONCE_TAG, x, y);
+        // The challenge preset is t=6, so its rate is 5 and the inputs must be spelled out;
+        // spongeHash rejects short input rather than zero-padding it.
         BigInteger challengeLike = PoseidonHash.spongeHash(
-                JubjubEdDSASuite.challengeParams(), JubjubEdDSASuite.CHALLENGE_TAG, x, y);
+                JubjubEdDSASuite.challengeParams(), JubjubEdDSASuite.CHALLENGE_TAG, x, y, z, z, z);
         assertNotEquals(nonce, challengeLike);
+    }
+
+    @Test
+    @DisplayName("spongeHash rejects short input rather than zero-padding it")
+    void spongeHashRejectsShortInput() {
+        // Zero-padding would be length-ambiguous: H(x) == H(x, 0) for a fixed capacity tag.
+        // Harmless for this suite's fixed arities, but a collision waiting for the first
+        // variable-length caller -- who would get no warning. Reject instead.
+        var t6 = JubjubEdDSASuite.challengeParams();   // rate 5
+        var t3 = JubjubEdDSASuite.nonceParams();       // rate 2
+        BigInteger a = BigInteger.ONE, b = BigInteger.TWO, tag = JubjubEdDSASuite.CHALLENGE_TAG;
+
+        assertThrows(IllegalArgumentException.class,
+                () -> PoseidonHash.spongeHash(t6, tag, a, b),
+                "2 inputs into a rate-5 sponge must be rejected, not padded");
+        assertThrows(IllegalArgumentException.class,
+                () -> PoseidonHash.spongeHash(t3, tag, a),
+                "1 input into a rate-2 sponge must be rejected");
+        assertThrows(IllegalArgumentException.class,
+                () -> PoseidonHash.spongeHash(t3, tag, a, b, a),
+                "over-long input was already rejected and still is");
+
+        // Exact rate is accepted.
+        assertDoesNotThrow(() -> PoseidonHash.spongeHash(t3, tag, a, b));
+        assertDoesNotThrow(() -> PoseidonHash.spongeHash(t6, tag, a, b, a, b, a));
+    }
+
+    @Test
+    @DisplayName("in-circuit spongeHash enforces the same arity as off-circuit")
+    void inCircuitSpongeHashRejectsShortInput() {
+        // If the two sides disagreed on arity, a value computed on one would not reproduce
+        // on the other -- an opaque proving failure rather than a loud one.
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("sponge_short")
+                .secretVar("a").secretVar("b")
+                .define(api -> Poseidon.spongeHash(api, JubjubEdDSASuite.challengeParams(),
+                        api.constant(JubjubEdDSASuite.CHALLENGE_TAG),
+                        api.var("a"), api.var("b"))));
     }
 
     // ------------------------------------------------------------------
