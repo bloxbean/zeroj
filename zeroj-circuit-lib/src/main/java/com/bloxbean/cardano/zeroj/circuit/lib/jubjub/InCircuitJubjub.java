@@ -289,6 +289,25 @@ public final class InCircuitJubjub {
             table[i] = table[i - 1].doubled();
         }
 
+        // Windowed table (ADR-0016 section 3 / ADR-0037 Decision 7 item 3): one addition per
+        // 3-bit window instead of one per bit. Measured 1,506 constraints for a 252-bit
+        // scalar against 2,513 for the bit-by-bit form.
+        return scalarMulFixedBaseWindowed(api, basePoint, scalarBits);
+    }
+
+    /**
+     * Bit-by-bit fixed-base multiplication, retained as the reference implementation that
+     * {@link #scalarMulFixedBaseWindowed} is differential-tested against. Not used in
+     * production paths.
+     */
+    static Point scalarMulFixedBaseBitwise(CircuitAPI api, JubjubPoint basePoint,
+                                           Variable[] scalarBits) {
+        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+        JubjubPoint[] table = new JubjubPoint[scalarBits.length];
+        table[0] = basePoint;
+        for (int i = 1; i < scalarBits.length; i++) {
+            table[i] = table[i - 1].doubled();
+        }
         Point acc = identity(api);
         for (int i = 0; i < scalarBits.length; i++) {
             Point addend = constant(api, table[i]);
@@ -314,6 +333,115 @@ public final class InCircuitJubjub {
     public static Point scalarMulFixedBase(CircuitAPI api, JubjubPoint basePoint,
                                            BitDecomposition scalar) {
         return scalarMulFixedBase(api, basePoint, scalar.bits());
+    }
+
+    /** Window width for {@link #scalarMulFixedBaseWindowed}; 3 measured cheapest. */
+    static final int FIXED_BASE_WINDOW_BITS = 3;
+
+    /**
+     * Fixed-base scalar multiplication using a {@value #FIXED_BASE_WINDOW_BITS}-bit windowed
+     * table, as ADR-0016 §3 specified and ADR-0037 Decision 7 item 3 scheduled.
+     *
+     * <p>The scalar is split into {@code w}-bit windows. Window {@code i} contributes
+     * {@code [v_i · 2^(w·i)]·G} for its value {@code v_i ∈ [0, 2^w)}, so the whole product is
+     * a sum of {@code ceil(n/w)} table entries — no doublings in-circuit at all, and one
+     * addition per window instead of one per bit.
+     *
+     * <p>Selecting the table entry is where a naive windowed implementation gets expensive.
+     * Here it is nearly free. Each output coordinate, as a function of the window's bits, is a
+     * multilinear polynomial: {@code f(b) = Σ_S c_S · Π_{k∈S} b_k}, whose coefficients come
+     * from the table by Möbius transform. The {@code c_S} are compile-time constants, so once
+     * the {@code 2^w − w − 1} bit-monomials are computed the coordinate is a constant-weighted
+     * linear combination — and the R1CS compiler folds constant multiplications for free. So a
+     * window costs {@code 2^w − w − 1} multiplications for the monomials plus one point
+     * addition, rather than {@code 2^w} muxes.
+     *
+     * <p>The bits must already be constrained boolean, which
+     * {@link CircuitAPI#decompose(Variable, int)} guarantees; the multilinear form is only a
+     * correct interpolation of the table on the boolean cube.
+     */
+    static Point scalarMulFixedBaseWindowed(CircuitAPI api, JubjubPoint basePoint,
+                                            Variable[] scalarBits) {
+        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+        // The multilinear selector below interpolates the table only on the boolean cube, so
+        // a non-boolean "bit" would select a point that is not in the table at all. The
+        // bit-by-bit path got this implicitly from select(); here it must be explicit.
+        // Costs nothing for decompose()-derived bits, which already carry the constraint.
+        for (Variable b : scalarBits) api.assertBoolean(b);
+
+        final int w = FIXED_BASE_WINDOW_BITS;
+        final int n = scalarBits.length;
+        final int windows = (n + w - 1) / w;
+
+        Point acc = null;
+        JubjubPoint windowBase = basePoint;   // [2^(w*i)] * G
+
+        for (int win = 0; win < windows; win++) {
+            int lo = win * w;
+            int hi = Math.min(lo + w, n);
+            int bitsInWindow = hi - lo;
+            int entries = 1 << bitsInWindow;
+
+            // Table for this window: entry j is [j] * windowBase, normalised to Z = 1 so the
+            // coefficients below are affine and the identity is a genuine (0,1) entry.
+            BigInteger[] tu = new BigInteger[entries];
+            BigInteger[] tv = new BigInteger[entries];
+            JubjubPoint running = JubjubPoint.IDENTITY;
+            for (int j = 0; j < entries; j++) {
+                tu[j] = running.affineU();
+                tv[j] = running.affineV();
+                running = running.add(windowBase);
+            }
+
+            // Bit-monomials over this window's bits, indexed by subset mask.
+            Variable[] monomial = new Variable[entries];
+            monomial[0] = api.constant(BigInteger.ONE);
+            for (int mask = 1; mask < entries; mask++) {
+                int lowestBit = Integer.numberOfTrailingZeros(mask);
+                int rest = mask & ~(1 << lowestBit);
+                monomial[mask] = (rest == 0)
+                        ? scalarBits[lo + lowestBit]
+                        : api.mul(monomial[rest], scalarBits[lo + lowestBit]);
+            }
+
+            Variable addU = multilinear(api, tu, monomial, entries);
+            Variable addV = multilinear(api, tv, monomial, entries);
+            // Z = 1 and T = u*v for the selected entry. T is one multiplication; deriving it
+            // from the selected coordinates keeps the extended-coordinate invariant exact.
+            Point addend = new Point(addU, addV, api.constant(BigInteger.ONE), api.mul(addU, addV));
+
+            acc = (acc == null) ? addend : add(api, acc, addend);
+
+            for (int k = 0; k < w; k++) windowBase = windowBase.doubled();
+        }
+        return acc;
+    }
+
+    /**
+     * Builds {@code Σ_S c_S · monomial[S]} where the {@code c_S} are the Möbius-transform
+     * coefficients of {@code table} over the boolean cube — i.e. the unique multilinear
+     * polynomial agreeing with {@code table[j]} at every boolean assignment {@code j}.
+     */
+    private static Variable multilinear(CircuitAPI api, BigInteger[] table,
+                                        Variable[] monomial, int entries) {
+        BigInteger p = JubjubCurve.BASE_FIELD_PRIME;
+        // Möbius transform: c_S = Σ_{J ⊆ S} (-1)^(|S|-|J|) · table[J]
+        BigInteger[] coeff = table.clone();
+        for (int bit = 0; bit < Integer.numberOfTrailingZeros(entries); bit++) {
+            for (int mask = 0; mask < entries; mask++) {
+                if ((mask & (1 << bit)) != 0) {
+                    coeff[mask] = coeff[mask].subtract(coeff[mask & ~(1 << bit)]).mod(p);
+                }
+            }
+        }
+        Variable acc = null;
+        for (int mask = 0; mask < entries; mask++) {
+            if (coeff[mask].signum() == 0) continue;
+            // Constant * variable folds to a linear combination in the R1CS compiler.
+            Variable term = api.mul(monomial[mask], api.constant(coeff[mask]));
+            acc = (acc == null) ? term : api.add(acc, term);
+        }
+        return acc != null ? acc : api.constant(BigInteger.ZERO);
     }
 
     /**

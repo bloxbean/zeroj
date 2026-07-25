@@ -256,13 +256,14 @@ class JubjubVerifierM3Test {
     void entryPointCosts() {
         int registered = registeredCircuit().compileR1CS(CurveId.BLS12_381).constraints().size();
         int strict = strictCircuit().compileR1CS(CurveId.BLS12_381).constraints().size();
-        assertEquals(19_000, registered,
-                "verifyWithRegisteredKey = verifyCore (18,960) + [8]pk != O (40). Pinned so "
-                        + "ADR-0037 M5 optimizations are visible and no regression slips in.");
-        assertEquals(27_569, strict,
-                "verifyStrict adds the in-circuit [l]pk == O subgroup check (+8,569)");
-        assertTrue(strict - registered > 8_000,
-                "the subgroup check should dominate the difference");
+        assertEquals(8_962, registered,
+                "verifyWithRegisteredKey = verifyCore (8,929) + [8]pk != O (33). Down from "
+                        + "19,000 before the M5 work; the ADR target was ~8k.");
+        assertEquals(14_500, strict,
+                "verifyStrict adds the in-circuit [l]pk == O subgroup check. Down from 27,569; "
+                        + "the ADR target was ~14k.");
+        assertTrue(strict - registered > 5_000,
+                "the variable-base subgroup check should dominate the difference");
     }
 
     // ------------------------------------------------------------------

@@ -37,6 +37,13 @@ class CircuitAPIImpl implements CircuitAPI {
      */
     private final Map<Integer, Integer> rangeBounds = new HashMap<>();
 
+    /**
+     * Wire ids already proven boolean by an emitted {@code a·(a−1) == 0} constraint.
+     * Re-asserting booleanity on the same wire adds constraints without adding information;
+     * a point-select over four coordinates used to pay for the same condition four times.
+     */
+    private final Set<Integer> booleanWires = new HashSet<>();
+
     private final Variable oneWire;
     private int nextId;
     private FieldConfig expectedField;
@@ -294,6 +301,10 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public void assertBoolean(Variable a) {
+        // Already proven boolean by an earlier constraint on this wire: re-emitting adds
+        // constraints without adding information. This is what makes a four-coordinate
+        // point-select cost one booleanity check instead of four.
+        if (!booleanWires.add(a.id())) return;
         // a * (a - 1) = 0
         var aMinusOne = sub(a, oneWire);
         var product = mul(a, aMinusOne);

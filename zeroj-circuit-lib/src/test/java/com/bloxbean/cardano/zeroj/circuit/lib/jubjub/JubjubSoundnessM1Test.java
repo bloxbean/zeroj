@@ -242,31 +242,29 @@ class JubjubSoundnessM1Test {
     }
 
     @Test
-    @DisplayName("cost pins: witnessAffine 6, assertWellFormed 14, verifyCore 19,500")
+    @DisplayName("cost pins: witnessAffine 5, assertWellFormed 13, verifyCore 8,929")
     void constraintCostsArePinned() {
         var wa = CircuitBuilder.create("wa_cost")
                 .secretVar("u").secretVar("v")
                 .define(api -> InCircuitJubjub.witnessAffine(api, api.var("u"), api.var("v")));
-        assertEquals(6, wa.compileR1CS(CurveId.BLS12_381).constraints().size(),
-                "witnessAffine standalone: u^2, v^2, u^2*v^2, d*(u^2v^2), the curve assertion, "
-                        + "and T = u*v. Five of these are new work; the legacy relation already "
-                        + "paid for T, which is why ADR-0037 records +5 per point incrementally.");
+        assertEquals(5, wa.compileR1CS(CurveId.BLS12_381).constraints().size(),
+                "witnessAffine: u^2, v^2, u^2*v^2, the curve assertion, and T = u*v. The "
+                        + "d-scaling folds away, since multiplying by a constant is linear.");
 
         var wf = CircuitBuilder.create("wf_cost")
                 .secretVar("u").secretVar("v").secretVar("z").secretVar("t")
                 .define(api -> InCircuitJubjub.assertWellFormed(api, new InCircuitJubjub.Point(
                         api.var("u"), api.var("v"), api.var("z"), api.var("t"))));
-        assertEquals(14, wf.compileR1CS(CurveId.BLS12_381).constraints().size(),
-                "assertWellFormed: four squarings, the d-scaling, the curve assertion, "
-                        + "T*Z and U*V plus their assertion, and the isZero(Z) inverse witness");
+        assertEquals(13, wf.compileR1CS(CurveId.BLS12_381).constraints().size(),
+                "assertWellFormed: four squarings, the curve assertion, T*Z and U*V plus "
+                        + "their assertion, and the isZero(Z) inverse witness");
 
-        assertEquals(18_960, fixedCircuit().compileR1CS(CurveId.BLS12_381).constraints().size(),
-                "verifyCore cost is pinned so optimizations are visible and no regression slips "
-                        + "in. The legacy forgeable relation was 18,965, so the fixed verifier "
-                        + "is very slightly CHEAPER despite adding affine binding of both "
-                        + "points (+10) and the canonical, complete challenge reduction "
-                        + "(~+530): moving the challenge to a single domain-separated t=6 "
-                        + "permutation saved 540 against the previous four-fold t=3 chain.");
+        assertEquals(8_929, fixedCircuit().compileR1CS(CurveId.BLS12_381).constraints().size(),
+                "verifyCore cost is pinned so a regression is visible. The original forgeable "
+                        + "relation cost 18,965; the fixed one -- affine-bound, canonically "
+                        + "reduced, domain-separated -- is 8,929, less than half, after the "
+                        + "ADR-0037 M5 work (booleanity dedup, constant-multiplication folding "
+                        + "in the R1CS compiler, and the windowed fixed-base table).");
     }
 
     // ------------------------------------------------------------------

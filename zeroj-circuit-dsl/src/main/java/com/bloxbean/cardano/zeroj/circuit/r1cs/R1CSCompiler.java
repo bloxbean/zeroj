@@ -85,12 +85,27 @@ public final class R1CSCompiler {
                 }
 
                 case Gate.Mul(var out, var left, var right) -> {
-                    // Creates one R1CS constraint: A * B = C
                     var a = consumeExpr(exprMap, reads, left.id());
                     var b = consumeExpr(exprMap, reads, right.id());
-                    builder.add(a, b, Map.of(out.id(), BigInteger.ONE));
-                    // Multiplication output is a new base variable (getExpr default)
-                    exprMap.remove(out.id());
+
+                    // Multiplying a linear combination by a *constant* is itself linear, so it
+                    // needs no R1CS constraint — just scale the other side's coefficients. This
+                    // matters a great deal in practice: a Poseidon MDS step is t^2 constant
+                    // multiplications per round, and a fixed-base scalar multiplication adds
+                    // against table entries that are constant in every coordinate. Emitting a
+                    // constraint for each was pure overhead.
+                    BigInteger aConst = constantValue(a, graph.oneWire().id());
+                    BigInteger bConst = constantValue(b, graph.oneWire().id());
+                    if (bConst != null) {
+                        exprMap.put(out.id(), scaleExpr(a, bConst, p));
+                    } else if (aConst != null) {
+                        exprMap.put(out.id(), scaleExpr(b, aConst, p));
+                    } else {
+                        // Genuine variable-by-variable product: one constraint A * B = C.
+                        builder.add(a, b, Map.of(out.id(), BigInteger.ONE));
+                        // Multiplication output is a new base variable (getExpr default)
+                        exprMap.remove(out.id());
+                    }
                 }
 
                 case Gate.AssertEq(var left, var right) -> {
@@ -149,6 +164,33 @@ public final class R1CSCompiler {
         var expr = exprMap.get(wireId);
         if (--reads[wireId] <= 0 && expr != null) exprMap.remove(wireId);
         return expr != null ? expr : Map.of(wireId, BigInteger.ONE);
+    }
+
+    /**
+     * If {@code expr} is a pure constant — a linear combination whose only term is the
+     * one-wire — returns that constant, else {@code null}.
+     *
+     * <p>An empty map is the constant zero: {@code addExprs} strips zero coefficients, so a
+     * cancelled-out expression arrives here as {@code {}}.
+     */
+    private static BigInteger constantValue(Map<Integer, BigInteger> expr, int oneWireId) {
+        if (expr.isEmpty()) return BigInteger.ZERO;
+        if (expr.size() != 1) return null;
+        var entry = expr.entrySet().iterator().next();
+        return entry.getKey() == oneWireId ? entry.getValue() : null;
+    }
+
+    /** Scales every coefficient of a linear combination by {@code k}, dropping zero terms. */
+    private static Map<Integer, BigInteger> scaleExpr(Map<Integer, BigInteger> expr,
+                                                      BigInteger k, BigInteger p) {
+        BigInteger kk = k.mod(p);
+        if (kk.signum() == 0) return Map.of();
+        var result = new HashMap<Integer, BigInteger>(expr.size() * 2);
+        for (var e : expr.entrySet()) {
+            BigInteger v = e.getValue().multiply(kk).mod(p);
+            if (v.signum() != 0) result.put(e.getKey(), v);
+        }
+        return result;
     }
 
     private static Map<Integer, BigInteger> addExprs(Map<Integer, BigInteger> a, Map<Integer, BigInteger> b,

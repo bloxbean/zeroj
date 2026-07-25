@@ -217,8 +217,8 @@ class JubjubEdDSASuiteTest {
                         api.var("a"), api.var("b"), api.var("c"), api.var("d"), api.var("e")))
                 .compileR1CS(CurveId.BLS12_381).constraints().size();
 
-        assertEquals(2_772, t6, "spec records 2,772 for the tagged t=6 challenge");
-        assertEquals(3_312, t3fold, "the previous untagged four-fold t=3 chain cost 3,312");
+        assertEquals(321, t6, "tagged t=6 challenge, after constant-multiplication folding");
+        assertEquals(960, t3fold, "the untagged four-fold t=3 chain, same compiler");
         assertTrue(t6 < t3fold,
                 "the wide permutation must be cheaper AND domain-separated, which is why no "
                         + "folded interim was shipped");
