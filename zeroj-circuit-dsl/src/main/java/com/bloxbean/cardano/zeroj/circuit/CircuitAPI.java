@@ -179,6 +179,35 @@ public interface CircuitAPI {
         return var(name);
     }
 
+    /**
+     * Asserts, at circuit-definition time, that {@code v} is a wire the verifier can see:
+     * a declared public input, or a constant created by this circuit.
+     *
+     * <p>Gadgets whose security argument depends on a value being verifier-visible — rather
+     * than chosen by the prover — call this instead of documenting the requirement. A
+     * documented-only contract is unenforceable here: the caller passes whatever wire it
+     * likes, and nothing at witness time distinguishes a public input from a secret one.
+     *
+     * <p><b>Provenance is resolved by wire id, never by {@link Variable#name()}.</b>
+     * {@code Variable} is a public record, so any caller can construct
+     * {@code new Variable(secretWire.id(), "someKnownPublicInputName")}. A name-based check
+     * would classify that as public while every emitted constraint referenced the secret
+     * wire. Implementations must therefore test membership against the circuit's own
+     * public-input and constant wire ids.
+     *
+     * <p>The default throws, so an implementation that has not opted in cannot silently
+     * accept anything.
+     *
+     * @throws IllegalArgumentException if {@code v} is a secret input, an intermediate or
+     *         derived wire, or not a wire of this circuit at all
+     * @see <a href="../../../../../../../../docs/adr/0037-jubjub-soundness-and-hardening.md">ADR-0037 Decision 4</a>
+     */
+    default void requirePublicOrConstant(Variable v) {
+        throw new UnsupportedOperationException(
+                "requirePublicOrConstant is not supported by this CircuitAPI implementation; "
+                        + "a gadget that depends on verifier-visible inputs cannot be used here");
+    }
+
     // --- Advice / hints (ADR-0028 Phase C) ---
 
     /**

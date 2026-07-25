@@ -29,6 +29,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -818,32 +819,40 @@ class ZkGadgetAdaptersTest {
                 "blinding", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
     }
 
-    /**
-     * ADR-0037 M1 withdrew {@code ZkEdDSAJubjub.verify}: the relation it called was forgeable.
-     * M3 replaces it with {@code verifyStrict} / {@code verifyWithRegisteredKey}, at which
-     * point the accept/reject coverage this test used to provide is restored against those
-     * named entry points. Until then the only correct behaviour is a loud refusal.
-     */
     @Test
-    void eddsaJubjubAdapterVerifyIsWithdrawnPendingM3() {
-        var ex = assertThrows(UnsupportedOperationException.class,
-                () -> buildEddsaVerifyCircuit());
-        assertTrue(ex.getMessage().contains("withdrawn"), ex.getMessage());
+    void eddsaJubjubAdapterAcceptsValidSignatureAndRejectsTamperedMessage() {
+        EdDSAJubjub.Keypair keypair = EdDSAJubjub.keypairFromSecret(EDDSA_SK);
+        EdDSAJubjub.Signature signature = EdDSAJubjub.sign(EDDSA_SK, EDDSA_MSG);
+        var circuit = buildEddsaVerifyCircuit();
+
+        assertDoesNotThrow(() -> circuit.calculateWitness(
+                eddsaWitness(keypair, signature, EDDSA_MSG), CurveId.BLS12_381));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(
+                eddsaWitness(keypair, signature, EDDSA_MSG.add(BigInteger.ONE)), CurveId.BLS12_381));
     }
 
-    /**
-     * Identity-public-key rejection moves to the M3 entry points, which enforce it via the
-     * {@code [8]·pk != O} backstop rather than an ad-hoc {@code assertNotIdentity}. Tracked
-     * by {@code JubjubVerifierM3Test}; this placeholder keeps the requirement visible here.
-     */
+    /** There is no unqualified verify: the key-trust assumption must be named by the caller. */
     @Test
-    @org.junit.jupiter.api.Disabled("ADR-0037 M1 withdrew the adapter verifier; restored in M3")
+    void eddsaJubjubAdapterHasNoUnqualifiedVerify() {
+        for (var m : ZkEdDSAJubjub.class.getMethods()) {
+            assertFalse(m.getName().equals("verify"),
+                    "ZkEdDSAJubjub must not expose an unqualified verify (ADR-0037 Decision 4)");
+        }
+    }
+
+    /** Identity pk is rejected via the [8]*pk != O backstop inside the entry point. */
+    @Test
     void eddsaJubjubAdapterRejectsIdentityPublicKey() {
-        // Intentionally empty while the adapter verifier is withdrawn.
+        BigInteger s = BigInteger.valueOf(5);
+        EdDSAJubjub.Keypair identityKey = new EdDSAJubjub.Keypair(BigInteger.ONE, JubjubPoint.IDENTITY);
+        EdDSAJubjub.Signature forged = new EdDSAJubjub.Signature(
+                JubjubPoint.SUBGROUP_GENERATOR.scalarMul(s), s);
+
+        assertThrows(ArithmeticException.class, () -> buildEddsaVerifyCircuit()
+                .calculateWitness(eddsaWitness(identityKey, forged, EDDSA_MSG), CurveId.BLS12_381));
     }
 
     @Test
-    @org.junit.jupiter.api.Disabled("ADR-0037 M1 withdrew the adapter verifier; width validation returns in M3")
     void eddsaJubjubAdapterRejectsOversizedScalarMetadata() {
         assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("zk-eddsa-width")
                 .publicVar("pkU").publicVar("pkV")
@@ -852,17 +861,13 @@ class ZkGadgetAdaptersTest {
                 .secretVar("kModL").secretVar("kQuotient")
                 .defineSignals(c -> {
                     var zk = new ZkContext(c);
-                    ZkEdDSAJubjub.verify(
+                    ZkEdDSAJubjub.verifyWithRegisteredKey(
                             zk,
-                            ZkJubjubPoint.fromTrustedAffine(
-                                    zk,
-                                    ZkField.publicInput(c, "pkU"),
-                                    ZkField.publicInput(c, "pkV")),
+                            ZkField.publicInput(c, "pkU"),
+                            ZkField.publicInput(c, "pkV"),
                             ZkField.publicInput(c, "msg"),
-                            ZkJubjubPoint.fromTrustedAffine(
-                                    zk,
-                                    ZkField.publicInput(c, "rU"),
-                                    ZkField.publicInput(c, "rV")),
+                            ZkField.publicInput(c, "rU"),
+                            ZkField.publicInput(c, "rV"),
                             ZkUInt.publicInput(c, "s", 253),
                             ZkUInt.secret(c, "kModL", 252),
                             ZkUInt.secret(c, "kQuotient", 4));
@@ -936,19 +941,15 @@ class ZkGadgetAdaptersTest {
                 .secretVar("kModL").secretVar("kQuotient")
                 .defineSignals(c -> {
                     var zk = new ZkContext(c);
-                    var publicKey = ZkJubjubPoint.fromTrustedAffine(
+                    // pk is a public input here, so the registered-key entry point is the
+                    // right one; the DSL enforces that provenance.
+                    ZkEdDSAJubjub.verifyWithRegisteredKey(
                             zk,
                             ZkField.publicInput(c, "pkU"),
-                            ZkField.publicInput(c, "pkV"));
-                    var rPoint = ZkJubjubPoint.fromTrustedAffine(
-                            zk,
-                            ZkField.publicInput(c, "rU"),
-                            ZkField.publicInput(c, "rV"));
-                    ZkEdDSAJubjub.verify(
-                            zk,
-                            publicKey,
+                            ZkField.publicInput(c, "pkV"),
                             ZkField.publicInput(c, "msg"),
-                            rPoint,
+                            ZkField.publicInput(c, "rU"),
+                            ZkField.publicInput(c, "rV"),
                             ZkUInt.publicInput(c, "s", 252),
                             ZkUInt.secret(c, "kModL", 252),
                             ZkUInt.secret(c, "kQuotient", 4));

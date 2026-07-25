@@ -79,19 +79,17 @@ class JubjubSoundnessM1Test {
     }
 
     @Test
-    @DisplayName("the withdrawn annotation-layer verify throws rather than silently working")
-    void withdrawnAdapterVerifyThrows() throws Exception {
-        Method m = com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkEdDSAJubjub.class
-                .getDeclaredMethod("verify",
-                        com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext.class,
-                        com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkJubjubPoint.class,
-                        com.bloxbean.cardano.zeroj.circuit.annotation.ZkField.class,
-                        com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkJubjubPoint.class,
-                        com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt.class,
-                        com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt.class,
-                        com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt.class);
-        assertTrue(m.isAnnotationPresent(Deprecated.class),
-                "the withdrawn verify must be marked deprecated for removal");
+    @DisplayName("no unqualified verify exists on either layer — the key-trust model must be named")
+    void noUnqualifiedVerifyAnywhere() {
+        for (Method m : InCircuitEdDSAJubjub.class.getMethods()) {
+            assertFalse(m.getName().equals("verify"),
+                    "InCircuitEdDSAJubjub.verify must not exist: its key-trust contract would "
+                            + "be ambiguous. Use verifyStrict or verifyWithRegisteredKey.");
+        }
+        for (Method m : com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkEdDSAJubjub.class.getMethods()) {
+            assertFalse(m.getName().equals("verify"),
+                    "ZkEdDSAJubjub.verify must not exist (ADR-0037 Decision 4)");
+        }
     }
 
     // ------------------------------------------------------------------
@@ -262,11 +260,13 @@ class JubjubSoundnessM1Test {
                 "assertWellFormed: four squarings, the d-scaling, the curve assertion, "
                         + "T*Z and U*V plus their assertion, and the isZero(Z) inverse witness");
 
-        assertEquals(19_500, fixedCircuit().compileR1CS(CurveId.BLS12_381).constraints().size(),
-                "verifyCore cost is pinned so ADR-0037 M5 optimizations are visible and no "
-                        + "regression slips in. Legacy (forgeable) relation was 18,965; the "
-                        + "+535 buys affine binding of both points and the canonical, complete "
-                        + "challenge reduction.");
+        assertEquals(18_960, fixedCircuit().compileR1CS(CurveId.BLS12_381).constraints().size(),
+                "verifyCore cost is pinned so optimizations are visible and no regression slips "
+                        + "in. The legacy forgeable relation was 18,965, so the fixed verifier "
+                        + "is very slightly CHEAPER despite adding affine binding of both "
+                        + "points (+10) and the canonical, complete challenge reduction "
+                        + "(~+530): moving the challenge to a single domain-separated t=6 "
+                        + "permutation saved 540 against the previous four-fold t=3 chain.");
     }
 
     // ------------------------------------------------------------------

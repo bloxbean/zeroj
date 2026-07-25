@@ -54,7 +54,17 @@ public final class PoseidonGrainLFSR {
             "255|3|8|57|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
             // BLS12-381 t=5 α=5 RF=8 RP=60 — ADR-0016 M4 (Pedersen / 4-ary Jubjub Merkle).
             // Sage script confirmed first-pass Cauchy matrix passes Algorithms 1/2/3 (all True).
-            "255|5|8|60|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+            "255|5|8|60|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+            // BLS12-381 t=6 α=5 RF=8 RP=60 — ADR-0037 Decision 5 (single-permutation EdDSA
+            // challenge: rate 5 + capacity 1 for the domain tag).
+            // Vetted 2026-07-25 by running the pinned hadeshash script:
+            //   sage generate_parameters_grain.sage 1 0 255 6 8 60 0x73eda753...00000001
+            // which reported Algorithm 1: [True, 0], Algorithm 2: [True, None],
+            // Algorithm 3: [True, None] — i.e. the first-pass Cauchy matrix is accepted, so
+            // skipping Algorithms 1/2/3 in Java is safe for this tuple. The resulting 408
+            // constants and 6x6 MDS are asserted equal to the Sage output by
+            // PoseidonParamsT6SageConformanceTest.
+            "255|6|8|60|0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
     );
 
     /** Field size in bits (n): 254 for BN254, 255 for BLS12-381. */

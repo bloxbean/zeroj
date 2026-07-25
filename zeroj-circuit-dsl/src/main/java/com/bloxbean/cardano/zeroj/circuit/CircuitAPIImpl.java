@@ -65,6 +65,24 @@ class CircuitAPIImpl implements CircuitAPI {
         }
     }
 
+    @Override
+    public void requirePublicOrConstant(Variable v) {
+        Objects.requireNonNull(v, "v");
+        // Resolve by wire id, never by name. Variable is a public record, so a caller can
+        // build new Variable(secretWire.id(), "aPublicInputName"); inputVisibilities is keyed
+        // by name while every constraint references the id, so a name-based check would
+        // authorise the secret wire. See ADR-0037 Decision 4.
+        if (constantWireValues.containsKey(v.id())) return;   // includes oneWire
+        for (Variable pub : publicInputs) {
+            if (pub.id() == v.id()) return;
+        }
+        throw new IllegalArgumentException(
+                "Variable " + v + " must be a public input or a circuit constant, but wire "
+                        + v.id() + " is neither. A gadget that relies on this value being "
+                        + "visible to the verifier cannot accept a secret or derived wire "
+                        + "(ADR-0037 Decision 4).");
+    }
+
     private Variable newIntermediate() {
         var v = Variable.intermediate(nextId++);
         intermediateVars.add(v);

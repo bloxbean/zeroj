@@ -3,7 +3,7 @@ package com.bloxbean.cardano.zeroj.circuit.lib.jubjub;
 import com.bloxbean.cardano.zeroj.circuit.BitDecomposition;
 import com.bloxbean.cardano.zeroj.circuit.CircuitAPI;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
-import com.bloxbean.cardano.zeroj.circuit.lib.PoseidonN;
+import com.bloxbean.cardano.zeroj.circuit.lib.Poseidon;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
@@ -14,10 +14,20 @@ import java.math.BigInteger;
  *
  * <p>Use case: a credential holder proves "I have a signature from issuer {@code pk} over
  * message {@code msg}" without revealing the signature. The gadget emits
- * {@code [S]·G == R + [k]·pk} where {@code k = Poseidon(R.u, R.v, pk.u, pk.v, msg) mod l},
- * plus the range, canonicality, and well-formedness constraints described below.
+ * {@code [S]·G == R + [k]·pk} where {@code k} is the domain-separated Poseidon challenge of
+ * {@code ZeroJ-JubjubEdDSA-v1}, plus the range, canonicality, and well-formedness constraints
+ * described below. The normative specification is
+ * <a href="../../../../../../../../../docs/specs/jubjub-eddsa-v1.md">docs/specs/jubjub-eddsa-v1.md</a>.
  *
- * <h2>There is no public {@code verify} here yet</h2>
+ * <h2>Two entry points, named for their key-trust assumption</h2>
+ * There is no unqualified public {@code verify}. Verification depends on an assumption about
+ * where {@code pk} came from that the gadget cannot infer, so the choice is made explicit:
+ * {@link #verifyStrict} subgroup-checks {@code pk} in-circuit and is correct for a
+ * prover-supplied key; {@link #verifyWithRegisteredKey} requires {@code pk} to be a public
+ * input or constant and shifts registry binding onto the protocol. Both reject small-order
+ * keys via {@code [8]·pk != O}.
+ *
+ * <h2>Why the old {@code verify(api, Point, ...)} is gone</h2>
  * The historical {@code verify(api, Point pk, ..., Point R, ...)} overload took raw
  * extended-coordinate wires and was <b>forgeable</b>: nothing tied {@code T} to {@code U·V/Z},
  * nothing asserted the curve equation, and nothing forbade {@code Z = 0}. A prover could pick
@@ -25,11 +35,9 @@ import java.math.BigInteger;
  * and obtain an accepted proof for a message that was never signed — with an {@code R} that is
  * not on the curve. That overload is removed rather than patched.
  *
- * <p>{@link #verifyCore} below is the fixed relation, and it is deliberately <b>not public</b>.
- * Verification depends on a trust assumption about {@code pk} that the gadget cannot infer, so
- * the public entry points are named for that assumption — {@code verifyStrict} and
- * {@code verifyWithRegisteredKey} — and arrive in ADR-0037 M3. An unqualified public
- * {@code verify} is never re-exposed, because its key-trust contract would be ambiguous.
+ * <p>{@link #verifyCore} below is the fixed relation, and it is deliberately <b>not public</b>:
+ * on its own it carries no assumption about {@code pk}, which is precisely the ambiguity the
+ * named entry points remove.
  *
  * <h2>What {@code verifyCore} enforces</h2>
  * <ol>
@@ -42,12 +50,13 @@ import java.math.BigInteger;
  *   <li>{@code [S]·G == R + [kModL]·pk}, cofactorless.</li>
  * </ol>
  *
- * <h2>What it does not enforce</h2>
- * Prime-order subgroup membership of {@code pk}. Cofactorless verification forces the accepted
- * {@code R} into the subgroup algebraically, but {@code pk} is unconstrained here: a
+ * <h2>What {@code verifyCore} does not enforce</h2>
+ * Anything about {@code pk}. Cofactorless verification forces the accepted {@code R} into the
+ * prime-order subgroup algebraically, but {@code pk} is unconstrained at this level: a
  * small-order {@code pk} (including the identity) makes {@code [k]·pk = O} and turns the
- * equation into {@code [S]·G == R}, a universal forgery. The M3 entry points close this — one
- * with a real subgroup check, the other by requiring {@code pk} to be verifier-visible.
+ * equation into {@code [S]·G == R}, a universal forgery needing no secret key. That is why
+ * {@code verifyCore} is not public, and why both entry points add {@code [8]·pk != O} —
+ * with {@link #verifyStrict} additionally proving subgroup membership outright.
  *
  * @see <a href="../../../../../../../../../docs/adr/0037-jubjub-soundness-and-hardening.md">ADR-0037</a>
  */
@@ -63,6 +72,110 @@ public final class InCircuitEdDSAJubjub {
      * {@code floor(kRaw / l) <= 8}.
      */
     static final int MAX_K_QUOTIENT = 8;
+
+    /**
+     * Verifies an EdDSA-Jubjub signature with an <b>in-circuit prime-order subgroup check</b>
+     * on the public key.
+     *
+     * <p>Use this whenever {@code pk} is chosen by the prover — a private witness, or one
+     * selected from a set (for example "a credential from <em>some</em> issuer in this Merkle
+     * tree"). It is the only entry point that establishes subgroup membership from inside the
+     * circuit, and therefore the only one whose soundness does not depend on the surrounding
+     * protocol.
+     *
+     * <p>Cost: the {@code [l]·pk == O} check is a full variable-base scalar multiplication,
+     * roughly 8.5k constraints on top of {@link #verifyWithRegisteredKey}. That is the price
+     * of not trusting the caller about the key.
+     *
+     * @return the bound public-key point
+     */
+    public static InCircuitJubjub.Point verifyStrict(CircuitAPI api,
+                                                     Variable pkU, Variable pkV,
+                                                     Variable msg,
+                                                     Variable rU, Variable rV,
+                                                     Variable s,
+                                                     Variable kModL,
+                                                     Variable kQuotient) {
+        InCircuitJubjub.Point pk = verifyCore(api, pkU, pkV, msg, rU, rV, s, kModL, kQuotient);
+        assertNotSmallOrder(api, pk);
+        assertInPrimeOrderSubgroup(api, pk);
+        return pk;
+    }
+
+    /**
+     * Verifies an EdDSA-Jubjub signature where {@code pk} is a value the verifier can see —
+     * a public input or a circuit constant — rather than one the prover chose.
+     *
+     * <p>Both {@code pk} wires are checked with
+     * {@link CircuitAPI#requirePublicOrConstant(Variable)}, which resolves provenance against
+     * the circuit's own public-input and constant wire ids. This is enforced by the DSL, not
+     * by documentation: a documented-only contract would be unenforceable, since a caller can
+     * hand over any wire it likes.
+     *
+     * <p><b>The DSL check establishes only that the value is verifier-visible, not that it is
+     * a valid key.</b> Binding it to a registry entry whose prime-order subgroup membership
+     * was checked off-circuit at registration remains an obligation on the final verifier. A
+     * mixed-order {@code pk = pk' + T} is verifier-visible, passes the {@code [8]·pk != O}
+     * backstop, and is accepted here; only {@link #verifyStrict} rejects it.
+     *
+     * @return the bound public-key point
+     * @throws IllegalArgumentException at circuit-definition time if either {@code pk} wire is
+     *         a secret or derived wire
+     */
+    public static InCircuitJubjub.Point verifyWithRegisteredKey(CircuitAPI api,
+                                                                Variable pkU, Variable pkV,
+                                                                Variable msg,
+                                                                Variable rU, Variable rV,
+                                                                Variable s,
+                                                                Variable kModL,
+                                                                Variable kQuotient) {
+        api.requirePublicOrConstant(pkU);
+        api.requirePublicOrConstant(pkV);
+        InCircuitJubjub.Point pk = verifyCore(api, pkU, pkV, msg, rU, rV, s, kModL, kQuotient);
+        assertNotSmallOrder(api, pk);
+        return pk;
+    }
+
+    /**
+     * Asserts {@code [8]·pk != O}, rejecting the identity and every point whose order divides
+     * the cofactor 8.
+     *
+     * <p>This is the cheap backstop both entry points apply. Without it a small-order
+     * {@code pk} makes {@code [k]·pk = O}, collapsing the verification equation to
+     * {@code [S]·G == R} — a universal forgery requiring no secret key, for any message.
+     * The identity is on the curve, so no curve-membership check can catch it.
+     *
+     * <p>It does <b>not</b> prove subgroup membership: a mixed-order {@code pk = pk' + T}
+     * with {@code pk' != O} passes. That is why it is a backstop and not the control, and
+     * why {@link #verifyStrict} exists.
+     *
+     * <p>Cost: three doublings plus a non-identity test, ~41 constraints.
+     */
+    static void assertNotSmallOrder(CircuitAPI api, InCircuitJubjub.Point pk) {
+        InCircuitJubjub.Point eightPk = InCircuitJubjub.doubled(api,
+                InCircuitJubjub.doubled(api, InCircuitJubjub.doubled(api, pk)));
+        // identity <=> U == 0 && V == Z
+        Variable isIdentity = api.and(
+                api.isZero(eightPk.u()),
+                api.isEqual(eightPk.v(), eightPk.z()));
+        api.assertEqual(isIdentity, api.constant(0));
+    }
+
+    /**
+     * Asserts {@code [l]·pk == O}, i.e. that {@code pk} lies in the prime-order subgroup.
+     *
+     * <p>The cofactor multiple is applied as repeated doubling wherever one is needed in this
+     * codebase, never folded into a scalar: {@code 8·l} would be 255 bits, which exceeds both
+     * the 252-bit width used here and the DSL's 253-bit decomposition ceiling.
+     */
+    static void assertInPrimeOrderSubgroup(CircuitAPI api, InCircuitJubjub.Point pk) {
+        InCircuitJubjub.Point lPk = InCircuitJubjub.scalarMulVariableBase(
+                api, pk, api.constant(JubjubCurve.SUBGROUP_ORDER), SCALAR_BITS);
+        Variable isIdentity = api.and(
+                api.isZero(lPk.u()),
+                api.isEqual(lPk.v(), lPk.z()));
+        api.assertEqual(isIdentity, api.constant(1));
+    }
 
     /**
      * The verification relation, without any assumption about where {@code pk} came from.
@@ -122,7 +235,12 @@ public final class InCircuitEdDSAJubjub {
 
         // 3. Recompute the challenge over the affine coordinates. Including pk defends
         //    against key substitution; the arity matches EdDSAJubjub.computeChallenge.
-        Variable kRaw = PoseidonN.hash(api, PoseidonParamsBLS12_381T3.INSTANCE,
+        //    Single t=6 permutation with the challenge tag in the capacity cell: rate 5
+        //    exactly covers the five elements, and the tag makes this value unusable as a
+        //    nonce. Because witnessAffine pinned Z = 1, rPoint.u()/v() are the affine
+        //    coordinates, so the hash cannot be ground by rescaling the representation.
+        Variable kRaw = Poseidon.spongeHash(api, JubjubEdDSASuite.challengeParams(),
+                api.constant(JubjubEdDSASuite.CHALLENGE_TAG),
                 rPoint.u(), rPoint.v(), pk.u(), pk.v(), msg);
         api.assertEqual(kRaw, api.add(api.mul(kQuotient, lConstant), kModL));
 
@@ -170,7 +288,10 @@ public final class InCircuitEdDSAJubjub {
      */
     public static KReduction witnessComputeKReduction(
             JubjubPoint rPoint, JubjubPoint pk, BigInteger msg) {
-        BigInteger kRaw = PoseidonHash.hashN(PoseidonParamsBLS12_381T3.INSTANCE,
+        // Must match verifyCore's in-circuit challenge exactly: same preset, same capacity
+        // tag, same input order, affine coordinates.
+        BigInteger kRaw = PoseidonHash.spongeHash(
+                JubjubEdDSASuite.challengeParams(), JubjubEdDSASuite.CHALLENGE_TAG,
                 rPoint.affineU(), rPoint.affineV(), pk.affineU(), pk.affineV(), msg);
         BigInteger[] qr = kRaw.divideAndRemainder(JubjubCurve.SUBGROUP_ORDER);
         BigInteger q = qr[0];

@@ -1,7 +1,6 @@
 package com.bloxbean.cardano.zeroj.circuit.lib.jubjub;
 
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
-import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -16,6 +15,12 @@ import java.util.Objects;
  * Used by the in-circuit verifier as its cryptographic oracle, and by application code for
  * issuing, signing, and off-chain verification.
  *
+ * <p>The normative specification is
+ * <a href="../../../../../../../../../docs/specs/jubjub-eddsa-v1.md">docs/specs/jubjub-eddsa-v1.md</a>;
+ * pinned constants live in {@link JubjubEdDSASuite}. Nonce and challenge are domain-separated
+ * by distinct capacity-cell tags, so a value computed for one can never be reinterpreted as
+ * the other.
+ *
  * <h2>Scheme</h2>
  *
  * <h3>Key generation</h3>
@@ -25,9 +30,9 @@ import java.util.Objects;
  *
  * <h3>Sign (sk, msg)</h3>
  * <ol>
- *   <li>{@code r = Poseidon(sk, msg) mod l} — deterministic nonce, no RNG required.</li>
+ *   <li>{@code r = Poseidon_t3(NONCE_TAG; sk, msg) mod l} — deterministic nonce, no RNG.</li>
  *   <li>{@code R = [r]·G}.</li>
- *   <li>{@code k = Poseidon(R.u, R.v, pk.u, pk.v, msg) mod l} — challenge.</li>
+ *   <li>{@code k = Poseidon_t6(CHALLENGE_TAG; R.u, R.v, pk.u, pk.v, msg) mod l}.</li>
  *   <li>{@code S = (r + k·sk) mod l}.</li>
  *   <li>Signature = {@code (R, S)}.</li>
  * </ol>
@@ -37,7 +42,7 @@ import java.util.Objects;
  *   <li>Reject if {@code pk} is the identity, or {@code pk}/{@code R} are outside the
  *       prime-order subgroup.</li>
  *   <li>Reject if {@code S ∉ [0, l)} — malleability.</li>
- *   <li>{@code k = Poseidon(R.u, R.v, pk.u, pk.v, msg) mod l}.</li>
+ *   <li>{@code k = Poseidon_t6(CHALLENGE_TAG; R.u, R.v, pk.u, pk.v, msg) mod l}.</li>
  *   <li>Check {@code [S]·G == R + [k]·pk}, cofactorless.</li>
  * </ol>
  *
@@ -213,7 +218,8 @@ public final class EdDSAJubjub {
         // no practical limit on signing volume. (An earlier revision of this comment claimed
         // "~2^-3 bias (p/l ~ 8)" and warned about signing volume; that was wrong. See
         // JubjubCurve.P_MINUS_EIGHT_L.)
-        BigInteger r = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, sk, msg).mod(l);
+        BigInteger r = PoseidonHash.spongeHash(
+                JubjubEdDSASuite.nonceParams(), JubjubEdDSASuite.NONCE_TAG, sk, msg).mod(l);
         JubjubPoint rPoint = JubjubPoint.SUBGROUP_GENERATOR.scalarMul(r);
         // The challenge binds (R, pk, msg); including pk defends against key-substitution
         // and duplicate-signature attacks, as in standard Ed25519 / Schnorr.
@@ -260,8 +266,12 @@ public final class EdDSAJubjub {
      * Exposed so in-circuit gadgets can compute {@code k} exactly as sign/verify do.
      */
     public static BigInteger computeChallenge(JubjubPoint r, JubjubPoint pk, BigInteger msg) {
-        return PoseidonHash.hashN(PoseidonParamsBLS12_381T3.INSTANCE,
-                r.affineU(), r.affineV(), pk.affineU(), pk.affineV(), msg)
+        // Single t=6 permutation with the challenge tag in the capacity cell: rate 5 exactly
+        // covers (R.u, R.v, pk.u, pk.v, msg). Coordinates are affine and canonical, so a
+        // projective representative cannot be used to grind the challenge.
+        return PoseidonHash.spongeHash(
+                        JubjubEdDSASuite.challengeParams(), JubjubEdDSASuite.CHALLENGE_TAG,
+                        r.affineU(), r.affineV(), pk.affineU(), pk.affineV(), msg)
                 .mod(JubjubCurve.SUBGROUP_ORDER);
     }
 

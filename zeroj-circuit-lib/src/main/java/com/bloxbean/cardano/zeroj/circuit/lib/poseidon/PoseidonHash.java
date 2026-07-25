@@ -110,6 +110,84 @@ public final class PoseidonHash {
         return acc;
     }
 
+    /**
+     * Poseidon permutation over a state of arbitrary width {@code t}, the off-circuit
+     * counterpart of {@code Poseidon.permute}.
+     *
+     * <p>ZeroJ sponge convention: {@code state[0]} is the capacity cell (zero, or a domain
+     * tag) and {@code state[1..t-1]} are rate cells; the hash output is {@code state[0]}
+     * after permuting.
+     *
+     * @param state input state of length {@code params.t()}; not modified
+     * @return the permuted state, a fresh array
+     */
+    public static BigInteger[] permute(PoseidonParams params, BigInteger[] state) {
+        Objects.requireNonNull(params, "params");
+        Objects.requireNonNull(state, "state");
+        if (params.alpha() != 5) {
+            throw new IllegalArgumentException("PoseidonHash supports only alpha=5, got " + params.alpha());
+        }
+        int t = params.t();
+        if (state.length != t) {
+            throw new IllegalArgumentException(
+                    "state length must equal t=" + t + ", got " + state.length);
+        }
+        BigInteger p = params.field().prime();
+        int rf = params.rf();
+        int rp = params.rp();
+        int totalRounds = rf + rp;
+
+        BigInteger[] s = new BigInteger[t];
+        for (int i = 0; i < t; i++) s[i] = state[i].mod(p);
+
+        for (int r = 0; r < totalRounds; r++) {
+            for (int i = 0; i < t; i++) {
+                s[i] = s[i].add(params.cAt(r, i)).mod(p);
+            }
+            boolean fullRound = r < rf / 2 || r >= rf / 2 + rp;
+            if (fullRound) {
+                for (int i = 0; i < t; i++) s[i] = sbox(s[i], p);
+            } else {
+                s[0] = sbox(s[0], p);
+            }
+            BigInteger[] next = new BigInteger[t];
+            for (int i = 0; i < t; i++) {
+                BigInteger acc = BigInteger.ZERO;
+                for (int j = 0; j < t; j++) {
+                    acc = acc.add(params.mAt(i, j).multiply(s[j]));
+                }
+                next[i] = acc.mod(p);
+            }
+            s = next;
+        }
+        return s;
+    }
+
+    /**
+     * Sponge hash of {@code inputs} in a single permutation, with {@code capacity} seeding
+     * the capacity cell — the natural place for a domain-separation tag.
+     *
+     * <p>Requires {@code inputs.length <= params.t() - 1}. Returns {@code state[0]} after
+     * permuting. This is the off-circuit counterpart of {@code Poseidon.spongeHash}, and the
+     * two must agree exactly for any value used in both places.
+     */
+    public static BigInteger spongeHash(PoseidonParams params, BigInteger capacity,
+                                        BigInteger... inputs) {
+        Objects.requireNonNull(params, "params");
+        Objects.requireNonNull(capacity, "capacity");
+        int t = params.t();
+        if (inputs.length > t - 1) {
+            throw new IllegalArgumentException(
+                    "rate is " + (t - 1) + " but " + inputs.length + " inputs were supplied");
+        }
+        BigInteger[] state = new BigInteger[t];
+        state[0] = capacity;
+        for (int i = 0; i < t - 1; i++) {
+            state[i + 1] = i < inputs.length ? inputs[i] : BigInteger.ZERO;
+        }
+        return permute(params, state)[0];
+    }
+
     private static BigInteger sbox(BigInteger x, BigInteger p) {
         BigInteger x2 = x.multiply(x).mod(p);
         BigInteger x4 = x2.multiply(x2).mod(p);
