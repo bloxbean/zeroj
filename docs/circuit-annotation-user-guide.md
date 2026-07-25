@@ -251,12 +251,27 @@ commitment.assertAffineEquals(zk, expectedU, expectedV);
 Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
 `< l`; range-limit any application amount separately when it has a smaller
 business-domain bound.
-Jubjub-based adapters use BLS12-381 and preserve the lower-level gadget
-contracts: arbitrary witness points are not implicitly curve- or
-subgroup-checked. Bind public keys and signature points with
-`ZkJubjubPoint.fromTrustedAffine(...)` only after off-circuit curve validity,
-subgroup membership, and non-identity checks. `ZkEdDSAJubjub.verify(...)`
-also rejects the identity public key in-circuit.
+> ⚠️ **The Jubjub adapters are not production-ready, and in-circuit EdDSA
+> verification is forgeable.** See
+> [ADR-0037](adr/0037-jubjub-soundness-and-hardening.md).
+>
+> A prover can supply an in-circuit point whose `Z`/`T` wires carry no
+> constraint, solve them against the verification equation, and obtain an
+> accepted proof for a message that was **never signed**. There is also no
+> identity or small-order check on `pk` in-circuit, so `pk = IDENTITY` verifies
+> for any message.
+>
+> Earlier revisions of this guide told you to bind points with
+> `ZkJubjubPoint.fromTrustedAffine(...)` "after off-circuit curve validity,
+> subgroup membership, and non-identity checks". **That guidance was wrong and is
+> withdrawn.** You never see the prover's witness, so no off-circuit check you
+> perform constrains it. `fromTrustedAffine` happens to pin `z = 1` and
+> `t = u·v`, which blocks one exploit shape, but it does not check curve
+> membership and it is not an enforced invariant of the gadget.
+>
+> Do not use these adapters for value-bearing credentials until ADR-0037 M1–M4
+> land. The off-circuit `JubjubPoint`, `EdDSAJubjub`, and `PedersenCommitment`
+> classes are sound and safe to use host-side.
 
 `ZkEdDSAJubjub.verify(...)` also needs two reduction witnesses,
 `kModL` and `kQuotient`, so the circuit can prove the Poseidon challenge was

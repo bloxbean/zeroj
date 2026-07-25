@@ -117,10 +117,10 @@ Relevant source:
 | `ZkMerkle` with custom hash lambda | Merkle with caller-provided hash | Depends on lambda | Direct | Yes with a BLS12-381-compatible lambda | Keep as advanced escape hatch. |
 | `ZkMpf` / `zeroj-mpf-poseidon` | Private CCL MPF inclusion and conservative exclusion over a Poseidon-rooted commitment | BLS12-381 Poseidon only | Direct through `ZkMpfProof` flattened arrays and `PoseidonMpfCodec` witness generation | Path exists through Groth16 BLS12-381; MPF-specific proof/Yaci demo is deferred until constraint optimization. Not compatible with native Aiken/Blake2b MPF roots. | Completed at witness level. Terminal fork exclusions are rejected in v1. Use `Groth16BLS12381Lib` in custom validators for root/nullifier/domain checks. |
 | `JubjubPoint` | Off-circuit Jubjub point arithmetic | Jubjub over BLS12-381 scalar field | Used by symbolic wrappers | Yes for BLS12-381 circuits | None. |
-| `InCircuitJubjub` | In-circuit Jubjub arithmetic | Requires BLS12-381 scalar field | Direct through `ZkJubjubPoint` | Yes | Document trusted point binding and subgroup-check contract. |
-| `ZkJubjubPoint` | Symbolic Jubjub point | Requires BLS12-381 scalar field | Direct | Yes | Add in-circuit curve/subgroup checks only if untrusted public points must be accepted directly. |
-| `InCircuitPedersen` / `ZkPedersen` | Jubjub Pedersen commitment | Requires BLS12-381 scalar field | Direct | Yes | None; document constraint cost and scalar width. |
-| `InCircuitEdDSAJubjub` / `ZkEdDSAJubjub` | EdDSA-Jubjub verification | Requires BLS12-381 scalar field | Direct | Yes | None for trusted/subgroup-checked points. |
+| `InCircuitJubjub` | In-circuit Jubjub arithmetic | Requires BLS12-381 scalar field | Direct through `ZkJubjubPoint` | **No — not production-ready (ADR-0037)** | Witness points carry no curve, `T`-invariant or `Z != 0` constraint. The "document the trusted-binding contract" mitigation is withdrawn: it cannot constrain a value the caller never sees. |
+| `ZkJubjubPoint` | Symbolic Jubjub point | Requires BLS12-381 scalar field | Direct | **No — not production-ready (ADR-0037)** | `fromTrustedAffine` pins `z = 1` and `t = u·v` but performs no curve-membership check. In-circuit checks are mandatory, not opt-in. |
+| `InCircuitPedersen` / `ZkPedersen` | Jubjub Pedersen commitment | Requires BLS12-381 scalar field | Direct | **No — not production-ready (ADR-0037)** | Commitment computation is sound; the `< l` scalar canonicality check rides on an unsound comparator. |
+| `InCircuitEdDSAJubjub` / `ZkEdDSAJubjub` | EdDSA-Jubjub verification | Requires BLS12-381 scalar field | Direct | **No — in-circuit verification is FORGEABLE (ADR-0037)** | A prover obtains an accepted proof for a never-signed message; `pk = IDENTITY` is a universal forgery. Blocked until ADR-0037 M1–M4. |
 | `zeroj-bls12381` | BLS12-381 field, G1/G2, pairing, hash-to-curve | BLS12-381 | Not a circuit gadget | Supports off-chain proof verification and conversion paths; Cardano has BLS builtins | Use for proof systems and BBS, not directly inside symbolic circuits unless a circuit gadget is built. |
 | `zeroj-blst` | Native BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
 | `zeroj-bls12381-wasm` | WASM BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
@@ -192,7 +192,7 @@ For new Cardano-oriented annotated circuits:
 1. Use `CurveId.BLS12_381` as the default compile/prove target.
 2. Use Groth16 as the default proof system for on-chain verification.
 3. Use Poseidon with explicit BLS12-381 parameters as the default ZK hash.
-4. Use Jubjub/Pedersen/EdDSA-Jubjub symbolic adapters only on BLS12-381.
+4. Use Jubjub/Pedersen/EdDSA-Jubjub symbolic adapters only on BLS12-381 — and not at all for value-bearing use until ADR-0037 M1–M4 land (in-circuit EdDSA verification is currently forgeable).
 5. Treat MiMC as BN254/off-chain unless a BLS12-381 MiMC variant is explicitly
    designed and documented.
 6. Treat PlonK on-chain support as experimental until external review and

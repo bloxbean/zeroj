@@ -189,6 +189,18 @@ in-repository EdDSA-Jubjub consumer; we cannot state that no deployed artifact n
 revocation. An adoption/release audit is required before that claim can be made, and it is a
 prerequisite of M0 below.
 
+**Release audit result (M0, completed 2026-07-25).** The audit was run and the answer is
+worse than "published in a tag": `com.bloxbean.cardano:zeroj-circuit-lib` is **live on Maven
+Central** in nine versions — `0.1.0-pre1`, `pre3`, `pre4`, `pre5`, `pre6-ci2`, `pre7`, `pre8`,
+`pre9`, `pre10` — with `pre10` released 2026-07-17. The published jar was downloaded and
+inspected: it contains `InCircuitEdDSAJubjub.class`, `InCircuitJubjub$Point.class`,
+`ZkEdDSAJubjub.class`, and the rest of the affected surface. The forgeable gadget is
+therefore not merely tagged but publicly resolvable by any downstream Gradle/Maven build
+today. We still have no evidence of an actual downstream consumer, but the exposure is
+"anyone can depend on it", not "it exists in history". This is what makes Decision 0
+immediate rather than M4 cleanup, and it means the fix must ship as a new release with
+release notes that name the defect, not as a silent correction.
+
 Two currently-published documents actively steer readers into the broken model:
 `zeroj-circuit-lib/README.md:51` marks EdDSA-Jubjub "Ready on BLS12-381 Groth16", and
 `docs/circuit-annotation-user-guide.md:254` recommends binding keys with

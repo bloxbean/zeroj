@@ -39,16 +39,16 @@ final proof, verification key data, and public inputs.
 | Bit and byte vectors | `Binary`, `SignalBinary` | `ZkBits`, `ZkBytes` | Generic | Ready for binding/equality on BLS12-381 Groth16 | Symbolic bitwise operations are still limited; use `SignalBinary` or add wrappers when needed. |
 | Binary decomposition | `Binary`, `SignalBinary`, `AliasCheck` | Partly via `ZkUInt`, `ZkBits`, `ZkBool` | Generic | Ready on BLS12-381 Groth16 | `AliasCheck` remains a lower-level helper for canonical field representation checks. |
 | Comparators and ranges | `Comparators`, `SignalComparators` | Mostly through `ZkUInt` | Generic | Ready on BLS12-381 Groth16 | Optional symbolic `min`/`max` helpers can be added later if needed. |
-| Selection / mux | `Mux` | `ZkBool.select(...)`, `ZkJubjubPoint.select(...)` | Generic for scalar values | Ready on BLS12-381 Groth16 | Dynamic array access remains a lower-level `Mux.arrayAccess(...)` pattern. |
+| Selection / mux | `Mux` | `ZkBool.select(...)`, `ZkJubjubPoint.select(...)` | Generic for scalar values | Ready on BLS12-381 Groth16 | Dynamic array access remains a lower-level `Mux.arrayAccess(...)` pattern. The scalar mux is sound; `ZkJubjubPoint.select(...)` inherits the Jubjub row's status below. |
 | MiMC | `MiMC`, `SignalMiMC` | `ZkMiMC` | BN254 only | Not Cardano-ready | `MiMC` and `SignalMiMC` call `requireField(FieldConfig.BN254)`. Use Poseidon for Cardano circuits. |
 | MiMC sponge | `MiMCSponge` | No direct `ZkMiMCSponge` | BN254 only, because it uses MiMC | Not Cardano-ready | Useful for BN254/off-chain legacy circuits only. |
 | Poseidon T3 | `Poseidon`, `SignalPoseidon` | `ZkPoseidon` | BN254 default; BLS12-381 with explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | No-params overloads are BN254 for backward compatibility. |
 | Folded Poseidon N | `PoseidonN` | `ZkPoseidonN` | BN254 default in DSL overloads; symbolic API requires explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | Folded two-input Poseidon, not a separate variable-width Poseidon permutation. |
 | Merkle membership | `Merkle`, `SignalMerkle` | `ZkMerkle` | Hash-dependent | Ready with params-aware BLS12-381 Poseidon helpers | Use `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` for Cardano. `HashType.MIMC` and default `HashType.POSEIDON` are BN254-oriented convenience paths. |
 | Poseidon MPF | No `Signal*` facade; host witness helpers live in `zeroj-mpf-poseidon` | `ZkMpf`, `ZkMpfProof` | BLS12-381 Poseidon only | Technically usable through gnark Groth16, but experimental/heavy | Ready at witness/circuit level. Current MPF circuit is large, so MPF-specific Yaci demo and pure Java proving are deferred until optimization. Not compatible with native Aiken/Blake2b MPF roots. |
-| Jubjub point arithmetic | `InCircuitJubjub`, `JubjubPoint` | `ZkJubjubPoint` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16 | `fromTrustedAffine(...)` assumes curve/subgroup/non-identity checks were done off-circuit when required by the protocol. |
-| Pedersen commitment | `InCircuitPedersen`, `PedersenCommitment` | `ZkPedersen` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16 | Symbolic scalar inputs are capped at `ZkPedersen.MAX_SCALAR_BITS = 252`. |
-| EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16 | Identity public keys are rejected in-circuit; affine inputs are still trusted for curve/subgroup membership unless separately checked. |
+| Jubjub point arithmetic | `InCircuitJubjub`, `JubjubPoint` | `ZkJubjubPoint` | BLS12-381 scalar field only | **NOT production-ready — see ADR-0037** | In-circuit points carry no curve, `T`-invariant, or `Z != 0` constraint. A witness point is unvalidated regardless of what the caller checks off-circuit. Off-circuit `JubjubPoint` is sound. |
+| Pedersen commitment | `InCircuitPedersen`, `PedersenCommitment` | `ZkPedersen` | BLS12-381 scalar field only | **NOT production-ready — see ADR-0037** | Commitment computation itself is sound (fixed-base, constant tables). The scalar canonicality check depends on an unsound comparator; see the comparator note below. |
+| EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | **NOT production-ready — in-circuit verification is forgeable. See ADR-0037** | A prover can produce an accepted proof for a never-signed message. Do not use for value-bearing credentials until ADR-0037 M1–M4 land. |
 | Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR` | Used by `ZkPoseidon*`, `ZkMerkle`, `ZkMpf` | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. The in-circuit `Poseidon` gadget currently supports T3/alpha-5 only. |
 
 **Real-world crypto (Cardano key derivation).** These gadgets reproduce standard wallet/key
@@ -212,12 +212,31 @@ Curve and parameter guidance:
   paths are BN254/off-chain conveniences. For Cardano Merkle circuits, use
   `ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
   explicit BLS12-381 Poseidon params.
-- **Jubjub / Pedersen / EdDSA-Jubjub** — BLS12-381-only adapters. They inherit
-  the curve/subgroup-check contracts documented on the underlying in-circuit
-  gadgets. Use `ZkJubjubPoint.fromTrustedAffine(...)` only for points validated
-  off-circuit for curve membership, subgroup membership, and non-identity where
-  the protocol requires it. `ZkEdDSAJubjub.verify(...)` rejects identity public
-  keys in-circuit.
+- **Jubjub / Pedersen / EdDSA-Jubjub** — ⚠️ **NOT production-ready. In-circuit
+  EdDSA verification is forgeable.** See
+  [ADR-0037](../docs/adr/0037-jubjub-soundness-and-hardening.md).
+
+  A prover can supply an `InCircuitJubjub.Point` whose `Z`/`T` wires carry no
+  constraint, solve them against the verification equation, and obtain an
+  accepted proof for a message that was **never signed** — with an `R` that is
+  not even on the curve. `ZkJubjubPoint.fromTrustedAffine(...)` avoids this only
+  incidentally, by pinning `z = 1` and `t = u·v`; that is a property of one call
+  site, not an enforced invariant, and it does not check curve membership either.
+  There is additionally no identity or small-order check on `pk` in-circuit, so
+  `pk = IDENTITY` is a universal forgery.
+
+  "Validate off-circuit, then trust in-circuit" is **not a usable contract for
+  witness values** — the caller never sees the prover's witness. Do not use these
+  gadgets for value-bearing credentials until ADR-0037 M1–M4 land. The off-circuit
+  `JubjubPoint`, `EdDSAJubjub` (modulo the identity-`pk` gap tracked in M2), and
+  `PedersenCommitment` classes are sound.
+
+- **Comparators** — ⚠️ `CircuitAPI.lessThan(a, b, n)` and everything built on it
+  (`Comparators`, `SignalComparators`, `Signal.lessThan`) are **unsound when an
+  operand is not already range-constrained to `n` bits**. Both directions are
+  affected: `lessThan(p−1, l, 252)` returns true, and
+  `greaterOrEqual(0, p−(2^64−1), 64)` returns true. Range-check every variable
+  operand yourself (`api.toBinary(x, n)`) until ADR-0037 M1 lands.
 - **Cardano key derivation** — `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, and
   `ZkCip1852` are bit-oriented and field-agnostic (they don't depend on the
   circuit's scalar field), so they run on BLS12-381 Groth16. `ZkCip1852`
