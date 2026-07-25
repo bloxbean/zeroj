@@ -19,7 +19,8 @@ implementation plan called for.
 We performed a correctness/security/performance review of that surface ahead of using it
 for value-bearing applications: manual read of all sources and tests, numeric re-derivation
 of every curve constant, compilation of each gadget to count real R1CS constraints, and
-executable proofs-of-concept for the suspected soundness gaps.
+executable proofs-of-concept for the suspected soundness gaps. Every "confirmed" and
+"measured" statement below was produced by running code, not by inspection.
 
 ### What the review confirmed (no action beyond locking it in)
 
@@ -77,12 +78,20 @@ executable proofs-of-concept for the suspected soundness gaps.
    `S = r`. Confirmed returning `true`. `ZkEdDSAJubjub` rejects identity in-circuit; the
    off-circuit verifier does not.
 
-4. **In-circuit curve/subgroup enforcement contradicts ADR-0016.** ADR-0016 §4 and Risk 1
-   state that the high-level verify gadget "*always* performs subgroup checks internally."
-   `InCircuitEdDSAJubjub`'s Javadoc explicitly opts out and delegates to callers. Once item 1
-   is fixed the verification equation does incidentally force `R` to be torsion-free (both
-   `[S]·G` and `[k]·pk` are), so the residual exposure is `pk`; but the asymmetry means a
-   signature the circuit accepts can be rejected by the off-circuit verifier.
+4. **The in-circuit verifier accepts any small-order public key — including in-circuit
+   identity — and no proposed cofactoring fixes that.** `InCircuitEdDSAJubjub.verify` has no
+   identity, subgroup, or torsion check on `pk`. Confirmed: with the affine well-formedness
+   binding of Decision 1 applied, `pk = IDENTITY` is accepted and yields a universal forgery
+   (`[k]·pk = O`, so the equation collapses to `[S]·G == R`; set `R = [S]·G` for any `S`).
+   Identity is on the curve, so no curve-membership check can reject it.
+
+   The same holds for every point of order dividing 8 — `(0, −1)` of order 2, or `[l]·
+   FULL_GENERATOR` of order 8. Under a **cofactored** verification equation this gets
+   strictly worse: `[8]·([k]·pk) = O` for all such `pk`, so the equation reduces to
+   `[8S]·G == [8]·R` and `R = [S]·G` forges for any message. Confirmed by direct computation:
+   the same forgery is **accepted** by the cofactored equation and **rejected** by the
+   cofactorless one shipping today. ADR-0016 §4 and Risk 1 claimed the high-level gadget
+   "*always* performs subgroup checks internally"; it never did.
 
 5. **The projective representation is a hash input.** `InCircuitEdDSAJubjub.java:80-81`
    hashes the *extended* `u()`/`v()` wires while `witnessComputeKReduction` hashes
@@ -135,51 +144,165 @@ executable proofs-of-concept for the suspected soundness gaps.
    generated and Sage-cross-checked but unusable — `PoseidonHash.hash:40` hard-rejects
    `t != 3` and the in-circuit `Poseidon` gadget is `t=3`-only.
 
-10. **No negative in-circuit tests.** Every in-circuit test is happy-path or wrong-public-
-    output. Nothing asserts that a malformed point, a non-boolean bit, or an aliased quotient
-    is *rejected*. This is precisely the test class that would have caught items 1 and 2.
+10. **No adversarial structural/soundness tests.** There *are* negative tests — `InCircuit
+    EdDSAJubjubTest` rejects tampered messages, a malleated `S`, and a wrong public key. What
+    is absent is the class that varies the *witness structure* rather than its values: nothing
+    asserts that a malformed point, a non-boolean bit, an aliased quotient, or an
+    out-of-range comparator operand is rejected. That is the class that would have caught
+    items 1, 2, and 11.
+
+11. **`CircuitAPIImpl.lessThan` is unsound on operands that carry no range constraint, and
+    the exposure is project-wide.** `lessThan(a, b, n)` forms `diff = (2^n − 1) + b − a` and
+    takes the MSB of an `(n+1)`-bit decomposition. If `a` carries no `< 2^n` constraint, the
+    subtraction wraps modulo `p`, and for a band of `a` near `p` the wrapped value lands back
+    inside `[2^n, 2^(n+1))` and the gadget returns *true*.
+
+    **Both directions are forgeable**, depending on which operand lacks the constraint:
+
+    | Asserted form | Unbounded operand | Confirmed witness |
+    |---|---|---|
+    | `a < b` | left (`a`) | `lessThan(p − 1, l, 252)` accepted; `lessThan(p − 1, 10^6, 64)` accepted |
+    | `a >= b` | right (`b`) | `greaterOrEqual(0, p − (2^64 − 1), 64)` accepted |
+
+    An earlier draft of this ADR claimed the `>=` direction was safe. That was wrong — it had
+    been tested by varying the left operand only. Enlarging the *right* operand drives
+    `diff = (2^n − 1) + b − a` to wrap to a small residue, and the comparison returns true.
+
+    `InCircuitEdDSAJubjub`'s `S < l` and `kModL < l` checks and
+    `ZkPedersen.assertCanonicalScalar` (line 108) are sound today **only** because
+    `scalarMulFixedBase` / `scalarMulVariableBase` and `InCircuitPedersen.commit` later emit
+    `toBinary(·, 252)` on the same wires. The repository-wide audit also found
+    `Signal.lessThan` (a public facade) and `SignalComparators.greaterOrEqual` in
+    `SealedBidCircuit:38` and `BalanceThresholdCircuit:28`. Both compare an unbounded private
+    witness against an **unbounded public input** (`reservePrice`, `threshold`). They are
+    therefore **not sound as circuit relations as written**; they hold only if the surrounding
+    protocol independently guarantees the public operand is below `2^64`, and neither circuit
+    documents that precondition.
 
 ### Blast radius today
 
-The only downstream consumer of these gadgets is
-`zeroj-examples/.../AnnotatedPedersenCommitment.java`. EdDSA-Jubjub is not wired into any
-shipped usecase. The soundness defects can therefore be fixed before anything depends on
-them; no deployed artifact needs revocation.
+`zeroj-examples/.../AnnotatedPedersenCommitment.java` is the only in-repository consumer of
+these gadgets, and EdDSA-Jubjub is not wired into any shipped usecase. However, commit
+`8b535d5` **is contained in every release tag in the repository** (`v0.1.0-pre1` through
+`v0.1.0-pre10`), so the affected code has been published. We can state that there is no known
+in-repository EdDSA-Jubjub consumer; we cannot state that no deployed artifact needs
+revocation. An adoption/release audit is required before that claim can be made, and it is a
+prerequisite of M0 below.
+
+Two currently-published documents actively steer readers into the broken model:
+`zeroj-circuit-lib/README.md:51` marks EdDSA-Jubjub "Ready on BLS12-381 Groth16", and
+`docs/circuit-annotation-user-guide.md:254` recommends binding keys with
+`fromTrustedAffine(...)` after off-circuit checks — the exact contract Decision 1 withdraws.
 
 ## Decision
 
-### 1. Point well-formedness becomes a gadget-enforced invariant, not a caller contract
+### 0. Downgrade the published safety claims immediately
+
+Before any code change, and ahead of every other milestone: mark EdDSA-Jubjub and the raw
+Jubjub point gadgets **not production-ready** in `zeroj-circuit-lib/README.md`, and replace
+the `fromTrustedAffine` guidance in `docs/circuit-annotation-user-guide.md` with an explicit
+warning that witness points are not curve- or subgroup-checked and that in-circuit EdDSA
+verification is forgeable until M1–M4 land. Run the release/adoption audit described under
+Blast Radius and record the result.
+
+Documentation that tells users a forgeable gadget is "Ready" is itself a live defect. It is
+not M4 work.
+
+### 1. Point well-formedness becomes a gadget-enforced invariant, with one exact mechanism
 
 The "validated off-circuit, trusted in-circuit" contract in `InCircuitJubjub` and
 `InCircuitEdDSAJubjub` is withdrawn for witness points. A prover-supplied point is not
 validated by anything the caller does off-circuit — the caller never sees the prover's
-witness. We will:
+witness.
 
-- Add `InCircuitJubjub.assertOnCurve(api, point)` emitting `V² − U² == Z² + d·(T²)`
-  (equivalently the affine form when `Z = 1`), and `assertExtendedConsistent(api, point)`
-  emitting `T·Z == U·V`. Together ~4 multiplication constraints per point.
-- Make `InCircuitEdDSAJubjub.verify` apply both to `pk` and `R` itself, unconditionally.
-  At ~8 constraints against a ~19,000-constraint gadget, the cost is not a reason to defer it
-  to callers.
-- Add a `witnessAffine(api, uWire, vWire)` constructor that binds `Z` to the constant-1 wire
-  and `T` to a constrained `u·v`, and steer all documentation and examples to it. The raw
-  four-wire `Point` constructor stays for gadget-internal use but is documented as unchecked.
+**The public raw-extended-`Point` verification overload is removed, and verification moves to
+a non-public `verifyCore` that takes affine `u`/`v` wires for `pk` and `R` and constructs the
+extended points internally.** It is not enough to offer a safe binder and document it; the
+unsafe path has to become unreachable at the API boundary. `verifyCore` is never public — the
+only public entry points are the two of Decision 4, so there is no window in which a public
+verifier exists with an ambiguous key-trust contract. Internally, for each of `pk` and `R`,
+`verifyCore` emits:
+
+- `Z := 1` (the constant wire) and `T := u·v` (one constraint), and
+- the affine curve equation `v² − u² == 1 + d·u²·v²`.
+
+Measured cost: **5 constraints per point, 10 for the pair** (legacy `verify` 18,965 →
+`verifyCore` 18,975). This single mechanism discharges curve membership, the
+extended-coordinate invariant, `Z != 0`, and the projective rescaling of Context item 5 —
+the last because `Z` is a constant, so the challenge hash is computed over genuinely affine
+coordinates by construction.
+
+`InCircuitJubjub.witnessAffine(api, uWire, vWire)` is exported as the same binder for other
+gadgets. `InCircuitJubjub.assertWellFormed(api, point)` is also provided for genuinely
+projective values, emitting all **three** of `V² − U² == Z² + d·T²`, `T·Z == U·V`, and
+`Z != 0`; it deliberately accepts any nonzero rescaling and is therefore **not** sufficient at
+a hashing boundary. The raw four-wire `Point` constructor remains for gadget-internal values
+and is documented as unchecked.
+
+**The `Z != 0` conjunct of `assertWellFormed` is not optional.** `(U,V,Z,T) = (0,0,0,0)`
+satisfies the other two identically — both reduce to `0 == 0` — propagates through the
+addition formula to an all-zero `R + [k]·pk`, and makes both projective-equality assertions
+read `0 == 0`, vacuously true for any `S`. A check set carrying only the curve equation and
+the `T` invariant leaves the forgery of Context item 1 fully intact; this was confirmed by
+executing that exact set against an all-zero witness.
+
+Both the corrected mechanism and its cost were validated before adoption: with affine
+binding on `pk` and `R`, the extended-coordinate forgery and the all-zero variant are both
+rejected and an honest signature still verifies.
 
 Rationale: ADR-0016 Risk 1's mitigation ("low-level ops are clearly documented as caller's
 responsibility") is not a viable control for values that originate in the witness. The
-correct boundary is the gadget.
+correct boundary is the gadget signature.
 
-### 2. The challenge reduction becomes canonical
+### 2. The challenge reduction becomes canonical *and* complete
 
-`kQuotient` is range-checked to **3 bits** (`q < 8`) instead of 4. Then
-`q·l + kModL <= 8l − 1 < p`, the field equation cannot wrap, and the decomposition is unique.
-Honest completeness is lost only when `kRaw >= 8l`, which occurs with probability
-`δ/p ≈ 2^-129`. `ZkEdDSAJubjub.validateInputs` is tightened to `kQuotient.bits() <= 3` to
-match.
+Witness `kQuotient` and `kModL`, and enforce all three of:
 
-We also assert `Z == 1` on every point whose coordinates feed the challenge hash, so the
-in-circuit and off-circuit challenge computations are provably the same function and the
-representation cannot be used to grind Fiat–Shamir.
+- `kQuotient <= 8`,
+- `kModL < l`,
+- `kQuotient == 8 ⇒ kModL < δ`  (where `δ = p − 8·l`).
+
+Then `kQuotient·l + kModL < p` unconditionally, so the field equation cannot wrap, the
+decomposition is unique, **and** every `kRaw ∈ [0, p)` has a satisfying witness. The earlier
+draft of this ADR proposed a flat 3-bit quotient; that is sound but sacrifices completeness
+on the `kRaw >= 8l` tail, which contradicts Decision 4's off-circuit-implies-in-circuit
+claim and sits at probability `≈ 2^-129` where no randomized corpus can exercise it. The
+three-part constraint costs a few hundred constraints and removes an untestable claim.
+
+`witnessComputeKReduction` returns the canonical `(q, kModL)` and is covered by a
+**deterministic** boundary test that constructs `kRaw` values straddling `8l` directly,
+rather than relying on sampling.
+
+**Comparator operands must carry range constraints; emission order is irrelevant.** R1CS
+constraints are declarative, so the earlier framing of this as an "ordering invariant" was
+wrong — the property is that the constraints *exist*, not where they appear. Per Context
+item 11:
+
+- `CircuitAPI.lessThan(a, b, n)` range-constrains **both** variable operands to `n` bits.
+  Constraining only the left operand is insufficient — the `>=` witness above attacks the
+  right one. A statically-validated constant operand is exempt and is checked at build time.
+- A reuse overload is added, but it takes an **opaque `BitDecomposition` type**, not a bare
+  `Variable[]`. A raw array carries no proof that its elements are boolean, so a
+  `lessThan(Variable[], Variable[])` overload would either be unsound or have to re-assert
+  booleanity — losing the reuse benefit it exists for. `BitDecomposition` has a non-public
+  constructor and returns defensively-copied, immutable bits, so the range constraint travels
+  with the value and cannot be forged. It **binds the source variable, the width, and the bits
+  together**, and the reuse overload consumes that bound object rather than taking a
+  decomposition plus a separately-supplied value — otherwise a caller could pass the
+  decomposition of `x` while comparing `y`. This is what keeps Decision 7 item 5 from being a
+  regression.
+
+  Transition: `CircuitAPI.toBinary` currently returns `Variable[]`
+  (`CircuitAPI.java:52`) and changing that return type is source-breaking across every
+  caller. We add `CircuitAPI.decompose(Variable, int) -> BitDecomposition` alongside it,
+  migrate library gadgets to the new method, and deprecate `toBinary` rather than break it in
+  the same release.
+- The precondition is documented on `CircuitAPI.lessThan`, `Comparators`, `SignalComparators`,
+  and `Signal.lessThan`.
+- A repository-wide call-site audit lands with adversarial tests for every public comparison
+  facade, exercising an unbounded operand on **each side** — an `a ≈ p` witness for `<` and a
+  `b ≈ p` witness for `>=`. `SealedBidCircuit` and `BalanceThresholdCircuit` are fixed by the
+  `lessThan` change and gain tests pinning the corrected relation.
 
 ### 3. Close the off-circuit verifier and key-handling gaps
 
@@ -192,23 +315,106 @@ representation cannot be used to grind Fiat–Shamir.
   and a documented `hashToField(byte[])` for byte-oriented messages. Not shipping these means
   every integrator re-implements the two easiest things to get wrong.
 
-### 4. In-circuit verification adopts the cofactored equation
+### 4. Public-key trust becomes an explicit, enforceable model — and verification stays cofactorless
 
-Rather than an in-circuit `[l]·P` subgroup check (~8,500 constraints per point), the verify
-gadget asserts the cofactored equation `[8S]·G == [8]·R + [8·kModL]·pk`, which costs three
-extra doublings per side (~60 constraints) and annihilates any order-8 component. The
-off-circuit `isInSubgroup()` gate on `pk` at issuer-registration time is retained and
-documented as a protocol requirement, not an implementation detail.
+Context item 4 shows that no amount of curve-membership checking rescues a small-order `pk`,
+and that cofactoring the verification equation makes it strictly worse. An earlier draft of
+this ADR adopted cofactored verification to close the accept/reject asymmetry with the
+off-circuit verifier; that is withdrawn. Cofactorless verification forces the accepted `R`
+into the prime-order subgroup algebraically — both `[S]·G` and `[k]·pk` lie there when `pk`
+does — so the circuit and the strict off-circuit verifier agree on exactly which `R` values
+are admissible.
 
-This closes the accept/reject asymmetry between `EdDSAJubjub.verify` and
-`InCircuitEdDSAJubjub.verify` for torsion-bearing keys.
+This is canonical *acceptance semantics*, not uniqueness of `R`. A signer who deviates from
+the deterministic nonce can produce a different, entirely valid prime-order-subgroup
+signature over the same `(pk, msg)`. A protocol that uses `R` as a uniqueness key therefore
+still depends on deterministic, single issuance — or, better, should derive its nullifier
+from a credential identifier rather than from `R`.
 
-### 5. Domain-separate the Poseidon uses
+Correcting an earlier draft: this is **not** a public malleability of an issued signature.
+Replacing `R` with `R + T` changes the challenge from `H(R, pk, msg)` to `H(R + T, pk, msg)`,
+so the original `S` no longer satisfies the equation. Measured: of the 8 torsion variants,
+exactly **1 of 8** verifies cofactored when `S` is held fixed — the original. The real
+exposure is **signer-controlled non-canonical issuance**: an issuer who knows `sk` can
+recompute the challenge and response for each variant and produce **8 of 8** distinct
+signatures that all verify under a cofactored equation, while the strict off-circuit verifier
+rejects every torsion-bearing one. Under cofactorless verification those variants are simply
+invalid, so a malicious issuer cannot mint credentials that the circuit honours and the
+off-chain checker disowns. See *Taming the Many EdDSAs* for the general treatment.
 
-The challenge and nonce hashes take a distinct constant domain tag as the first fold input.
-If Decision 7's `t=5`/`t=6` Poseidon path lands first, the tag rides along in the wider
-permutation at no extra cost; until then it costs one additional 828-constraint permutation
-in the challenge, which is accepted.
+Instead, the trust model for `pk` is made explicit in the API, because it is the protocol
+shape — not the gadget — that determines whether `pk` is attacker-controlled:
+
+- **`verifyStrict(...)`** performs an in-circuit prime-order subgroup check on `pk`
+  (`[l]·pk == O`, ~8,559 constraints). This is the correct entry point whenever `pk` is a
+  private witness or is selected by the prover — for example "a credential from *some*
+  issuer in this Merkle tree".
+- **`verifyWithRegisteredKey(...)`** requires `pk` to be a circuit constant or a public
+  input. This requirement is **enforced by the DSL, not by Javadoc.** Today `Variable` is a
+  `record(int id, String name)` and `InputVisibility` is a private enum inside
+  `CircuitAPIImpl`, so a gadget has no way to tell a public input from a secret witness — a
+  documented contract here would be unenforceable, exactly the failure mode Decision 1
+  withdraws. Prerequisite for this entry point: add
+  `CircuitAPI.requirePublicOrConstant(Variable)`, which throws at circuit-definition time, and
+  have `verifyWithRegisteredKey` call it on both `pk` wires.
+
+  **Authorization is set membership over circuit-owned wire IDs, never over any name supplied
+  through `Variable`.** `Variable` is a public record, so any caller can construct
+  `new Variable(secretWire.id(), "someKnownPublicInputName")`. The existing
+  `inputVisibilities` map is keyed by *name* while every emitted constraint references the
+  *id*, so it is **not** a usable basis: a name-keyed implementation would classify that
+  forgery as public while the circuit wires in the secret value. The check resolves against
+  the `publicInputs` wire IDs plus a dedicated constant-wire-ID set that `CircuitAPIImpl`
+  maintains as it creates constants. That set must include `oneWire`, which is constructed
+  directly in the constructor and never enters `constantCache` — `constantCache.values()`
+  alone would omit it.
+  Tests must cover: an ordinary secret input; a secret wire carrying a public input's name; a
+  derived/intermediate wire; and genuine public and constant wires including `oneWire`.
+
+  The DSL check establishes only that the value is verifier-visible. Binding it to a registry
+  entry whose subgroup membership was checked at registration remains a protocol obligation
+  on the final verifier, stated in the Javadoc and repeated in the module README.
+
+Both entry points additionally assert `[8]·pk != O` — three doublings plus a non-identity
+check, measured at **41 constraints** on top of the affine binder. This rejects the identity
+and every pure-torsion key outright. It does not prove subgroup membership (a mixed-order
+`pk = pk' + T` passes), which is exactly why it is a backstop rather than the control, and
+why `verifyStrict` exists.
+
+There is no public unqualified `verify(...)` at any point in the sequence. M1 deletes the
+raw-point overload and leaves `verifyCore` non-public; M3 exposes the two named entry points
+above. The ambiguous name is removed rather than left as a trap, and it is never briefly
+re-exposed in an interim form.
+
+Note on scalar width, correcting an earlier draft: `8·kModL` is at most `8(l − 1)`, which is
+255 bits and less than `p`, so it does **not** exceed `scalarMulFixedBase`'s 255-element
+array cap. It does exceed both the 252-bit scalar width used by the legacy verifier (and
+retained in `verifyCore`) and `CircuitAPIImpl`'s `MAX_SAFE_BITS = 253` ceiling on `toBinary`,
+so it cannot be built through the scalar overload. Where a cofactor multiple is needed
+anywhere in this codebase it is applied as three doublings after the scalar multiplication —
+cheaper, and it sidesteps the width question entirely.
+
+### 5. Domain-separate the Poseidon uses, with the construction pinned
+
+This ADR does **not** pin the construction — it states what must be pinned and makes doing so
+a hard prerequisite of M3. A normative specification document (`docs/specs/jubjub-eddsa-v1`)
+must exist and be reviewed before any domain-separation code lands:
+
+- A ZeroJ suite identifier and version string, and the literal field-element tag per use
+  (challenge, nonce, `hashToField`), with golden vectors.
+- `hashToField(byte[])`: byte ordering, framing/padding, reduction algorithm, and DST, with
+  vectors. An underspecified `hashToField` is how two implementations of "the same" scheme
+  stop interoperating.
+- The `t = 6` Poseidon parameter set itself: generated through the existing
+  `PoseidonParamsCodegen` path and cross-checked against the hadeshash Sage reference, on the
+  same footing as the `t=3`/`t=5` presets. New Poseidon parameters are a security-relevant
+  artifact, not a config change.
+- Arity arithmetic, correcting an earlier draft: the challenge absorbs five field elements,
+  so with capacity 1 a single permutation needs rate 5, i.e. **`t = 6`** — `t = 5` (rate 4)
+  cannot do it, and the earlier "`t=5`/`t=6`" phrasing was wrong. Adding a sixth absorbed
+  element for the tag needs `t = 7`, unless the tag instead initialises the capacity cell,
+  which is the construction we adopt: **`t = 6` with the domain tag in the capacity cell.**
+  Until that lands, the tag costs one extra folded `t=3` permutation (828 constraints).
 
 ### 6. Reconcile ADR-0016 and the in-code documentation with what shipped
 
@@ -219,87 +425,169 @@ verify" estimate is 6× low; and M6's consolidated cross-verification suite and 
 `JubjubCurveTest.assertParameterSquareness` gate named in Risk 4 do not exist. The incorrect
 nonce-bias warning at `EdDSAJubjub.java:100-104` is deleted and replaced with the measured
 `2^-129` figure. Javadoc constraint estimates on `InCircuitJubjub` and `InCircuitPedersen`
-are replaced with measured numbers, with a note that they are pinned by a test.
+are replaced with measured numbers, pinned by a test.
 
 ### 7. Sequence performance work strictly after the soundness gates
 
-Constraint-count work is not a release blocker and must not land before Decision 1–4 gates
-are green, because several of the optimizations change the same code paths. Planned, in
-value order:
+Constraint-count work is not a release blocker and must not land before the Decision 1–4
+gates are green, because several optimizations touch the same code paths. Planned, in value
+order:
 
 1. Assert booleanity once per point-select instead of four times, and skip it entirely for
    `toBinary`-derived bits (−6 to −8 constraints/bit, i.e. up to −2,016 per 252-bit mul).
 2. A dedicated constant-addend addition path for fixed-base multiplication (~4 constraints
    instead of 10 per addition).
 3. The 3–4 bit windowed fixed-base table ADR-0016 §3 specified.
-4. Finish the `t=5`/`t=6` Poseidon so the five-input challenge is one permutation
-   (~−2,500 constraints per verify).
-5. Reuse the `toBinary` decomposition for the `< l` comparison instead of decomposing twice.
+4. Finish the `t=6` Poseidon so the five-input challenge plus domain tag is one permutation
+   (~−2,500 constraints per verify, and it absorbs Decision 5's 828).
+5. Reuse the `toBinary` decomposition for the `< l` comparison instead of decomposing twice —
+   via the `BitDecomposition` `lessThan` overload of Decision 2, which preserves the range constraint
+   rather than dropping it. The `lessThan(p − 1, l, 252)` regression is the gate.
 
-Targets: 252-bit fixed-base multiplication at ~1.5–2k constraints (from 6,049) and EdDSA
-verify below ~8k (from 18,965). Off-circuit, a Montgomery or Barrett reduction layer, wNAF
-scalar multiplication, Strauss–Shamir for the verify equation, batch inversion, a cached
-quadratic non-residue in `modSqrt` (it currently re-searches from 2 on every `fromBytes`),
-and a hard-coded Pedersen `H` (currently a Poseidon try-and-increment plus Tonelli–Shanks in
-a static initializer, already pinned by a fixture test) are expected to give 3–5× on
-`scalarMul` and ~3× on `verify`. These are tracked here but scheduled after M1–M3.
+Targets, stated per entry point because they are not comparable: 252-bit fixed-base
+multiplication at ~1.5–2k constraints (from 6,049); `verifyWithRegisteredKey` below ~8k; and
+`verifyStrict` below ~14k, since its in-circuit subgroup check alone is ~8,559 today and only
+partly benefits from items 1–3. An earlier draft quoted a single ≤8k target, which
+`verifyStrict` cannot meet by construction.
 
-### 8. Accept the remaining items as documented, not blocking
+Off-circuit, a Montgomery or Barrett reduction layer, wNAF scalar
+multiplication, Strauss–Shamir for the verify equation, batch inversion, a cached quadratic
+non-residue in `modSqrt` (it currently re-searches from 2 on every `fromBytes`), and a
+hard-coded Pedersen `H` (currently a Poseidon try-and-increment plus Tonelli–Shanks in a
+static initializer, already pinned by a fixture test) are expected to give 3–5× on
+`scalarMul` and ~3× on `verify`. Tracked here, scheduled after M1–M3.
 
-Variable-time `scalarMul` (secret-dependent branching over variable-time `BigInteger`) is
-accepted for prover-side use, consistent with the ADR-0021 posture for `zeroj-bls12381`.
+### 8. The off-circuit signer is classified non-production for remotely reachable issuers
+
+`JubjubPoint.scalarMul` branches on secret bits over variable-time `BigInteger`, and
+`EdDSAJubjub.sign` performs secret-dependent scalar multiplication for both the long-lived
+key and the deterministic nonce. Unlike ADR-0021's BLS12-381 posture, there is no native
+`blst` fallback to route secrets through.
+
+Documentation is not a mitigation for a remotely reachable or co-resident issuer, so the
+classification is explicit rather than advisory: **this signer is not approved for
+value-bearing issuance on shared or network-reachable infrastructure.** Approved uses are
+local/offline signing and test issuance.
+
+Lifting the restriction requires the **entire** signing computation to be constant-time, not
+just the scalar multiplication: branchless conditional select and fixed-length limb scalars
+in `scalarMul`, branchless field reduction, **and the nonce hash** — `r = Poseidon(sk, msg)`
+feeds the secret key straight through Poseidon's `BigInteger` S-box and MDS arithmetic, which
+is variable-time on every operation. A constant-time `scalarMul` over a variable-time
+Poseidon leaks the key just as effectively. This is deferred to a separate ADR and the
+restriction stands until all of it lands.
+
 Deriving the nonce as `Poseidon(sk, msg)` rather than from a separate hashed prefix of the
-secret (RFC 8032 style) is accepted, documented. Issuer signing services that are remotely
-timeable need an environment-specific review; that is called out in the module README rather
-than solved here. Jubjub-Merkle (ADR-0016 §7, optional) stays unimplemented.
+secret (RFC 8032 style) is accepted and documented. Jubjub-Merkle (ADR-0016 §7, optional)
+stays unimplemented.
 
 ## Consequences
 
 ### Easier
 
-- The in-circuit gadgets become safe to hand to application developers: a witness point that
-  is not a well-formed curve point fails the proof instead of forging one.
-- The in-circuit and off-circuit verifiers accept exactly the same signature set, so an
-  off-chain pre-check is a reliable predictor of in-circuit success.
+- The unsafe path stops being reachable: the legacy raw-`Point` verifier is removed and
+  neither public named entry point accepts raw extended-coordinate wires, so a caller cannot
+  construct a forgeable point at the signature boundary.
+- The `pk` trust assumption becomes a choice the caller makes by name (`verifyStrict` vs
+  `verifyWithRegisteredKey`) rather than an undocumented default.
+- Cofactorless verification keeps the accepted `R` in the prime-order subgroup, so the
+  circuit and the off-circuit verifier agree on which signatures are admissible and a
+  malicious issuer cannot mint non-canonical variants the circuit honours. This is canonical
+  *acceptance semantics*, not a uniqueness guarantee on `R` — see Decision 4 for what a
+  nullifier-bearing protocol still has to do for itself.
 - Integrators get a safe key-generation and message-encoding surface instead of inventing one.
-- The performance roadmap can proceed safely because Decision 1–4 gates pin behaviour.
+- The performance roadmap can proceed safely because the Decision 1–4 gates pin behaviour.
 
 ### Harder
 
-- EdDSA verify grows by roughly 70 constraints (well-formedness + cofactored equation) before
-  Decision 7 claws back several thousand.
-- The domain-separation change and the canonical `kQuotient` width are **breaking**: proofs,
-  verification keys, and witnesses produced under the current gadget will not verify against
-  the fixed circuit. Acceptable because nothing in production depends on it yet; it would not
-  be acceptable later, which is why this is sequenced now.
-- More test-maintenance surface (negative in-circuit tests, constraint-count pins).
+- **Near-term cost grows by roughly 1,200 constraints, not the ~70 an earlier draft
+  claimed**: +10 measured for affine binding of `pk` and `R`, +41 measured for `[8]·pk != O`,
+  ~+300 for the canonical three-part reduction, +828 for domain separation until `t = 6`
+  lands, and 0–500 for comparator range-constraining depending on whether the
+  `BitDecomposition` overload reuses existing decompositions. `verifyWithRegisteredKey` lands
+  near 20,100–20,600 before Decision 7 claws back several thousand; `verifyStrict` adds a
+  further ~8,559 for the in-circuit subgroup check.
+- **Two different breaking changes, with different migration scope.** They are not
+  interchangeable and an earlier draft conflated them:
+  - *Decision 2 (canonical reduction)* preserves `k = kRaw mod l`, so **signatures and
+    credentials stay valid**. It changes the circuit, the witness layout, and therefore
+    proofs and verification keys. Migration = recompile, re-run setup, re-prove.
+  - *Decision 5 (domain separation)* changes what the challenge *is*, so it changes what a
+    valid signature is. **Previously issued signatures and credentials become unverifiable**
+    and must be re-issued, on top of everything Decision 2 invalidates.
+
+  The release audit of Decision 0 sets the scope of the re-issuance. Sequencing this now,
+  while `AnnotatedPedersenCommitment` is the only in-repository consumer, is what keeps it
+  small.
+- More test-maintenance surface (negative in-circuit tests, comparator adversarial tests
+  across every public facade, constraint-count pins).
+- The legacy public `verify` method is removed, so every existing call site must move to a
+  named entry point.
 
 ### Neutral
 
 - No on-chain verifier change. All Jubjub work stays inside the SNARK, as ADR-0016 §Risks 6
   established.
 - The ADR-0016 architecture decisions (Jubjub over BabyJubJub, extended coordinates, Poseidon
-  challenge) are unaffected; only the enforcement boundary and the cost estimates change.
+  challenge) are unaffected; the enforcement boundary, the trust model, and the cost estimates
+  change.
 
 ## Test Plan
 
-- **Soundness regressions (must fail before the fix, pass after):**
-  - The extended-coordinate forgery: arbitrary `R.u`/`R.v`, solved `R.z`/`R.t`, an unsigned
-    message, and a valid-looking `S` — assert the witness calculation now throws.
-  - The challenge alias: `(q + 8, kModL + δ)` for a genuine signature — assert rejected.
-  - Identity public key with `R = [r]·G`, `S = r` — assert off-circuit `verify` returns false.
-  - A curve-valid but torsion-bearing `pk` — assert in-circuit and off-circuit agree.
-- **Well-formedness gates:** off-curve `(u, v)` with `Z = 1`; `T != u·v` with `Z = 1`; `Z = 0`;
-  a rescaled `(λU, λV, λZ, λT)` representation of a valid point — each asserted rejected.
+- **Pre-fix exploit fixtures.** Retain the extended-coordinate and all-zero exploit witness
+  vectors together with the accepting legacy circuit. Because M1 deletes the public overload
+  those exploits called, the historical circuit is retained as a non-compiled test resource
+  or a self-contained test-only reproduction of the legacy relation — never as source that
+  still calls the removed method.
+- **M1 soundness gates:**
+  - `assertWellFormed` rejects the exact malformed points from the retained exploit fixtures,
+    and a structural test confirms that no public raw-extended-`Point` verification overload
+    exists.
+  - The challenge alias `(q + 8, kModL + δ)` for a genuine signature is rejected.
+  - `lessThan(p − 1, l, 252)` is rejected standalone and through the `S < l` check;
+    `greaterOrEqual` with `b ≈ p` is rejected standalone and through both example circuits.
+- **M3 verifier regressions:**
+  - `pk = IDENTITY` with `R = [S]·G` and arbitrary `S` is rejected by both public entry
+    points.
+  - A `pk` of order 2 (`(0, −1)`) or order 8 (`[l]·FULL_GENERATOR`) with `R = [S]·G` is
+    rejected by both `verifyStrict` and `verifyWithRegisteredKey`.
+  - A **mixed-order** `pk = pk' + T`: `verifyStrict` must reject it; `verifyWithRegisteredKey`
+    accepts it, and the test asserts that outcome explicitly so the residual dependence on
+    registry binding is visible rather than implied. This needs a **deterministic constructed
+    vector, not a random signature**: under cofactorless verification the torsion term cancels
+    only when `8 | k`, measured at 51/400 random transcripts — exactly the subset with
+    `k ≡ 0 (mod 8)`. The vector is built by searching `msg` for a transcript with `8 | k` and
+    pinning it, so the test asserts acceptance rather than flaking at ~7/8.
+  - `verifyWithRegisteredKey` called with a secret witness `pk` — asserted to throw at
+    circuit-definition time via `requirePublicOrConstant`.
+- **Well-formedness gates:** off-curve `(U, V)`; `T·Z != U·V` (the general projective form of
+  the invariant — `T = U·V/Z`, so `T != u·v` is only the `Z = 1` special case); `Z = 0`; the
+  all-zero point — each asserted rejected against **`assertWellFormed`**, since once
+  verification takes affine wires these values are no longer expressible at its boundary.
+  Paired with a structural test asserting that **no raw-extended-`Point` verification overload
+  exists**, which is what makes the affine-only boundary a property of the API rather than a
+  convention. A nonzero projective rescaling `(λU, λV, λZ, λT)` of a valid point must **pass**
+  `assertWellFormed` (it is a legitimate representation); an earlier draft wrongly listed it
+  as always rejected.
+- **Reduction boundary:** deterministic witnesses with `kRaw` immediately below, at, and above
+  `8l`, asserting the canonical `(q, kModL)` is accepted and every alias rejected. Not
+  sampled — constructed.
+- **Verifier relation:** over a randomized corpus, every signature the off-circuit verifier
+  accepts is accepted by `verifyStrict`, and vice versa. Divergences are enumerated and
+  asserted, never merely observed.
+- **Comparator audit:** adversarial tests in both `<` and `>=` directions for
+  `CircuitAPI.lessThan`, `Comparators`, `SignalComparators`, and `Signal.lessThan`, plus
+  pinning tests for `SealedBidCircuit` and `BalanceThresholdCircuit`.
 - **Input validation:** `sign` with `sk = 0`, `sk = l`, `sk > l`; `sign`/`verify` with
   `msg >= p`; `Keypair.toString()` asserted not to contain the secret scalar's digits.
-- **Key generation:** `generateKeypair` output asserted in `[1, l)` over many samples, and
-  `pk` asserted in-subgroup and non-identity.
+- **Key generation:** `generateKeypair` output asserted in `[1, l)` over many samples, with
+  `pk` in-subgroup and non-identity.
+- **Domain separation:** golden vectors for the challenge, the nonce, and `hashToField`,
+  including byte-ordering and framing cases.
 - **Parameter pinning (ADR-0016 Risk 4 debt):** `a` is a QR and `d` is a non-QR; `d` re-derived
   as `-10240/10241 mod p`; `[8]·FULL_GENERATOR == SUBGROUP_GENERATOR`; `l` and `p` primality.
-- **Cost pinning:** a test asserting compiled constraint counts for `add`, `doubled`,
-  fixed-base 252-bit, variable-base 252-bit, Pedersen 252-bit, and EdDSA verify, so
-  Decision 7 changes are visible and no regression sneaks in.
+- **Cost pinning:** compiled constraint counts for `add`, `doubled`, fixed-base 252-bit,
+  variable-base 252-bit, Pedersen 252-bit, `verifyStrict`, and `verifyWithRegisteredKey`.
 - **Regression:** existing `JubjubPointTest` (including the 16 zkcrypto serialization
   vectors), `EdDSAJubjubTest`, `PedersenTest`, `InCircuitJubjubTest`,
   `InCircuitEdDSAJubjubTest`, and `ZkGadgetAdaptersTest` must stay green throughout.
@@ -308,28 +596,42 @@ than solved here. Jubjub-Merkle (ADR-0016 §7, optional) stays unimplemented.
 
 | # | Scope | Gate |
 |---|---|---|
-| **M1** | Land the four soundness regression tests from the Test Plan as failing tests, then Decisions 1 and 2 (well-formedness asserts, `witnessAffine` binder, 3-bit `kQuotient`, `Z == 1` on hashed points) | All four regressions flip to passing; existing suite green |
-| **M2** | Decision 3 (identity `pk` rejection, `sk`/`msg` range checks, `Keypair` redaction, `generateKeypair(SecureRandom)`, `hashToField`) | Input-validation and key-generation gates green |
-| **M3** | Decision 4 (cofactored in-circuit equation) and Decision 5 (domain separation); parameter-pinning tests | In-circuit and off-circuit accept/reject sets proven identical over a randomized corpus |
-| **M4** | Decision 6 (ADR-0016 amendment, Javadoc and README corrections, constraint-count pins) | Documentation states measured numbers; no remaining claim contradicted by code |
-| **M5** | Decision 7 performance work, in the listed order, each re-validated against M1–M3 gates | Fixed-base ≤ ~2k, EdDSA verify ≤ ~8k, all gates still green |
+| **M0** | Decision 0: downgrade README and user-guide safety claims; run the release/adoption audit for tags `v0.1.0-pre1`–`pre10` | No published document describes a forgeable gadget as ready; audit result recorded |
+| **M1** | Capture the pre-fix exploits as fixtures, then Decisions 1 and 2: delete the public raw-`Point` overload, add non-public `verifyCore` on affine wires, `witnessAffine`, three-conjunct `assertWellFormed`, canonical reduction, comparator range-constraining + `BitDecomposition` + repo-wide audit | No public verifier is exposed in this milestone; `assertWellFormed` rejects every captured exploit witness; structural no-raw-overload test green; existing suite green |
+| **M2** | Decision 3 (identity `pk` rejection, `sk`/`msg` range checks, `Keypair` redaction, `generateKeypair(SecureRandom)`, `hashToField`) | Input-validation, key-generation, and `hashToField` vector gates green |
+| **M3** | Decision 4 (`requirePublicOrConstant` in the DSL, `verifyStrict` / `verifyWithRegisteredKey`, `[8]·pk != O`) and Decision 5 (normative spec `docs/specs/jubjub-eddsa-v1` reviewed and `t = 6` parameters generated + Sage-validated **before** any code) | Small-order and identity `pk` rejected by both entry points; mixed-order outcome asserted per entry point; verifier-relation corpus green with divergences enumerated; spec and Poseidon vectors merged |
+| **M4** | Decision 6 (ADR-0016 amendment, Javadoc corrections, constraint-count pins) | No remaining documented claim contradicted by code |
+| **M5** | Decision 7 performance work, in order, each re-validated against M1–M3 gates | Fixed-base ≤ ~2k; `verifyWithRegisteredKey` ≤ ~8k; `verifyStrict` ≤ ~14k; all gates still green |
 
 Per ADR-0016's pattern, a review pass runs at each milestone boundary before the next starts.
-M1–M3 are prerequisites for using EdDSA-Jubjub or Pedersen in any value-bearing usecase; M4
-and M5 are not.
+
+**M0 is immediate. M1–M3 are necessary hardening, not sufficient for production.** Shipping
+EdDSA-Jubjub for value-bearing use additionally requires: the public-key binding model wired
+into the consuming protocol and verified end to end, a migration path for artifacts
+invalidated by Decisions 2 and 5, a constant-time signing path or acceptance of the Decision 8
+restriction, and an external cryptographic review. Those are out of this ADR's scope and
+gate the release, not the milestones.
 
 ## Risks
 
 | Risk | Severity | Mitigation |
 |---|---:|---|
-| A caller builds `InCircuitJubjub.Point` from raw witness wires and forges proofs | Critical | Decision 1 moves the check into the gadget; M1 regression test pins it |
-| The challenge alias is composed into a future protocol that binds `kModL` | High | Decision 2 makes the reduction canonical before any such composition exists |
-| Identity or torsion-bearing public keys accepted off-circuit | High | Decision 3 and 4; randomized accept/reject equivalence corpus in M3 |
-| Integrators roll their own key sampling or message encoding | High | Decision 3 ships both; README documents them as the supported path |
-| Breaking change lands after a usecase depends on the current gadget | Medium | Sequence now, while `AnnotatedPedersenCommitment` is the only consumer |
+| A caller builds `InCircuitJubjub.Point` from raw witness wires and forges proofs | Critical | Decision 1 removes raw-wire points from the public verification API entirely; the M1 structural test pins it |
+| A partial well-formedness fix (curve equation without `Z != 0`) ships and the forgery survives | Critical | Decision 1 mandates the three-conjunct `assertWellFormed`, tested directly, plus the structural test that no raw-`Point` verification overload exists |
+| `requirePublicOrConstant` is implemented by name and a forged `Variable(secretId, publicName)` bypasses it | Critical | Decision 4 requires wire-ID set membership against `publicInputs` and the dedicated constant-wire-ID set (including `oneWire`); the forged-name case is an explicit M3 test |
+| Small-order or identity `pk` accepted in-circuit | Critical | Decision 4: `[8]·pk != O` in both entry points, plus a real subgroup check in `verifyStrict`; M3 regressions |
+| Cofactored verification is reintroduced and silently enables small-order-`pk` forgery and signer-controlled non-canonical issuance | High | Decision 4 records the measured comparison and why cofactorless is retained; any future batch verifier must reproduce the same validation semantics, not a cofactored relaxation |
+| `verifyWithRegisteredKey` is called with a prover-controlled `pk` because the contract is only documented | High | Decision 4 makes `requirePublicOrConstant` a DSL-enforced prerequisite; M3 asserts the secret-witness call throws |
+| A public comparator operand near `p` forges a `>=` relation in an application circuit | High | Decision 2 constrains both operands; M1 adds `b ≈ p` adversarial tests across every facade and pins both example circuits |
+| A performance rewrite drops the range constraint the `< l` checks depend on | High | Decision 2 constrains both operands inside `lessThan` and adds the `BitDecomposition` overload; Decision 7 item 5 is gated on the `s = p − 1` regression |
+| Published docs keep steering users into the withdrawn trust model | High | Decision 0 / M0 lands before any code change |
+| The challenge alias is composed into a future protocol that binds `kModL` | High | Decision 2 makes the reduction canonical and complete before any such composition exists |
+| Integrators roll their own key sampling or message encoding | High | Decision 3 ships both with pinned vectors |
+| Released pre-tags carry the forgeable gadget into a downstream consumer | High | M0 release/adoption audit; blast-radius claim not asserted until it completes |
+| Decision 5 (domain separation) invalidates persisted signatures and credentials | Medium | Re-issuance path; scope set by the M0 release audit, while `AnnotatedPedersenCommitment` is the only in-repository consumer |
+| Decision 2 (canonical reduction) invalidates circuit artifacts — proofs, witnesses, verification keys — but **not** signatures | Low | Recompile, re-run setup, re-prove; no credential re-issuance needed |
+| Variable-time signing on a reachable issuer leaks the key | Medium | Decision 8 classifies the signer non-production for that deployment shape rather than documenting a caveat |
 | Performance work (M5) silently reintroduces a soundness gap | Medium | M1–M3 gates are hard prerequisites and re-run per M5 step |
-| ~19k constraints per EdDSA verify limits circuit composition | Medium | Decision 7 targets ≤ ~8k; workable for Groth16 on BLS12-381 in the interim |
-| Variable-time scalar multiplication in an issuer signing service | Medium | Accepted and documented (Decision 8); environment-specific review required for high-value issuers |
 
 ## References
 
@@ -340,6 +642,9 @@ and M5 are not.
   posture; constant-time contract precedent)
 - ADR-0028: DSL Optimization and Hint Soundness (constraint-level soundness precedent)
 - Hisil, Wong, Carter, Dawson — *Twisted Edwards Curves Revisited*, 2008
-- RFC 8032 — *Edwards-Curve Digital Signature Algorithm (EdDSA)*
+- RFC 8032 §8.8, *Multiplication by Cofactor in Verification* —
+  <https://www.rfc-editor.org/rfc/rfc8032.html#section-8.8>
+- Chalkias, Garillot, Nikolaenko — *Taming the Many EdDSAs*, 2020 (cofactored vs cofactorless
+  verification and small-order key handling)
 - zkcrypto/jubjub — <https://github.com/zkcrypto/jubjub>
 - Zcash Sapling spec — <https://zips.z.cash/protocol/sapling.pdf> §5.4.8
