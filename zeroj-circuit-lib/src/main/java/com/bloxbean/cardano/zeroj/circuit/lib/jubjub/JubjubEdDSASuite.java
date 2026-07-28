@@ -31,10 +31,16 @@ import java.math.BigInteger;
  * {@code t = 5} has rate 4 and cannot express it.
  *
  * <p>Measured, in-circuit: the five-element challenge under {@code t=6} with a tag costs
- * <b>2,772</b> constraints, against <b>3,312</b> for the previous untagged four-fold
- * {@code t=3} construction and <b>4,140</b> for a tagged five-fold one. The wide permutation
- * is both cheaper and domain-separated, so there was no reason to ship a folded interim and
- * invalidate signatures twice.
+ * <b>321</b> constraints, as pinned by {@code JubjubEdDSASuiteTest}. The wide permutation is
+ * both cheaper than the alternatives and domain-separated, so there was no reason to ship a
+ * folded interim and invalidate signatures twice.
+ *
+ * <p>An earlier revision of this Javadoc quoted <b>2,772</b> here, against 3,312 for the
+ * previous untagged four-fold {@code t=3} construction and 4,140 for a tagged five-fold one.
+ * Those were pre-compiler-optimisation figures; the R1CS compiler folds the constant
+ * multiplications of the MDS step into linear combinations, which is most of the difference.
+ * The comparison the old numbers were making — wide-and-tagged beats folded-and-untagged —
+ * still holds (ADR-0038 Decision 5).
  */
 public final class JubjubEdDSASuite {
 

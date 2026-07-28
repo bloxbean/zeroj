@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Evaluates a {@link ConstraintGraph} on concrete inputs to produce the full witness.
@@ -31,6 +32,9 @@ public final class WitnessCalculator {
      */
     public static BigInteger[] calculate(ConstraintGraph graph, Map<String, List<BigInteger>> inputs,
                                           FieldConfig config) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(config, "config");
+        graph.requireCompatibleField(config);
         var store = new BoxedStore(graph.numWires());
         evaluate(graph, inputs, config, store);
         return store.w;
@@ -46,6 +50,9 @@ public final class WitnessCalculator {
      */
     public static long[] calculateFlat(ConstraintGraph graph, Map<String, List<BigInteger>> inputs,
                                         FieldConfig config) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(config, "config");
+        graph.requireCompatibleField(config);
         long[][] chunks = calculateFlatChunked(graph, inputs, config);
         long[] limbs = new long[graph.numWires() * 4];
         int pos = 0;
@@ -65,6 +72,9 @@ public final class WitnessCalculator {
      */
     public static long[][] calculateFlatChunked(ConstraintGraph graph, Map<String, List<BigInteger>> inputs,
                                                  FieldConfig config) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(config, "config");
+        graph.requireCompatibleField(config);
         int n = graph.numWires();
         int nChunks = (n + WIRES_PER_CHUNK - 1) / WIRES_PER_CHUNK;
         long[][] chunks = new long[nChunks][];
@@ -131,6 +141,7 @@ public final class WitnessCalculator {
 
     private static void evaluate(ConstraintGraph graph, Map<String, List<BigInteger>> inputs,
                                  FieldConfig config, Store witness) {
+        graph.requireCompatibleField(config);
         BigInteger p = config.prime();
 
         // Wire 0 = 1

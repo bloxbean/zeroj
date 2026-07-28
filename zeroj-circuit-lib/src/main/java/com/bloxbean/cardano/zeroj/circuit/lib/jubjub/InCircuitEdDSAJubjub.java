@@ -51,12 +51,14 @@ import java.math.BigInteger;
  * </ol>
  *
  * <h2>What {@code verifyCore} does not enforce</h2>
- * Anything about {@code pk}. Cofactorless verification forces the accepted {@code R} into the
- * prime-order subgroup algebraically, but {@code pk} is unconstrained at this level: a
- * small-order {@code pk} (including the identity) makes {@code [k]·pk = O} and turns the
- * equation into {@code [S]·G == R}, a universal forgery needing no secret key. That is why
- * {@code verifyCore} is not public, and why both entry points add {@code [8]·pk != O} —
- * with {@link #verifyStrict} additionally proving subgroup membership outright.
+ * Anything about {@code pk}. Cofactorless verification forces {@code R} into the prime-order
+ * subgroup only when {@code pk} is already in that subgroup. At core level, a mixed-order key
+ * can be matched by an {@code R} whose torsion component cancels that of {@code [k]·pk}.
+ * Worse, a small-order {@code pk} (including the identity) can make {@code [k]·pk = O} and
+ * turn the equation into {@code [S]·G == R}, a universal forgery needing no secret key. That
+ * is why {@code verifyCore} is not public, and why both entry points add
+ * {@code [8]·pk != O} — with {@link #verifyStrict} additionally proving subgroup membership
+ * outright and {@link #verifyWithRegisteredKey} requiring that property from its registry.
  *
  * @see <a href="../../../../../../../../../docs/adr/0037-jubjub-soundness-and-hardening.md">ADR-0037</a>
  */
@@ -83,9 +85,10 @@ public final class InCircuitEdDSAJubjub {
      * circuit, and therefore the only one whose soundness does not depend on the surrounding
      * protocol.
      *
-     * <p>Cost: the {@code [l]·pk == O} check is a full variable-base scalar multiplication,
-     * roughly 8.5k constraints on top of {@link #verifyWithRegisteredKey}. That is the price
-     * of not trusting the caller about the key.
+     * <p>Cost: the {@code [l]·pk == O} check is a full variable-base scalar multiplication.
+     * The pinned complete entry-point totals are 14,500 constraints here versus 8,962 for
+     * {@link #verifyWithRegisteredKey}, a 5,538-constraint increment. That is the price of not
+     * trusting the caller about the key.
      *
      * @return the bound public-key point
      */
@@ -261,8 +264,10 @@ public final class InCircuitEdDSAJubjub {
                 api, JubjubPoint.SUBGROUP_GENERATOR, sBits);
         InCircuitJubjub.Point kPk = InCircuitJubjub.scalarMulVariableBase(api, pk, kBits);
 
-        // 6. [S]·G == R + [k]·pk, projectively. Cofactorless: this forces the accepted R
-        //    into the prime-order subgroup, since both sides' other terms lie there.
+        // 6. [S]·G == R + [k]·pk, projectively and cofactorless. If pk is in the
+        //    prime-order subgroup (proved by verifyStrict or guaranteed by the registered-key
+        //    protocol), this also forces R into it. verifyCore alone does not: a mixed-order
+        //    pk can be paired with torsion in R that cancels the torsion of [k]pk.
         InCircuitJubjub.Point rPlusKPk = InCircuitJubjub.add(api, rPoint, kPk);
         api.assertEqual(api.mul(sG.u(), rPlusKPk.z()), api.mul(rPlusKPk.u(), sG.z()));
         api.assertEqual(api.mul(sG.v(), rPlusKPk.z()), api.mul(rPlusKPk.v(), sG.z()));
@@ -288,6 +293,18 @@ public final class InCircuitEdDSAJubjub {
      */
     public static KReduction witnessComputeKReduction(
             JubjubPoint rPoint, JubjubPoint pk, BigInteger msg) {
+        java.util.Objects.requireNonNull(rPoint, "rPoint");
+        java.util.Objects.requireNonNull(pk, "pk");
+        // Reject-not-reduce, matching sign/verify and EdDSAJubjub.computeChallenge. This
+        // witness helper must accept exactly the domain the scheme does: silently reducing an
+        // out-of-range msg here would produce witnesses for a transcript that sign/verify
+        // would have refused (ADR-0038 Decision 5).
+        if (msg == null || msg.signum() < 0
+                || msg.compareTo(JubjubCurve.BASE_FIELD_PRIME) >= 0) {
+            throw new IllegalArgumentException(
+                    "msg must be a field element in [0, p); use EdDSAJubjub.hashToField(byte[]) "
+                            + "for byte messages");
+        }
         // Must match verifyCore's in-circuit challenge exactly: same preset, same capacity
         // tag, same input order, affine coordinates.
         BigInteger kRaw = PoseidonHash.spongeHash(

@@ -39,14 +39,21 @@ import static com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve.TWO_D;
  *       sees the prover's witness, so no off-circuit check constrains it. This replaces
  *       the contract documented here before ADR-0037.</li>
  *   <li>Subgroup membership is <b>not</b> established by either binder. It costs a full
- *       {@code [l]·P} scalar multiplication (~8.5k constraints) and is applied only where
- *       the threat model needs it — see {@code InCircuitEdDSAJubjub.verifyStrict}.</li>
+ *       {@code [l]·P} scalar multiplication and is applied only where the threat model needs
+ *       it. In the pinned EdDSA entry points it raises the complete verifier from 8,962 to
+ *       14,500 constraints (+5,538) — see
+ *       {@code InCircuitEdDSAJubjub.verifyStrict}.</li>
  *   <li>Scalar inputs are range-constrained by the gadget itself: the
  *       {@link Variable}-plus-width overloads of {@link #scalarMulFixedBase} and
  *       {@link #scalarMulVariableBase} call {@link CircuitAPI#decompose}. The
  *       {@link BitDecomposition} overloads consume a decomposition the caller already
  *       holds, which is how a scalar used for both a range check and a multiplication
- *       avoids being decomposed twice.</li>
+ *       avoids being decomposed twice — and they validate its provenance with
+ *       {@link CircuitAPI#requireOwned} <b>before reading any bit</b>. The recomposition
+ *       constraint {@code Σ bits[i]·2^i == source} lives in the circuit that minted the
+ *       decomposition, so consuming a foreign one would multiply by bits that nothing here
+ *       ties to the intended scalar — the prover could choose them freely, subject only to
+ *       booleanity (ADR-0038 Decision 1).</li>
  *   <li>These gadgets do not enforce that a scalar is reduced modulo
  *       {@link JubjubCurve#SUBGROUP_ORDER}. For EdDSA verification that is enforced at
  *       the higher layer.</li>
@@ -279,16 +286,14 @@ public final class InCircuitJubjub {
                     "scalarBits.length must be at most 255; got " + scalarBits.length
                             + " (Jubjub scalar field is 252-bit; 255 tolerates slight overprovisioning)");
         }
-        // Precompute table[i] = [2^i] · basePoint off-circuit.
-        JubjubPoint[] table = new JubjubPoint[scalarBits.length];
-        table[0] = basePoint;
-        for (int i = 1; i < scalarBits.length; i++) {
-            table[i] = table[i - 1].doubled();
-        }
-
         // Windowed table (ADR-0016 section 3 / ADR-0037 Decision 7 item 3): one addition per
         // 3-bit window instead of one per bit. Measured 1,506 constraints for a 252-bit
         // scalar against 2,513 for the bit-by-bit form.
+        //
+        // The windowed path builds its own per-window tables, so the bit-indexed
+        // table[i] = [2^i]·basePoint this method used to precompute here was dead: 252
+        // off-circuit point doublings computed and immediately discarded on every call
+        // (ADR-0038 Decision 5).
         return scalarMulFixedBaseWindowed(api, basePoint, scalarBits);
     }
 
@@ -320,15 +325,30 @@ public final class InCircuitJubjub {
      */
     public static Point scalarMulFixedBase(CircuitAPI api, JubjubPoint basePoint,
                                            Variable scalar, int numBits) {
-        return scalarMulFixedBase(api, basePoint, api.decompose(scalar, numBits));
+        // Goes straight to the bits rather than through the BitDecomposition overload: the
+        // decomposition is minted from this very api one expression earlier, so ownership
+        // holds by construction and routing through requireOwned would only impose the seam
+        // on CircuitAPI implementations that have no reason to support it.
+        return scalarMulFixedBase(api, basePoint, api.decompose(scalar, numBits).bits());
     }
 
     /**
      * Overload consuming a {@link BitDecomposition} the caller already holds, so a scalar
      * that was decomposed for a range check is not decomposed a second time here.
+     *
+     * <p>The decomposition must have been minted by {@code api} — validated here before its
+     * bits are read. Skipping that check would be unsound in a way the booleanity assertions
+     * below cannot catch: this gadget re-asserts that each bit is boolean, but the constraint
+     * binding those bits to the scalar they decompose, {@code Σ bits[i]·2^i == source}, was
+     * emitted in the circuit that minted them. Consume a foreign decomposition and this
+     * circuit multiplies by bits it never tied to any particular value, so the prover chooses
+     * the effective scalar freely (ADR-0038 Decision 1).
+     *
+     * @throws IllegalArgumentException if {@code scalar} was minted by a different circuit
      */
     public static Point scalarMulFixedBase(CircuitAPI api, JubjubPoint basePoint,
                                            BitDecomposition scalar) {
+        api.requireOwned(scalar);
         return scalarMulFixedBase(api, basePoint, scalar.bits());
     }
 
@@ -453,9 +473,19 @@ public final class InCircuitJubjub {
      *
      * <p>Caveats:
      * <ul>
-     *   <li>{@code base} must be in the prime-order subgroup; call
-     *       {@code isInSubgroup()} off-circuit on every untrusted point
-     *       before passing it into a witness.</li>
+     *   <li>This gadget establishes nothing about {@code base}. It must already have been
+     *       bound in-circuit — with {@link #witnessAffine} or
+     *       {@link #assertWellFormed(CircuitAPI, Point)} — by whoever produced it. An
+     *       earlier revision of this Javadoc instructed callers to "call
+     *       {@code isInSubgroup()} off-circuit on every untrusted point before passing it
+     *       into a witness"; that contract is <b>withdrawn</b> (ADR-0038 P0). It is exactly
+     *       the "validate off-circuit, then trust in-circuit" model ADR-0037 Decision 1
+     *       removed: the caller never sees the prover's witness, so an off-circuit check
+     *       constrains nothing.</li>
+     *   <li>Prime-order subgroup membership is <b>not</b> established here, and cannot be
+     *       established off-circuit either. Where the threat model needs it, prove it
+     *       in-circuit — see {@code InCircuitEdDSAJubjub.assertInPrimeOrderSubgroup}, which
+     *       costs a full {@code [l]·P} multiplication.</li>
      *   <li>This does not enforce that the scalar is reduced modulo
      *       {@link JubjubCurve#SUBGROUP_ORDER}. For protocols that depend
      *       on that reduction (EdDSA), the caller must range-check the
@@ -491,15 +521,26 @@ public final class InCircuitJubjub {
      */
     public static Point scalarMulVariableBase(CircuitAPI api, Point base,
                                               Variable scalar, int numBits) {
-        return scalarMulVariableBase(api, base, api.decompose(scalar, numBits));
+        // See scalarMulFixedBase(api, basePoint, scalar, numBits): ownership holds by
+        // construction here, so this path does not depend on the requireOwned seam.
+        return scalarMulVariableBase(api, base, api.decompose(scalar, numBits).bits());
     }
 
     /**
      * Overload consuming a {@link BitDecomposition} the caller already holds, so a scalar
      * that was decomposed for a range check is not decomposed a second time here.
+     *
+     * <p>The decomposition must have been minted by {@code api} — validated here before its
+     * bits are read. A foreign decomposition's recomposition constraint
+     * {@code Σ bits[i]·2^i == source} lives in the circuit that minted it, so consuming one
+     * here multiplies by bits nothing in this circuit binds to the intended scalar
+     * (ADR-0038 Decision 1).
+     *
+     * @throws IllegalArgumentException if {@code scalar} was minted by a different circuit
      */
     public static Point scalarMulVariableBase(CircuitAPI api, Point base,
                                               BitDecomposition scalar) {
+        api.requireOwned(scalar);
         return scalarMulVariableBase(api, base, scalar.bits());
     }
 }

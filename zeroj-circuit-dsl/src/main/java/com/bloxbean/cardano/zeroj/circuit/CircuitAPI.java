@@ -144,6 +144,17 @@ public interface CircuitAPI {
      * <p>The comparison is performed at {@code max(a.width(), b.width())} bits. Both operands
      * already carry a proof that they fit within their own widths, so the soundness
      * precondition of {@link #lessThan(Variable, Variable, int)} is discharged by the types.
+     *
+     * <p><b>Both operands are ownership-checked first</b>
+     * ({@link #requireOwned(BitDecomposition)}), before either width is read and before any
+     * constraint is emitted. Because this overload emits no range constraints of its own,
+     * authenticating the evidence <em>is</em> the range check: a decomposition minted in
+     * another circuit proves nothing here, and since wire ids restart per circuit it could
+     * otherwise be passed off as evidence about unrelated same-id wires — the
+     * {@code p − 1 < 1,000,000} forgery ADR-0037 closed, reopened through a different door
+     * (ADR-0038 Decision 1).
+     *
+     * @throws IllegalArgumentException if either operand was minted by a different circuit
      */
     Variable lessThan(BitDecomposition a, BitDecomposition b);
 
@@ -206,6 +217,48 @@ public interface CircuitAPI {
         throw new UnsupportedOperationException(
                 "requirePublicOrConstant is not supported by this CircuitAPI implementation; "
                         + "a gadget that depends on verifier-visible inputs cannot be used here");
+    }
+
+    /**
+     * Asserts, at circuit-definition time, that {@code decomposition} was minted by
+     * <b>this</b> circuit — that the booleanity and recomposition constraints it stands for
+     * were emitted into the constraint system now being built.
+     *
+     * <p>Every gadget that consumes a {@link BitDecomposition} must call this <b>first</b>,
+     * before reading {@link BitDecomposition#bits()} and before emitting any constraint. Wire
+     * ids restart at 1 in every circuit, so a foreign decomposition names wires that exist
+     * here too and hold entirely unrelated values, while the constraints it attests to —
+     * booleanity of the bits and {@code Σ bits[i]·2^i == source} — were emitted somewhere
+     * else. A consumer that trusts it therefore operates on bits nothing in this circuit
+     * binds: {@link #lessThan(BitDecomposition, BitDecomposition)} skips its range
+     * constraints outright, reopening the {@code p − 1 < 1,000,000} forgery ADR-0037 closed,
+     * and a scalar multiplication multiplies by prover-chosen bits that are not tied to the
+     * intended scalar.
+     *
+     * <p>A consumer taking more than one decomposition validates <b>every</b> operand before
+     * emitting anything, so a foreign operand cannot be rejected only after another operand's
+     * constraints have already mutated the circuit.
+     *
+     * <p>Ownership is an object identity, compared by reference — not a name or an id, either
+     * of which a caller can fabricate through the public API, since {@link Variable} is a
+     * public record. Implementations must not disclose the identity through an accessor, an
+     * exception message, or {@code toString()}.
+     *
+     * <p>The default throws, so a {@code CircuitAPI} implementation that has not opted into
+     * provenance tracking fails closed rather than silently accepting typed evidence it
+     * cannot authenticate.
+     *
+     * @throws IllegalArgumentException if {@code decomposition} was minted by a different
+     *         circuit
+     * @throws UnsupportedOperationException if this implementation does not track provenance
+     * @see <a href="../../../../../../../../docs/adr/0038-jubjub-dsl-remediation-plan.md">ADR-0038 Decision 1</a>
+     */
+    default void requireOwned(BitDecomposition decomposition) {
+        throw new UnsupportedOperationException(
+                "requireOwned is not supported by this CircuitAPI implementation; a gadget "
+                        + "that consumes a BitDecomposition cannot be used here, because this "
+                        + "implementation cannot authenticate which circuit emitted it "
+                        + "(ADR-0038 Decision 1)");
     }
 
     // --- Advice / hints (ADR-0028 Phase C) ---

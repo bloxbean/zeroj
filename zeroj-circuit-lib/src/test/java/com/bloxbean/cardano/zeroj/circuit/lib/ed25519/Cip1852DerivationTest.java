@@ -5,7 +5,10 @@ import com.bloxbean.cardano.client.crypto.bip32.HdKeyGenerator;
 import com.bloxbean.cardano.client.crypto.bip32.HdKeyPair;
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
+import com.bloxbean.cardano.zeroj.circuit.FieldConfig;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
+import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSCompiler;
+import com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
@@ -106,6 +109,23 @@ class Cip1852DerivationTest {
         System.out.println("    + hint inverse + hint mul                     = " + fullPathConstraints(true, true));
     }
 
+    /**
+     * Stable large-compiler regression gate used by ADR-0034 and ADR-0038. Unlike the report
+     * above this compiles only the reviewed default configuration, so it can be run after an
+     * R1CS compiler change without building all three ~19M+ variants.
+     */
+    @Test
+    @EnabledIfSystemProperty(named = "zeroj.heavy", matches = "true")
+    void compiler_defaultProductionPath_constraintPin() {
+        // Default/reviewed configuration: deterministic multiplication and hint inverse.
+        // Hint multiplication remains explicitly audit-gated in Fe25519.
+        int[] counts = fullPathConstraintCounts(false, true, true);
+        assertEquals(18_754_215, counts[0],
+                "stable default CIP-1852 constraint count");
+        assertEquals(counts[1], counts[0],
+                "the online resource controller changed the incumbent all-inline row count");
+    }
+
     @Test
     @EnabledIfSystemProperty(named = "zeroj.heavy", matches = "true")
     void fullPath_withHints_stillMatchesCardanoClient() {
@@ -123,6 +143,11 @@ class Cip1852DerivationTest {
     }
 
     private static int fullPathConstraints(boolean hintMul, boolean hintInv) {
+        return fullPathConstraintCounts(hintMul, hintInv, false)[0];
+    }
+
+    private static int[] fullPathConstraintCounts(
+            boolean hintMul, boolean hintInv, boolean compareIncumbent) {
         boolean pm = com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL;
         boolean pi = com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE;
         try {
@@ -135,10 +160,40 @@ class Cip1852DerivationTest {
                 for (int i = 0; i < 32; i++) { kL[i] = api.var("kL" + i); kR[i] = api.var("kR" + i); cc[i] = api.var("cc" + i); }
                 Cip1852Derivation.paymentKeyHash(api, kL, kR, cc, 0, 0, 0);
             });
-            return builder.compileR1CS(CurveId.BN254).numConstraints();
+            int guarded = builder.compileR1CS(CurveId.BN254).numConstraints();
+            if (!compareIncumbent) return new int[]{guarded};
+            return new int[]{guarded, compileWithIncumbentInlining(builder)};
         } finally {
             com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_MUL = pm;
             com.bloxbean.cardano.zeroj.circuit.lib.field.Fe25519.USE_HINT_INVERSE = pi;
+        }
+    }
+
+    /**
+     * Test-only reflection bridge to the package-private differential policy. Keeping that
+     * policy out of the public DSL API is more important than avoiding reflection in this
+     * opt-in 19M-row regression test.
+     */
+    private static int compileWithIncumbentInlining(CircuitBuilder builder) {
+        try {
+            var graph = builder.constraintGraph();
+            Class<?> policyClass = Class.forName(
+                    "com.bloxbean.cardano.zeroj.circuit.r1cs.LinearInliningPolicy");
+            var inlineAll = policyClass.getDeclaredMethod(
+                    "inlineAll", com.bloxbean.cardano.zeroj.circuit.ConstraintGraph.class);
+            inlineAll.setAccessible(true);
+            Object policy = inlineAll.invoke(null, graph);
+
+            var compile = R1CSCompiler.class.getDeclaredMethod(
+                    "compile",
+                    com.bloxbean.cardano.zeroj.circuit.ConstraintGraph.class,
+                    FieldConfig.class,
+                    policyClass);
+            compile.setAccessible(true);
+            return ((R1CSConstraintSystem) compile.invoke(
+                    null, graph, FieldConfig.BN254, policy)).numConstraints();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("cannot invoke incumbent compiler policy", e);
         }
     }
 

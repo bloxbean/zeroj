@@ -101,7 +101,33 @@ from this table.
 
 ---
 
-## 4. `hashToField(msg)` — byte strings to field elements
+## 4. Message field encoding and preprocessing
+
+The signature transcript consumes one integer `msg ∈ [0,p)`. It does not consume an
+untyped byte string, and the signature encoding does not identify how an application payload
+was mapped to that integer.
+
+### 4.1 Canonical field-element messages
+
+The canonical byte representation of `msg` is exactly 32 unsigned **big-endian** bytes:
+
+```text
+encoded = I2OSP(msg, 32)
+msg     = OS2IP_BE(encoded)
+```
+
+Decoding MUST reject any other length and any value `msg >= p`; it MUST NOT reduce an
+out-of-range value. This is the encoding accepted by
+`JubjubMessage.fromCanonicalFieldBytes`. It follows the suite's big-endian OS2IP convention
+for tags and hashing and is deliberately different from the compressed-point encoding in
+§9, which is little-endian.
+
+The signature binds the resulting field element only. A verifier starting from an original
+application payload must repeat the same preprocessing. Neither the signature nor
+`JubjubMessage` records whether the field element came from this canonical decoder or from
+`hashToField`.
+
+### 4.2 `hashToField(msg)` — byte strings to field elements
 
 Maps an arbitrary byte string to an element of `[0, p)`.
 
@@ -119,12 +145,16 @@ Notes, all normative:
 - The DST and the message are **both length-prefixed**, so no two distinct `(DST, msg)` pairs
   share a preimage and callers cannot create ambiguity by concatenation.
 - `len(msg)` is an unsigned 64-bit big-endian count of bytes.
-- 512 bits reduced into a 255-bit field leaves a modular bias of about `2^-257`. A bare
-  32-byte digest would have left a bias near `2^-1` for the low residues and MUST NOT be used.
+- For a uniform 512-bit input, the relative probability difference between reduction buckets
+  is approximately `2^-257.14`; the resulting statistical distance from uniform is
+  approximately `2^-261.23` for this modulus. A bare 32-byte digest would leave
+  non-negligible reduction bias and MUST NOT be used.
 - SHA-512, not Poseidon: the input is a byte string of arbitrary length, and a byte-oriented
   hash avoids inventing a sponge padding rule for it.
+- The resulting integer is represented with the canonical 32-byte big-endian codec from
+  §4.1 when it crosses a byte-oriented API.
 
-### 4.1 Test vectors
+### 4.3 Test vectors
 
 | `msg` | `hashToField(msg)` |
 |---|---|
@@ -171,7 +201,7 @@ challenge:  k = Poseidon_t6( capacity = CHALLENGE_TAG, rate = (R.u, R.v, pk.u, p
 
 ```
 1.  require 0 < sk < l  and  0 <= msg < p
-2.  r = nonce(sk, msg)
+2.  r = nonce(sk, msg); abort without output if r = 0
 3.  R = [r]·G
 4.  k = challenge(R, pk, msg)
 5.  S = (r + k·sk) mod l
@@ -231,7 +261,7 @@ every point of order dividing 8. They differ in how subgroup membership is estab
 
 | Entry point | `pk` requirement | Cost of the check |
 |---|---|---|
-| `verifyStrict` | in-circuit `[l]·pk == O` | ~8.5k constraints |
+| `verifyStrict` | in-circuit `[l]·pk == O` | 14,500 total versus 8,962 registered-key total (+5,538) |
 | `verifyWithRegisteredKey` | `pk` must be a public input or a circuit constant, enforced by the DSL against circuit-owned wire IDs | negligible |
 
 `verifyWithRegisteredKey` shifts an obligation onto the protocol rather than removing it: the

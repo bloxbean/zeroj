@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +69,28 @@ class PedersenTest {
     //  Off-circuit commit / verify
     // ------------------------------------------------------------------
 
+    /**
+     * Literal compatibility fixture. Keeping coordinates and the wire encoding as literals
+     * prevents the commitment and encoding implementations from drifting together unnoticed.
+     */
+    @Test
+    @DisplayName("Pedersen commitment golden vector is byte-for-byte pinned")
+    void commitmentGoldenVector_isPinned() {
+        JubjubPoint commitment =
+                PedersenCommitment.commit(BigInteger.valueOf(42), BigInteger.valueOf(12345));
+
+        assertEquals(new BigInteger(
+                        "478a0bd6a0eebdffc610618ad979b39d6237f240125534886d38720cbd76a025", 16),
+                commitment.affineU());
+        assertEquals(new BigInteger(
+                        "6387c33be7b7177b74ce909592456d7c81dab375a6ba3182eb7f5e2974e0d357", 16),
+                commitment.affineV());
+        assertEquals("57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+                HexFormat.of().formatHex(commitment.toBytes()));
+        assertTrue(PedersenCommitment.verify(
+                commitment, BigInteger.valueOf(42), BigInteger.valueOf(12345)));
+    }
+
     @Test
     @DisplayName("Commit(v, r) == [v]·G + [r]·H; verify accepts the opening")
     void commit_verify_roundTrip() {
@@ -107,6 +130,8 @@ class PedersenTest {
         BigInteger v = BigInteger.valueOf(42);
         BigInteger r = BigInteger.valueOf(12345);
         JubjubPoint c = PedersenCommitment.commit(v, r);
+        assertFalse(PedersenCommitment.verify(null, v, r),
+                "preserve the historical malformed-commitment result");
         assertFalse(PedersenCommitment.verify(c, v.add(BigInteger.ONE), r));
         assertFalse(PedersenCommitment.verify(c, v, r.add(BigInteger.ONE)));
     }

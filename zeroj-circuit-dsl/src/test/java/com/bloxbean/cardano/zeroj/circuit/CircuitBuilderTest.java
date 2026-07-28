@@ -127,6 +127,26 @@ class CircuitBuilderTest {
     }
 
     @Test
+    void r1csDiagnostics_areAdditiveAndMatchTheReturnedSystem() {
+        var circuit = CircuitBuilder.create("multiplier-diagnostics")
+                .publicVar("z").secretVar("x").secretVar("y")
+                .define(api -> api.assertEqual(
+                        api.mul(api.var("x"), api.var("y")), api.var("z")));
+
+        var ordinary = circuit.compileR1CS(CurveId.BN254);
+        var diagnosed = circuit.compileR1CSWithDiagnostics(CurveId.BN254);
+
+        assertEquals(ordinary.constraints(), diagnosed.system().constraints(),
+                "requesting diagnostics must not change the emitted R1CS");
+        assertEquals(diagnosed.system().numConstraints(), diagnosed.diagnostics().rows());
+        assertEquals(diagnosed.system().constraints().stream()
+                        .mapToLong(row -> (long) row.a().size() + row.b().size() + row.c().size())
+                        .sum(),
+                diagnosed.diagnostics().totalCsrTerms());
+        assertFalse(diagnosed.diagnostics().pressureModeEntered());
+    }
+
+    @Test
     void plonk_multiplier_compilesSuccessfully() {
         var circuit = CircuitBuilder.create("multiplier")
                 .publicVar("z").secretVar("x").secretVar("y")

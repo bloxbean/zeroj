@@ -351,6 +351,15 @@ item 11:
   decomposition of `x` while comparing `y`. This is what keeps Decision 7 item 5 from being a
   regression.
 
+  > **Amended by [ADR-0038](0038-jubjub-dsl-remediation-plan.md) P0/P1 — "cannot be forged"
+  > was wrong as shipped.** Non-public construction and defensive copying were the wrong
+  > properties to check. The type binds source, width, and bits but **not the issuing
+  > circuit**, and wire ids restart at 1 per circuit, so a decomposition minted in circuit A
+  > is accepted by a consumer in circuit B as evidence about unrelated same-id wires — the
+  > `p − 1 < 1,000,000` forgery this decision closed, reopened through a different door.
+  > ADR-0038 P1 adds an opaque per-circuit owner token validated by every consumer before any
+  > id-keyed cache lookup. The paragraph above is left as written for the historical record.
+
   Transition: `CircuitAPI.toBinary` currently returns `Variable[]`
   (`CircuitAPI.java:52`) and changing that return type is source-breaking across every
   caller. We add `CircuitAPI.decompose(Variable, int) -> BitDecomposition` alongside it,
@@ -405,7 +414,8 @@ Instead, the trust model for `pk` is made explicit in the API, because it is the
 shape — not the gadget — that determines whether `pk` is attacker-controlled:
 
 - **`verifyStrict(...)`** performs an in-circuit prime-order subgroup check on `pk`
-  (`[l]·pk == O`, ~8,559 constraints). This is the correct entry point whenever `pk` is a
+  (`[l]·pk == O`; the final pinned entry point is 14,500 constraints versus 8,962 for the
+  registered-key path, +5,538). This is the correct entry point whenever `pk` is a
   private witness or is selected by the prover — for example "a credential from *some*
   issuer in this Merkle tree".
 - **`verifyWithRegisteredKey(...)`** requires `pk` to be a circuit constant or a public
@@ -502,11 +512,16 @@ order:
 5. Reuse the `toBinary` decomposition for the `< l` comparison instead of decomposing twice —
    via the `BitDecomposition` `lessThan` overload of Decision 2, which preserves the range constraint
    rather than dropping it. The `lessThan(p − 1, l, 252)` regression is the gate.
+   > **Amended by [ADR-0038](0038-jubjub-dsl-remediation-plan.md) P1.** "Preserves the range
+   > constraint" is imprecise: the overload emits no range constraint and relies on the typed
+   > evidence instead. That is only sound once the evidence identifies its issuing circuit,
+   > which it did not — see the amendment under Decision 2. ADR-0038 P1 adds the owner token,
+   > checked before any bit is read.
 
 Targets, stated per entry point because they are not comparable: 252-bit fixed-base
 multiplication at ~1.5–2k constraints (from 6,049); `verifyWithRegisteredKey` below ~8k; and
-`verifyStrict` below ~14k, since its in-circuit subgroup check alone is ~8,559 today and only
-partly benefits from items 1–3. An earlier draft quoted a single ≤8k target, which
+`verifyStrict` below ~14k. Final pins are 8,962 and 14,500 respectively (+5,538 for the strict
+subgroup path). An earlier draft quoted a single ≤8k target, which
 `verifyStrict` cannot meet by construction.
 
 Off-circuit, a Montgomery or Barrett reduction layer, wNAF scalar
@@ -564,8 +579,9 @@ stays unimplemented.
   ~+300 for the canonical three-part reduction, +828 for domain separation until `t = 6`
   lands, and 0–500 for comparator range-constraining depending on whether the
   `BitDecomposition` overload reuses existing decompositions. `verifyWithRegisteredKey` lands
-  near 20,100–20,600 before Decision 7 claws back several thousand; `verifyStrict` adds a
-  further ~8,559 for the in-circuit subgroup check.
+  near 20,100–20,600 before Decision 7 claws back several thousand; the pre-Decision-7
+  estimate had `verifyStrict` add ~8,559 for the subgroup check. The final pinned entry-point
+  delta after Decision 7 is 5,538.
 - **Two different breaking changes, with different migration scope.** They are not
   interchangeable and an earlier draft conflated them:
   - *Decision 2 (canonical reduction)* preserves `k = kRaw mod l`, so **signatures and

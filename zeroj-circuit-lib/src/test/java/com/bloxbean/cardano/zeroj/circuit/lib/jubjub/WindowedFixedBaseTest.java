@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.circuit.lib.jubjub;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
 import com.bloxbean.cardano.zeroj.circuit.CircuitBuilder;
+import com.bloxbean.cardano.zeroj.circuit.Variable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -118,51 +119,79 @@ class WindowedFixedBaseTest {
     }
 
     @Test
-    @DisplayName("a non-boolean scalar bit is rejected — the multilinear form needs the boolean cube")
+    @DisplayName("raw-array API rejects the actual non-boolean multilinear-selector forgery")
     void nonBooleanBitRejected() {
-        // Feed the bits directly so a caller can attempt to supply 2 instead of 0/1. The
-        // multilinear selector interpolates the table only at boolean assignments, so without
-        // the booleanity assertion this would select a point that is in no table at all.
+        // For one bit the selector interpolates between IDENTITY=(0,1) and G:
+        //   u(b) = b*uG, v(b) = 1 + b*(vG-1).
+        // At b=2 this is generally neither [2]G nor even a curve point. Constrain the circuit
+        // to that exact polynomial output: if scalarMulFixedBaseWindowed's assertBoolean loop
+        // is deleted, this witness is accepted. Using [2]G here would be a vacuous regression
+        // test because the output equality would still reject after the boolean guard vanished.
+        BigInteger p = JubjubCurve.BASE_FIELD_PRIME;
+        BigInteger forgedU = G.affineU().shiftLeft(1).mod(p);
+        BigInteger forgedV = G.affineV().shiftLeft(1).subtract(BigInteger.ONE).mod(p);
+        assertThrows(IllegalArgumentException.class,
+                () -> JubjubPoint.fromAffine(forgedU, forgedV),
+                "test premise: the interpolated b=2 output must not be a curve point");
+
         var circuit = CircuitBuilder.create("win_nonbool")
                 .publicVar("outU").publicVar("outV")
-                .secretVar("b0").secretVar("b1").secretVar("b2")
+                .secretVar("b0")
                 .define(api -> {
-                    var bits = new com.bloxbean.cardano.zeroj.circuit.Variable[]{
-                            api.var("b0"), api.var("b1"), api.var("b2")};
-                    var r = InCircuitJubjub.scalarMulFixedBaseWindowed(api, G, bits);
+                    // Deliberately use the public raw-array boundary, not decompose()-derived
+                    // bits whose cached booleanity would make the assertion a no-op.
+                    var r = InCircuitJubjub.scalarMulFixedBase(
+                            api, G, new Variable[]{api.var("b0")});
                     api.assertEqual(api.mul(api.var("outU"), r.z()), r.u());
                     api.assertEqual(api.mul(api.var("outV"), r.z()), r.v());
                 });
-        JubjubPoint two = G.scalarMul(BigInteger.TWO);
-        assertThrows(Exception.class, () -> circuit.calculateWitness(Map.of(
-                "outU", List.of(two.affineU()), "outV", List.of(two.affineV()),
-                "b0", List.of(BigInteger.TWO),        // not boolean
-                "b1", List.of(BigInteger.ZERO),
-                "b2", List.of(BigInteger.ZERO)), CurveId.BLS12_381),
-                "a non-boolean bit must be rejected by the booleanity constraint");
 
-        // Sanity: the same circuit accepts the honest boolean encoding of 2 = 0b010.
+        assertThrows(Exception.class, () -> circuit.calculateWitness(Map.of(
+                "outU", List.of(forgedU), "outV", List.of(forgedV),
+                "b0", List.of(BigInteger.TWO)), CurveId.BLS12_381),
+                "the raw-array booleanity guard must reject the selector's exact forged output");
+
+        // Sanity: the same raw-array circuit accepts an honest boolean input.
         assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
-                "outU", List.of(two.affineU()), "outV", List.of(two.affineV()),
-                "b0", List.of(BigInteger.ZERO),
-                "b1", List.of(BigInteger.ONE),
-                "b2", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
+                "outU", List.of(G.affineU()), "outV", List.of(G.affineV()),
+                "b0", List.of(BigInteger.ONE)), CurveId.BLS12_381));
     }
 
     @Test
     @DisplayName("windowing is cheaper than the bit-by-bit form it replaced")
     void windowedIsCheaper() {
-        int windowed = CircuitBuilder.create("cost_w").secretVar("k")
+        var windowedSystem = CircuitBuilder.create("cost_w").secretVar("k")
                 .define(api -> InCircuitJubjub.scalarMulFixedBaseWindowed(
                         api, G, api.decompose(api.var("k"), 252).bits()))
-                .compileR1CS(CurveId.BLS12_381).constraints().size();
-        int bitwise = CircuitBuilder.create("cost_b").secretVar("k")
+                .compileR1CS(CurveId.BLS12_381);
+        var bitwiseSystem = CircuitBuilder.create("cost_b").secretVar("k")
                 .define(api -> InCircuitJubjub.scalarMulFixedBaseBitwise(
                         api, G, api.decompose(api.var("k"), 252).bits()))
-                .compileR1CS(CurveId.BLS12_381).constraints().size();
+                .compileR1CS(CurveId.BLS12_381);
+        int windowed = windowedSystem.constraints().size();
+        int bitwise = bitwiseSystem.constraints().size();
         assertEquals(1_506, windowed, "252-bit windowed fixed-base cost");
         assertEquals(2_513, bitwise, "252-bit bit-by-bit fixed-base cost");
+        assertEquals(7_865, nnz(windowedSystem),
+                "windowed sparse-matrix nonzeros are a production performance pin");
+        assertEquals(638_804, nnz(bitwiseSystem),
+                "bitwise reference nonzeros must not regress under compiler repair");
+        assertEquals(2_048, paddedDomain(windowed));
+        assertEquals(4_096, paddedDomain(bitwise));
         assertTrue(windowed < bitwise);
+    }
+
+    private static long nnz(
+            com.bloxbean.cardano.zeroj.circuit.r1cs.R1CSConstraintSystem system) {
+        return system.constraints().stream()
+                .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size())
+                .sum();
+    }
+
+    private static int paddedDomain(int rows) {
+        int domain = 1;
+        while (domain < rows) domain <<= 1;
+        return domain;
     }
 
     @Test

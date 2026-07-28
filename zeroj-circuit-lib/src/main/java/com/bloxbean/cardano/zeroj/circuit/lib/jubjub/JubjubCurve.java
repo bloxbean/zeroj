@@ -25,7 +25,7 @@ import java.math.BigInteger;
  * The full Jubjub curve has order {@code 8 · l}. For cryptographic use
  * (signatures, commitments, ZK circuits), points must live in the
  * prime-order subgroup of order {@code l}. A point is in the subgroup iff
- * {@code [l] · P == 0}. {@link #SUBGROUP_GENERATOR} is a fixed generator
+ * {@code [l] · P == 0}. {@link JubjubPoint#SUBGROUP_GENERATOR} is a fixed generator
  * of that subgroup; it equals {@code [8] · FULL_GENERATOR}.
  */
 public final class JubjubCurve {
@@ -67,6 +67,13 @@ public final class JubjubCurve {
     public static final int COFACTOR = 8;
 
     /**
+     * Bit length of {@link #SUBGROUP_ORDER}, and therefore the fixed iteration count of
+     * the package-private fixed-schedule secret-scalar helper. Every scalar in {@code [0, l)} fits in
+     * this many bits, so a schedule of exactly this length is complete.
+     */
+    public static final int SCALAR_BITS = 252;
+
+    /**
      * {@code δ = p − 8·l}, where {@code p} is {@link #BASE_FIELD_PRIME} and {@code l} is
      * {@link #SUBGROUP_ORDER}. Equals
      * {@code 0x207c9f6499bdd7e87b478d0848469a49} (126 bits).
@@ -92,7 +99,7 @@ public final class JubjubCurve {
      * {@code FULL_GENERATOR} — a generator of the full curve group (order
      * {@code 8 · l}). Not safe for cryptographic use without first
      * cofactor-clearing (i.e. multiply by 8). Exposed for
-     * {@link #SUBGROUP_GENERATOR} derivation and for interop with zkcrypto
+     * {@link JubjubPoint#SUBGROUP_GENERATOR} derivation and for interop with zkcrypto
      * test vectors.
      */
     public static final BigInteger FULL_GENERATOR_U = new BigInteger(

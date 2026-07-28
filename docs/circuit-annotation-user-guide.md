@@ -251,10 +251,25 @@ commitment.assertAffineEquals(zk, expectedU, expectedV);
 Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
 `< l`; range-limit any application amount separately when it has a smaller
 business-domain bound.
-Jubjub adapters use BLS12-381. Every prover-supplied point is bound and curve-checked by
-the gadget itself — `ZkJubjubPoint.fromTrustedAffine(...)` no longer relies on you having
-validated anything off-circuit, because a witness value is not constrained by checks the
-caller performs on data it cannot see.
+Jubjub adapters use BLS12-381.
+
+Bind every prover-supplied point with `ZkJubjubPoint.witnessAffine(zk, u, v)`. It asserts the
+affine curve equation and pins `z = 1`, `t = u·v` — 5 constraints — so an off-curve witness
+such as `(u, v) = (1, 1)` cannot be injected. For a genuinely projective point, call
+`assertWellFormed()`, which emits the projective invariants (`V² − U² == Z² + d·T²`,
+`T·Z == U·V`, `Z != 0`) once; repeated calls are free, and points from `witnessAffine` or
+`constant` are already established.
+
+Neither establishes prime-order subgroup membership — that is a separate, much more expensive
+check applied only where the threat model needs it (`ZkEdDSAJubjub.verifyStrict`).
+
+> **History (ADR-0038).** Before P2 this adapter emitted **no point-validity constraints at
+> all**: `fromTrustedAffine` pinned `z` and `t` without asserting the curve equation, its
+> `assertWellFormed()` delegated to four empty `ZkField.assertWellFormed()` calls, and this
+> guide told you the gadget curve-checked every point. It did not. `fromTrustedAffine` is
+> deprecated and now delegates to the safe binder; the name described the
+> validate-off-circuit-then-trust-in-circuit model that ADR-0037 removed, which cannot work
+> for a witness value the caller never sees.
 
 `ZkEdDSAJubjub` exposes two entry points rather than one `verify`, because whether the public
 key needs an in-circuit subgroup check depends on your protocol:

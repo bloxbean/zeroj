@@ -210,6 +210,32 @@ class JubjubVerifierM3Test {
         }
     }
 
+    @Test
+    @DisplayName("hedged fixed-limb signatures verify through both circuit entry points")
+    void hedgedSignaturesVerifyThroughBoth() {
+        byte[] secret = fixed32(SK);
+        JubjubMessage typedMessage =
+                JubjubMessage.fromCanonicalFieldBytes(fixed32(BigInteger.valueOf(7_777)));
+        JubjubPoint pk;
+        EdDSAJubjub.Signature signature;
+        try (HardenedJubjubKey key = HardenedJubjubKey.importCanonical(secret);
+             JubjubSigner signer = JubjubSigners.hedgedCandidateForTesting(
+                     key, output -> java.util.Arrays.fill(output, (byte) 0x39))) {
+            pk = signer.publicKey();
+            signature = signer.sign(typedMessage);
+        } finally {
+            java.util.Arrays.fill(secret, (byte) 0);
+        }
+
+        BigInteger msg = typedMessage.toPublicFieldElement();
+        Map<String, List<BigInteger>> values =
+                witness(pk, signature.r(), signature.s(), msg);
+        assertDoesNotThrow(
+                () -> strictCircuit().calculateWitness(values, CurveId.BLS12_381));
+        assertDoesNotThrow(
+                () -> registeredCircuit().calculateWitness(values, CurveId.BLS12_381));
+    }
+
     /**
      * Off-circuit acceptance must imply in-circuit acceptance, and for {@code verifyStrict}
      * the converse holds too: both apply the same cofactorless equation with the same
@@ -254,8 +280,10 @@ class JubjubVerifierM3Test {
     @Test
     @DisplayName("cost pins for the two entry points")
     void entryPointCosts() {
-        int registered = registeredCircuit().compileR1CS(CurveId.BLS12_381).constraints().size();
-        int strict = strictCircuit().compileR1CS(CurveId.BLS12_381).constraints().size();
+        var registeredSystem = registeredCircuit().compileR1CS(CurveId.BLS12_381);
+        var strictSystem = strictCircuit().compileR1CS(CurveId.BLS12_381);
+        int registered = registeredSystem.constraints().size();
+        int strict = strictSystem.constraints().size();
         assertEquals(8_962, registered,
                 "verifyWithRegisteredKey = verifyCore (8,929) + [8]pk != O (33). Down from "
                         + "19,000 before the M5 work; the ADR target was ~8k.");
@@ -264,6 +292,34 @@ class JubjubVerifierM3Test {
                         + "the ADR target was ~14k.");
         assertTrue(strict - registered > 5_000,
                 "the variable-base subgroup check should dominate the difference");
+        assertEquals(364_342, registeredSystem.constraints().stream()
+                        .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum(),
+                "registered-key verifier sparse-matrix nonzeros");
+        assertEquals(705_251, strictSystem.constraints().stream()
+                        .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum(),
+                "strict verifier sparse-matrix nonzeros");
+        assertEquals(16_384, Integer.highestOneBit(registered - 1) << 1);
+        assertEquals(16_384, Integer.highestOneBit(strict - 1) << 1);
+    }
+
+    @Test
+    @DisplayName("registered verifier compiles consistently through PLONK and Halo2 backends")
+    void registeredVerifierCrossBackendSmoke() {
+        var circuit = registeredCircuit();
+        var plonk = circuit.compilePlonK(CurveId.BLS12_381);
+        var halo2 = circuit.compileHalo2(CurveId.BLS12_381);
+
+        assertEquals(32_563, plonk.numGates(),
+                "PLONK includes three public-input anchor rows");
+        assertEquals(32_560, halo2.numRows());
+        assertEquals(plonk.numPublicInputs(),
+                plonk.numGates() - halo2.numRows());
+        assertEquals(plonk.domainSize(), halo2.domainSize());
+        assertEquals(plonk.numPublicInputs(), halo2.numPublicInputs());
+        assertEquals(plonk.numWires(), halo2.numWires());
+        assertEquals(3, halo2.adviceColumns().size());
+        assertEquals(5, halo2.selectorColumns().size());
+        assertEquals(32_768, plonk.domainSize());
     }
 
     // ------------------------------------------------------------------
@@ -310,5 +366,14 @@ class JubjubVerifierM3Test {
         w.put("kModL", List.of(red.kModL()));
         w.put("kQuotient", List.of(red.kQuotient()));
         return w;
+    }
+
+    private static byte[] fixed32(BigInteger value) {
+        byte[] raw = value.toByteArray();
+        byte[] out = new byte[32];
+        int source = raw.length == 33 && raw[0] == 0 ? 1 : 0;
+        int length = raw.length - source;
+        System.arraycopy(raw, source, out, out.length - length, length);
+        return out;
     }
 }

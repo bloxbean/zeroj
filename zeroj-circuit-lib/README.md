@@ -39,16 +39,17 @@ final proof, verification key data, and public inputs.
 | Bit and byte vectors | `Binary`, `SignalBinary` | `ZkBits`, `ZkBytes` | Generic | Ready for binding/equality on BLS12-381 Groth16 | Symbolic bitwise operations are still limited; use `SignalBinary` or add wrappers when needed. |
 | Binary decomposition | `Binary`, `SignalBinary`, `AliasCheck` | Partly via `ZkUInt`, `ZkBits`, `ZkBool` | Generic | Ready on BLS12-381 Groth16 | `AliasCheck` remains a lower-level helper for canonical field representation checks. |
 | Comparators and ranges | `Comparators`, `SignalComparators` | Mostly through `ZkUInt` | Generic | Ready on BLS12-381 Groth16 | Optional symbolic `min`/`max` helpers can be added later if needed. |
-| Selection / mux | `Mux` | `ZkBool.select(...)`, `ZkJubjubPoint.select(...)` | Generic for scalar values | Ready on BLS12-381 Groth16 | Dynamic array access remains a lower-level `Mux.arrayAccess(...)` pattern. |
+| Selection / mux | `Mux` | `ZkBool.select(...)` | Generic for scalar values | Ready on BLS12-381 Groth16 | Dynamic array access remains a lower-level `Mux.arrayAccess(...)` pattern. `ZkJubjubPoint.select(...)` inherits the Jubjub-row status below, not this one. |
 | MiMC | `MiMC`, `SignalMiMC` | `ZkMiMC` | BN254 only | Not Cardano-ready | `MiMC` and `SignalMiMC` call `requireField(FieldConfig.BN254)`. Use Poseidon for Cardano circuits. |
 | MiMC sponge | `MiMCSponge` | No direct `ZkMiMCSponge` | BN254 only, because it uses MiMC | Not Cardano-ready | Useful for BN254/off-chain legacy circuits only. |
 | Poseidon T3 | `Poseidon`, `SignalPoseidon` | `ZkPoseidon` | BN254 default; BLS12-381 with explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | No-params overloads are BN254 for backward compatibility. |
 | Folded Poseidon N | `PoseidonN` | `ZkPoseidonN` | BN254 default in DSL overloads; symbolic API requires explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | Folded two-input Poseidon, not a separate variable-width Poseidon permutation. |
 | Merkle membership | `Merkle`, `SignalMerkle` | `ZkMerkle` | Hash-dependent | Ready with params-aware BLS12-381 Poseidon helpers | Use `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` for Cardano. `HashType.MIMC` and default `HashType.POSEIDON` are BN254-oriented convenience paths. |
 | Poseidon MPF | No `Signal*` facade; host witness helpers live in `zeroj-mpf-poseidon` | `ZkMpf`, `ZkMpfProof` | BLS12-381 Poseidon only | Technically usable through gnark Groth16, but experimental/heavy | Ready at witness/circuit level. Current MPF circuit is large, so MPF-specific Yaci demo and pure Java proving are deferred until optimization. Not compatible with native Aiken/Blake2b MPF roots. |
-| Jubjub point arithmetic | `InCircuitJubjub`, `JubjubPoint` | `ZkJubjubPoint` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16, pending external review (ADR-0037) | Bind every prover-supplied point with `witnessAffine(...)` (curve equation, `Z = 1`, `T = u·v`; 5 constraints) or `assertWellFormed(...)` for projective input. The raw `Point` constructor is unchecked and documented as gadget-internal. Neither binder establishes subgroup membership. |
-| Pedersen commitment | `InCircuitPedersen`, `PedersenCommitment` | `ZkPedersen` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16, pending external review | 3,020 constraints for a 252-bit commitment. Symbolic scalar inputs are capped at `ZkPedersen.MAX_SCALAR_BITS = 252`. |
-| EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16, pending external review; **signing is not constant-time** | Two entry points named for their key-trust model: `verifyStrict` (in-circuit subgroup check, 14,500 constraints) and `verifyWithRegisteredKey` (public/constant key, 8,962). There is no unqualified `verify`. Spec: [`jubjub-eddsa-v1`](../docs/specs/jubjub-eddsa-v1.md). |
+| Jubjub point arithmetic | `InCircuitJubjub`, `JubjubPoint` | `ZkJubjubPoint` | BLS12-381 scalar field only | Ready for algebraic/public-data use on BLS12-381 Groth16, pending external review (ADR-0037/0038) | Generic off-circuit secret-scalar use remains offline/isolated because `BigInteger` arithmetic is variable-time. Bind every prover-supplied in-circuit point with `witnessAffine(...)` (curve equation, `Z = 1`, `T = u·v`; 5 constraints) or `assertWellFormed(...)` for projective input (13 constraints, idempotent). The raw `Point` constructor is unchecked and documented as gadget-internal. Neither binder establishes subgroup membership. `ZkJubjubPoint.fromTrustedAffine` is deprecated and delegates to `witnessAffine`. |
+| Pedersen commitment (in-circuit) | `InCircuitPedersen` | `ZkPedersen` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16, pending external review | 3,020 constraints for two 252-bit vectors. `InCircuitPedersen` proves the represented residues but does not establish integer `< l`; `ZkPedersen` adds that canonicality check. |
+| Pedersen commitment (off-circuit generation) | `PedersenCommitment.commit`; internal fixed-limb review candidate | — | Jubjub over BLS12-381 | Legacy is **offline/isolated only**; fixed-limb path is an unapproved ADR-0039 M9 candidate | The candidate is package-private, uses mutable explicit-width openings and fixed-limb schedules, and has separate timing/external/platform gates. Hiding and binding of the commitment itself are unaffected. |
+| EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub`, `JubjubSigner` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Verification ready pending external review; legacy signing offline-only; fixed-limb hedged profile remains an unapproved candidate | Two in-circuit entry points are named for their key-trust model. `JubjubSigners.validatedDedicatedHostJavaRequired` deliberately fails closed until ADR-0039 M4–M8 pass. Specs: [`jubjub-eddsa-v1`](../docs/specs/jubjub-eddsa-v1.md), [hedged candidate](../docs/specs/jubjub-eddsa-hedged-v1-candidate.md). |
 | Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR` | Used by `ZkPoseidon*`, `ZkMerkle`, `ZkMpf` | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. The in-circuit `Poseidon` gadget currently supports T3/alpha-5 only. |
 
 **Real-world crypto (Cardano key derivation).** These gadgets reproduce standard wallet/key
@@ -217,9 +218,11 @@ Curve and parameter guidance:
   [`docs/specs/jubjub-eddsa-v1.md`](../docs/specs/jubjub-eddsa-v1.md).
 
   Every prover-supplied point must be bound with `InCircuitJubjub.witnessAffine(...)`, which
-  asserts the curve equation and pins `Z = 1`, `T = u·v`. The gadgets enforce this at their
-  own signatures rather than documenting it: a witness value is not constrained by anything
-  the caller checks off-circuit, because the caller never sees the prover's witness.
+  asserts the curve equation and pins `Z = 1`, `T = u·v`; a genuinely projective input must
+  pass `InCircuitJubjub.assertWellFormed(...)`. The low-level arithmetic API takes an unchecked
+  raw `Point`, so this is an explicit caller precondition there—a witness value is not
+  constrained by anything the caller checks off-circuit. The named EdDSA verifier entry
+  points are stronger: they accept affine wires and enforce binding at their own boundary.
 
   Verification comes in two named entry points, because whether `pk` needs an in-circuit
   subgroup check depends on the protocol, not the gadget. `verifyStrict(...)` proves
@@ -228,20 +231,78 @@ Curve and parameter guidance:
   the DSL against circuit-owned wire ids, and leaves registry binding to the final verifier.
   Both reject small-order keys via `[8]·pk != O`. There is no unqualified `verify`.
 
-  Still open before production use: an external cryptographic review, and the constant-time
-  signing restriction below.
+  `ZkJubjubPoint` carries the same guarantee via `witnessAffine(...)`; its `assertWellFormed()`
+  emits the projective invariants once. Before
+  [ADR-0038](../docs/adr/0038-jubjub-dsl-remediation-plan.md) P2 it emitted nothing at all and
+  accepted an off-curve `(1, 1)`.
 
-- **Signing is not constant-time.** `EdDSAJubjub.sign` performs secret-dependent scalar
+  Still open before validated secret-bearing production use: external cryptographic review
+  and the ADR-0039 platform/deployment gates below.
+
+- **Off-circuit Pedersen commitment generation is offline-only.**
+  `PedersenCommitment.commit(value, blinding)` uses a fresh 64-bit multiple-of-`l` scalar
+  blinding and a fixed 316-iteration add/double schedule for both legs. This removes the old
+  bit-length/zero-early-return channel and randomises the raw trailing-zero/identity-duration
+  signal, but Java branches, `BigInteger`, the reductions and the JVM remain variable-time.
+  The commitment's binding and perfect hiding are unaffected, as are the in-circuit Pedersen
+  gadgets — the restriction is on secret-bearing execution only. Verification uses the faster
+  public-scalar path because the opening is disclosed to that verifier.
+
+  ADR-0039 also contains an internal fixed-limb Pedersen candidate. It accepts explicit
+  unsigned widths, stores both inputs modulo `l`, uses fixed 252-iteration schedules, and
+  never converts a secret opening to `BigInteger`. Its classes remain package-private until
+  independent timing, platform, external-review, and public-API gates pass.
+
+- **Legacy signing is not constant-time.** `EdDSAJubjub.sign` performs secret-dependent scalar
   multiplication over variable-time `BigInteger` and feeds `sk` through Poseidon's
   variable-time field arithmetic. It is **not approved for value-bearing issuance on shared
   or network-reachable infrastructure**; approved uses are local/offline signing and test
-  issuance. Verification handles only public data and is unaffected.
+  issuance. It verifies its generated signature before returning, which catches inconsistent
+  candidate faults but cannot detect a coherent attacker-selected nonce used in both `R` and
+  `S`. Signing fails closed before point multiplication if its deterministic nonce is zero;
+  releasing such a signature would disclose the secret key.
+
+  ADR-0039 adds a separate fixed-limb implementation and typed `JubjubMessage` boundary.
+  `JubjubSigners.fixedLimbDeterministicV1Compatibility(...)` preserves legacy signature bytes
+  for offline testing. The hedged profile is implemented only as an internal review candidate:
+  it derives every nonce twice into disjoint scratch, checks equality/nonzero, and independently
+  verifies the public candidate before release. `validatedDedicatedHostJavaRequired()` takes
+  no untagged caller key and throws until external design/implementation review, an approved
+  key-provisioning boundary, and an exact JVM/CPU/CSPRNG deployment profile pass M4–M8; it
+  never falls back to a weaker signer.
+
+  `JubjubMessage.toPublicFieldElement()` is the explicit public-data bridge for circuit
+  inputs. Typed message overloads can make an untyped Java `null` literal ambiguous; existing
+  statically typed `BigInteger` calls and bytecode remain compatible.
+
+  For intentional legacy/offline typed signing, use
+  `signCompatibilityOffline(Keypair, JubjubMessage)` or the explicitly profiled
+  `JubjubSigners.compatibilityOffline(...)` wrapper. The generic typed
+  `sign(Keypair, JubjubMessage)` name is deprecated because it is too easy to mistake for
+  hardened signing. `Keypair` is now a validating final class rather than a record:
+  its public `(sk, pk)` constructor rejects an out-of-range secret or mismatched public key
+  and recomputes the relation, so the factory methods are cheaper when constructing a key.
+  The `sk()` / `pk()` accessors, value equality, and the former two-component record hash are
+  preserved. Code using record reflection, record-component metadata, record patterns, or
+  assignment to `java.lang.Record` must migrate and recompile.
+
+  Multiple-of-`l` scalar blinding assumes a prime-order subgroup base. Package boundaries keep
+  the helper internal; development and test runs can additionally enable
+  `-Dzeroj.jubjub.debugSecretSubgroupChecks=true` for an expensive fail-closed precondition
+  check. This is misuse detection, not a constant-time guarantee.
 
 - **Comparators** — `CircuitAPI.lessThan(a, b, n)` range-constrains **both** variable
   operands to `n` bits, and rejects a constant operand that does not fit at
   circuit-definition time. Before ADR-0037 it constrained neither and was forgeable in both
-  directions. Use `decompose(...)` with the `BitDecomposition` overload when you already hold
-  a decomposition, to avoid paying for the bound twice.
+  directions.
+
+  The `lessThan(BitDecomposition, BitDecomposition)` overload skips those range constraints on
+  the strength of the typed evidence, so it validates that evidence first: every consumer of a
+  `BitDecomposition` calls `CircuitAPI.requireOwned(...)` before reading a single bit, and a
+  decomposition minted in another circuit is rejected at circuit-definition time. Wire ids
+  restart per circuit, so without that check a foreign decomposition would pass as evidence
+  about unrelated same-id wires ([ADR-0038](../docs/adr/0038-jubjub-dsl-remediation-plan.md)
+  P1). `ZkUInt.decomposition()` exposes an owned decomposition for reuse.
 
 - **Cardano key derivation** — `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, and
   `ZkCip1852` are bit-oriented and field-agnostic (they don't depend on the

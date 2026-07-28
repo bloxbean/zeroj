@@ -18,7 +18,8 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>{@link #verifyStrict} — subgroup-checks {@code pk} inside the circuit. Correct
- *       whenever {@code pk} is prover-supplied. Costs ~8.5k extra constraints.</li>
+ *       whenever {@code pk} is prover-supplied. The pinned complete entry-point cost is
+ *       14,500 constraints versus 8,962 for the registered-key path: +5,538.</li>
  *   <li>{@link #verifyWithRegisteredKey} — requires {@code pk} to be a public input or
  *       constant, enforced by the DSL, and leaves registry binding to the final verifier.</li>
  * </ul>
