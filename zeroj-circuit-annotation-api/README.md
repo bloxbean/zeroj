@@ -102,7 +102,12 @@ Known limitations:
   explicit BLS12-381 Poseidon params.
 - Elliptic-curve composite symbolic types are available for the shipped Jubjub
   use cases (`ZkJubjubPoint`, Pedersen, EdDSA-Jubjub). Add a curve-specific
-  symbolic wrapper before using another curve family.
+  symbolic wrapper before using another curve family. Their readiness is tracked
+  by [ADR-0038](../docs/adr/0038-jubjub-dsl-remediation-plan.md), whose implementation
+  and regression gates are complete pending external cryptographic review — check the Jubjub rows of
+  [`zeroj-circuit-lib/README.md`](../zeroj-circuit-lib/README.md) for current status
+  before relying on any of them, and note that off-circuit signing and Pedersen
+  commitment *generation* are restricted to offline/isolated use.
 - Private field-style symbolic inputs are rejected by the processor. Use
   package-private field style or parameter-style inputs.
 

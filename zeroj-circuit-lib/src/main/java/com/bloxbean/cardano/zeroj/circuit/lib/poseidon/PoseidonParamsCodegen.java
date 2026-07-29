@@ -62,7 +62,13 @@ public final class PoseidonParamsCodegen {
             // ADR-0016 M4: t=5 for 4-ary Merkle / Pedersen-chunked hashing.
             new Preset("PoseidonParamsBLS12_381T5",
                     "BLS12-381 t=5 alpha=5 RF=8 RP=60",
-                    FieldConfig.BLS12_381, 255, 5, 5, 8, 60)
+                    FieldConfig.BLS12_381, 255, 5, 5, 8, 60),
+            // ADR-0037 Decision 5: t=6 gives rate 5 with capacity 1, so the five-element
+            // EdDSA challenge absorbs in a single permutation, with the domain tag
+            // initialising the capacity cell. t=5 (rate 4) cannot hold five elements.
+            new Preset("PoseidonParamsBLS12_381T6",
+                    "BLS12-381 t=6 alpha=5 RF=8 RP=60",
+                    FieldConfig.BLS12_381, 255, 6, 5, 8, 60)
     );
 
     public static void main(String[] args) throws IOException {

@@ -37,6 +37,9 @@ public final class PlonKCompiler {
      * Compile a constraint graph to PlonK constraint system.
      */
     public static PlonKConstraintSystem compile(ConstraintGraph graph, FieldConfig config) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(config, "config");
+        graph.requireCompatibleField(config);
         BigInteger p = config.prime();
         // Normalize constants to field: -1 mod p = p-1
         BigInteger negOne = NEG_ONE.mod(p);

@@ -10,6 +10,21 @@ dependencies {
     testImplementation project(':zeroj-test-vectors')
 }
 
+// Deterministic structure is gated in ordinary tests; wall-clock and allocation are recorded
+// separately because they are environment-sensitive. Run:
+// ./gradlew :zeroj-circuit-dsl:r1csCompilerBenchmark
+tasks.register('r1csCompilerBenchmark', Test) {
+    description = 'Records public-vs-incumbent R1CS compiler time/allocation on a 40k-row shape.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*R1CSCompilerBenchmark*' }
+    systemProperty 'zeroj.bench', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {

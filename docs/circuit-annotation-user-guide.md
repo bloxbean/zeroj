@@ -251,14 +251,39 @@ commitment.assertAffineEquals(zk, expectedU, expectedV);
 Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
 `< l`; range-limit any application amount separately when it has a smaller
 business-domain bound.
-Jubjub-based adapters use BLS12-381 and preserve the lower-level gadget
-contracts: arbitrary witness points are not implicitly curve- or
-subgroup-checked. Bind public keys and signature points with
-`ZkJubjubPoint.fromTrustedAffine(...)` only after off-circuit curve validity,
-subgroup membership, and non-identity checks. `ZkEdDSAJubjub.verify(...)`
-also rejects the identity public key in-circuit.
+Jubjub adapters use BLS12-381.
 
-`ZkEdDSAJubjub.verify(...)` also needs two reduction witnesses,
+Bind every prover-supplied point with `ZkJubjubPoint.witnessAffine(zk, u, v)`. It asserts the
+affine curve equation and pins `z = 1`, `t = u·v` — 5 constraints — so an off-curve witness
+such as `(u, v) = (1, 1)` cannot be injected. For a genuinely projective point, call
+`assertWellFormed()`, which emits the projective invariants (`V² − U² == Z² + d·T²`,
+`T·Z == U·V`, `Z != 0`) once; repeated calls are free, and points from `witnessAffine` or
+`constant` are already established.
+
+Neither establishes prime-order subgroup membership — that is a separate, much more expensive
+check applied only where the threat model needs it (`ZkEdDSAJubjub.verifyStrict`).
+
+> **History (ADR-0038).** Before P2 this adapter emitted **no point-validity constraints at
+> all**: `fromTrustedAffine` pinned `z` and `t` without asserting the curve equation, its
+> `assertWellFormed()` delegated to four empty `ZkField.assertWellFormed()` calls, and this
+> guide told you the gadget curve-checked every point. It did not. `fromTrustedAffine` is
+> deprecated and now delegates to the safe binder; the name described the
+> validate-off-circuit-then-trust-in-circuit model that ADR-0037 removed, which cannot work
+> for a witness value the caller never sees.
+
+`ZkEdDSAJubjub` exposes two entry points rather than one `verify`, because whether the public
+key needs an in-circuit subgroup check depends on your protocol:
+
+- `verifyStrict(...)` — proves `[l]·pk == O` in-circuit. Use whenever `pk` is a private
+  witness or is chosen by the prover. ~14,500 constraints.
+- `verifyWithRegisteredKey(...)` — requires `pk` to be a public input or circuit constant,
+  enforced by the DSL. Binding it to a subgroup-checked registry entry remains your
+  verifier's job. ~8,962 constraints.
+
+Both reject small-order public keys, including the identity. The normative scheme is
+[`docs/specs/jubjub-eddsa-v1.md`](specs/jubjub-eddsa-v1.md).
+
+Both entry points also need two reduction witnesses,
 `kModL` and `kQuotient`, so the circuit can prove the Poseidon challenge was
 reduced modulo the Jubjub subgroup order. Compute those host values with
 `ZkEdDSAJubjub.witnessComputeKReduction(signature.r(), publicKey, message)` and

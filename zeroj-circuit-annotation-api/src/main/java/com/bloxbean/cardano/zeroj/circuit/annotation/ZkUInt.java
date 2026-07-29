@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.circuit.annotation;
 
+import com.bloxbean.cardano.zeroj.circuit.BitDecomposition;
 import com.bloxbean.cardano.zeroj.circuit.Signal;
 import com.bloxbean.cardano.zeroj.circuit.SignalBuilder;
 
@@ -17,6 +18,16 @@ public final class ZkUInt implements ZkValue {
     final Signal signal;
     private final int bits;
     private boolean wellFormed;
+
+    /**
+     * The decomposition proving {@code signal < 2^bits}, minted lazily and cached.
+     *
+     * <p>Cached because the constraints it stands for are emitted exactly once. Before
+     * ADR-0038 the range proof was emitted by {@code assertInRange} and the resulting
+     * {@link BitDecomposition} thrown away, so a gadget that also needed the bits — Pedersen
+     * commitment, for instance — decomposed the same wire a second time.
+     */
+    private BitDecomposition decomposition;
 
     private ZkUInt(ZkContext context, Signal signal, int bits, boolean wellFormed) {
         this.context = Objects.requireNonNull(context, "context");
@@ -131,9 +142,36 @@ public final class ZkUInt implements ZkValue {
     @Override
     public void assertWellFormed() {
         if (!wellFormed) {
-            signal.assertInRange(bits);
+            // Route through decomposition() so the bits are retained rather than emitted and
+            // discarded; the constraints are identical either way.
+            decomposition();
+        }
+    }
+
+    /**
+     * This value's binary decomposition at its declared width, proving {@code value < 2^bits}.
+     *
+     * <p>Minted on first use and cached, so the range constraints are emitted once no matter
+     * how many gadgets ask. A value that was already range-constrained at construction returns
+     * that same decomposition; a derived value — the result of {@link #add} or {@link #mul},
+     * which carry a widened bound rather than an emitted proof — mints one here at its
+     * declared width.
+     *
+     * <p>The returned object is owned by this value's circuit and is validated by every gadget
+     * that consumes it ({@link com.bloxbean.cardano.zeroj.circuit.CircuitAPI#requireOwned}).
+     * Passing it to a gadget building a <em>different</em> circuit is rejected at
+     * circuit-definition time, so handing it out is safe.
+     *
+     * @see <a href="../../../../../../../../docs/adr/0038-jubjub-dsl-remediation-plan.md">ADR-0038 Decision 5</a>
+     */
+    public BitDecomposition decomposition() {
+        if (decomposition == null) {
+            decomposition = context.builder().api().decompose(signal.variable(), bits);
+            // decompose() emits exactly the booleanity + recomposition constraints that
+            // assertInRange would have.
             wellFormed = true;
         }
+        return decomposition;
     }
 
     private int compareBits(ZkUInt other) {

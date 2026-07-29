@@ -120,6 +120,91 @@ public final class Poseidon {
     }
 
     /**
+     * Poseidon permutation over a state of arbitrary width {@code t}, with the state given
+     * and returned explicitly.
+     *
+     * <p>This is the general form of the {@code t=3} hash above: same round structure
+     * (RF/2 full rounds, RP partial rounds, RF/2 full rounds), same {@code x^alpha} S-box,
+     * same MDS multiplication — just not specialised to a three-cell state. It exists so that
+     * a sponge with rate {@code t-1} can absorb more than two inputs in a single permutation.
+     *
+     * <p>The caller owns the sponge convention: by ZeroJ's convention {@code state[0]} is the
+     * capacity cell (initialised to zero, or to a domain tag) and {@code state[1..t-1]} are
+     * rate cells holding the inputs; the output is {@code state[0]} after permuting.
+     *
+     * <p>Cost note: the MDS step is {@code t^2} constant multiplications per round, so cost
+     * grows quadratically in {@code t} while capacity grows linearly. A wider permutation is
+     * not automatically cheaper than folding a narrow one — measure before choosing.
+     *
+     * @param state input state of length {@code params.t()}; not modified
+     * @return the permuted state, a fresh array
+     */
+    public static Variable[] permute(CircuitAPI api, PoseidonParams params, Variable[] state) {
+        if (params.alpha() != 5) {
+            throw new IllegalArgumentException(
+                    "Poseidon gadget supports only alpha=5 (got " + params.alpha() + ")");
+        }
+        int t = params.t();
+        if (state == null || state.length != t) {
+            throw new IllegalArgumentException(
+                    "state length must equal t=" + t + ", got "
+                            + (state == null ? "null" : state.length));
+        }
+        api.requireField(params.field());
+
+        int rf = params.rf();
+        int rp = params.rp();
+        int nRounds = rf + rp;
+
+        Variable[] s = state.clone();
+        for (int r = 0; r < nRounds; r++) {
+            // AddRoundConstants
+            for (int i = 0; i < t; i++) {
+                s[i] = api.add(s[i], api.constant(params.cAt(r, i)));
+            }
+            // S-box: all cells in full rounds, first cell only in partial rounds
+            boolean fullRound = r < rf / 2 || r >= rf / 2 + rp;
+            if (fullRound) {
+                for (int i = 0; i < t; i++) s[i] = sbox(api, s[i]);
+            } else {
+                s[0] = sbox(api, s[0]);
+            }
+            // MDS
+            Variable[] next = new Variable[t];
+            for (int i = 0; i < t; i++) {
+                Variable acc = api.mul(s[0], api.constant(params.mAt(i, 0)));
+                for (int j = 1; j < t; j++) {
+                    acc = api.add(acc, api.mul(s[j], api.constant(params.mAt(i, j))));
+                }
+                next[i] = acc;
+            }
+            s = next;
+        }
+        return s;
+    }
+
+    /**
+     * Sponge hash of {@code inputs} in a single permutation, with {@code capacity} seeding the
+     * capacity cell — the natural place for a domain-separation tag.
+     *
+     * <p>Requires {@code inputs.length <= params.t() - 1}, i.e. the rate must cover the input
+     * count. Returns {@code state[0]} after permuting.
+     */
+    public static Variable spongeHash(CircuitAPI api, PoseidonParams params,
+                                      Variable capacity, Variable... inputs) {
+        int t = params.t();
+        // Exactly the rate, never zero-padded — see PoseidonHash.requireExactRate for why.
+        // The in-circuit and off-circuit spongeHash must agree on this, or a value computed
+        // on one side would not reproduce on the other.
+        com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash.requireExactRate(
+                t, inputs.length);
+        Variable[] state = new Variable[t];
+        state[0] = capacity;
+        System.arraycopy(inputs, 0, state, 1, t - 1);
+        return permute(api, params, state)[0];
+    }
+
+    /**
      * S-box: x^5 = (x^2)^2 * x. Costs 2 multiplication constraints.
      */
     private static Variable sbox(CircuitAPI api, Variable x) {

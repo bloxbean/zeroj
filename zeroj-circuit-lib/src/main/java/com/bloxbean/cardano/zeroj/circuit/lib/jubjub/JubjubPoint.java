@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.zeroj.circuit.lib.jubjub;
 
 import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -36,6 +37,45 @@ import static com.bloxbean.cardano.zeroj.circuit.lib.jubjub.JubjubCurve.TWO_D;
  * Instances are immutable. Arithmetic returns new instances.
  */
 public final class JubjubPoint {
+    /**
+     * Fresh scalar blinding for known prime-order subgroup bases. Per-thread instances avoid a
+     * global RNG lock becoming the throughput bottleneck for independent offline workers.
+     */
+    private static final ThreadLocal<SecureRandom> SECRET_SCALAR_BLINDING_RANDOM =
+            ThreadLocal.withInitial(SecureRandom::new);
+
+    /**
+     * Package-private instrumentation for deterministic tests of the production schedule.
+     * The observer is sampled once per multiplication, so ordinary callers pay one
+     * {@link ThreadLocal#get()} rather than one lookup per iteration.
+     */
+    private static final ThreadLocal<SecretScheduleObserver> SECRET_SCHEDULE_OBSERVER =
+            new ThreadLocal<>();
+
+    /** Random multiple-of-l blinding width; 252 + 64 gives a fixed 316-iteration schedule. */
+    static final int SECRET_SCALAR_BLINDING_BITS = 64;
+    static final int SECRET_SCALAR_BLINDED_SCHEDULE_BITS =
+            JubjubCurve.SCALAR_BITS + SECRET_SCALAR_BLINDING_BITS;
+    static final String DEBUG_SECRET_SUBGROUP_PROPERTY =
+            "zeroj.jubjub.debugSecretSubgroupChecks";
+
+    interface SecretScheduleObserver {
+        void scheduleStarted(int iterations);
+        void addition();
+        void doubling();
+    }
+
+    static void installSecretScheduleObserverForTesting(SecretScheduleObserver observer) {
+        Objects.requireNonNull(observer, "observer");
+        if (SECRET_SCHEDULE_OBSERVER.get() != null) {
+            throw new IllegalStateException("a secret-schedule observer is already installed");
+        }
+        SECRET_SCHEDULE_OBSERVER.set(observer);
+    }
+
+    static void clearSecretScheduleObserverForTesting() {
+        SECRET_SCHEDULE_OBSERVER.remove();
+    }
 
     // ---------- Extended coordinates ----------
     private final BigInteger u;
@@ -110,12 +150,35 @@ public final class JubjubPoint {
 
     /** Affine u-coordinate = {@code U/Z (mod p)}. */
     public BigInteger affineU() {
+        if (z.equals(BigInteger.ONE)) return u;
         return u.multiply(z.modInverse(BASE_FIELD_PRIME)).mod(BASE_FIELD_PRIME);
     }
 
     /** Affine v-coordinate = {@code V/Z (mod p)}. */
     public BigInteger affineV() {
+        if (z.equals(BigInteger.ONE)) return v;
         return v.multiply(z.modInverse(BASE_FIELD_PRIME)).mod(BASE_FIELD_PRIME);
+    }
+
+    /**
+     * Returns the canonical affine representative {@code (u, v, 1, u·v)}.
+     *
+     * <p>Scalar blinding intentionally changes the intermediate projective representative.
+     * Generated public keys, signatures, and commitments normalize before crossing their API
+     * boundary so callers never observe random raw {@code U/V/Z/T} coordinates for the same
+     * affine point. Containers constructed explicitly by a caller preserve the supplied
+     * representative.
+     */
+    public JubjubPoint normalized() {
+        if (z.equals(BigInteger.ONE)) return this;
+        BigInteger zInverse = z.modInverse(BASE_FIELD_PRIME);
+        BigInteger affineU = u.multiply(zInverse).mod(BASE_FIELD_PRIME);
+        BigInteger affineV = v.multiply(zInverse).mod(BASE_FIELD_PRIME);
+        return new JubjubPoint(
+                affineU,
+                affineV,
+                BigInteger.ONE,
+                affineU.multiply(affineV).mod(BASE_FIELD_PRIME));
     }
 
     /** {@code true} iff this point is the identity {@code (0, 1)}. */
@@ -211,6 +274,127 @@ public final class JubjubPoint {
             base = base.doubled();
         }
         return negate ? result.negate() : result;
+    }
+
+    /**
+     * Fixed-schedule scalar multiplication for <b>secret</b> scalars in {@code [0, l)}.
+     *
+     * <p>Runs exactly {@value JubjubCurve#SCALAR_BITS} iterations regardless of
+     * {@code k.bitLength()}, and performs one addition and one doubling in every iteration —
+     * never skipping the addition, and never returning early for {@code k = 0}. The
+     * add/double operation count is therefore identical for every scalar in range, whatever
+     * its bit length or Hamming weight.
+     *
+     * <h2>Scope, stated precisely — this is best-effort, not constant-time</h2>
+     * It removes the <b>loop-bound and operation-count channel</b>. It does not make the
+     * operation constant-time, and the name says so. What remains:
+     * <ul>
+     *   <li>selecting between the two already-computed points uses a secret-dependent Java
+     *       branch. It performs no additional coordinate arithmetic, but it is a branch;</li>
+     *   <li>{@link BigInteger} arithmetic is inherently variable-time — values carry
+     *       data-dependent word counts, {@code multiply} switches algorithm by operand size,
+     *       and {@code mod} divides. Closing that needs a fixed-limb layer modulo the subgroup
+     *       order, which does not exist (ADR-0038 Decision 6).</li>
+     * </ul>
+     *
+     * <p><b>Residual channel:</b> while the accumulator is the affine identity its small
+     * coordinates make {@link BigInteger} arithmetic measurably cheaper. In this LSB-first loop,
+     * the number of such iterations is {@code k.getLowestSetBit()}, so this raw primitive still
+     * exposes structured low-bit information. Production secret-bearing call sites use the
+     * package-private multiple-of-l blinded wrapper below to randomise that count. This raw
+     * method remains only as a package-private test/reference primitive; it is not suitable for
+     * a secret-bearing production call site.
+     *
+     * <p><b>Signing remains offline-only.</b> This method does not change that classification.
+     *
+     * @param k secret scalar; must satisfy {@code 0 <= k < l}
+     * @throws IllegalArgumentException if {@code k} is outside {@code [0, l)}
+     * @see <a href="../../../../../../../../../docs/adr/0038-jubjub-dsl-remediation-plan.md">ADR-0038 Decision 4</a>
+     */
+    JubjubPoint scalarMulSecretRaw252UnsafeForTiming(BigInteger k) {
+        requireSecretScalar(k);
+        return scalarMulFixedSchedule(k, JubjubCurve.SCALAR_BITS);
+    }
+
+    /**
+     * Best-effort scalar multiplication for a secret scalar on a point already known to be in
+     * the prime-order subgroup.
+     *
+     * <p>Samples a fresh 64-bit {@code m} and computes {@code [k + m·l]P}. Since {@code [l]P}
+     * is the identity for a subgroup point, the affine result and every signature/commitment
+     * encoding are unchanged. Because {@code l} is odd, uniform {@code m} makes the low 64 bits
+     * of the represented scalar uniform, decoupling the raw loop's trailing-zero timing from
+     * {@code k}. The loop always runs 316 iterations.
+     *
+     * <p><b>This is blinding, not constant-time arithmetic.</b> Java branches and
+     * {@link BigInteger} remain variable-time, and signing/commitment generation therefore stay
+     * restricted to offline or isolated execution.
+     *
+     * <p>Package-private by design: the identity {@code [k + m·l]P = [k]P} is false for an
+     * arbitrary mixed-order Jubjub point. Current callers use only
+     * {@link #SUBGROUP_GENERATOR} and Pedersen's cofactor-cleared {@code H}.
+     * Development/test environments can additionally set
+     * {@code -Dzeroj.jubjub.debugSecretSubgroupChecks=true} to verify the precondition at
+     * runtime. That check performs a full subgroup multiplication and is intentionally off by
+     * default; it is misuse detection, not a production constant-time boundary.
+     */
+    JubjubPoint scalarMulSecretBlindedBestEffort(BigInteger k) {
+        requireSecretScalar(k);
+        byte[] blindBytes = new byte[SECRET_SCALAR_BLINDING_BITS / Byte.SIZE];
+        SECRET_SCALAR_BLINDING_RANDOM.get().nextBytes(blindBytes);
+        try {
+            return scalarMulSecretBlindedBestEffort(k, new BigInteger(1, blindBytes));
+        } finally {
+            Arrays.fill(blindBytes, (byte) 0);
+        }
+    }
+
+    /**
+     * Deterministic test seam for the blinded schedule. The caller must establish that this
+     * point has order dividing {@code l}; see {@link #scalarMulSecretBlindedBestEffort(BigInteger)}.
+     */
+    JubjubPoint scalarMulSecretBlindedBestEffort(BigInteger k, BigInteger m) {
+        requireSecretScalar(k);
+        Objects.requireNonNull(m, "m");
+        if (Boolean.getBoolean(DEBUG_SECRET_SUBGROUP_PROPERTY) && !isInSubgroup()) {
+            throw new IllegalStateException(
+                    "multiple-of-l scalar blinding requires a point whose order divides l; "
+                            + "this point is not in the Jubjub prime-order subgroup");
+        }
+        BigInteger limit = BigInteger.ONE.shiftLeft(SECRET_SCALAR_BLINDING_BITS);
+        if (m.signum() < 0 || m.compareTo(limit) >= 0) {
+            throw new IllegalArgumentException(
+                    "scalar blinding factor must satisfy 0 <= m < 2^"
+                            + SECRET_SCALAR_BLINDING_BITS);
+        }
+        BigInteger blinded = k.add(m.multiply(SUBGROUP_ORDER));
+        return scalarMulFixedSchedule(blinded, SECRET_SCALAR_BLINDED_SCHEDULE_BITS);
+    }
+
+    private static void requireSecretScalar(BigInteger k) {
+        Objects.requireNonNull(k, "k");
+        if (k.signum() < 0 || k.compareTo(SUBGROUP_ORDER) >= 0) {
+            throw new IllegalArgumentException(
+                    "secret scalar must satisfy 0 <= k < l (the Jubjub subgroup order); this "
+                            + "method's fixed schedule is only defined on that range");
+        }
+    }
+
+    private JubjubPoint scalarMulFixedSchedule(BigInteger scalar, int iterations) {
+        JubjubPoint result = IDENTITY;
+        JubjubPoint base = this;
+        SecretScheduleObserver observer = SECRET_SCHEDULE_OBSERVER.get();
+        if (observer != null) observer.scheduleStarted(iterations);
+        for (int i = 0; i < iterations; i++) {
+            // Always compute the sum, then select. Skipping it when the bit is clear is what
+            // makes the operation count depend on the Hamming weight.
+            JubjubPoint sum = result.add(base);
+            if (observer != null) observer.addition();
+            result = scalar.testBit(i) ? sum : result;
+            base = base.doubled();
+            if (observer != null) observer.doubling();
+        }
+        return result;
     }
 
     /** Cofactor-clear: returns {@code [8] · P}, guaranteed to be in the prime-order subgroup. */

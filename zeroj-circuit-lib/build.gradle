@@ -10,6 +10,97 @@ test {
     maxHeapSize = '4g'
 }
 
+// ADR-0038 P4 benchmark matrix. Deliberately NOT a gate: nothing here asserts, because a
+// timing assertion in CI is flaky and a harness that finds no leak proves nothing. The
+// deterministic add/double operation-count gate in SecretScalarScheduleTest is what CI
+// enforces. Run: ./gradlew :zeroj-circuit-lib:secretScalarBenchmark
+tasks.register('secretScalarBenchmark', Test) {
+    description = 'ADR-0038 P4 secret-scalar timing benchmark matrix (records, does not assert).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*SecretScalarTimingBenchmark*' }
+    systemProperty 'zeroj.bench', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+// ADR-0039 M6 fixed-limb signer/Pedersen performance matrix. Results are evidence for the
+// exact JVM/CPU used to run it, never a portable constant-time or readiness claim.
+// Run: ./gradlew :zeroj-circuit-lib:jubjubHardenedBenchmark
+tasks.register('jubjubHardenedBenchmark', Test) {
+    description = 'ADR-0039 M6 hardened Jubjub latency/allocation/concurrency benchmark.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*HardenedJubjubBenchmark*' }
+    systemProperty 'zeroj.hardenedBench', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+// Diagnostic timing harness with a deliberately leaky negative control. It records Welch
+// statistics; only failure to detect the negative control is asserted.
+// Run: ./gradlew :zeroj-circuit-lib:jubjubHardenedTiming
+tasks.register('jubjubHardenedTiming', Test) {
+    description = 'ADR-0039 M6 diagnostic fixed-limb timing/Welch harness.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*HardenedJubjubTimingHarness*' }
+    systemProperty 'zeroj.hardenedTiming', 'true'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+tasks.register('jubjubHardenedTimingInterpreted', Test) {
+    description = 'ADR-0039 M6 timing harness under the interpreter (-Xint).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*HardenedJubjubTimingHarness*' }
+    systemProperty 'zeroj.hardenedTiming', 'true'
+    systemProperty 'zeroj.hardenedTimingWarmup', '100'
+    systemProperty 'zeroj.hardenedTimingSamples', '600'
+    jvmArgs '-Xint'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+tasks.register('jubjubHardenedTimingC1', Test) {
+    description = 'ADR-0039 M6 timing harness with C1-only compilation.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*HardenedJubjubTimingHarness*' }
+    systemProperty 'zeroj.hardenedTiming', 'true'
+    systemProperty 'zeroj.hardenedTimingWarmup', '1000'
+    systemProperty 'zeroj.hardenedTimingSamples', '6000'
+    jvmArgs '-XX:TieredStopAtLevel=1'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+tasks.register('jubjubHardenedTimingC2', Test) {
+    description = 'ADR-0039 M6 timing harness with tiering disabled and C2 batch compilation.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*HardenedJubjubTimingHarness*' }
+    systemProperty 'zeroj.hardenedTiming', 'true'
+    systemProperty 'zeroj.hardenedTimingWarmup', '2000'
+    systemProperty 'zeroj.hardenedTimingSamples', '12000'
+    jvmArgs '-XX:-TieredCompilation', '-Xbatch'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 // Opt-in heavy gadget tests (full Ed25519 scalar-mult circuits, ~30M+ constraints). Gated on
 // -Dzeroj.heavy=true so the normal test run stays fast. Run: ./gradlew :zeroj-circuit-lib:heavyGadgetTest
 tasks.register('heavyGadgetTest', Test) {

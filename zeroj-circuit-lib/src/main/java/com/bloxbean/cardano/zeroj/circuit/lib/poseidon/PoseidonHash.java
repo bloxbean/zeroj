@@ -110,6 +110,109 @@ public final class PoseidonHash {
         return acc;
     }
 
+    /**
+     * Poseidon permutation over a state of arbitrary width {@code t}, the off-circuit
+     * counterpart of {@code Poseidon.permute}.
+     *
+     * <p>ZeroJ sponge convention: {@code state[0]} is the capacity cell (zero, or a domain
+     * tag) and {@code state[1..t-1]} are rate cells; the hash output is {@code state[0]}
+     * after permuting.
+     *
+     * @param state input state of length {@code params.t()}; not modified
+     * @return the permuted state, a fresh array
+     */
+    public static BigInteger[] permute(PoseidonParams params, BigInteger[] state) {
+        Objects.requireNonNull(params, "params");
+        Objects.requireNonNull(state, "state");
+        if (params.alpha() != 5) {
+            throw new IllegalArgumentException("PoseidonHash supports only alpha=5, got " + params.alpha());
+        }
+        int t = params.t();
+        if (state.length != t) {
+            throw new IllegalArgumentException(
+                    "state length must equal t=" + t + ", got " + state.length);
+        }
+        BigInteger p = params.field().prime();
+        int rf = params.rf();
+        int rp = params.rp();
+        int totalRounds = rf + rp;
+
+        BigInteger[] s = new BigInteger[t];
+        for (int i = 0; i < t; i++) s[i] = state[i].mod(p);
+
+        for (int r = 0; r < totalRounds; r++) {
+            for (int i = 0; i < t; i++) {
+                s[i] = s[i].add(params.cAt(r, i)).mod(p);
+            }
+            boolean fullRound = r < rf / 2 || r >= rf / 2 + rp;
+            if (fullRound) {
+                for (int i = 0; i < t; i++) s[i] = sbox(s[i], p);
+            } else {
+                s[0] = sbox(s[0], p);
+            }
+            BigInteger[] next = new BigInteger[t];
+            for (int i = 0; i < t; i++) {
+                BigInteger acc = BigInteger.ZERO;
+                for (int j = 0; j < t; j++) {
+                    acc = acc.add(params.mAt(i, j).multiply(s[j]));
+                }
+                next[i] = acc.mod(p);
+            }
+            s = next;
+        }
+        return s;
+    }
+
+    /**
+     * Sponge hash of {@code inputs} in a single permutation, with {@code capacity} seeding
+     * the capacity cell — the natural place for a domain-separation tag.
+     *
+     * <p>Requires {@code inputs.length <= params.t() - 1}. Returns {@code state[0]} after
+     * permuting. This is the off-circuit counterpart of {@code Poseidon.spongeHash}, and the
+     * two must agree exactly for any value used in both places.
+     */
+    public static BigInteger spongeHash(PoseidonParams params, BigInteger capacity,
+                                        BigInteger... inputs) {
+        Objects.requireNonNull(params, "params");
+        Objects.requireNonNull(capacity, "capacity");
+        int t = params.t();
+        requireExactRate(t, inputs.length);
+        BigInteger[] state = new BigInteger[t];
+        state[0] = capacity;
+        System.arraycopy(inputs, 0, state, 1, t - 1);
+        return permute(params, state)[0];
+    }
+
+    /**
+     * Requires exactly {@code t-1} inputs — the full rate — rather than zero-padding a short
+     * vector.
+     *
+     * <p>Zero-padding would make this construction length-ambiguous: with no length encoding
+     * or padding delimiter, {@code H(x1..xm)} and {@code H(x1..xm, 0)} are the same value for
+     * any {@code m < t-1}. That is harmless for the fixed-arity uses in this codebase, but it
+     * is a collision waiting for the first caller who absorbs a variable-length vector, and
+     * such a caller would get no warning.
+     *
+     * <p>Rejecting short input costs nothing today (every call site already passes exactly the
+     * rate) and forces any future variable-length use to choose an explicit, unambiguous
+     * encoding — length-prefixing the vector, or folding the length into the capacity tag —
+     * rather than inheriting a silent one.
+     *
+     * <p>Public so the in-circuit {@code Poseidon.spongeHash} in the sibling package shares
+     * this exact definition. A duplicated copy is how the two sides would drift, and a value
+     * computed on one side would then fail to reproduce on the other.
+     */
+    public static void requireExactRate(int t, int suppliedInputs) {
+        if (suppliedInputs != t - 1) {
+            throw new IllegalArgumentException(
+                    "spongeHash requires exactly " + (t - 1) + " inputs for t=" + t
+                            + " (the full rate), got " + suppliedInputs
+                            + ". Short input is rejected rather than zero-padded, because "
+                            + "zero-padding is length-ambiguous: H(x) would equal H(x, 0). "
+                            + "Pad explicitly, or use a wider/narrower preset.");
+        }
+    }
+
     private static BigInteger sbox(BigInteger x, BigInteger p) {
         BigInteger x2 = x.multiply(x).mod(p);
         BigInteger x4 = x2.multiply(x2).mod(p);

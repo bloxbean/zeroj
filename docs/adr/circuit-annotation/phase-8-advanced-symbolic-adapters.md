@@ -57,6 +57,17 @@ Exit criteria results:
 
 ## Review Results
 
+> **Amended by [ADR-0038](../0038-jubjub-dsl-remediation-plan.md) P0/P2 — these approvals
+> rested on the wrong properties.** The API/design track approved `ZkJubjubPoint` for
+> exposing "only trusted affine construction" and "documenting the trust boundary"; the
+> correctness/security track approved it for having "no public extended-coordinate
+> constructor". None of the three tracks checked whether the adapter **asserts the curve
+> equation** — it did not, so an off-curve `(u,v) = (1,1)` was accepted, and its
+> `assertWellFormed()` delegated to four empty `ZkField.assertWellFormed()` calls and emitted
+> nothing. Constructor visibility and a documented trust boundary are precisely the
+> substitute properties ADR-0038's process note warns about. ADR-0038 P2 replaces the binder
+> with one that asserts the curve equation. The approvals below are left for the record.
+
 Approved after three independent review tracks:
 
 - API/design review: approved after the point wrapper exposed only trusted

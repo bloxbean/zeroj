@@ -51,6 +51,28 @@ public record ConstraintGraph(
     /** Total number of input signals (public + secret). */
     public int numInputs() { return publicInputs.size() + secretInputs.size(); }
 
+    /**
+     * Enforces the field dependency recorded by {@link CircuitAPI#requireField(FieldConfig)}.
+     *
+     * <p>This check belongs on the graph, not only on {@link CircuitBuilder}: the graph and
+     * each compiler/witness calculator are public APIs, so callers can legitimately invoke
+     * them directly. Silently evaluating BLS12-381 Poseidon/Jubjub constants in BN254 changes
+     * the intended relation.
+     *
+     * @throws IllegalStateException if this graph declared a different field
+     */
+    public void requireCompatibleField(FieldConfig actual) {
+        Objects.requireNonNull(actual, "actual");
+        if (expectedField != null && !expectedField.equals(actual)) {
+            throw new IllegalStateException(
+                    "Field mismatch: circuit declared expected field " + expectedField.name()
+                            + " (via requireField) but compilation / witness calculation "
+                            + "was requested for " + actual.name() + ". Typical cause: a "
+                            + "gadget was given Poseidon/Jubjub parameters for a field that "
+                            + "does not match the target. Use matching parameters and field.");
+        }
+    }
+
     /** Get all named variables (public + secret). */
     public Map<String, Variable> namedVariables() {
         var map = new LinkedHashMap<String, Variable>();

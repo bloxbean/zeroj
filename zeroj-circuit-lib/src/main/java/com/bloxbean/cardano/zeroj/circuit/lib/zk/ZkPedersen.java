@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.zeroj.circuit.lib.zk;
 
+import com.bloxbean.cardano.zeroj.circuit.BitDecomposition;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkBits;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;
@@ -23,15 +24,32 @@ public final class ZkPedersen {
         return commit(zk, value, blinding, Math.max(value.bits(), blinding.bits()));
     }
 
+    /**
+     * Commits to {@code value} with {@code blinding}.
+     *
+     * <p>{@code scalarBits} is validated as an upper bound on both operands, but each scalar
+     * is multiplied at <b>its own declared width</b>: a 16-bit value alongside a 252-bit
+     * blinding pays for 16 bits on the value leg. Passing the shared maximum to both legs, as
+     * this method used to, made every small commitment cost as much as the widest operand.
+     *
+     * <p><b>Order matters.</b> Both decompositions are obtained <em>before</em> the
+     * canonicality check runs. {@code assertCanonicalScalar} compares against {@code l} at
+     * {@link #MAX_SCALAR_BITS}, and its range precondition is discharged from the DSL's range
+     * cache — but only if a bound is already recorded for the wire. Run it first on a derived
+     * value that has no cached bound and it mints a full 252-bit decomposition that is then
+     * thrown away, which is precisely the duplicate this reuse removes.
+     */
     public static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding, int scalarBits) {
         validateScalarInputs(zk, value, blinding, scalarBits);
+        // Mint (or retrieve) both owned decompositions at their actual widths FIRST, so the
+        // canonicality check below is satisfied from the range cache rather than emitting a
+        // second, wider decomposition.
+        BitDecomposition valueBits = value.decomposition();
+        BitDecomposition blindingBits = blinding.decomposition();
         assertCanonicalScalar(zk, value.signal().variable());
         assertCanonicalScalar(zk, blinding.signal().variable());
         return ZkJubjubPoint.wrap(zk, InCircuitPedersen.commit(
-                zk.builder().api(),
-                value.signal().variable(),
-                blinding.signal().variable(),
-                scalarBits));
+                zk.builder().api(), valueBits, blindingBits));
     }
 
     /**

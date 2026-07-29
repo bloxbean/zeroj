@@ -1,129 +1,324 @@
 package com.bloxbean.cardano.zeroj.circuit.lib.jubjub;
 
+import com.bloxbean.cardano.zeroj.circuit.BitDecomposition;
 import com.bloxbean.cardano.zeroj.circuit.CircuitAPI;
 import com.bloxbean.cardano.zeroj.circuit.Variable;
-import com.bloxbean.cardano.zeroj.circuit.lib.Comparators;
-import com.bloxbean.cardano.zeroj.circuit.lib.PoseidonN;
+import com.bloxbean.cardano.zeroj.circuit.lib.Poseidon;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
+import java.math.BigInteger;
+
 /**
- * In-circuit EdDSA-Jubjub verification gadget, matching the off-circuit
- * {@link EdDSAJubjub} scheme.
+ * In-circuit EdDSA-Jubjub verification, matching the off-circuit {@link EdDSAJubjub} scheme.
  *
- * <p>Use case: a credential holder proves "I have a signature {@code sig}
- * from issuer {@code pk} over message {@code msg}", without revealing the
- * signature itself. Inside the SNARK, the gadget emits the constraints
- * {@code [S]·G == R + [k]·pk} where {@code k = Poseidon(R.u, R.v, msg) mod l},
- * plus range / malleability checks.
+ * <p>Use case: a credential holder proves "I have a signature from issuer {@code pk} over
+ * message {@code msg}" without revealing the signature. The gadget emits
+ * {@code [S]·G == R + [k]·pk} where {@code k} is the domain-separated Poseidon challenge of
+ * {@code ZeroJ-JubjubEdDSA-v1}, plus the range, canonicality, and well-formedness constraints
+ * described below. The normative specification is
+ * <a href="../../../../../../../../../docs/specs/jubjub-eddsa-v1.md">docs/specs/jubjub-eddsa-v1.md</a>.
  *
- * <h2>Security checklist</h2>
- * Enforced by this gadget:
+ * <h2>Two entry points, named for their key-trust assumption</h2>
+ * There is no unqualified public {@code verify}. Verification depends on an assumption about
+ * where {@code pk} came from that the gadget cannot infer, so the choice is made explicit:
+ * {@link #verifyStrict} subgroup-checks {@code pk} in-circuit and is correct for a
+ * prover-supplied key; {@link #verifyWithRegisteredKey} requires {@code pk} to be a public
+ * input or constant and shifts registry binding onto the protocol. Both reject small-order
+ * keys via {@code [8]·pk != O}.
+ *
+ * <h2>Why the old {@code verify(api, Point, ...)} is gone</h2>
+ * The historical {@code verify(api, Point pk, ..., Point R, ...)} overload took raw
+ * extended-coordinate wires and was <b>forgeable</b>: nothing tied {@code T} to {@code U·V/Z},
+ * nothing asserted the curve equation, and nothing forbade {@code Z = 0}. A prover could pick
+ * {@code R.u}/{@code R.v} freely, solve the verification equation for {@code R.z}/{@code R.t},
+ * and obtain an accepted proof for a message that was never signed — with an {@code R} that is
+ * not on the curve. That overload is removed rather than patched.
+ *
+ * <p>{@link #verifyCore} below is the fixed relation, and it is deliberately <b>not public</b>:
+ * on its own it carries no assumption about {@code pk}, which is precisely the ambiguity the
+ * named entry points remove.
+ *
+ * <h2>What {@code verifyCore} enforces</h2>
  * <ol>
- *   <li>{@code S < l} — malleability prevention (rejects the {@code S + l} alias).</li>
- *   <li>Challenge {@code k} recomputed in-circuit via Poseidon.</li>
- *   <li>Verification equation {@code [S]·G == R + [k]·pk}.</li>
+ *   <li>{@code pk} and {@code R} are bound with {@link InCircuitJubjub#witnessAffine}: on the
+ *       curve, {@code Z = 1}, {@code T = u·v}. Because {@code Z} is constant, the challenge
+ *       hash is taken over genuinely affine coordinates and cannot be ground by rescaling.</li>
+ *   <li>{@code S < l} and {@code kModL < l}, on operands that are range-constrained.</li>
+ *   <li>The challenge reduction is <b>canonical and complete</b>: {@code q <= 8},
+ *       {@code kModL < l}, and {@code q == 8 ⇒ kModL < δ}. See {@link #verifyCore}.</li>
+ *   <li>{@code [S]·G == R + [kModL]·pk}, cofactorless.</li>
  * </ol>
  *
- * <p><b>IMPORTANT — subgroup-check contract</b>: this gadget does <b>not</b>
- * perform in-circuit subgroup checks on {@code pk} or {@code R} (doing so
- * would add ~5000 constraints per check — the cost of an {@code [l]·P}
- * scalar-mul). Both points must therefore come from a trusted source:
- * <ul>
- *   <li>{@code pk}: check {@link JubjubPoint#isInSubgroup} <b>off-circuit</b>
- *       at issuer-registration time. Afterwards treat pk as a trusted
- *       circuit constant or public input.</li>
- *   <li>{@code R}: comes from the issued signature. An attacker who controls
- *       the signer can substitute a small-order R and fabricate a matching
- *       S. For credential schemes where the issuer is trusted, this is
- *       acceptable. For adversarial-signer protocols, add an explicit
- *       subgroup-check gadget around this verify (see {@link #verify}).</li>
- * </ul>
+ * <h2>What {@code verifyCore} does not enforce</h2>
+ * Anything about {@code pk}. Cofactorless verification forces {@code R} into the prime-order
+ * subgroup only when {@code pk} is already in that subgroup. At core level, a mixed-order key
+ * can be matched by an {@code R} whose torsion component cancels that of {@code [k]·pk}.
+ * Worse, a small-order {@code pk} (including the identity) can make {@code [k]·pk = O} and
+ * turn the equation into {@code [S]·G == R}, a universal forgery needing no secret key. That
+ * is why {@code verifyCore} is not public, and why both entry points add
+ * {@code [8]·pk != O} — with {@link #verifyStrict} additionally proving subgroup membership
+ * outright and {@link #verifyWithRegisteredKey} requiring that property from its registry.
+ *
+ * @see <a href="../../../../../../../../../docs/adr/0037-jubjub-soundness-and-hardening.md">ADR-0037</a>
  */
 public final class InCircuitEdDSAJubjub {
 
     private InCircuitEdDSAJubjub() {}
 
+    /** Jubjub scalars are 252 bits; both {@code S} and {@code kModL} live in {@code [0, l)}. */
+    static final int SCALAR_BITS = 252;
+
     /**
-     * Asserts that {@code (R, S)} is a valid EdDSA-Jubjub signature of
-     * {@code msg} under public key {@code pk}. Throws a witness-evaluation
-     * error if not.
-     *
-     * <p>The {@code scalarBits} parameter is the width in bits used for
-     * fixed/variable-base scalar-mul. For Jubjub use {@code 252}.
-     *
-     * @param api         circuit API
-     * @param pk          issuer public key (asserted in-subgroup by caller)
-     * @param msg         message digest as a field element
-     * @param rPoint      signature component R (asserted in-subgroup by caller)
-     * @param s           signature scalar S (asserted {@code < l} by this gadget)
-     * @param scalarBits  bits for scalar-mul (typically 252)
+     * Maximum quotient in the canonical challenge reduction. {@code kRaw < p = 8l + δ}, so
+     * {@code floor(kRaw / l) <= 8}.
      */
-    public static void verify(CircuitAPI api,
-                              InCircuitJubjub.Point pk,
-                              Variable msg,
-                              InCircuitJubjub.Point rPoint,
-                              Variable s,
-                              Variable kModL,
-                              Variable kQuotient) {
-        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+    static final int MAX_K_QUOTIENT = 8;
 
-        Variable lConstant = api.constant(JubjubCurve.SUBGROUP_ORDER);
-
-        // 1. Enforce S < l (malleability prevention).
-        Variable sLtL = Comparators.lessThan(api, s, lConstant, 252);
-        api.assertEqual(sLtL, api.constant(1));
-
-        // 2. Recompute k_raw = Poseidon(R.u, R.v, pk.u, pk.v, msg) and assert
-        //    it equals kQuotient · l + kModL. Including pk in the challenge
-        //    prevents key-substitution attacks; matching the 5-input Poseidon
-        //    of the off-circuit EdDSAJubjub.computeChallenge.
-        Variable kRaw = PoseidonN.hash(api, PoseidonParamsBLS12_381T3.INSTANCE,
-                rPoint.u(), rPoint.v(), pk.u(), pk.v(), msg);
-        Variable reconstructed = api.add(api.mul(kQuotient, lConstant), kModL);
-        api.assertEqual(kRaw, reconstructed);
-
-        // 3. Range checks:
-        //    kModL < l (canonical reduction);
-        //    kQuotient < 16 (4 bits). p / l ≈ 8.000028, so kRaw ∈ [0, p) admits
-        //    q ∈ [0, 9] in the worst case; 4 bits (q < 16) gives safe headroom.
-        Variable kLtL = Comparators.lessThan(api, kModL, lConstant, 252);
-        api.assertEqual(kLtL, api.constant(1));
-        api.toBinary(kQuotient, 4); // asserts kQuotient ∈ [0, 2^4)
-
-        // 4. [S]·G (252 bits) and [kModL]·pk (252 bits).
-        InCircuitJubjub.Point sG = InCircuitJubjub.scalarMulFixedBase(
-                api, JubjubPoint.SUBGROUP_GENERATOR, s, 252);
-        InCircuitJubjub.Point kPk = InCircuitJubjub.scalarMulVariableBase(
-                api, pk, kModL, 252);
-
-        // 5. R + [k]·pk
-        InCircuitJubjub.Point rPlusKPk = InCircuitJubjub.add(api, rPoint, kPk);
-
-        // 6. Assert [S]·G == R + [k]·pk (projective equality).
-        api.assertEqual(api.mul(sG.u(), rPlusKPk.z()), api.mul(rPlusKPk.u(), sG.z()));
-        api.assertEqual(api.mul(sG.v(), rPlusKPk.z()), api.mul(rPlusKPk.v(), sG.z()));
+    /**
+     * Verifies an EdDSA-Jubjub signature with an <b>in-circuit prime-order subgroup check</b>
+     * on the public key.
+     *
+     * <p>Use this whenever {@code pk} is chosen by the prover — a private witness, or one
+     * selected from a set (for example "a credential from <em>some</em> issuer in this Merkle
+     * tree"). It is the only entry point that establishes subgroup membership from inside the
+     * circuit, and therefore the only one whose soundness does not depend on the surrounding
+     * protocol.
+     *
+     * <p>Cost: the {@code [l]·pk == O} check is a full variable-base scalar multiplication.
+     * The pinned complete entry-point totals are 14,500 constraints here versus 8,962 for
+     * {@link #verifyWithRegisteredKey}, a 5,538-constraint increment. That is the price of not
+     * trusting the caller about the key.
+     *
+     * @return the bound public-key point
+     */
+    public static InCircuitJubjub.Point verifyStrict(CircuitAPI api,
+                                                     Variable pkU, Variable pkV,
+                                                     Variable msg,
+                                                     Variable rU, Variable rV,
+                                                     Variable s,
+                                                     Variable kModL,
+                                                     Variable kQuotient) {
+        InCircuitJubjub.Point pk = verifyCore(api, pkU, pkV, msg, rU, rV, s, kModL, kQuotient);
+        assertNotSmallOrder(api, pk);
+        assertInPrimeOrderSubgroup(api, pk);
+        return pk;
     }
 
     /**
-     * Witness-helper result from {@link #witnessComputeKReduction}:
-     * {@code kModL} is the challenge scalar (≡ {@code Poseidon(...) mod l});
-     * {@code kQuotient} is the integer quotient needed by the in-circuit
-     * consistency assertion.
+     * Verifies an EdDSA-Jubjub signature where {@code pk} is a value the verifier can see —
+     * a public input or a circuit constant — rather than one the prover chose.
+     *
+     * <p>Both {@code pk} wires are checked with
+     * {@link CircuitAPI#requirePublicOrConstant(Variable)}, which resolves provenance against
+     * the circuit's own public-input and constant wire ids. This is enforced by the DSL, not
+     * by documentation: a documented-only contract would be unenforceable, since a caller can
+     * hand over any wire it likes.
+     *
+     * <p><b>The DSL check establishes only that the value is verifier-visible, not that it is
+     * a valid key.</b> Binding it to a registry entry whose prime-order subgroup membership
+     * was checked off-circuit at registration remains an obligation on the final verifier. A
+     * mixed-order {@code pk = pk' + T} is verifier-visible, passes the {@code [8]·pk != O}
+     * backstop, and is accepted here; only {@link #verifyStrict} rejects it.
+     *
+     * @return the bound public-key point
+     * @throws IllegalArgumentException at circuit-definition time if either {@code pk} wire is
+     *         a secret or derived wire
      */
-    public record KReduction(java.math.BigInteger kModL, java.math.BigInteger kQuotient) {}
+    public static InCircuitJubjub.Point verifyWithRegisteredKey(CircuitAPI api,
+                                                                Variable pkU, Variable pkV,
+                                                                Variable msg,
+                                                                Variable rU, Variable rV,
+                                                                Variable s,
+                                                                Variable kModL,
+                                                                Variable kQuotient) {
+        api.requirePublicOrConstant(pkU);
+        api.requirePublicOrConstant(pkV);
+        InCircuitJubjub.Point pk = verifyCore(api, pkU, pkV, msg, rU, rV, s, kModL, kQuotient);
+        assertNotSmallOrder(api, pk);
+        return pk;
+    }
 
     /**
-     * Helper for callers: computes the {@link KReduction} witnesses that
-     * {@link #verify} requires as secret inputs. {@code kQuotient} is
-     * guaranteed to be in {@code [0, 16)}; {@code kModL} is in {@code [0, l)}.
+     * Asserts {@code [8]·pk != O}, rejecting the identity and every point whose order divides
+     * the cofactor 8.
+     *
+     * <p>This is the cheap backstop both entry points apply. Without it a small-order
+     * {@code pk} makes {@code [k]·pk = O}, collapsing the verification equation to
+     * {@code [S]·G == R} — a universal forgery requiring no secret key, for any message.
+     * The identity is on the curve, so no curve-membership check can catch it.
+     *
+     * <p>It does <b>not</b> prove subgroup membership: a mixed-order {@code pk = pk' + T}
+     * with {@code pk' != O} passes. That is why it is a backstop and not the control, and
+     * why {@link #verifyStrict} exists.
+     *
+     * <p>Cost: three doublings plus a non-identity test, ~41 constraints.
+     */
+    static void assertNotSmallOrder(CircuitAPI api, InCircuitJubjub.Point pk) {
+        InCircuitJubjub.Point eightPk = InCircuitJubjub.doubled(api,
+                InCircuitJubjub.doubled(api, InCircuitJubjub.doubled(api, pk)));
+        // identity <=> U == 0 && V == Z
+        Variable isIdentity = api.and(
+                api.isZero(eightPk.u()),
+                api.isEqual(eightPk.v(), eightPk.z()));
+        api.assertEqual(isIdentity, api.constant(0));
+    }
+
+    /**
+     * Asserts {@code [l]·pk == O}, i.e. that {@code pk} lies in the prime-order subgroup.
+     *
+     * <p>The cofactor multiple is applied as repeated doubling wherever one is needed in this
+     * codebase, never folded into a scalar: {@code 8·l} would be 255 bits, which exceeds both
+     * the 252-bit width used here and the DSL's 253-bit decomposition ceiling.
+     */
+    static void assertInPrimeOrderSubgroup(CircuitAPI api, InCircuitJubjub.Point pk) {
+        InCircuitJubjub.Point lPk = InCircuitJubjub.scalarMulVariableBase(
+                api, pk, api.constant(JubjubCurve.SUBGROUP_ORDER), SCALAR_BITS);
+        Variable isIdentity = api.and(
+                api.isZero(lPk.u()),
+                api.isEqual(lPk.v(), lPk.z()));
+        api.assertEqual(isIdentity, api.constant(1));
+    }
+
+    /**
+     * The verification relation, without any assumption about where {@code pk} came from.
+     *
+     * <p>Package-private on purpose: see the class Javadoc. Callers reach this through a
+     * named public entry point that also discharges the {@code pk} trust assumption.
+     *
+     * <h3>Canonical, complete challenge reduction</h3>
+     * The circuit asserts {@code kRaw == kQuotient·l + kModL} over the field. That alone does
+     * not pin {@code (kQuotient, kModL)}: since {@code p = 8l + δ}, the pair
+     * {@code (q + 8, kModL + δ)} satisfies the same field equation, so a prover could choose
+     * between two different challenges for one transcript. Constraining
+     * {@code kQuotient <= 8} and {@code kModL < l} is still not enough — {@code q = 8} with a
+     * large {@code kModL} makes {@code q·l + kModL} exceed {@code p} and wrap. Adding
+     * {@code q == 8 ⇒ kModL < δ} forces {@code q·l + kModL < p} unconditionally, which makes
+     * the decomposition unique.
+     *
+     * <p>It is also <em>complete</em>: every {@code kRaw ∈ [0, p)} has a satisfying witness,
+     * namely the true integer quotient and remainder. A flat 3-bit quotient bound would also
+     * be sound but would reject the {@code kRaw >= 8l} tail — a completeness hole at
+     * probability {@code δ/p ≈ 2^-129} that no randomized test could ever exercise.
+     *
+     * @param pkU  affine u of the public key (bound and curve-checked here)
+     * @param pkV  affine v of the public key
+     * @param msg  message field element
+     * @param rU   affine u of the signature point R
+     * @param rV   affine v of the signature point R
+     * @param s    signature scalar S, asserted {@code < l}
+     * @param kModL     challenge witness, asserted {@code < l} and canonical
+     * @param kQuotient reduction quotient witness, asserted {@code <= 8} and canonical
+     * @return the bound public-key point, so callers can add their own {@code pk} checks
+     *         without re-binding it
+     */
+    static InCircuitJubjub.Point verifyCore(CircuitAPI api,
+                                            Variable pkU, Variable pkV,
+                                            Variable msg,
+                                            Variable rU, Variable rV,
+                                            Variable s,
+                                            Variable kModL,
+                                            Variable kQuotient) {
+        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+
+        // 0. Bind both witness points: on the curve, Z = 1, T = u*v.
+        //    Z = 1 is what makes the challenge hash below affine by construction.
+        InCircuitJubjub.Point pk = InCircuitJubjub.witnessAffine(api, pkU, pkV);
+        InCircuitJubjub.Point rPoint = InCircuitJubjub.witnessAffine(api, rU, rV);
+
+        Variable lConstant = api.constant(JubjubCurve.SUBGROUP_ORDER);
+
+        // 1. Decompose both scalars once. The bits serve the range checks below and the
+        //    scalar multiplications in step 5, so neither scalar is decomposed twice.
+        BitDecomposition sBits = api.decompose(s, SCALAR_BITS);
+        BitDecomposition kBits = api.decompose(kModL, SCALAR_BITS);
+
+        // 2. S < l  (malleability: rejects the S + l alias).
+        api.assertEqual(api.lessThan(s, lConstant, SCALAR_BITS), api.constant(1));
+
+        // 3. Recompute the challenge over the affine coordinates. Including pk defends
+        //    against key substitution; the arity matches EdDSAJubjub.computeChallenge.
+        //    Single t=6 permutation with the challenge tag in the capacity cell: rate 5
+        //    exactly covers the five elements, and the tag makes this value unusable as a
+        //    nonce. Because witnessAffine pinned Z = 1, rPoint.u()/v() are the affine
+        //    coordinates, so the hash cannot be ground by rescaling the representation.
+        Variable kRaw = Poseidon.spongeHash(api, JubjubEdDSASuite.challengeParams(),
+                api.constant(JubjubEdDSASuite.CHALLENGE_TAG),
+                rPoint.u(), rPoint.v(), pk.u(), pk.v(), msg);
+        api.assertEqual(kRaw, api.add(api.mul(kQuotient, lConstant), kModL));
+
+        // 4. Canonical + complete reduction (see method Javadoc).
+        api.decompose(kQuotient, 4);                                    // q < 16
+        api.assertEqual(                                                 // q <= 8
+                api.lessThan(kQuotient, api.constant(MAX_K_QUOTIENT + 1), 4), api.constant(1));
+        api.assertEqual(                                                 // kModL < l
+                api.lessThan(kModL, lConstant, SCALAR_BITS), api.constant(1));
+        Variable qIsMax = api.isEqual(kQuotient, api.constant(MAX_K_QUOTIENT));
+        Variable kLtDelta = api.lessThan(
+                kModL, api.constant(JubjubCurve.P_MINUS_EIGHT_L), SCALAR_BITS);
+        // q == 8  =>  kModL < delta, i.e. NOT(q == 8 AND kModL >= delta)
+        api.assertEqual(api.mul(qIsMax, api.sub(api.constant(1), kLtDelta)), api.constant(0));
+
+        // 5. [S]·G and [kModL]·pk, reusing the decompositions from step 1.
+        InCircuitJubjub.Point sG = InCircuitJubjub.scalarMulFixedBase(
+                api, JubjubPoint.SUBGROUP_GENERATOR, sBits);
+        InCircuitJubjub.Point kPk = InCircuitJubjub.scalarMulVariableBase(api, pk, kBits);
+
+        // 6. [S]·G == R + [k]·pk, projectively and cofactorless. If pk is in the
+        //    prime-order subgroup (proved by verifyStrict or guaranteed by the registered-key
+        //    protocol), this also forces R into it. verifyCore alone does not: a mixed-order
+        //    pk can be paired with torsion in R that cancels the torsion of [k]pk.
+        InCircuitJubjub.Point rPlusKPk = InCircuitJubjub.add(api, rPoint, kPk);
+        api.assertEqual(api.mul(sG.u(), rPlusKPk.z()), api.mul(rPlusKPk.u(), sG.z()));
+        api.assertEqual(api.mul(sG.v(), rPlusKPk.z()), api.mul(rPlusKPk.v(), sG.z()));
+
+        return pk;
+    }
+
+    /**
+     * Witness values required by the verification relation: {@code kModL} is the challenge
+     * scalar {@code Poseidon(...) mod l}, and {@code kQuotient} is the integer quotient the
+     * in-circuit canonicality assertion needs.
+     */
+    public record KReduction(BigInteger kModL, BigInteger kQuotient) {}
+
+    /**
+     * Computes the {@link KReduction} witnesses for a given transcript.
+     *
+     * <p>The returned pair is the unique canonical one: {@code kQuotient ∈ [0, 8]} and
+     * {@code kModL ∈ [0, l)} with {@code kQuotient·l + kModL == kRaw} over the integers.
+     * Because {@code kRaw < p = 8l + δ}, the quotient can only reach 8 when
+     * {@code kRaw >= 8l}, in which case {@code kModL < δ} automatically — so the witness
+     * always satisfies the in-circuit constraints.
      */
     public static KReduction witnessComputeKReduction(
-            JubjubPoint rPoint, JubjubPoint pk, java.math.BigInteger msg) {
-        java.math.BigInteger kRaw = com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash
-                .hashN(PoseidonParamsBLS12_381T3.INSTANCE,
-                        rPoint.affineU(), rPoint.affineV(),
-                        pk.affineU(), pk.affineV(), msg);
-        java.math.BigInteger[] qr = kRaw.divideAndRemainder(JubjubCurve.SUBGROUP_ORDER);
-        return new KReduction(qr[1], qr[0]);
+            JubjubPoint rPoint, JubjubPoint pk, BigInteger msg) {
+        java.util.Objects.requireNonNull(rPoint, "rPoint");
+        java.util.Objects.requireNonNull(pk, "pk");
+        // Reject-not-reduce, matching sign/verify and EdDSAJubjub.computeChallenge. This
+        // witness helper must accept exactly the domain the scheme does: silently reducing an
+        // out-of-range msg here would produce witnesses for a transcript that sign/verify
+        // would have refused (ADR-0038 Decision 5).
+        if (msg == null || msg.signum() < 0
+                || msg.compareTo(JubjubCurve.BASE_FIELD_PRIME) >= 0) {
+            throw new IllegalArgumentException(
+                    "msg must be a field element in [0, p); use EdDSAJubjub.hashToField(byte[]) "
+                            + "for byte messages");
+        }
+        // Must match verifyCore's in-circuit challenge exactly: same preset, same capacity
+        // tag, same input order, affine coordinates.
+        BigInteger kRaw = PoseidonHash.spongeHash(
+                JubjubEdDSASuite.challengeParams(), JubjubEdDSASuite.CHALLENGE_TAG,
+                rPoint.affineU(), rPoint.affineV(), pk.affineU(), pk.affineV(), msg);
+        BigInteger[] qr = kRaw.divideAndRemainder(JubjubCurve.SUBGROUP_ORDER);
+        BigInteger q = qr[0];
+        if (q.compareTo(BigInteger.valueOf(MAX_K_QUOTIENT)) > 0) {
+            // Unreachable for kRaw < p; a violation means the Poseidon output was not
+            // reduced into the base field, which would silently break the circuit.
+            throw new IllegalStateException(
+                    "Challenge quotient " + q + " exceeds " + MAX_K_QUOTIENT
+                            + "; Poseidon output was not reduced mod p");
+        }
+        return new KReduction(qr[1], q);
     }
 }

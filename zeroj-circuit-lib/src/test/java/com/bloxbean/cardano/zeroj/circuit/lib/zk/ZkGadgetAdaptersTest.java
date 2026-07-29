@@ -29,7 +29,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZkGadgetAdaptersTest {
     private static final BigInteger EDDSA_SK = new BigInteger(
@@ -662,6 +664,14 @@ class ZkGadgetAdaptersTest {
                 "outV", List.of(expected.affineV())), CurveId.BLS12_381));
     }
 
+    /**
+     * NOTE (ADR-0038 P2): this test pins <b>constructor visibility and the field guard</b> —
+     * NOT point validity. Those are different properties, and treating this green test as
+     * coverage is exactly how the missing curve-equation assertion survived three review
+     * passes: "no public extended-coordinate constructor" was checked, "the gadget asserts the
+     * point is on the curve" was not. Point validity is pinned by
+     * {@link ZkJubjubPointSafetyTest}; do not weaken that suite on the strength of this one.
+     */
     @Test
     void jubjubPointAdapterHasNoPublicExtendedCoordinateConstructorAndGuardsField() {
         assertEquals(0, ZkJubjubPoint.class.getConstructors().length);
@@ -671,7 +681,7 @@ class ZkGadgetAdaptersTest {
                 .publicVar("v")
                 .defineSignals(c -> {
                     var zk = new ZkContext(c);
-                    ZkJubjubPoint.fromTrustedAffine(
+                    ZkJubjubPoint.witnessAffine(
                                     zk,
                                     ZkField.publicInput(c, "u"),
                                     ZkField.publicInput(c, "v"))
@@ -829,15 +839,27 @@ class ZkGadgetAdaptersTest {
                 eddsaWitness(keypair, signature, EDDSA_MSG.add(BigInteger.ONE)), CurveId.BLS12_381));
     }
 
+    /** There is no unqualified verify: the key-trust assumption must be named by the caller. */
+    @Test
+    void eddsaJubjubAdapterHasNoUnqualifiedVerify() {
+        for (var m : ZkEdDSAJubjub.class.getMethods()) {
+            assertFalse(m.getName().equals("verify"),
+                    "ZkEdDSAJubjub must not expose an unqualified verify (ADR-0037 Decision 4)");
+        }
+    }
+
+    /** Identity pk is rejected via the [8]*pk != O backstop inside the entry point. */
     @Test
     void eddsaJubjubAdapterRejectsIdentityPublicKey() {
         BigInteger s = BigInteger.valueOf(5);
-        EdDSAJubjub.Keypair identityKey = new EdDSAJubjub.Keypair(BigInteger.ONE, JubjubPoint.IDENTITY);
+        // The classic universal forgery: with pk = O, [k]*pk = O and the verification equation
+        // collapses to [S]*G == R, so any (r, S = r) passes without a secret key at all.
         EdDSAJubjub.Signature forged = new EdDSAJubjub.Signature(
                 JubjubPoint.SUBGROUP_GENERATOR.scalarMul(s), s);
 
         assertThrows(ArithmeticException.class, () -> buildEddsaVerifyCircuit()
-                .calculateWitness(eddsaWitness(identityKey, forged, EDDSA_MSG), CurveId.BLS12_381));
+                .calculateWitness(eddsaWitness(JubjubPoint.IDENTITY, forged, EDDSA_MSG),
+                        CurveId.BLS12_381));
     }
 
     @Test
@@ -849,17 +871,13 @@ class ZkGadgetAdaptersTest {
                 .secretVar("kModL").secretVar("kQuotient")
                 .defineSignals(c -> {
                     var zk = new ZkContext(c);
-                    ZkEdDSAJubjub.verify(
+                    ZkEdDSAJubjub.verifyWithRegisteredKey(
                             zk,
-                            ZkJubjubPoint.fromTrustedAffine(
-                                    zk,
-                                    ZkField.publicInput(c, "pkU"),
-                                    ZkField.publicInput(c, "pkV")),
+                            ZkField.publicInput(c, "pkU"),
+                            ZkField.publicInput(c, "pkV"),
                             ZkField.publicInput(c, "msg"),
-                            ZkJubjubPoint.fromTrustedAffine(
-                                    zk,
-                                    ZkField.publicInput(c, "rU"),
-                                    ZkField.publicInput(c, "rV")),
+                            ZkField.publicInput(c, "rU"),
+                            ZkField.publicInput(c, "rV"),
                             ZkUInt.publicInput(c, "s", 253),
                             ZkUInt.secret(c, "kModL", 252),
                             ZkUInt.secret(c, "kQuotient", 4));
@@ -933,19 +951,15 @@ class ZkGadgetAdaptersTest {
                 .secretVar("kModL").secretVar("kQuotient")
                 .defineSignals(c -> {
                     var zk = new ZkContext(c);
-                    var publicKey = ZkJubjubPoint.fromTrustedAffine(
+                    // pk is a public input here, so the registered-key entry point is the
+                    // right one; the DSL enforces that provenance.
+                    ZkEdDSAJubjub.verifyWithRegisteredKey(
                             zk,
                             ZkField.publicInput(c, "pkU"),
-                            ZkField.publicInput(c, "pkV"));
-                    var rPoint = ZkJubjubPoint.fromTrustedAffine(
-                            zk,
-                            ZkField.publicInput(c, "rU"),
-                            ZkField.publicInput(c, "rV"));
-                    ZkEdDSAJubjub.verify(
-                            zk,
-                            publicKey,
+                            ZkField.publicInput(c, "pkV"),
                             ZkField.publicInput(c, "msg"),
-                            rPoint,
+                            ZkField.publicInput(c, "rU"),
+                            ZkField.publicInput(c, "rV"),
                             ZkUInt.publicInput(c, "s", 252),
                             ZkUInt.secret(c, "kModL", 252),
                             ZkUInt.secret(c, "kQuotient", 4));
@@ -956,10 +970,24 @@ class ZkGadgetAdaptersTest {
             EdDSAJubjub.Keypair keypair,
             EdDSAJubjub.Signature signature,
             BigInteger message) {
-        var kReduction = ZkEdDSAJubjub.witnessComputeKReduction(signature.r(), keypair.pk(), message);
+        return eddsaWitness(keypair.pk(), signature, message);
+    }
+
+    /**
+     * Takes the public key directly rather than a {@link EdDSAJubjub.Keypair}, because the
+     * witness only ever needs {@code pk} — and since ADR-0038 P4 a {@code Keypair} guarantees
+     * {@code pk = [sk]·G}, so an adversarial public key such as the identity cannot be
+     * expressed as one. That guarantee is the point; the test simply has no business
+     * fabricating a keypair to obtain a public key.
+     */
+    private Map<String, List<BigInteger>> eddsaWitness(
+            JubjubPoint pk,
+            EdDSAJubjub.Signature signature,
+            BigInteger message) {
+        var kReduction = ZkEdDSAJubjub.witnessComputeKReduction(signature.r(), pk, message);
         return Map.of(
-                "pkU", List.of(keypair.pk().affineU()),
-                "pkV", List.of(keypair.pk().affineV()),
+                "pkU", List.of(pk.affineU()),
+                "pkV", List.of(pk.affineV()),
                 "rU", List.of(signature.r().affineU()),
                 "rV", List.of(signature.r().affineV()),
                 "msg", List.of(message),

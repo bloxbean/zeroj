@@ -33,6 +33,9 @@ public final class Halo2Compiler {
      * Compile a constraint graph to a Halo2 PLONKish circuit system.
      */
     public static Halo2CircuitSystem compile(ConstraintGraph graph, FieldConfig config) {
+        Objects.requireNonNull(graph, "graph");
+        Objects.requireNonNull(config, "config");
+        graph.requireCompatibleField(config);
         BigInteger p = config.prime();
         // Normalize constants to field: -1 mod p = p-1
         BigInteger negOne = NEG_ONE.mod(p);

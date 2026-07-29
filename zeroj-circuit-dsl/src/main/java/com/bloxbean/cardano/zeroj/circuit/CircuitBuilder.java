@@ -102,6 +102,19 @@ public final class CircuitBuilder {
         return R1CSCompiler.compile(graph, FieldConfig.forCurve(curve));
     }
 
+    /**
+     * Compile to R1CS and expose deterministic materialisation-pressure diagnostics.
+     *
+     * <p>Use this in deployment/build tooling when a pressure event — which may trigger an
+     * R1CS shape change — should be surfaced explicitly before setup/key generation. The ordinary
+     * {@link #compileR1CS(CurveId)} API remains unchanged.
+     */
+    public R1CSCompiler.CompilationResult compileR1CSWithDiagnostics(CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return R1CSCompiler.compileWithDiagnostics(graph, FieldConfig.forCurve(curve));
+    }
+
     /** Compile to PlonK constraint system. */
     public PlonKConstraintSystem compilePlonK(CurveId curve) {
         requireDefined();
@@ -155,17 +168,6 @@ public final class CircuitBuilder {
      * BLS12-381 are paired with a BN254 compile curve.
      */
     private void checkExpectedField(CurveId curve) {
-        FieldConfig expected = graph.expectedField();
-        if (expected == null) return;
-        FieldConfig actual = FieldConfig.forCurve(curve);
-        if (!expected.equals(actual)) {
-            throw new IllegalStateException(
-                    "Field mismatch: circuit declared expected field " + expected.name()
-                            + " (via requireField) but compilation / witness calculation "
-                            + "was requested for " + curve + " (" + actual.name() + "). "
-                            + "Typical cause: a gadget was given PoseidonParams for a field "
-                            + "that does not match the target curve. Either pass matching "
-                            + "params or compile for the matching curve.");
-        }
+        graph.requireCompatibleField(FieldConfig.forCurve(curve));
     }
 }
