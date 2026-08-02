@@ -49,4 +49,6 @@ dependencies {
 }
 ```
 
-This transitively brings in `cardano-client-lib:0.7.1`.
+The repository-wide CCL baseline is `0.8.0-pre4` (ADR-0041). All
+`com.bloxbean.cardano:cardano-client-*` artifacts are resolved to that version so the
+integration, MPF adapter, and test oracles use one compatible release.

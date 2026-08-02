@@ -7,7 +7,7 @@ description = 'ZeroJ CCL integration — fluent transaction builder helpers for 
 dependencies {
     api project(':zeroj-cardano')
     api project(':zeroj-api')
-    api 'com.bloxbean.cardano:cardano-client-lib:0.7.2'
+    api "com.bloxbean.cardano:cardano-client-lib:${rootProject.ext.cclVersion}"
 
     implementation project(':zeroj-verifier-core')
 

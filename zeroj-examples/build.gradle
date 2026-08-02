@@ -7,7 +7,6 @@ description = 'ZeroJ end-to-end examples and demos'
 
 ext {
     julcVersion = '0.1.0-pre14'
-    cclVersion = '0.8.0-pre2'
 }
 
 repositories {
@@ -50,8 +49,8 @@ dependencies {
     annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
 
     // Cardano Client Lib for tx building in E2E tests
-    testImplementation "com.bloxbean.cardano:cardano-client-lib:${cclVersion}"
-    testImplementation "com.bloxbean.cardano:cardano-client-backend-blockfrost:${cclVersion}"
+    testImplementation "com.bloxbean.cardano:cardano-client-lib:${rootProject.ext.cclVersion}"
+    testImplementation "com.bloxbean.cardano:cardano-client-backend-blockfrost:${rootProject.ext.cclVersion}"
     testImplementation "com.bloxbean.cardano:julc-cardano-client-lib:${julcVersion}"
     testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
     testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"

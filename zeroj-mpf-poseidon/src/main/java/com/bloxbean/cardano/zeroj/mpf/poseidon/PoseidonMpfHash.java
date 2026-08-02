@@ -15,14 +15,18 @@ import java.util.Objects;
  * Canonical Poseidon byte digest used by the Poseidon-rooted MPF profile.
  */
 public final class PoseidonMpfHash {
+    /** Commitment profile written to persistent-store manifests. */
+    public static final String PROFILE_ID = "zeroj-poseidon-mpf-v2";
     public static final int DIGEST_LENGTH = 32;
     public static final int KEY_PATH_NIBBLES = DIGEST_LENGTH * 2;
     public static final int MAX_DIGEST_CHUNKS = 3;
+    public static final int RAW_BYTES_PER_CHUNK = 31;
 
     static final BigInteger DOMAIN_BYTES = BigInteger.valueOf(0x5a4d5046L); // ZMPF
     static final BigInteger DOMAIN_LEAF = BigInteger.valueOf(0x5a4d5047L);
     static final BigInteger DOMAIN_KEY_PATH = BigInteger.valueOf(0x5a4d5048L);
     static final BigInteger DOMAIN_KEY_NULLIFIER = BigInteger.valueOf(0x5a4d5049L);
+    static final BigInteger DOMAIN_RAW_BYTES_V2 = BigInteger.valueOf(0x5a4d504aL);
 
     private static final BigInteger PRIME = FieldConfig.BLS12_381.prime();
 
@@ -40,6 +44,39 @@ public final class PoseidonMpfHash {
         requireBlsParams(params);
         Objects.requireNonNull(bytes, "bytes");
 
+        List<BigInteger> chunks = circuitCompatibleChunks(bytes);
+        if (chunks != null) {
+            List<BigInteger> fields = new ArrayList<>(2 + MAX_DIGEST_CHUNKS);
+            fields.add(DOMAIN_BYTES);
+            fields.add(BigInteger.valueOf(bytes.length));
+            fields.addAll(chunks);
+            while (fields.size() < 2 + MAX_DIGEST_CHUNKS) {
+                fields.add(BigInteger.ZERO);
+            }
+            return hashFields(params, fields.toArray(BigInteger[]::new));
+        }
+
+        // CCL's HashFunction contract accepts arbitrary bytes. The internal MPF
+        // strings mirrored by ZkMpf always take the fixed path above, while raw
+        // keys/values that are not canonical scalar chunks use an injective,
+        // domain-separated 31-byte encoding. Every such chunk is < 2^248 and
+        // therefore a canonical BLS12-381 scalar field element.
+        List<BigInteger> fields = new ArrayList<>(2 + ((bytes.length + RAW_BYTES_PER_CHUNK - 1)
+                / RAW_BYTES_PER_CHUNK));
+        fields.add(DOMAIN_RAW_BYTES_V2);
+        fields.add(BigInteger.valueOf(bytes.length));
+        for (int offset = 0; offset < bytes.length; offset += RAW_BYTES_PER_CHUNK) {
+            int end = Math.min(bytes.length, offset + RAW_BYTES_PER_CHUNK);
+            fields.add(unsigned(Arrays.copyOfRange(bytes, offset, end)));
+        }
+        return hashFields(params, fields.toArray(BigInteger[]::new));
+    }
+
+    /**
+     * Returns the fixed circuit-compatible chunks, or {@code null} when the
+     * total raw-byte fallback must be used.
+     */
+    private static List<BigInteger> circuitCompatibleChunks(byte[] bytes) {
         List<BigInteger> chunks = new ArrayList<>();
 
         int offset = 0;
@@ -52,25 +89,15 @@ public final class PoseidonMpfHash {
         while (offset < bytes.length) {
             BigInteger chunk = unsigned(Arrays.copyOfRange(bytes, offset, offset + DIGEST_LENGTH));
             if (chunk.compareTo(PRIME) >= 0) {
-                throw new IllegalArgumentException("32-byte chunk is not a canonical BLS12-381 scalar field element");
+                return null;
             }
             chunks.add(chunk);
             offset += DIGEST_LENGTH;
         }
         if (chunks.size() > MAX_DIGEST_CHUNKS) {
-            throw new IllegalArgumentException("Poseidon MPF byte digest supports at most "
-                    + MAX_DIGEST_CHUNKS + " chunks, got " + chunks.size());
+            return null;
         }
-
-        List<BigInteger> fields = new ArrayList<>();
-        fields.add(DOMAIN_BYTES);
-        fields.add(BigInteger.valueOf(bytes.length));
-        fields.addAll(chunks);
-        while (fields.size() < 2 + MAX_DIGEST_CHUNKS) {
-            fields.add(BigInteger.ZERO);
-        }
-
-        return PoseidonHash.hashN(params, fields.toArray(BigInteger[]::new));
+        return chunks;
     }
 
     public static BigInteger fieldFromDigestBytes(byte[] digest) {
@@ -83,6 +110,21 @@ public final class PoseidonMpfHash {
             throw new IllegalArgumentException("digest is not a canonical BLS12-381 scalar field element");
         }
         return value;
+    }
+
+    /**
+     * Hashes two canonical MPF digests through the exact fixed 64-byte profile
+     * without allocating and reparsing a temporary {@code left || right} array.
+     */
+    static byte[] digestPair(PoseidonParams params, byte[] left, byte[] right) {
+        BigInteger leftField = fieldFromDigestBytes(left);
+        BigInteger rightField = fieldFromDigestBytes(right);
+        return toDigestBytes(hashFields(params,
+                DOMAIN_BYTES,
+                BigInteger.valueOf(DIGEST_LENGTH * 2L),
+                leftField,
+                rightField,
+                BigInteger.ZERO));
     }
 
     public static byte[] toDigestBytes(BigInteger value) {
@@ -147,6 +189,13 @@ public final class PoseidonMpfHash {
                 throw new IllegalArgumentException("keyPath nibble out of range at " + i + ": " + nibble);
             }
             fields[i + 2] = BigInteger.valueOf(nibble);
+        }
+        return hashFields(params, fields);
+    }
+
+    static BigInteger hashFields(PoseidonParams params, BigInteger... fields) {
+        if (PoseidonParamsBLS12_381T3.INSTANCE.equals(params)) {
+            return PoseidonMpfFastPoseidon.hashN(fields);
         }
         return PoseidonHash.hashN(params, fields);
     }

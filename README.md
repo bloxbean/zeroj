@@ -48,7 +48,7 @@ remaining production gates are tracked in
 | Cardano anchoring + CCL helpers | `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` | **Beta** |
 | WASM backends | `zeroj-bls12381-wasm`, `zeroj-bbs-wasm` | **Experimental, opt-in** |
 | gnark native prover | `zeroj-prover-gnark` | **Experimental, opt-in** (Go native library) |
-| MPF Poseidon | `zeroj-mpf-poseidon` | **Experimental** (circuit too large for the practical on-chain path) |
+| MPF Poseidon | `zeroj-mpf-poseidon` | **Experimental — high-volume path benchmarked** (5M local end-to-end run passed; production setup, security review, and Yaci/testnet gates remain open) |
 | BN254 (Groth16 + PlonK, off-chain) | legacy classes | **Disabled by default** — `-Dzeroj.allowLegacyBn254=true`; not a Cardano curve |
 | Halo2 verifier, WASM prover | `incubator/*` | **Incubator** |
 
@@ -286,6 +286,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
 | [`zeroj-cardano`](zeroj-cardano/) | Cardano anchoring — proof anchor model, metadata encoding |
 | [`zeroj-ccl`](zeroj-ccl/) | Cardano Client Lib integration — fluent transaction helpers |
+| [`zeroj-mpf-poseidon`](zeroj-mpf-poseidon/) | Poseidon-rooted CCL MPF adapter, proof codec, and symbolic circuit witness path ([5M benchmark](docs/benchmarks/poseidon-mpf-5m-2026-08-02.md)) |
 | [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
 #### Mainline Opt-In Modules (`zeroj-bom-all` only)
@@ -302,6 +303,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 |--------|-------------|
 | [`zeroj-test-vectors`](zeroj-test-vectors/) | Shared test fixtures — pre-generated proofs and VKs |
 | [`zeroj-examples`](zeroj-examples/) | End-to-end demos: circuit definition to on-chain verification |
+| [`zeroj-mpf-poseidon-load`](zeroj-mpf-poseidon-load/) | Non-published resumable RocksDB load, proof, circuit, Groth16, and Cardano artifact benchmark tool |
 | [`zeroj-bom-core`](zeroj-bom-core/) | BOM for the v3 core path |
 | [`zeroj-bom-all`](zeroj-bom-all/) | BOM for core plus opt-in and incubator modules |
 

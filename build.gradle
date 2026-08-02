@@ -21,6 +21,7 @@ allprojects {
 
 ext.ossrhUsername = System.getenv('MAVEN_USERNAME')
 ext.ossrhPassword = System.getenv('MAVEN_PASSWORD')
+ext.cclVersion = '0.8.0-pre4'
 
 nexusPublishing {
     repositories {
@@ -78,6 +79,16 @@ subprojects {
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
 
+    configurations.configureEach {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.bloxbean.cardano'
+                    && details.requested.name.startsWith('cardano-client-')) {
+                details.useVersion(rootProject.ext.cclVersion)
+                details.because('ADR-0041 pins every Cardano Client Lib artifact to one verified baseline')
+            }
+        }
+    }
+
     test {
         useJUnitPlatform()
         testLogging {
@@ -87,7 +98,7 @@ subprojects {
     }
 
     // Publishing for publishable modules
-    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples']
+    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples', 'zeroj-mpf-poseidon-load']
     if (!nonPublishable.contains(project.name)) {
         apply plugin: 'maven-publish'
         apply plugin: 'signing'

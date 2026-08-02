@@ -2,39 +2,55 @@ package com.bloxbean.cardano.zeroj.mpf.poseidon;
 
 import com.bloxbean.cardano.vds.core.NibblePath;
 import com.bloxbean.cardano.vds.mpf.commitment.CommitmentScheme;
-import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonHash;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParams;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
  * Circuit-friendly MPF commitment scheme for the Poseidon-rooted profile.
  */
 public final class PoseidonMpfCommitmentScheme implements CommitmentScheme {
+    public static final int DEFAULT_PAIR_CACHE_ENTRIES = 262_144;
     private static final int RADIX = 16;
     private static final int LEAF_NIBBLES_PER_CHUNK = 31;
 
     private final PoseidonParams params;
     private final PoseidonMpfHashFunction hashFunction;
     private final byte[] nullHash = new byte[PoseidonMpfHash.DIGEST_LENGTH];
+    private final PairHashCache pairHashCache;
 
     public PoseidonMpfCommitmentScheme() {
         this(PoseidonParamsBLS12_381T3.INSTANCE);
     }
 
     public PoseidonMpfCommitmentScheme(PoseidonParams params) {
+        this(params, DEFAULT_PAIR_CACHE_ENTRIES);
+    }
+
+    /**
+     * @param pairCacheEntries maximum memoized binary-Merkle pairs; zero disables caching
+     */
+    public PoseidonMpfCommitmentScheme(PoseidonParams params, int pairCacheEntries) {
         PoseidonMpfHash.requireBlsParams(params);
+        if (pairCacheEntries < 0) throw new IllegalArgumentException("pairCacheEntries must be >= 0");
         this.params = Objects.requireNonNull(params, "params");
         this.hashFunction = new PoseidonMpfHashFunction(params);
+        this.pairHashCache = new PairHashCache(pairCacheEntries);
     }
 
     public PoseidonParams params() {
         return params;
+    }
+
+    public PairCacheStats pairCacheStats() {
+        return pairHashCache.stats();
     }
 
     @Override
@@ -73,7 +89,7 @@ public final class PoseidonMpfCommitmentScheme implements CommitmentScheme {
             fields.add(BigInteger.ZERO);
         }
         fields.add(valueField);
-        return PoseidonMpfHash.toDigestBytes(PoseidonHash.hashN(params, fields.toArray(BigInteger[]::new)));
+        return PoseidonMpfHash.toDigestBytes(PoseidonMpfHash.hashFields(params, fields.toArray(BigInteger[]::new)));
     }
 
     @Override
@@ -104,7 +120,7 @@ public final class PoseidonMpfCommitmentScheme implements CommitmentScheme {
         while (size > 1) {
             byte[][] next = new byte[size / 2][];
             for (int i = 0; i < size; i += 2) {
-                next[i / 2] = hashFunction.digest(concat(current[i], current[i + 1]));
+                next[i / 2] = pairHashCache.digest(current[i], current[i + 1], params);
             }
             current = next;
             size = current.length;
@@ -152,5 +168,62 @@ public final class PoseidonMpfCommitmentScheme implements CommitmentScheme {
         byte[] out = Arrays.copyOf(a, a.length + b.length);
         System.arraycopy(b, 0, out, a.length, b.length);
         return out;
+    }
+
+    public record PairCacheStats(int capacity, int size, long hits, long misses) {}
+
+    private static final class PairHashCache {
+        private final int capacity;
+        private final Map<PairKey, byte[]> entries;
+        private long hits;
+        private long misses;
+
+        private PairHashCache(int capacity) {
+            this.capacity = capacity;
+            this.entries = capacity == 0 ? Map.of() : new LinkedHashMap<>(1024, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<PairKey, byte[]> eldest) {
+                    return size() > PairHashCache.this.capacity;
+                }
+            };
+        }
+
+        private synchronized byte[] digest(byte[] left, byte[] right, PoseidonParams params) {
+            if (capacity == 0) return PoseidonMpfHash.digestPair(params, left, right);
+            PairKey key = new PairKey(left, right);
+            byte[] cached = entries.get(key);
+            if (cached != null) {
+                hits++;
+                return cached.clone();
+            }
+            misses++;
+            byte[] digest = PoseidonMpfHash.digestPair(params, left, right);
+            entries.put(key, digest.clone());
+            return digest;
+        }
+
+        private synchronized PairCacheStats stats() {
+            return new PairCacheStats(capacity, entries.size(), hits, misses);
+        }
+    }
+
+    private static final class PairKey {
+        private final byte[] bytes;
+        private final int hashCode;
+
+        private PairKey(byte[] left, byte[] right) {
+            this.bytes = concat(left, right);
+            this.hashCode = Arrays.hashCode(bytes);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || other instanceof PairKey key && Arrays.equals(bytes, key.bytes);
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
     }
 }
