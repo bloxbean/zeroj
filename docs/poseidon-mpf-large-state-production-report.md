@@ -1,10 +1,18 @@
-# Practical large-state Poseidon MPF/MPT report
+# Archived pre-ADR-0042 large-state Poseidon MPF/MPT assessment
 
-- **Status:** engineering assessment and production plan
+- **Status:** archived historical snapshot; do not use as current API or performance guidance
 - **Date:** 2026-08-02
 - **Applies to:** ZeroJ Poseidon MPF v2, CCL `0.8.0-pre4`, [GitHub issue #25](https://github.com/bloxbean/zeroj/issues/25)
 - **Measurement detail:** [five-million-entry benchmark](benchmarks/poseidon-mpf-5m-2026-08-02.md)
 - **Protocol decision:** [ADR-0041](adr/0041-poseidon-mpf-production-readiness-and-load-benchmark.md)
+
+> This document is frozen as the analysis that led to ADR-0042. It references removed package
+> names, the historical generic 17.4-million-constraint circuit, CCL `0.8.0-pre4`, and the
+> unreleased `v2` profile alias. For the implemented MPF/JMT APIs, current operation-specific
+> measurements, and deployment guidance, use the
+> [current practical large-state guide](merkle/practical-large-state-guide.md),
+> [ADR-0042](adr/0042-operation-specific-poseidon-mpf-and-jmt-circuits.md), and the two current
+> benchmark reports. The body below is retained only to preserve decision history.
 
 ## Executive answer
 
@@ -65,14 +73,14 @@ atomic batches, snapshots/version roots, and pruning.
 ## What already exists in ZeroJ
 
 The reusable public gadget is
-[`ZkMpf.verifyInclusionPoseidon`](../zeroj-circuit-lib/src/main/java/com/bloxbean/cardano/zeroj/circuit/lib/zk/ZkMpf.java),
+[`ZkMpf.verifyInclusionPoseidon`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/circuit/ZkMpf.java),
 with the flattened witness shape in
-[`ZkMpfProof`](../zeroj-circuit-lib/src/main/java/com/bloxbean/cardano/zeroj/circuit/lib/zk/ZkMpfProof.java).
+[`ZkMpfProof`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/circuit/ZkMpfProof.java).
 The public annotated example is
 [`AnnotatedMpfPrivateRegistryInclusion`](../zeroj-examples/src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java).
 
 CCL proof conversion and the explicit bound check are in
-[`PoseidonMpfCodec`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/mpf/poseidon/PoseidonMpfCodec.java).
+[`PoseidonMpfCodec`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/ccl/PoseidonMpfCodec.java).
 The exact circuit used for the high-volume run is
 [`PoseidonMpfInclusionCircuit`](../zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/PoseidonMpfInclusionCircuit.java),
 and the benchmark CLI defaults `--max-steps` to 8 in

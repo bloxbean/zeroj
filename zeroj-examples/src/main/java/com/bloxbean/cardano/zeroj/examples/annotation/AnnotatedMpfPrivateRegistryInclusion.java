@@ -13,17 +13,16 @@ import com.bloxbean.cardano.zeroj.circuit.annotation.ZkContext;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkField;
 import com.bloxbean.cardano.zeroj.circuit.annotation.ZkUInt;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
-import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMpf;
-import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMpfProof;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit.ZkMpf;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit.ZkMpfBranchProof;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit.ZkMpfInclusion;
 
 @ZKCircuit(
         name = "annotation-mpf-private-registry-inclusion",
-        nameTemplate = "annotation-mpf-private-registry-inclusion-s{maxSteps}-f{maxForkPrefixChunks}",
+        nameTemplate = "annotation-mpf-private-registry-inclusion-s{maxSteps}",
         version = 1)
 public class AnnotatedMpfPrivateRegistryInclusion {
-    public AnnotatedMpfPrivateRegistryInclusion(
-            @CircuitParam("maxSteps") int maxSteps,
-            @CircuitParam("maxForkPrefixChunks") int maxForkPrefixChunks) {
+    public AnnotatedMpfPrivateRegistryInclusion(@CircuitParam("maxSteps") int maxSteps) {
     }
 
     @Prove
@@ -37,54 +36,19 @@ public class AnnotatedMpfPrivateRegistryInclusion {
             ZkArray<ZkUInt> keyPath,
             @Secret(name = "value_commitment")
             ZkField valueCommitment,
-            @Secret(name = "mpf_kind")
-            @FixedSize(param = "maxSteps")
-            @UInt(bits = 2)
-            ZkArray<ZkUInt> stepKind,
-            @Secret(name = "mpf_skip")
+            @Secret(name = "mpf_branch_skip")
             @FixedSize(param = "maxSteps")
             @UInt(bits = 8)
             ZkArray<ZkUInt> stepSkip,
-            @Secret(name = "mpf_neighbor")
+            @Secret(name = "mpf_branch_sibling")
             @FixedSize(param = "maxSteps", inner = 4)
-            ZkArray<ZkArray<ZkField>> neighbors,
-            @Secret(name = "mpf_neighbor_nibble")
-            @FixedSize(param = "maxSteps")
-            @UInt(bits = 4)
-            ZkArray<ZkUInt> neighborNibble,
-            @Secret(name = "mpf_fork_prefix_length")
-            @FixedSize(param = "maxSteps")
-            @UInt(bits = 8)
-            ZkArray<ZkUInt> forkPrefixLength,
-            @Secret(name = "mpf_fork_prefix")
-            @FixedSize(param = "maxSteps", innerParam = "maxForkPrefixChunks")
-            ZkArray<ZkArray<ZkField>> forkPrefixChunks,
-            @Secret(name = "mpf_fork_root")
-            @FixedSize(param = "maxSteps")
-            ZkArray<ZkField> forkRoot,
-            @Secret(name = "mpf_leaf_key_path")
-            @FixedSize(param = "maxSteps", inner = 64)
-            @UInt(bits = 4)
-            ZkArray<ZkArray<ZkUInt>> leafKeyPath,
-            @Secret(name = "mpf_leaf_value_digest")
-            @FixedSize(param = "maxSteps")
-            ZkArray<ZkField> leafValueDigest,
-            @Secret(name = "mpf_valid")
+            ZkArray<ZkArray<ZkField>> siblings,
+            @Secret(name = "mpf_branch_valid")
             @FixedSize(param = "maxSteps")
             ZkArray<ZkBool> valid) {
-        ZkMpfProof proof = ZkMpfProof.fromArrays(
-                stepKind,
-                stepSkip,
-                neighbors,
-                neighborNibble,
-                forkPrefixLength,
-                forkPrefixChunks,
-                forkRoot,
-                leafKeyPath,
-                leafValueDigest,
-                valid);
+        ZkMpfBranchProof proof = ZkMpfBranchProof.fromArrays(stepSkip, siblings, valid);
 
-        ZkMpf.verifyInclusionPoseidon(
+        ZkMpfInclusion.verify(
                 zk,
                 PoseidonParamsBLS12_381T3.INSTANCE,
                 keyPath,

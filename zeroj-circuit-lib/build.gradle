@@ -118,6 +118,7 @@ tasks.register('heavyGadgetTest', Test) {
 dependencies {
     api project(':zeroj-circuit-dsl')
     api project(':zeroj-circuit-annotation-api')
+    implementation project(':zeroj-bls12381')
 
     testImplementation project(':zeroj-test-vectors')
     // Test-only oracle for the Blake2b gadget: cardano-client's Blake2bUtil is exactly the

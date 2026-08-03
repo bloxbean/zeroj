@@ -1,6 +1,8 @@
 package com.bloxbean.cardano.zeroj.mpf.load;
 
 import com.bloxbean.cardano.zeroj.api.CurveId;
+import com.bloxbean.cardano.zeroj.api.AuthenticatedStateCircuitManifest;
+import com.bloxbean.cardano.zeroj.api.Groth16ArtifactBundleIdentity;
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.api.R1CSFlat;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
@@ -19,15 +21,19 @@ import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Pipeline;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProofBLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend;
 import com.bloxbean.cardano.zeroj.crypto.msm.FlatScalars;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHash;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfValueCommitment;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfHash;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfValueCommitment;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.Groth16VerificationKeyCodec;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -68,8 +74,11 @@ public final class PoseidonMpfCircuitBenchmark {
             int privateInputCount = compiled.privateInputs();
             double compileCircuitBuildSeconds = compiled.buildSeconds();
             double compileSeconds = compiled.compileSeconds();
-            String fingerprint = Groth16Pipeline.fingerprint(
-                    constraints, wires, publicInputCount);
+            var pipelineCircuit = new Groth16Pipeline.Compiled(
+                    compiled.flat(), constraints, wires, publicInputCount);
+            String fingerprint = pipelineCircuit.fingerprint();
+            String r1csSha256 = pipelineCircuit.r1csSha256();
+            String templateId = "zeroj-mpf-v1-inclusion-s" + options.maxSteps() + "-p1";
             System.out.printf("circuit %s: %,d constraints, %,d wires, %d public; build %.3f s, compile %.3f s%n",
                     fingerprint, constraints, wires, publicInputCount,
                     compiled.buildSeconds(), compiled.compileSeconds());
@@ -82,6 +91,9 @@ public final class PoseidonMpfCircuitBenchmark {
             double proveSeconds = 0.0;
             double positiveVerifySeconds = 0.0;
             double negativeVerifySeconds = 0.0;
+            List<Double> proveTrialSeconds = List.of();
+            List<Double> positiveVerifyTrialSeconds = List.of();
+            List<Double> negativeVerifyTrialSeconds = List.of();
             Boolean positiveVerified = null;
             Boolean negativeRejected = null;
             int compressedProofBytes = 0;
@@ -104,17 +116,24 @@ public final class PoseidonMpfCircuitBenchmark {
                 if (!rootInput.equals(witness.values()[1])) {
                     throw new IllegalStateException("Witness public root does not match requested root");
                 }
+                List<R1CSConstraint> inMemoryConstraints = compiled.constraints();
                 try (keys) {
-                    long proveStarted = System.nanoTime();
-                    Groth16ProofBLS381 proof = keys.prove(witness.values(), compiled.constraints());
-                    proveSeconds = secondsSince(proveStarted);
-                    ProofVerification verification = verifyProof(keys, proof, publicInputs);
-                    positiveVerified = verification.positiveVerified();
-                    negativeRejected = verification.negativeRejected();
-                    positiveVerifySeconds = verification.positiveSeconds();
-                    negativeVerifySeconds = verification.negativeSeconds();
-                    compressedProofBytes = verification.compressedBytes();
-                    ArtifactStats artifacts = writeCardanoArtifacts(keys, proof, rootInput);
+                    TrialRun trials = runTrials(
+                            keys, publicInputs,
+                            () -> keys.prove(witness.values(), inMemoryConstraints));
+                    Groth16ProofBLS381 proof = trials.lastProof();
+                    proveSeconds = trials.medianProveSeconds();
+                    positiveVerifySeconds = trials.medianPositiveVerifySeconds();
+                    negativeVerifySeconds = trials.medianNegativeVerifySeconds();
+                    proveTrialSeconds = trials.proveSeconds();
+                    positiveVerifyTrialSeconds = trials.positiveVerifySeconds();
+                    negativeVerifyTrialSeconds = trials.negativeVerifySeconds();
+                    positiveVerified = true;
+                    negativeRejected = true;
+                    compressedProofBytes = trials.proofBytes();
+                    ArtifactStats artifacts = writeCardanoArtifacts(
+                            keys, proof, rootInput, templateId, fingerprint, r1csSha256,
+                            setupProvenance, constraints, wires, publicInputCount);
                     cardanoVerificationKeyBytes = artifacts.verificationKeyBytes();
                     cardanoArtifactsDirectory = artifacts.directory();
                 }
@@ -123,8 +142,6 @@ public final class PoseidonMpfCircuitBenchmark {
                 if (options.setupMode() == LoadOptions.SetupMode.STORE) {
                     requireBenchmarkSetupOptIn();
                     requireEmptyOrMissing(options.keysDir());
-                    var pipelineCircuit = new Groth16Pipeline.Compiled(
-                            compiled.flat(), constraints, wires, publicInputCount);
                     long setupStarted = System.nanoTime();
                     Groth16Pipeline.setup(pipelineCircuit, BENCHMARK_TAU, options.keysDir(), true);
                     setupSeconds = secondsSince(setupStarted);
@@ -139,6 +156,7 @@ public final class PoseidonMpfCircuitBenchmark {
 
                 // The compile graph and heap-backed R1CS must not coexist with
                 // witness generation or the prover's FFT/MSM phase.
+                pipelineCircuit = null;
                 compiled = null;
                 releaseGcSeconds = requestCollection();
                 FlatWitness witness = calculateFlatWitness(witnessInputs, wires);
@@ -153,23 +171,29 @@ public final class PoseidonMpfCircuitBenchmark {
                     Groth16Keys keys = Groth16Keys.load(options.keysDir());
                     keyLoadSeconds = secondsSince(loadStarted);
                     try (keys) {
-                        long proveStarted = System.nanoTime();
-                        Groth16ProofBLS381 proof = Groth16Pipeline.prove(
-                                keys,
-                                constraintCache,
-                                fingerprint,
-                                () -> { throw new IllegalStateException("Matching R1CS cache disappeared"); },
-                                witness::values,
-                                0,
-                                ProverBackend.PURE_JAVA);
-                        proveSeconds = secondsSince(proveStarted);
-                        ProofVerification verification = verifyProof(keys, proof, publicInputs);
-                        positiveVerified = verification.positiveVerified();
-                        negativeRejected = verification.negativeRejected();
-                        positiveVerifySeconds = verification.positiveSeconds();
-                        negativeVerifySeconds = verification.negativeSeconds();
-                        compressedProofBytes = verification.compressedBytes();
-                        ArtifactStats artifacts = writeCardanoArtifacts(keys, proof, rootInput);
+                        TrialRun trials = runTrials(keys, publicInputs, () ->
+                                Groth16Pipeline.prove(
+                                        keys,
+                                        constraintCache,
+                                        fingerprint,
+                                        () -> { throw new IllegalStateException(
+                                                "Matching R1CS cache disappeared"); },
+                                        witness::values,
+                                        0,
+                                        ProverBackend.PURE_JAVA));
+                        Groth16ProofBLS381 proof = trials.lastProof();
+                        proveSeconds = trials.medianProveSeconds();
+                        positiveVerifySeconds = trials.medianPositiveVerifySeconds();
+                        negativeVerifySeconds = trials.medianNegativeVerifySeconds();
+                        proveTrialSeconds = trials.proveSeconds();
+                        positiveVerifyTrialSeconds = trials.positiveVerifySeconds();
+                        negativeVerifyTrialSeconds = trials.negativeVerifySeconds();
+                        positiveVerified = true;
+                        negativeRejected = true;
+                        compressedProofBytes = trials.proofBytes();
+                        ArtifactStats artifacts = writeCardanoArtifacts(
+                                keys, proof, rootInput, templateId, fingerprint, r1csSha256,
+                                setupProvenance, constraints, wires, publicInputCount);
                         cardanoVerificationKeyBytes = artifacts.verificationKeyBytes();
                         cardanoArtifactsDirectory = artifacts.directory();
                     }
@@ -188,12 +212,15 @@ public final class PoseidonMpfCircuitBenchmark {
                     artifact.index(),
                     artifact.steps(),
                     options.maxSteps(),
-                    options.maxForkPrefixChunks(),
+                    templateId,
+                    "inclusion/branch-path",
                     constraints,
                     wires,
                     publicInputCount,
                     privateInputCount,
                     fingerprint,
+                    r1csSha256,
+                    options.keysDir().toString(),
                     compileCircuitBuildSeconds,
                     witnessCircuitBuildSeconds,
                     witnessSeconds,
@@ -208,20 +235,27 @@ public final class PoseidonMpfCircuitBenchmark {
                     negativeVerifySeconds,
                     positiveVerified,
                     negativeRejected,
+                    options.circuitTrials(),
+                    proveTrialSeconds,
+                    positiveVerifyTrialSeconds,
+                    negativeVerifyTrialSeconds,
                     compressedProofBytes,
                     cardanoVerificationKeyBytes,
                     cardanoArtifactsDirectory,
                     keyStoreBytes,
-                    heap.peakBytes());
-            files.writeReportSection("circuit", result);
+                    heap.peakBytes(),
+                    heap.peakRssBytes(),
+                    heap.peakRssMinusUsedHeapBytes(),
+                    heap.rssSamples(),
+                    heap.rssSource());
+            files.writeReportSection("circuit-s" + options.maxSteps(), result, options);
             return result;
         }
     }
 
     private CompiledCircuit compileCircuit() {
         long buildStarted = System.nanoTime();
-        var circuit = PoseidonMpfInclusionCircuit.build(
-                options.maxSteps(), options.maxForkPrefixChunks());
+        var circuit = PoseidonMpfInclusionCircuit.build(options.maxSteps());
         double buildSeconds = secondsSince(buildStarted);
         long compileStarted = System.nanoTime();
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
@@ -231,10 +265,36 @@ public final class PoseidonMpfCircuitBenchmark {
                 r1cs.numPublicInputs(), r1cs.numPrivateInputs(), buildSeconds, compileSeconds);
     }
 
+    private TrialRun runTrials(
+            Groth16Keys keys, BigInteger[] publicInputs, ProofFactory factory) throws IOException {
+        List<Double> prove = new java.util.ArrayList<>(options.circuitTrials());
+        List<Double> positive = new java.util.ArrayList<>(options.circuitTrials());
+        List<Double> negative = new java.util.ArrayList<>(options.circuitTrials());
+        Groth16ProofBLS381 last = null;
+        int proofBytes = 0;
+        for (int trial = 0; trial < options.circuitTrials(); trial++) {
+            long proveStarted = System.nanoTime();
+            last = factory.create();
+            prove.add(secondsSince(proveStarted));
+            ProofVerification verification = verifyProof(keys, last, publicInputs);
+            positive.add(verification.positiveSeconds());
+            negative.add(verification.negativeSeconds());
+            proofBytes = verification.compressedBytes();
+        }
+        return new TrialRun(last, List.copyOf(prove), List.copyOf(positive),
+                List.copyOf(negative), median(prove), median(positive), median(negative), proofBytes);
+    }
+
+    private static double median(List<Double> values) {
+        double[] sorted = values.stream().mapToDouble(Double::doubleValue).sorted().toArray();
+        int middle = sorted.length / 2;
+        return (sorted.length & 1) == 1
+                ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.0;
+    }
+
     private BoxedWitness calculateBoxedWitness(Map<String, List<BigInteger>> inputs, int expectedWires) {
         long buildStarted = System.nanoTime();
-        var circuit = PoseidonMpfInclusionCircuit.build(
-                options.maxSteps(), options.maxForkPrefixChunks());
+        var circuit = PoseidonMpfInclusionCircuit.build(options.maxSteps());
         double buildSeconds = secondsSince(buildStarted);
         long witnessStarted = System.nanoTime();
         BigInteger[] values = circuit.calculateWitness(inputs, CurveId.BLS12_381);
@@ -247,8 +307,7 @@ public final class PoseidonMpfCircuitBenchmark {
 
     private FlatWitness calculateFlatWitness(Map<String, List<BigInteger>> inputs, int expectedWires) {
         long buildStarted = System.nanoTime();
-        var circuit = PoseidonMpfInclusionCircuit.build(
-                options.maxSteps(), options.maxForkPrefixChunks());
+        var circuit = PoseidonMpfInclusionCircuit.build(options.maxSteps());
         double buildSeconds = secondsSince(buildStarted);
         long witnessStarted = System.nanoTime();
         long[] limbs = circuit.calculateWitnessFlat(inputs, CurveId.BLS12_381);
@@ -286,26 +345,107 @@ public final class PoseidonMpfCircuitBenchmark {
     private ArtifactStats writeCardanoArtifacts(
             Groth16Keys keys,
             Groth16ProofBLS381 proof,
-            BigInteger publicRoot) throws IOException {
+            BigInteger publicRoot,
+            String templateId,
+            String fingerprint,
+            String r1csSha256,
+            String setupProvenance,
+            int constraints,
+            int wires,
+            int publicInputs) throws IOException {
         var compressedVk = ProverToCardano.compressVk(keys);
         var compressedProof = ProverToCardano.compressProof(proof);
-        files.writeCardanoArtifact("proof-a.g1", compressedProof.piA());
-        files.writeCardanoArtifact("proof-b.g2", compressedProof.piB());
-        files.writeCardanoArtifact("proof-c.g1", compressedProof.piC());
-        files.writeCardanoArtifact("vk-alpha.g1", compressedVk.alpha());
-        files.writeCardanoArtifact("vk-beta.g2", compressedVk.beta());
-        files.writeCardanoArtifact("vk-gamma.g2", compressedVk.gamma());
-        files.writeCardanoArtifact("vk-delta.g2", compressedVk.delta());
-        for (int i = 0; i < compressedVk.ic().size(); i++) {
-            files.writeCardanoArtifact("vk-ic-" + i + ".g1", compressedVk.ic().get(i));
+        byte[] verificationKey = Groth16VerificationKeyCodec.encode(compressedVk);
+        String verificationKeySha256 = sha256(verificationKey);
+        byte[] publicRootBytes = PoseidonMpfHash.toDigestBytes(publicRoot);
+        String dimensionFingerprint = "c" + constraints + "-w" + wires + "-p" + publicInputs;
+        String expectedFingerprint = dimensionFingerprint + "-r" + r1csSha256;
+        if (!expectedFingerprint.equals(fingerprint)) {
+            throw new IllegalStateException("exact circuit fingerprint does not bind the canonical R1CS");
         }
-        files.writeCardanoArtifact("public-input-root.bin", PoseidonMpfHash.toDigestBytes(publicRoot));
+        var circuitManifest = new AuthenticatedStateCircuitManifest(
+                AuthenticatedStateCircuitManifest.SCHEMA_VERSION,
+                templateId,
+                PoseidonMpfHash.PROFILE_ID,
+                AuthenticatedStateCircuitManifest.Operation.INCLUSION,
+                options.maxSteps(),
+                List.of(new AuthenticatedStateCircuitManifest.PublicInput(
+                        0, "root", "field", "canonical-unsigned-big-endian-32")),
+                AuthenticatedStateCircuitManifest.POSEIDON_PARAMETER_FINGERPRINT,
+                AuthenticatedStateCircuitManifest.R1CS_FORMAT,
+                r1csSha256,
+                dimensionFingerprint,
+                "groth16",
+                "bls12-381",
+                AuthenticatedStateCircuitManifest.VK_FORMAT,
+                verificationKeySha256,
+                null,
+                null,
+                new AuthenticatedStateCircuitManifest.SetupProvenance(
+                        "benchmark-single-party",
+                        setupProvenance + "/" + fingerprint,
+                        null,
+                        false));
+        byte[] circuitManifestBytes = circuitManifest.canonicalJsonBytes();
+        String bundleSha256 = Groth16ArtifactBundleIdentity.sha256(
+                circuitManifest,
+                verificationKey,
+                compressedProof.piA(),
+                compressedProof.piB(),
+                compressedProof.piC(),
+                List.of(publicRootBytes));
+        Path directory = files.cardanoArtifactsDir(
+                templateId, fingerprint, verificationKeySha256, bundleSha256);
+        Map<String, ArtifactFile> artifactFiles = new LinkedHashMap<>();
+        writeArtifact(directory, artifactFiles, "proof-a.g1", compressedProof.piA());
+        writeArtifact(directory, artifactFiles, "proof-b.g2", compressedProof.piB());
+        writeArtifact(directory, artifactFiles, "proof-c.g1", compressedProof.piC());
+        writeArtifact(directory, artifactFiles, "vk-alpha.g1", compressedVk.alpha());
+        writeArtifact(directory, artifactFiles, "vk-beta.g2", compressedVk.beta());
+        writeArtifact(directory, artifactFiles, "vk-gamma.g2", compressedVk.gamma());
+        writeArtifact(directory, artifactFiles, "vk-delta.g2", compressedVk.delta());
+        for (int i = 0; i < compressedVk.ic().size(); i++) {
+            writeArtifact(directory, artifactFiles,
+                    "vk-ic-" + i + ".g1", compressedVk.ic().get(i));
+        }
+        writeArtifact(directory, artifactFiles, "verification-key.bin", verificationKey);
+        writeArtifact(directory, artifactFiles, "public-input-root.bin", publicRootBytes);
+        writeArtifact(directory, artifactFiles, "circuit-manifest.json", circuitManifestBytes);
+        String circuitManifestSha256 = sha256(circuitManifestBytes);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> canonicalSetupProvenance = (Map<String, Object>)
+                circuitManifest.toJsonModel().get("setupProvenance");
+        files.writeCardanoArtifactManifest(directory, new ArtifactManifest(
+                "zeroj-cardano-groth16-artifacts-v2",
+                Groth16ArtifactBundleIdentity.SCHEMA,
+                PoseidonMpfHash.PROFILE_ID,
+                "inclusion", templateId, fingerprint, r1csSha256,
+                circuitManifestSha256, verificationKeySha256, bundleSha256,
+                List.of("root"), List.of("public-input-root.bin"),
+                canonicalSetupProvenance, false, Instant.now().toString(),
+                Map.copyOf(artifactFiles)));
         long verificationKeyBytes = compressedVk.alpha().length
                 + compressedVk.beta().length
                 + compressedVk.gamma().length
                 + compressedVk.delta().length
                 + compressedVk.ic().stream().mapToLong(value -> value.length).sum();
-        return new ArtifactStats(files.cardanoArtifactsDir().toString(), verificationKeyBytes);
+        return new ArtifactStats(directory.toString(), verificationKeyBytes);
+    }
+
+    private void writeArtifact(
+            Path directory, Map<String, ArtifactFile> artifactFiles,
+            String name, byte[] value) throws IOException {
+        files.writeCardanoArtifact(directory, name, value);
+        artifactFiles.put(name, new ArtifactFile(value.length, sha256(value)));
+    }
+
+    private static String sha256(byte[] value) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(value));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
     }
 
     private static double requestCollection() {
@@ -389,7 +529,32 @@ public final class PoseidonMpfCircuitBenchmark {
             double negativeSeconds,
             int compressedBytes) {}
 
+    @FunctionalInterface
+    private interface ProofFactory {
+        Groth16ProofBLS381 create() throws IOException;
+    }
+
+    private record TrialRun(
+            Groth16ProofBLS381 lastProof,
+            List<Double> proveSeconds,
+            List<Double> positiveVerifySeconds,
+            List<Double> negativeVerifySeconds,
+            double medianProveSeconds,
+            double medianPositiveVerifySeconds,
+            double medianNegativeVerifySeconds,
+            int proofBytes) {}
+
     private record ArtifactStats(String directory, long verificationKeyBytes) {}
+
+    private record ArtifactFile(long bytes, String sha256) {}
+
+    private record ArtifactManifest(
+            String schema, String bundleIdentity, String profileId, String operation, String templateId,
+            String exactCircuitFingerprint, String r1csSha256,
+            String circuitManifestSha256, String verificationKeySha256, String bundleSha256,
+            List<String> publicInputs, List<String> publicInputFiles,
+            Map<String, Object> setupProvenance, boolean productionApproved, String generatedAt,
+            Map<String, ArtifactFile> files) {}
 
     public record CircuitResult(
             String startedAt,
@@ -397,12 +562,15 @@ public final class PoseidonMpfCircuitBenchmark {
             long datasetIndex,
             int observedProofSteps,
             int maxSteps,
-            int maxForkPrefixChunks,
+            String templateId,
+            String proofForm,
             int constraints,
             int wires,
             int publicInputs,
             int privateInputs,
             String fingerprint,
+            String r1csSha256,
+            String keysDirectory,
             double compileCircuitBuildSeconds,
             double witnessCircuitBuildSeconds,
             double witnessSeconds,
@@ -417,9 +585,17 @@ public final class PoseidonMpfCircuitBenchmark {
             double negativeVerifySeconds,
             Boolean positiveVerified,
             Boolean negativeInputRejected,
+            int circuitTrials,
+            List<Double> proveTrialSeconds,
+            List<Double> positiveVerifyTrialSeconds,
+            List<Double> negativeVerifyTrialSeconds,
             int compressedProofBytes,
             long cardanoVerificationKeyBytes,
             String cardanoArtifactsDirectory,
             long keyStoreBytes,
-            long peakObservedHeapBytes) {}
+            long peakObservedHeapBytes,
+            long peakObservedRssBytes,
+            long peakRssMinusUsedHeapBytes,
+            long rssSamples,
+            String rssSource) {}
 }

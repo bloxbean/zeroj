@@ -3,10 +3,16 @@
 This report records the reference run for
 [ADR-0041](../adr/0041-poseidon-mpf-production-readiness-and-load-benchmark.md)
 and [GitHub issue #25](https://github.com/bloxbean/zeroj/issues/25).
-The broader application architecture, circuit-profile guidance, and alternatives are in the
-[practical large-state MPF/MPT report](../poseidon-mpf-large-state-production-report.md).
+The broader application architecture and current MPF/JMT profile guidance are in the
+[practical large-state guide](../merkle/practical-large-state-guide.md). The original
+pre-ADR-0042 assessment remains archived for decision history.
 
 ## Outcome
+
+The first ADR-0041 run below is retained as historical evidence. It used the then-current
+generic MPF circuit and CCL `0.8.0-pre4`; its 17.4-million-constraint and 3.5-minute proving
+figures must not be used to size ADR-0042 operation-specific circuits. A later compatibility
+migration and fresh ADR-0042 measurements are recorded near the end of this report.
 
 The high-volume path works end to end:
 
@@ -14,13 +20,13 @@ The high-volume path works end to end:
 5,000,000 deterministic entries
         |
         v
-CCL 0.8.0-pre4 RocksDB MPF + zeroj-poseidon-mpf-v2
+CCL 0.8.0-pre4 RocksDB MPF + historical zeroj-poseidon-mpf-v2 alias
         |
         v
 real CCL inclusion proof (5-9 steps across the complete current root)
         |
         v
-ZeroJ witness -> 17,399,380-constraint R1CS
+historical generic ZeroJ witness -> 17,399,380-constraint R1CS
         |
         v
 192-byte Groth16 proof -> off-chain pairing verification
@@ -49,15 +55,16 @@ The completed dataset is retained at:
 .benchmark-data/poseidon-mpf-5m
 ```
 
-It contains the RocksDB MPF, manifest, raw JSON report, 9.6 GiB sparse Groth16 benchmark key
-bundle, and Cardano proof artifacts. The root `.gitignore` excludes `.benchmark-data/`, and
+It contains the RocksDB MPF, manifest, raw JSON report, historical 9.6 GiB sparse Groth16 key,
+new operation-specific keys, and Cardano proof artifacts. The root `.gitignore` excludes
+`.benchmark-data/`, and
 the directory is outside every Gradle `build/` directory, so `./gradlew clean` does not remove
 it.
 
 The dataset is local benchmark state: it is neither committed to Git nor backed up by the
 repository. Filesystem deletion or workspace removal can still destroy it.
 
-## Configuration
+## Historical ADR-0041 configuration
 
 | Setting | Value |
 |---|---:|
@@ -121,8 +128,10 @@ would be misleading.
 
 ## CCL MPF proof sampling
 
-All 32 sampled values matched the deterministic dataset. Every CCL wire proof passed both
-CCL verification and ZeroJ's independent reference verifier before witness encoding.
+All 32 sampled values matched the deterministic dataset. Every CCL wire proof passed strict
+CCL MPF-profile verification before witness encoding. The later ADR-0042 witness-normalization
+path performs the same mandatory strict verification again; it is not an independent hash
+implementation.
 
 | Metric | Min | Median | p95 | p99 / max |
 |---|---:|---:|---:|---:|
@@ -183,7 +192,7 @@ all key sets of the same size. The Poseidon key digest makes honest paths approx
 balanced, but its scalar-field output is not literally uniform over all 256-bit strings and
 an untrusted caller can grind candidate keys for shared prefixes.
 
-## Circuit and Groth16 result
+## Historical generic circuit and Groth16 result
 
 | Metric | Result |
 |---|---:|
@@ -220,7 +229,7 @@ Setup provenance was
 `single-party-fixed-toxic-waste-benchmark-only/sparse-store`. These keys must not be used for
 production funds or credentials.
 
-## Cardano/Julc verification
+## Historical generic Cardano/Julc verification
 
 The exact proof and verification key emitted by the five-million-entry circuit were loaded by
 `PoseidonMpfCardanoArtifactTest` and evaluated in the Julc Plutus V3 VM path. The real proof
@@ -240,15 +249,16 @@ was submitted by this benchmark.
 
 ## Reuse commands
 
-Run these commands from the repository root. They reuse the preserved database and do not
-rebuild five million entries.
+Run these commands from the repository root. They reuse the preserved database and the
+ADR-0042 S9 operation-specific key; they do not rebuild five million entries. Always pass the
+absolute work directory because Gradle runs the application from its module directory.
 
 ```bash
 POSEIDON_MPF_BENCH_DIR="$(pwd)/.benchmark-data/poseidon-mpf-5m"
 
 ./gradlew :zeroj-mpf-poseidon-load:run \
   --args="--stage=proofs --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
-  --samples=32 --max-steps=8 --rocksdb-profile=high-throughput"
+  --samples=32 --max-steps=9 --rocksdb-profile=high-throughput"
 
 ./gradlew :zeroj-mpf-poseidon-load:run \
   --args="--stage=depth-scan --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
@@ -256,27 +266,102 @@ POSEIDON_MPF_BENCH_DIR="$(pwd)/.benchmark-data/poseidon-mpf-5m"
 
 ./gradlew :zeroj-mpf-poseidon-load:run \
   --args="--stage=circuit --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
-  --samples=32 --max-steps=8 --setup=load \
-  --keys-dir=$POSEIDON_MPF_BENCH_DIR/groth16-keys \
-  --rocksdb-profile=high-throughput"
+  --samples=32 --max-steps=9 --circuit-trials=3 --setup=load \
+  --keys-dir=$POSEIDON_MPF_BENCH_DIR/groth16-keys-release-v2-s9 \
+  --rocksdb-profile=high-throughput --allow-insecure-setup=true"
+
+MPF_ARTIFACT_BUNDLE="$(jq -r \
+  '.["circuit-s9"].cardanoArtifactsDirectory' \
+  "$POSEIDON_MPF_BENCH_DIR/report.json")"
+test -d "$MPF_ARTIFACT_BUNDLE"
 
 ./gradlew \
-  -Dzeroj.poseidonMpf.cardanoArtifacts="$POSEIDON_MPF_BENCH_DIR/cardano-artifacts" \
+  -Dzeroj.poseidonMpf.cardanoArtifacts="$MPF_ARTIFACT_BUNDLE" \
   :zeroj-onchain-julc:test \
   --tests com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.PoseidonMpfCardanoArtifactTest
 ```
 
-`--setup=load` is important for reuse. `--setup=store` intentionally refuses to overwrite an
-existing key directory.
+`--setup=load` is important for reuse. It fails if the key manifest does not match the exact
+R1CS SHA-256. `--setup=store` intentionally refuses to overwrite an existing key directory.
+The Julc property must identify the final `bundle-*` leaf, whose ancestors bind template,
+exact circuit fingerprint, and VK identity.
+
+## ADR-0042 CCL dev1 compatibility and profile-label migration
+
+On 2026-08-02, the preserved database was reopened under the repository-wide CCL
+`0.8.0-pre5-dev1` baseline. The one-time `migrate-profile` operator stage verified the
+recorded root, stored values, CCL proofs, and ZeroJ reference verification for 32
+deterministic samples before changing metadata. It then backed up the original manifest,
+changed the unreleased profile alias to `zeroj-poseidon-mpf-v1`, updated the CCL and complete
+Poseidon-parameter fingerprints, reopened the database, and repeated the same checks.
+
+| Compatibility check | Result |
+|---|---:|
+| Root before and after | `5988af1bdc5883f6cf67b748c85b7fa32de9e4cbf309d971288d86d6d1129ad8` |
+| Deterministic samples | 32 |
+| Pre-migration root/value/proof pass | 0.807 s |
+| Post-migration root/value/proof pass | 0.470 s |
+| Serialized proof digests unchanged | yes |
+| RocksDB nodes/roots rewritten | no |
+| Original metadata backup | `.benchmark-data/poseidon-mpf-5m/manifest.pre-adr0042-v2.json` |
+
+The original load, proof, setup, Groth16, and Cardano measurements earlier in this report
+remain CCL `0.8.0-pre4` measurements; this compatibility note does not relabel their
+provenance. The old `v2` string was an unreleased metadata alias, not a different root
+algorithm. Normal opens now reject it, so migration is explicit and auditable rather than a
+silent runtime alias.
+
+## ADR-0042 operation-specific rerun
+
+After migration, the preserved root was reopened with CCL `0.8.0-pre5-dev1` and the new
+inclusion primitive. Thirty-two deterministic native proofs again passed strict CCL-profile
+verification and mandatory witness normalization.
+
+The fresh S9 run recorded Git revision
+`98c303176df01c7aff7fe9bb51502e1278b3e758` from a deliberately dirty ADR-0042 working tree,
+with source-tree SHA-256
+`292ea2637cb7b8aeaae00f87e3cfeda7e895b1a25477b35fce1a3d2a0c3eaafb` and 105 untracked
+source files. These values are preserved in `circuit-s9Provenance`; they prevent the benchmark
+from being misrepresented as a clean release build.
+
+| Native path metric | Minimum | Median | p95 | Maximum |
+|---|---:|---:|---:|---:|
+| Proof generation | 5.945 ms | 6.351 ms | 8.701 ms | 17.333 ms |
+| Proof verification | 2.989 ms | 3.204 ms | 4.527 ms | 6.266 ms |
+| Verified witness normalization | 3.084 ms | 3.347 ms | 4.451 ms | 6.621 ms |
+| Serialized proof | 805 B | 805 B | 939 B | 939 B |
+
+The fresh circuit measurements use one packed public digest, three timed proof/verification
+trials, separate exact-fingerprint key directories, and the known benchmark-only setup.
+Timings below are medians.
+
+| Profile | Constraints / wires | Exact R1CS SHA-256 | Setup | Prove | Verify / reject | Peak heap / RSS |
+|---|---:|---|---:|---:|---:|---:|
+| S8 | 50,768 / 283,384 | `e3a9fe7f2bcce454395a5bb0f2fac12e3fd99065d6b6c82325d7cdce16c1b74c` | 2.349 s | 3.999 s | 115.560 / 114.201 ms | 2.772 / 3.258 GB |
+| S9 | 56,635 / 316,949 | `540279f349be215c837245a888934dd507bbfecf21c4a66146a3febcd33d427d` | 2.421 s | 4.173 s | 119.222 / 114.560 ms | 2.733 / 3.297 GB |
+| S12 | 74,236 / 417,644 | `84975e990f84da821650147a9e6b8f5fdd2b67b20ce06c31ecb490411915bf00` | 2.961 s | 4.489 s | 117.807 / 118.152 ms | 2.868 / 3.445 GB |
+
+Every row produced a 192-byte proof and 432-byte Cardano VK. Positive proofs verified and a
+mutated public root was rejected. On 2026-08-03, one retained multi-bundle
+artifact-bundle-v2 test invocation loaded S8, S9, and S12, recomputed every nested identity,
+passed all three positive Julc evaluations, and rejected all three mutated roots. Every profile
+used the same ledger-style budget (CPU 2,627,770,348; memory 177,749); warm host VM evaluation
+was 2.134–2.277 ms in the final run. These current figures replace the historical generic circuit for
+planning purposes, while leaving the original result above as reproducibility evidence.
+
+S8 still misses the 218 known 9-step paths. S9 is the smallest measured profile that covers
+this exact five-million-entry root; S12 provides headroom but is not a permanent capacity
+guarantee. Each deployed profile needs its own reviewed R1CS/VK and production ceremony.
 
 ## Production conclusion
 
 The answer to the storage-scaling question is **yes** for the measured architecture: five
 million entries can remain off-chain in CCL RocksDB, while a real inclusion path is converted
 to a fixed-bound symbolic circuit, proved with Groth16, and verified through the Cardano VM
-path. The stronger statement "the 8-step circuit supports every entry in a 5M MPF" is false
-for this root. Exact all-entry coverage requires at least 9 steps here, or an explicit larger
-profile/fallback policy.
+path. With ADR-0042 the measured S9 proof takes about 4.17 seconds, rather than the historical
+generic circuit's 3.5 minutes. The stronger statement "the 8-step circuit supports every
+entry in a 5M MPF" remains false for this root. Exact all-entry coverage requires at least 9
+steps here, or an explicit larger-profile/fallback policy.
 
 The main operational costs observed here are linear off-chain build time and substantial
 one-time circuit setup/proving resources. On-chain proof and verification-key sizes do not
@@ -284,9 +369,10 @@ scale with the number of MPF entries.
 
 Before calling the feature production-ready, complete all of the following:
 
-1. generate or import a reviewed production setup for exactly
-   `c17399380-w37718764-p1` and destroy/replace the benchmark keys;
-2. complete cryptographic and circuit-semantics review, including the v2 hash domains and
+1. select the deployed operation/profile, freeze its full exact R1CS SHA-256 and VK identity,
+   and generate or import a reviewed production setup for that exact circuit; never reuse
+   either the historical `c17399380-w37718764-p1` key or the retained ADR-0042 benchmark keys;
+2. complete cryptographic and circuit-semantics review, including the MPF v1 hash domains and
    raw-key/value binding policy;
 3. select a bound using the complete scan, enforce or monitor it across later updates, and
    define over-bound routing; the current 8-step profile misses 218 paths;

@@ -2,10 +2,12 @@
 
 ## Status
 
-Implemented for off-chain Poseidon MPF adapters, codec, symbolic inclusion,
-conservative symbolic exclusion, annotated example coverage, and a standalone
-witness-level usecase. Groth16/Yaci full-stack MPF proving remains follow-up
-work because the first symbolic verifier is constraint-heavy.
+Historical design implemented, then superseded by
+[ADR-0042](../0042-operation-specific-poseidon-mpf-and-jmt-circuits.md). The original generic
+API and package examples below are retained as decision history. Current code uses named MPF
+and JMT operation primitives in their structure modules; pure-Java Groth16 and local Julc VM
+paths are implemented and benchmarked, while external review, production ceremonies, Yaci,
+and public-network gates remain open.
 
 ## Date
 

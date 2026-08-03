@@ -14,8 +14,12 @@ public final class PoseidonMpfLoadMain {
         }
 
         System.out.printf("Poseidon MPF profile=%s CCL=%s stage=%s entries=%,d workDir=%s%n",
-                com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHash.PROFILE_ID,
+                com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfHash.PROFILE_ID,
                 BuildInfo.cclVersion(), options.stage(), options.entries(), options.workDir());
+
+        if (options.stage().includes(LoadOptions.Stage.MIGRATE_PROFILE)) {
+            new PoseidonMpfManifestMigration(options).run();
+        }
 
         if (options.stage().includes(LoadOptions.Stage.LOAD)) {
             new PoseidonMpfLoadRunner(options).run();
@@ -42,20 +46,21 @@ public final class PoseidonMpfLoadMain {
         System.out.println("""
                 ZeroJ Poseidon MPF load/proof benchmark
 
-                  --stage=all|load|proofs|circuit|depth-scan
+                  --stage=all|load|proofs|circuit|depth-scan|migrate-profile
                                                        default: all (depth-scan is opt-in)
-                  --work-dir=PATH                      default: build/poseidon-mpf-5m
+                  --work-dir=PATH                      default: .benchmark-data/poseidon-mpf-5m
                   --entries=N                          default: 5000000
                   --batch=N                            default: 1000
                   --seed=N                             default: 25
                   --samples=N                          default: 32
                   --max-steps=N                        default: 8
-                  --max-fork-prefix-chunks=N           default: 2
+                  --circuit-trials=N                   default: 1; use >=3 for reported timings
                   --pair-cache=N                       default: 262144 entries (0 disables)
                   --rocksdb-profile=high-throughput|balanced|low-memory|default
                                                        default: high-throughput
                   --progress-every=N                   default: 100000 (0 disables)
                   --wal=true|false                     default: true
+                  --sync=true|false                    default: true; sync=true requires WAL
                   --depth-scan-version=N               default: latest root; depth-scan only
                   --setup=none|in-memory|store|load    default: none
                   --keys-dir=PATH                      default: WORK_DIR/groth16-keys

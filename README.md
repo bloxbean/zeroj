@@ -48,7 +48,7 @@ remaining production gates are tracked in
 | Cardano anchoring + CCL helpers | `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` | **Beta** |
 | WASM backends | `zeroj-bls12381-wasm`, `zeroj-bbs-wasm` | **Experimental, opt-in** |
 | gnark native prover | `zeroj-prover-gnark` | **Experimental, opt-in** (Go native library) |
-| MPF Poseidon | `zeroj-mpf-poseidon` | **Experimental — high-volume path benchmarked** (5M local end-to-end run passed; production setup, security review, and Yaci/testnet gates remain open) |
+| Poseidon authenticated state | `zeroj-mpf-poseidon`, `zeroj-jmt-poseidon` | **Experimental — high-volume paths benchmarked** (both 5M local end-to-end runs passed with operation-specific circuits; production ceremonies, external review, and Yaci/public-network gates remain open) |
 | BN254 (Groth16 + PlonK, off-chain) | legacy classes | **Disabled by default** — `-Dzeroj.allowLegacyBn254=true`; not a Cardano curve |
 | Halo2 verifier, WASM prover | `incubator/*` | **Incubator** |
 
@@ -58,7 +58,7 @@ remaining production gates are tracked in
 - **CircuitSpec Java DSL** (recommended) — define circuits as reusable Java classes with `CircuitSpec`
 - **Inline lambda DSL** — quick prototyping with `CircuitBuilder.define(api -> ...)`
 - **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`; `.wasm` witness calculation in incubator)
-- **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, and a per-gadget status table in [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md)
+- **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, plus operation-specific Poseidon MPF/JMT circuits in their authenticated-state modules; see the [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md) gadget table and [large-state guide](docs/merkle/practical-large-state-guide.md)
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
@@ -286,7 +286,8 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
 | [`zeroj-cardano`](zeroj-cardano/) | Cardano anchoring — proof anchor model, metadata encoding |
 | [`zeroj-ccl`](zeroj-ccl/) | Cardano Client Lib integration — fluent transaction helpers |
-| [`zeroj-mpf-poseidon`](zeroj-mpf-poseidon/) | Poseidon-rooted CCL MPF adapter, proof codec, and symbolic circuit witness path ([5M benchmark](docs/benchmarks/poseidon-mpf-5m-2026-08-02.md)) |
+| [`zeroj-mpf-poseidon`](zeroj-mpf-poseidon/) | Poseidon-rooted CCL MPF adapter, strict witness normalization, and operation-specific inclusion/non-inclusion/update/insert circuits ([5M benchmark](docs/benchmarks/poseidon-mpf-5m-2026-08-02.md)) |
+| [`zeroj-jmt-poseidon`](zeroj-jmt-poseidon/) | Poseidon-rooted CCL JMT host profile plus operation-specific inclusion/non-inclusion/update/insert/tombstone circuits ([5M benchmark](docs/benchmarks/poseidon-jmt-5m-2026-08-03.md)) |
 | [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
 #### Mainline Opt-In Modules (`zeroj-bom-all` only)
@@ -304,6 +305,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-test-vectors`](zeroj-test-vectors/) | Shared test fixtures — pre-generated proofs and VKs |
 | [`zeroj-examples`](zeroj-examples/) | End-to-end demos: circuit definition to on-chain verification |
 | [`zeroj-mpf-poseidon-load`](zeroj-mpf-poseidon-load/) | Non-published resumable RocksDB load, proof, circuit, Groth16, and Cardano artifact benchmark tool |
+| [`zeroj-jmt-poseidon-load`](zeroj-jmt-poseidon-load/) | Non-published durable/versioned JMT load, depth, operations, Groth16, and Cardano artifact benchmark tool |
 | [`zeroj-bom-core`](zeroj-bom-core/) | BOM for the v3 core path |
 | [`zeroj-bom-all`](zeroj-bom-all/) | BOM for core plus opt-in and incubator modules |
 

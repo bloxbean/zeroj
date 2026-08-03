@@ -29,6 +29,8 @@ include 'zeroj-onchain-julc'
 include 'zeroj-test-vectors'
 include 'zeroj-examples'
 include 'zeroj-mpf-poseidon-load'
+include 'zeroj-jmt-poseidon'
+include 'zeroj-jmt-poseidon-load'
 include 'zeroj-bom-core'
 include 'zeroj-bom-all'
 

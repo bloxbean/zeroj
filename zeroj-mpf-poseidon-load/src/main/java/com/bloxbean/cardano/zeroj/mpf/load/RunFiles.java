@@ -1,15 +1,17 @@
 package com.bloxbean.cardano.zeroj.mpf.load;
 
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHash;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfHash;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,14 +38,48 @@ final class RunFiles {
         return rocksDbDir;
     }
 
-    Path cardanoArtifactsDir() {
-        return workDir.resolve("cardano-artifacts");
+    Path manifestFile() {
+        return manifestFile;
     }
 
-    void writeCardanoArtifact(String name, byte[] bytes) throws IOException {
-        Path directory = cardanoArtifactsDir();
+    Path migrationBackupFile() {
+        return workDir.resolve("manifest.pre-adr0042-v2.json");
+    }
+
+    Manifest readManifestUnchecked() throws IOException {
+        if (Files.notExists(manifestFile)) {
+            throw new IllegalStateException("Missing benchmark manifest: " + manifestFile);
+        }
+        return JSON.readValue(manifestFile.toFile(), Manifest.class);
+    }
+
+    void writeManifest(Manifest manifest) throws IOException {
+        writeAtomic(manifestFile, manifest);
+    }
+
+    void restoreManifest(byte[] encodedManifest) throws IOException {
+        writeAtomic(manifestFile, encodedManifest);
+    }
+
+    Path cardanoArtifactsDir(
+            String templateId, String fingerprint, String verificationKeySha256,
+            String bundleSha256) {
+        requireSafePathComponent("templateId", templateId);
+        requireSafePathComponent("fingerprint", fingerprint);
+        requireSafePathComponent("verificationKeySha256", verificationKeySha256);
+        requireSafePathComponent("bundleSha256", bundleSha256);
+        return workDir.resolve("cardano-artifacts").resolve(templateId).resolve(fingerprint)
+                .resolve("vk-" + verificationKeySha256).resolve("bundle-" + bundleSha256);
+    }
+
+    void writeCardanoArtifact(Path directory, String name, byte[] bytes) throws IOException {
         Files.createDirectories(directory);
         writeAtomic(directory.resolve(name), bytes);
+    }
+
+    void writeCardanoArtifactManifest(Path directory, Object manifest) throws IOException {
+        Files.createDirectories(directory);
+        writeAtomic(directory.resolve("manifest.json"), manifest);
     }
 
     Manifest ensureManifest(LoadOptions options) throws IOException {
@@ -87,15 +123,20 @@ final class RunFiles {
         return updated;
     }
 
-    synchronized void writeReportSection(String name, Object section) throws IOException {
+    synchronized void writeReportSection(
+            String name, Object section, LoadOptions options) throws IOException {
         Map<String, Object> report = new LinkedHashMap<>();
         if (Files.exists(reportFile)) {
             report.putAll(JSON.readValue(reportFile.toFile(), new TypeReference<>() {}));
         }
         report.put("profileId", PoseidonMpfHash.PROFILE_ID);
         report.put("cclVersion", BuildInfo.cclVersion());
+        report.put("poseidonParameterFingerprint", BuildInfo.poseidonFingerprint());
         report.put("updatedAt", Instant.now().toString());
         report.put(name, section);
+        report.put(name + "Provenance", BenchmarkRunProvenance.capture(
+                name, BuildInfo.cclVersion(), BuildInfo.poseidonFingerprint(),
+                options.reportConfiguration()));
         writeAtomic(reportFile, report);
     }
 
@@ -106,6 +147,7 @@ final class RunFiles {
         requireEqual("datasetSchema", DeterministicDataset.SCHEMA_ID, manifest.datasetSchema());
         requireEqual("seed", options.seed(), manifest.seed());
         requireEqual("targetEntries", options.entries(), manifest.targetEntries());
+        requireEqual("batchSize", options.batchSize(), manifest.batchSize());
         requireEqual("keyBytes", DeterministicDataset.KEY_BYTES, manifest.keyBytes());
         requireEqual("valueBytes", DeterministicDataset.VALUE_BYTES, manifest.valueBytes());
     }
@@ -114,6 +156,12 @@ final class RunFiles {
         if (!Objects.equals(expected, actual)) {
             throw new IllegalStateException("Manifest mismatch for " + name + ": expected "
                     + expected + ", found " + actual);
+        }
+    }
+
+    private static void requireSafePathComponent(String name, String value) {
+        if (value == null || !value.matches("[a-zA-Z0-9._-]+")) {
+            throw new IllegalArgumentException(name + " is not a safe artifact identity");
         }
     }
 
@@ -126,20 +174,39 @@ final class RunFiles {
     private static void writeAtomic(Path target, Object value) throws IOException {
         Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
         JSON.writeValue(temporary.toFile(), value);
-        try {
-            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
-        }
+        forceFile(temporary);
+        moveAtomic(temporary, target);
+        forceDirectory(target.getParent());
     }
 
     private static void writeAtomic(Path target, byte[] value) throws IOException {
         Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
         Files.write(temporary, value);
+        forceFile(temporary);
+        moveAtomic(temporary, target);
+        forceDirectory(target.getParent());
+    }
+
+    private static void moveAtomic(Path temporary, Path target) throws IOException {
         try {
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            throw new IOException(
+                    "atomic sidecar replacement is required for durable MPF checkpoints", e);
+        }
+    }
+
+    private static void forceFile(Path file) throws IOException {
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+            channel.force(true);
+        }
+    }
+
+    private static void forceDirectory(Path directory) throws IOException {
+        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            channel.force(true);
+        } catch (UnsupportedOperationException error) {
+            throw new IOException("filesystem does not support durable directory checkpoints", error);
         }
     }
 

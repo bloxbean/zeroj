@@ -18,6 +18,8 @@ dependencies {
     // Now declare modules without version
     implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
     implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
+    implementation 'com.bloxbean.cardano:zeroj-mpf-poseidon'
+    implementation 'com.bloxbean.cardano:zeroj-jmt-poseidon'
     implementation 'com.bloxbean.cardano:zeroj-verifier-core'
     implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
     implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'
@@ -63,6 +65,8 @@ All publishable ZeroJ modules are covered by this BOM.
 - `zeroj-patterns`
 - `zeroj-circuit-dsl`
 - `zeroj-circuit-lib`
+- `zeroj-mpf-poseidon`
+- `zeroj-jmt-poseidon`
 - `zeroj-prover-spi`
 - `zeroj-prover-gnark`
 - `zeroj-onchain-julc`
@@ -71,6 +75,9 @@ All publishable ZeroJ modules are covered by this BOM.
 - `zeroj-bbs`
 - `zeroj-bbs-wasm`
 - `zeroj-bls12381-wasm`
+- `zeroj-crypto-blst`
+- `zeroj-tools`
+- `zeroj-ceremony`
 
 **Incubator opt-in:**
 - `zeroj-prover-wasm`

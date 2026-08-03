@@ -32,7 +32,7 @@ public final class DeterministicDataset {
                 .putInt(VALUE_MAGIC)
                 .putInt(1)
                 .array();
-        // Force this ordinary 32-byte value through the v2 raw-byte fallback.
+        // Force this ordinary 32-byte value through the v1 raw-byte fallback.
         // The old profile rejected it as a non-canonical scalar chunk.
         out[0] = (byte) 0xff;
         return out;

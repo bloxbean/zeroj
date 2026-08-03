@@ -1,6 +1,7 @@
 # ADR-0042: Operation-specific Poseidon MPF and JMT circuits
 
-- **Status**: accepted; implementation planned
+- **Status**: accepted; phases 0-6 implemented, Phase 7 local release gates implemented,
+  external production gates open, optional Phase 8 deferred
 - **Date**: 2026-08-02
 - **Supersedes in part**: the CCL `0.8.0-pre4` dependency and pre-release MPF `v2` naming
   decisions in
@@ -10,8 +11,9 @@
 - **Introduces**: separate MPF/JMT Poseidon modules and operation-specific circuit families
 - **Related**:
   [Poseidon MPF gadget design](circuit-annotation/zk-mpf-gadget.md),
-  [five-million-entry MPF benchmark](../benchmarks/poseidon-mpf-5m-2026-08-02.md), and
-  [large-state production report](../poseidon-mpf-large-state-production-report.md)
+  [five-million-entry MPF benchmark](../benchmarks/poseidon-mpf-5m-2026-08-02.md),
+  [five-million-entry JMT benchmark](../benchmarks/poseidon-jmt-5m-2026-08-03.md), and
+  [current practical large-state guide](../merkle/practical-large-state-guide.md)
 
 ## Context
 
@@ -25,33 +27,33 @@ CCL MPF proof node forms in one bounded circuit:
 - inclusion and exclusion selection; and
 - leaf divergence and proof-shape checks.
 
-This full-semantics design is useful and must remain available. It is also expensive.
-The measured eight-step circuit has 17,399,380 constraints and took 213.826 seconds to create
-a Groth16 proof in the 2026-08-02 reference benchmark. That cost is tied to the circuit shape,
-not to the five million entries stored in RocksDB.
+This full-semantics design is useful and remains available, but it is expensive. The historical
+pre-ADR-0042 S8 circuit had 17,399,380 constraints and took 213.826 seconds to prove. That result
+is retained as compatibility/provenance evidence, not as the current recommended MPF circuit.
 
-An exploratory CCL `0.8.0-pre5-dev1` JMT integration demonstrated a different approach: define
-one circuit for one operation and use a circuit-native radix-16 Poseidon commitment. A JMT
-inclusion proof then needs four binary sibling hashes per traversed radix-16 level. The
-exploratory results were:
+ADR-0042 now implements operation-specific MPF and JMT circuits. On the same development
+machine, with fresh single-party benchmark-only setup material and three proof trials, the
+current inclusion profiles measured:
 
-| Circuit | Constraints | Groth16 proving time | Proof size |
-|---|---:|---:|---:|
-| Operation-specific JMT inclusion, 8 levels | 25,730 | 8.261 s | 192 B |
-| Operation-specific JMT inclusion, 64 levels | 186,394 | 17.4-19.3 s | 192 B |
-| Existing full-semantics MPF, 8 steps | 17,399,380 | 213.826 s | 192 B |
+| Structure/profile | Exact constraints | Setup | Median prove | Host verify | Proof |
+|---|---:|---:|---:|---:|---:|
+| MPF S8 | 50,768 | 2.349 s | 3.999 s | 115.6 ms | 192 B |
+| MPF S9 | 56,635 | 2.421 s | 4.173 s | 119.2 ms | 192 B |
+| MPF S12 | 74,236 | 2.961 s | 4.489 s | 117.8 ms | 192 B |
+| JMT S8 | 10,069 | 1.142 s | 2.856 s | 114.0 ms | 192 B |
+| JMT S10 | 12,063 | 1.172 s | 2.911 s | 113.3 ms | 192 B |
+| JMT S12 | 14,057 | 1.306 s | 2.901 s | 114.4 ms | 192 B |
+| JMT S64 | 65,901 | 2.947 s | 4.582 s | 115.2 ms | 192 B |
 
-These are feasibility measurements on one development machine using insecure local benchmark
-setup parameters. They are not release SLAs. The difference shows the value of specialization;
-it does not establish that JMT is intrinsically faster than MPF. An operation-specific MPF
-circuit may also become much smaller than the current `ZkMpf` circuit.
+These are local feasibility measurements, not release SLAs. The exact R1CS digest, setup mode,
+all trials, key size, heap/RSS, and artifact directory are retained in the preserved reports.
+The earlier 25,730/186,394-constraint JMT prototype measurements are superseded by this matrix.
 
-The same JMT experiment loaded 100,000 entries in durable RocksDB, generated real CCL object
-and wire proofs, converted a proof into a ZeroJ witness, proved it with Groth16, and verified
-the resulting artifact in the Julc Plutus V3 VM. The native JMT wire proof was 2,157 bytes at
-the median and 2,404 bytes at the observed maximum. The on-chain Groth16 proof remained 192
-bytes. Consequently, JMT's larger native proof is private prover input and does not need to be
-processed by the Cardano validator.
+The durable JMT qualification loaded five million entries, generated real CCL object/wire proofs,
+converted them into ZeroJ witnesses, and verified every selected circuit artifact in the Julc
+Plutus V3 VM. The 32 native JMT proof samples were 2,744-3,161 bytes (2,881-byte median); these
+bytes are private prover input. The Cardano-facing Groth16 proof remained 192 bytes, so native
+JMT proof size does not expand the on-chain proof.
 
 CCL `0.8.0-pre5-dev1` also changes the JMT decision materially. It provides a named custom
 `JmtProfile` containing a format descriptor, hash function, commitment scheme, and proof codec.
@@ -91,8 +93,8 @@ can reuse one verification key.
 
 ### 1. Use CCL `0.8.0-pre5-dev1` throughout this branch
 
-The root `cclVersion` property will move from `0.8.0-pre4` to `0.8.0-pre5-dev1`. Every direct
-`com.bloxbean.cardano:cardano-client-*` dependency continues to resolve through that one root
+The root `cclVersion` property is pinned to `0.8.0-pre5-dev1`. Every direct
+`com.bloxbean.cardano:cardano-client-*` dependency resolves through that one root
 property and the existing resolution rule. ZeroJ will not place pre4 MPF and dev1 JMT artifacts
 on the same runtime classpath because they publish the same Maven coordinates and Java packages.
 
@@ -100,18 +102,18 @@ This supersedes ADR-0041's dependency-version decision. It does not change the e
 MPF commitment algorithm/root, preserved five-million-entry database, benchmark methodology, or
 production gates. Section 3 separately replaces the pre-release `v2` profile label with `v1`.
 
-Before accepting the dependency update as complete, the implementation must:
+The completed compatibility gate:
 
-1. run the small MPF golden-root and wire-proof compatibility suites;
-2. reopen the preserved five-million-entry MPF database under dev1;
-3. verify its recorded root without mutation;
-4. generate and verify proofs for deterministic existing entries; and
-5. confirm that no resolved CCL dependency remains on pre4.
+1. ran the small MPF golden-root and wire-proof compatibility suites;
+2. reopened the preserved five-million-entry MPF database under dev1;
+3. verified its recorded root without mutation;
+4. generated and verified proofs for deterministic existing entries; and
+5. confirmed that no resolved CCL dependency remains on pre4.
 
 Source comparison found no intended MPF commitment/root-format change between these tags; the
-RocksDB MPF difference is resource-lifecycle cleanup. The compatibility checks remain mandatory
-because persisted roots are production data, not an assumption. If any root or wire proof drifts,
-the version update stops and requires a separate migration ADR.
+RocksDB MPF difference is resource-lifecycle cleanup. The same checks remain mandatory for future
+dependency changes because persisted roots are production data, not an assumption. Any root or
+wire-proof drift requires a separate migration ADR.
 
 `0.8.0-pre5-dev1` is a development release. ZeroJ will move to the first stable CCL release that
 contains the same JMT fixes and profile API after repeating the same compatibility gates.
@@ -238,7 +240,8 @@ public API; implementation may use package-private shared helpers to avoid dupli
 | Primitive | Statement | Minimum public inputs in the standalone template | Private witness | Priority |
 |---|---|---|---|---|
 | `ZkMpfInclusion` | A key path maps to a value commitment under `root` | `root` | key path, value commitment, normalized proof | P0 |
-| `ZkMpfNonInclusion` | A key path is absent under `root` using a sound supported terminal form | `root` | query path and exclusion proof | P0 |
+| `ZkMpfNonInclusionEmpty` | A key path reaches an authenticated empty child under `root` | `root` | query path and missing-branch proof | P0 |
+| `ZkMpfNonInclusionDifferentLeaf` | A different authenticated leaf proves the query path absent | `root` | query path, conflicting leaf, divergence data and path | P0 |
 | `ZkMpfValueUpdate` | Replacing an existing value transforms `oldRoot` into `newRoot` | `oldRoot`, `newRoot` | key path, old/new values, authentication path | P1 |
 | `ZkMpfInsert` | A previously absent key is inserted canonically, producing `newRoot` | `oldRoot`, `newRoot` | key/value, exclusion witness, structural rewrite witness | P1 |
 | `ZkMpfDelete` | An existing key is removed and the Patricia path is canonically normalized | `oldRoot`, `newRoot` | key/value, inclusion witness, merge/rewrite witness | P2 |
@@ -249,9 +252,19 @@ public API; implementation may use package-private shared helpers to avoid dupli
 authentication path. Insert and delete must reproduce CCL's canonical Patricia restructuring;
 they are not implemented by merely swapping a leaf digest.
 
-`ZkMpfNonInclusion` must fail closed for any CCL proof form whose terminal commitment is not fully
-authenticated by the normalized witness. Unsupported forms are not accepted merely to offer a
-single broad API.
+The implemented initial catalog contains the three read circuits, value update, and two distinct
+insertion templates: `insert-empty` and `insert-different-leaf`. `ZkMpfInsert` is a source-level
+facade over those insertion gadgets; there is intentionally no generic
+`zeroj-mpf-v1-insert-sN-p2` R1CS. Physical delete remains a P2 follow-up because canonical branch
+collapse needs additional authenticated rewrite data not present in an ordinary inclusion path.
+Multiproofs and batches remain under the optional Phase 8 decision below.
+
+The two non-inclusion shapes are distinct circuits so an attacker cannot select
+the terminal soundness rule through a witness flag. A convenience Java facade
+may dispatch after fail-closed host decoding, but there is no universal
+`ZkMpfNonInclusion` R1CS. Both circuits fail closed for any CCL proof form whose
+terminal commitment is not fully authenticated by the normalized witness.
+Unsupported forms are not accepted merely to offer one broad API.
 
 ### 6. Provide operation-specific JMT primitives
 
@@ -264,7 +277,7 @@ JMT proof forms are simpler but remain distinct statements:
 | `ZkJmtNonInclusionDifferentLeaf` | The queried key diverges from an authenticated conflicting leaf | `root` | query key, conflicting leaf, divergence data, siblings | P1 |
 | `ZkJmtValueUpdate` | Updating an existing leaf transforms `oldRoot` into `newRoot` | `oldRoot`, `newRoot` | key, old/new values and one path | P1 |
 | `ZkJmtInsert` | A valid non-inclusion becomes a canonical included leaf | `oldRoot`, `newRoot` | key/value, non-inclusion proof and rewrite witness | P1 |
-| `ZkJmtTombstoneUpdate` | A live value is replaced with an application-defined tombstone | `oldRoot`, `newRoot` | key, live/tombstone values and path | P2 |
+| `ZkJmtTombstoneUpdate` | A live value is replaced with the application-selected tombstone commitment | `oldRoot`, `newRoot`, `jmt_tombstone_value_hash` | key, live value and path | P2 |
 | `ZkJmtMultiInclusion` | Several entries are included under one root | `root` | entries and deduplicated multipath | P2 |
 | `ZkJmtBatchTransition` | An ordered batch transforms one version root into the next | `oldRoot`, `newRoot`, optional batch/version commitment | operations and shared transition witness | P3 |
 
@@ -272,6 +285,10 @@ JMT proof forms are simpler but remain distinct statements:
 storing a tombstone still proves inclusion of that tombstone. A future physical/canonical delete
 requires CCL storage semantics, proof semantics, circuit semantics, pruning behavior, and test
 vectors to be specified together in a separate ADR.
+
+The implemented initial catalog contains all three reads, value update, both insertion shapes,
+and public-tombstone update. `ZkJmtInsert` is likewise a source-level facade over
+`insert-empty` and `insert-different-leaf`; no generic `...-insert-sN-p2` template exists.
 
 JMT version numbers, Cardano chain points, rollback horizons, and pruning metadata are not Merkle
 membership constraints. The application or validator must authenticate `{chain point, version,
@@ -323,23 +340,25 @@ must include or resolve unambiguously to:
 - Poseidon parameter fingerprint; and
 - trusted-setup/verification-key identifier.
 
-Illustrative identifiers are:
+Implemented identifier examples are:
 
 ```text
 zeroj-mpf-v1-inclusion-s12-p1
 zeroj-jmt-v1-inclusion-s8-p1
 zeroj-jmt-v1-inclusion-s64-p1
-zeroj-jmt-v1-update-s64-p2
+zeroj-jmt-v1-value-update-s64-p2
 ```
 
-The final naming format will be documented with generated manifests rather than inferred from
-class names. A witness deeper than the selected bound fails before proving; it is never truncated.
+The naming format is frozen by the canonical circuit manifest rather than inferred from class
+names. A witness deeper than the selected bound fails before proving; it is never truncated.
 
-ZeroJ may publish a small common-path profile and a full-bound fallback. The initial candidates
-are JMT S8 plus S64. MPF presets will be chosen only after the operation-specific circuit and the
-preserved five-million-entry proof-depth data are benchmarked. Applications requiring one fixed
-latency profile may choose only the full bound; applications allowing routing may use a smaller
-common profile and a slower fallback.
+The measured five-million-entry MPF reached S9: S8 covered 4,999,782 entries and missed 218;
+S9 covered the complete measured root. The measured five-million-entry JMT reached S12: S8
+covered 4,987,028 entries, S10 missed 32, and S12 covered all entries. These are dataset results,
+not universal bounds. Applications may route common paths to S8 and overflow to a larger profile;
+MPF S12 provides measured margin, while JMT S64 is the format-maximum fallback. A deployment that
+requires one key/VK and cannot route must select a bound justified for its own dataset, or use the
+format maximum.
 
 Groth16 proof size remains 192 bytes for these BLS12-381 circuits. Proving time and proving-key
 size scale with the circuit. On-chain verification work scales mainly with the number of public
@@ -449,19 +468,33 @@ the correct key in the validator parameters.
 
 ### Phase 0: Specifications and vectors
 
+Implementation status: complete after adversarial re-review. The frozen corpus now includes
+literal/cross-checked MPF wires, all dev1 JMT proof forms, neighbor metadata, a single-neighbor
+case, a valid zero-step root-leaf exclusion, manifest canonical bytes/hash, and depth-gap,
+proof-form, canonical-CBOR, and resource-bound regressions.
+
 1. Freeze the module names, package hierarchy, and dependency rules from Section 9.
 2. Freeze the final `zeroj-poseidon-mpf-v1` name and unchanged commitment vectors.
 3. Freeze the `zeroj-poseidon-jmt-v1` domains, encodings, empty child, leaf commitment, branch
    commitment, key canonicality rule, and stable CCL format descriptor.
 4. Record cross-language-friendly golden vectors for raw hashing, leaf commitments, every branch
-   position, complete roots, object proofs, wire proofs, and negative mutations.
+   position, complete roots, object proofs, wire proofs, and negative mutations. The commitment
+   vectors and MPF fixtures form Phase 0A. CCL JMT object/wire and persistence vectors form Phase
+   0B and close immediately after Phase 1 installs the required dev1 API; this explicit
+   prerequisite avoids pretending pre4 can generate dev1 JMT fixtures.
 5. Record the input schemas and soundness statement for every P0/P1 primitive.
 6. Assign versioned circuit/profile identifiers and manifest schemas.
 
 Exit criterion: two independent host-side implementations or one implementation plus a simple
-independent vector checker agree on all v1 vectors.
+independent vector checker agree on all v1 vectors. Under this plan, Phase 0 remained open across
+the narrow Phase 1 dependency prerequisite and closed only after the Phase 0B CCL JMT corpus
+passed; that criterion is now satisfied.
 
 ### Phase 1: Common CCL dev1 baseline
+
+Implementation status: complete. All resolved CCL artifacts use `0.8.0-pre5-dev1`; the preserved
+five-million-entry MPF root and sampled proofs remained unchanged across the explicit profile-label
+migration.
 
 1. Change the root CCL pin to `0.8.0-pre5-dev1`.
 2. Run dependency insight to prove one CCL version across all ZeroJ configurations.
@@ -477,12 +510,18 @@ to dev1, or the phase stops for a migration decision.
 
 ### Phase 2: Operation-specific MPF reads
 
+Implementation status: complete. The full-semantics classes moved into the MPF module; the three
+read forms have separate fail-closed witnesses/templates, randomized and adversarial tests, pinned
+R1CS identities, and real CCL differential checks. Current inclusion profiles are 50,768
+constraints at S8, 56,635 at S9, and 74,236 at S12.
+
 1. Move `ZkMpf` and `ZkMpfProof` from `zeroj-circuit-lib` into the MPF module and the
    `com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit` package.
 2. Move only genuinely structure-neutral Poseidon, binary-Merkle, canonical-field, nibble, and
    padding helpers into appropriate `zeroj-circuit-lib` packages. Keep all MPF node/proof semantics
    in `zeroj-mpf-poseidon`.
-3. Implement `ZkMpfInclusion` and `ZkMpfNonInclusion` as separate public gadgets/templates.
+3. Implement `ZkMpfInclusion`, `ZkMpfNonInclusionEmpty`, and
+   `ZkMpfNonInclusionDifferentLeaf` as separate public gadgets/templates.
 4. Add CCL proof normalization, positive/negative vectors, malformed-proof tests, and differential
    checks against the existing `ZkMpf` result.
 5. Benchmark S8/S9/S12 and any full-bound candidate on preserved real proofs.
@@ -492,6 +531,12 @@ mutations, preserve MPF v1 roots, demonstrate a material constraint/proving impr
 `zeroj-circuit-lib` with no CCL MPF/JMT dependency or structure-specific public class.
 
 ### Phase 3: MPF transitions
+
+Implementation status: complete for the accepted P1 single-operation scope. Value update and the
+two canonical insertion shapes match CCL before/after roots under randomized state-machine and
+mutation tests. `ZkMpfInsert` dispatches to the two shape-specific gadgets. Physical delete is not
+misrepresented as a zero terminal: canonical Patricia collapse remains the explicitly deferred P2
+follow-up described in Section 5.
 
 1. Implement `ZkMpfValueUpdate` first.
 2. Specify and implement canonical `ZkMpfInsert` against CCL-generated before/after roots.
@@ -504,6 +549,11 @@ Exit criterion: old-root and new-root mutations, wrong operations, wrong old val
 and non-canonical rewrites are rejected.
 
 ### Phase 4: Poseidon JMT host profile
+
+Implementation status: complete. The dev1 custom profile, full-key leaf binding, prefix-independent
+radix-16 commitment, CCL object/wire bridge, strict reference verifier, durable RocksDB facade,
+profile manifest, rollback/pruning policy, in-flight crash recovery, and golden corpus are present.
+The durable store enforces one logical writer and fails closed on foreign or ahead manifests.
 
 1. Add `zeroj-jmt-poseidon` under
    `com.bloxbean.cardano.zeroj.merkle.jmt.poseidon` with a stable `JmtProfile.custom(...)`, hash
@@ -518,6 +568,12 @@ all golden vectors agree on roots and proofs.
 
 ### Phase 5: Operation-specific JMT circuits
 
+Implementation status: complete for the catalog promised by Section 6: inclusion, both
+non-inclusion forms, value update, both insertion forms, and tombstone update. Tests cover real CCL
+proofs, randomized deep insertions, S64 padding/boundaries, field aliases, proof-form confusion,
+old/new-root mutations, and the exact public tombstone binding. JMT inclusion is 10,069 constraints
+at S8 and 65,901 at S64.
+
 1. Implement and harden `ZkJmtInclusion`.
 2. Implement the two non-inclusion circuits separately.
 3. Implement `ZkJmtValueUpdate` and `ZkJmtInsert` with CCL before/after differential tests.
@@ -527,6 +583,11 @@ Exit criterion: every primitive has statement documentation, constraint counts, 
 R1CS fingerprints, and real CCL proof-to-witness tests.
 
 ### Phase 6: Scale and performance qualification
+
+Implementation status: complete for local qualification. Preserved MPF and JMT databases, exact
+five-million-key depth censuses, native proof samples, fixed-heap/RSS telemetry, update/rollback/
+prune timing, exact R1CS/key identities, three-trial proving matrices, and strict Cardano artifact
+bundles are recorded. The results establish local scale/correctness evidence, not a service SLA.
 
 1. Preserve deterministic 10K and 100K smoke databases outside build directories.
 2. Run 1M and 5M JMT loads with production RocksDB options and recorded batch/version policies.
@@ -541,6 +602,21 @@ bound, prover cost, and on-chain verifier cost.
 
 ### Phase 7: Cardano and release gates
 
+Implementation status: local engineering gates complete; external production gates open. All
+seven selected inclusion bundles pass strict manifest/file/path/VK/public-input checks, positive
+Julc VM verification, and mutated-root rejection. A representative state-transition validator
+binds the authoritative datum root/version, continuing state token/value/address, signer, release
+ID, new root, and operation-specific VK. Real MPF and JMT value-update proofs pass end to end and
+cross-structure/key/manifest substitutions fail. Release identity also binds an audited unapplied
+validator digest, compiler profile, exact circuit manifest, policy/token/signer, and one-shot token
+genesis attestation; the Cardano V3 script hash is derived internally and cross-checked with CCL.
+The independent Python R1CS checker agrees with the Java canonical digest and rejects tampering.
+
+Yaci/public-network execution, comparison with the protocol parameters at deployment time,
+external cryptographic review, and an exact-fingerprint multi-party ceremony require external
+infrastructure and governance. They were not fabricated or marked complete. Consequently all
+generated bundles remain `productionApproved=false` and mainnet manifest creation fails closed.
+
 1. Export real proof/VK artifacts for every release template and test positive plus mutated inputs
    in the Julc Plutus V3 VM.
 2. Bind operation/VK identifiers and root transitions in representative application validators.
@@ -553,6 +629,19 @@ bound, prover cost, and on-chain verifier cost.
 Exit criterion: no primitive is labelled production-ready solely because a local proof passed.
 
 ### Phase 8: Optional multiproofs and batches
+
+Implementation status: deliberately deferred, as allowed by this optional phase. CCL dev1 exposes
+the single-key proof APIs qualified here but no frozen cross-structure multiproof contract that can
+serve as an independent host oracle. Inventing a ZeroJ-only multipath format in this ADR would add
+a new commitment/proof protocol after the single-operation security boundary was frozen. A future
+ADR must specify bounded batch size, duplicate-key/order semantics, path deduplication, transition
+atomicity, CCL interoperability, vectors, and whether several independent 192-byte proofs are
+actually worse for the target application.
+
+That follow-up is now specified by
+[ADR-0043](0043-bounded-multiproofs-batch-transitions-and-mpf-deletion.md), with the host-side
+contract separated into its
+[CCL handoff companion](0043-bounded-multiproofs-batch-transitions-and-mpf-deletion-ccl.md).
 
 Implement multipath and batch primitives only after single-operation circuits are stable. Measure
 deduplicated-path witnesses against multiple independent proofs. Do not assume one batch circuit is
@@ -702,5 +791,7 @@ operation-specific primitive. Add JMT in the separate `zeroj-jmt-poseidon` artif
 off-chain authenticated-state option using the same reviewed Poseidon parameter family but its own
 v1 commitment profile. Keep structure-neutral helpers in `zeroj-circuit-lib`, RocksDB in the two
 load modules, and use one CCL `0.8.0-pre5-dev1` baseline throughout this branch. Do not call either
-structure or any new circuit production-ready until its operation-specific review, scale benchmark,
-Cardano validation, and trusted-setup gates pass.
+structure or any new circuit production-ready until external operation-specific review,
+exact-fingerprint production setup, Yaci/current-protocol-budget validation, and public target-
+network transaction gates pass. Local scale, proof, artifact, and Julc VM qualification is
+complete and is evidence for those gates, not a substitute for them.

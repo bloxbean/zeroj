@@ -1,0 +1,26 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'ZeroJ Poseidon-rooted Jellyfish Merkle Tree profile and operation-specific circuits'
+
+dependencies {
+    api project(':zeroj-circuit-lib')
+    api project(':zeroj-circuit-annotation-api')
+    api "com.bloxbean.cardano:cardano-client-jellyfish-merkle:${rootProject.ext.cclVersion}"
+    api "com.bloxbean.cardano:cardano-client-verified-structures-core:${rootProject.ext.cclVersion}"
+
+    testImplementation project(':zeroj-test-vectors')
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                name = 'ZeroJ Poseidon JMT'
+                description = 'Poseidon JMT profile, CCL integration, witnesses, and ZK circuit primitives'
+            }
+        }
+    }
+}

@@ -44,6 +44,7 @@ dependencies {
     // ZeroJ — blst for point compression in SnarkjsToCardano / ProverToCardano
     api project(':zeroj-api')
     implementation project(':zeroj-blst')
+    implementation "com.bloxbean.cardano:cardano-client-crypto:${rootProject.ext.cclVersion}"
 
     // Pure Java prover and BLS point types — used by ProverToCardano to compress prover output
     api project(':zeroj-crypto')
@@ -59,7 +60,9 @@ dependencies {
 
     // Test — circuit DSL for on-chain verification tests
     testImplementation project(':zeroj-circuit-dsl')
-    testImplementation "com.bloxbean.cardano:cardano-client-crypto:${rootProject.ext.cclVersion}"
+    testImplementation project(':zeroj-mpf-poseidon')
+    testImplementation project(':zeroj-jmt-poseidon')
+    testImplementation "com.bloxbean.cardano:cardano-client-plutus:${rootProject.ext.cclVersion}"
 
     // Test — off-chain BBS (build real presentations to differential-test the on-chain BBS gadgets).
     // Test-scope only: the on-chain BBS gadgets themselves have no zeroj-bbs dependency.
@@ -70,6 +73,10 @@ test {
     def poseidonMpfArtifacts = System.getProperty('zeroj.poseidonMpf.cardanoArtifacts')
     if (poseidonMpfArtifacts != null) {
         systemProperty 'zeroj.poseidonMpf.cardanoArtifacts', poseidonMpfArtifacts
+    }
+    def poseidonJmtArtifacts = System.getProperty('zeroj.poseidonJmt.cardanoArtifacts')
+    if (poseidonJmtArtifacts != null) {
+        systemProperty 'zeroj.poseidonJmt.cardanoArtifacts', poseidonJmtArtifacts
     }
 }
 

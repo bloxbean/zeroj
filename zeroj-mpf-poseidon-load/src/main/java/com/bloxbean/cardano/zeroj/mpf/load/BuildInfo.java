@@ -1,14 +1,11 @@
 package com.bloxbean.cardano.zeroj.mpf.load;
 
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHash;
+import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParameterFingerprint;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfHash;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Properties;
 
 final class BuildInfo {
@@ -28,20 +25,10 @@ final class BuildInfo {
     }
 
     static String poseidonFingerprint() {
-        try {
-            var params = PoseidonParamsBLS12_381T3.INSTANCE;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            digest.update(ByteBuffer.allocate(16)
-                    .putInt(params.t())
-                    .putInt(params.alpha())
-                    .putInt(params.rf())
-                    .putInt(params.rp())
-                    .array());
-            for (var value : params.c()) digest.update(PoseidonMpfHash.toDigestBytes(value));
-            for (var value : params.m()) digest.update(PoseidonMpfHash.toDigestBytes(value));
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
+        return PoseidonParameterFingerprint.sha256(PoseidonParamsBLS12_381T3.INSTANCE);
+    }
+
+    static String legacyPoseidonFingerprint() {
+        return PoseidonParameterFingerprint.legacySha256(PoseidonParamsBLS12_381T3.INSTANCE);
     }
 }

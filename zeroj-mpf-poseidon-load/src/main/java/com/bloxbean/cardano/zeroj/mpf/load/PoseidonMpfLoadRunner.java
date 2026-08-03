@@ -5,8 +5,8 @@ import com.bloxbean.cardano.vds.mpf.MpfTrie;
 import com.bloxbean.cardano.vds.mpf.rocksdb.RocksDbStateTrees;
 import com.bloxbean.cardano.vds.rocksdb.namespace.NamespaceOptions;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfCommitmentScheme;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHashFunction;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.ccl.PoseidonMpfCommitmentScheme;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.ccl.PoseidonMpfHashFunction;
 import org.rocksdb.WriteBatch;
 import org.rocksdb.WriteOptions;
 
@@ -51,12 +51,9 @@ public final class PoseidonMpfLoadRunner {
             long lastVersion = state.rootsIndex().lastVersion();
             resumedFrom = lastVersion < 0 ? 0L : lastVersion;
             byte[] persistedRoot = lastVersion < 0 ? null : state.rootsIndex().latest();
+            validateResume(state, manifest, resumedFrom, persistedRoot);
             durableCompleted = resumedFrom;
             durableRoot = persistedRoot;
-            if (resumedFrom > options.entries()) {
-                throw new IllegalStateException("Persisted checkpoint " + resumedFrom
-                        + " exceeds requested entries " + options.entries());
-            }
             manifest = files.checkpoint(manifest, resumedFrom, persistedRoot,
                     resumedFrom == options.entries() ? "loaded" : "loading");
 
@@ -80,6 +77,7 @@ public final class PoseidonMpfLoadRunner {
                 long batchEnd = Math.min(options.entries(), batchStart + options.batchSize());
                 try (WriteBatch batch = new WriteBatch(); WriteOptions writeOptions = new WriteOptions()) {
                     writeOptions.setDisableWAL(!options.wal());
+                    writeOptions.setSync(options.sync());
                     state.nodeStore().withBatch(batch, () -> {
                         for (long index = batchStart; index < batchEnd; index++) {
                             trie.put(
@@ -102,6 +100,10 @@ public final class PoseidonMpfLoadRunner {
                 durableCompleted = completed;
                 durableRoot = trie.getRootHash();
                 checkpoints++;
+                // Authenticate the exact durable batch before observers or progress hooks can
+                // fail. A process death in the commit/sidecar gap is rejected on the next open.
+                manifest = files.checkpoint(
+                        manifest, completed, durableRoot, "loading");
                 checkpointObserver.afterCommit(completed, durableRoot.clone());
                 if (completed >= nextProgress || completed == options.entries()) {
                     double elapsed = secondsSince(startedNanos);
@@ -137,18 +139,63 @@ public final class PoseidonMpfLoadRunner {
                     elapsedSeconds,
                     (options.entries() - resumedFrom) / Math.max(elapsedSeconds, 0.001),
                     options.wal(),
+                    options.sync(),
+                    options.wal() && options.sync(),
                     options.rocksDbProfile().name().toLowerCase().replace('_', '-'),
                     HexFormat.of().formatHex(finalRoot),
                     diskBefore,
                     diskAfter,
                     heap.peakBytes(),
+                    heap.peakRssBytes(),
+                    heap.peakRssMinusUsedHeapBytes(),
+                    heap.rssSamples(),
+                    heap.rssSource(),
                     commitments.pairCacheStats(),
                     runtimeMetadata());
-            files.writeReportSection("load", result);
+            files.writeReportSection("load", result, options);
             return result;
         } catch (RuntimeException | IOException e) {
             files.checkpoint(manifest, durableCompleted, durableRoot, "interrupted");
             throw e;
+        }
+    }
+
+    private void validateResume(
+            RocksDbStateTrees state,
+            RunFiles.Manifest manifest,
+            long resumedFrom,
+            byte[] persistedRoot) {
+        if (resumedFrom > options.entries()) {
+            throw new IllegalStateException("Persisted MPF version " + resumedFrom
+                    + " exceeds target entry count " + options.entries());
+        }
+        if (resumedFrom != options.entries() && resumedFrom % options.batchSize() != 0) {
+            throw new IllegalStateException("Persisted MPF version is not a dataset batch boundary: "
+                    + resumedFrom);
+        }
+        if (manifest.completedEntries() > resumedFrom) {
+            throw new IllegalStateException("Manifest checkpoint is ahead of durable MPF state");
+        }
+        if (manifest.completedEntries() < resumedFrom) {
+            throw new IllegalStateException("Durable MPF state is ahead of the authenticated "
+                    + "dataset manifest; refusing to adopt unverified commits");
+        }
+        if (manifest.completedEntries() == 0) {
+            if (persistedRoot != null) {
+                throw new IllegalStateException("Empty MPF manifest has a persisted root");
+            }
+            return;
+        }
+        if (manifest.rootHex() == null || persistedRoot == null) {
+            throw new IllegalStateException("MPF manifest/root checkpoint is incomplete");
+        }
+        byte[] recorded = HexFormat.of().parseHex(manifest.rootHex());
+        byte[] historical = state.rootsIndex().get(manifest.completedEntries());
+        if (historical == null || !java.util.Arrays.equals(recorded, historical)) {
+            throw new IllegalStateException("Manifest root does not match durable MPF history");
+        }
+        if (!java.util.Arrays.equals(recorded, persistedRoot)) {
+            throw new IllegalStateException("Latest MPF manifest root does not match RocksDB");
         }
     }
 
@@ -185,11 +232,17 @@ public final class PoseidonMpfLoadRunner {
             double elapsedSeconds,
             double entriesPerSecond,
             boolean walEnabled,
+            boolean syncWrites,
+            boolean productionDurabilityOptions,
             String rocksDbProfile,
             String rootHex,
             long databaseBytesBefore,
             long databaseBytesAfter,
             long peakObservedHeapBytes,
+            long peakObservedRssBytes,
+            long peakRssMinusUsedHeapBytes,
+            long rssSamples,
+            String rssSource,
             PoseidonMpfCommitmentScheme.PairCacheStats pairCache,
             Map<String, String> runtime) {}
 

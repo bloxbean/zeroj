@@ -28,6 +28,13 @@ tasks.named('processResources') {
 
 tasks.named('run') {
     jvmArgs '-Djava.library.path=' + System.getProperty('java.library.path')
+    if (project.hasProperty('benchmarkMaxHeap')) {
+        def requested = project.property('benchmarkMaxHeap').toString()
+        if (!(requested ==~ /[1-9][0-9]*[kKmMgG]/)) {
+            throw new GradleException('benchmarkMaxHeap must look like 4g, 512m, or 1048576k')
+        }
+        jvmArgs "-Xms${requested}", "-Xmx${requested}"
+    }
 }
 
 test {

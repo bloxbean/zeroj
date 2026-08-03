@@ -5,8 +5,8 @@ import com.bloxbean.cardano.vds.mpf.BenchmarkMpfProofDepthScanner;
 import com.bloxbean.cardano.vds.mpf.rocksdb.RocksDbStateTrees;
 import com.bloxbean.cardano.vds.rocksdb.namespace.NamespaceOptions;
 import com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfCommitmentScheme;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHashFunction;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.ccl.PoseidonMpfCommitmentScheme;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.ccl.PoseidonMpfHashFunction;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -75,9 +75,13 @@ public final class PoseidonMpfDepthScanRunner {
                     scan.stepHistogram(),
                     elapsed,
                     scan.visitedNodes() / Math.max(elapsed, 0.001),
-                    heap.peakBytes());
+                    heap.peakBytes(),
+                    heap.peakRssBytes(),
+                    heap.peakRssMinusUsedHeapBytes(),
+                    heap.rssSamples(),
+                    heap.rssSource());
             String reportSection = scanVersion == completed ? "depthScan" : "depthScan" + scanVersion;
-            files.writeReportSection(reportSection, result);
+            files.writeReportSection(reportSection, result, options);
             System.out.printf("depth scan complete: %,d entries, max=%d steps, %,d nodes in %.3f s%n",
                     result.entries(), result.maxProofSteps(), result.visitedNodes(), result.elapsedSeconds());
             return result;
@@ -100,5 +104,9 @@ public final class PoseidonMpfDepthScanRunner {
             Map<Integer, Long> stepHistogram,
             double elapsedSeconds,
             double nodesPerSecond,
-            long peakObservedHeapBytes) {}
+            long peakObservedHeapBytes,
+            long peakObservedRssBytes,
+            long peakRssMinusUsedHeapBytes,
+            long rssSamples,
+            String rssSource) {}
 }

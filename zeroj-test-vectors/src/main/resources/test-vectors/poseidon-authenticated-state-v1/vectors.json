@@ -1,0 +1,329 @@
+{
+  "schema": "zeroj-poseidon-authenticated-state-v1-vectors",
+  "poseidonParameterFingerprint": "4bf489f3a231cbdba3e9b8c2d21966e052bf9132b9ddf6529aa3f569297a8fc2",
+  "canonicalFieldBoundaryHex": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+  "mpf": {
+    "profileId": "zeroj-poseidon-mpf-v1",
+    "rawHashes": [
+      { "name": "empty", "inputHex": "", "digestHex": "1abe9786509b66b9632290811875a753096c640cba9534b584329ac61f476cf2" },
+      { "name": "zero", "inputHex": "00", "digestHex": "162dc789d37ec62f8af43b5d19d5b22fe71648a591152471b6c79ded7b72a637" },
+      { "name": "abc", "inputHex": "616263", "digestHex": "57602cdcfe40b556934983882cf128b98e890cd3af0130aef3bab893b4c1dcf7" },
+      { "name": "non-canonical-32", "inputHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "digestHex": "3b2be194a8cad7c41438d9992e9496be7c0403b61c82b7b16a5b59bc92da12cb" },
+      { "name": "sequence-31", "pattern": "sequence-mod-251", "length": 31, "digestHex": "62aa1ffcc30156ffb39db828d104b02120097fadfa2bb51249f95fce1ee0c8c1" },
+      { "name": "sequence-32", "pattern": "sequence-mod-251", "length": 32, "digestHex": "42b368129c26db1e5073df10d5e2581cf3704fed540161804fbb47700582aab4" },
+      { "name": "sequence-63", "pattern": "sequence-mod-251", "length": 63, "digestHex": "667f5a0199a05678dd2a617c47c5244bda7aac8613e714edb9ad158ef9a82350" },
+      { "name": "sequence-64", "pattern": "sequence-mod-251", "length": 64, "digestHex": "20ed5c4362beba7e5de3645007d968690bc2eb455fd77fc96e78eca2c28172ac" },
+      { "name": "sequence-95", "pattern": "sequence-mod-251", "length": 95, "digestHex": "6e33b57a4beb468ffa1c48f9b03874cd4dfb9e720e0f0fc9e795c7c9e9b647a4" },
+      { "name": "sequence-96", "pattern": "sequence-mod-251", "length": 96, "digestHex": "57a1ef5dc734afecf12f56f24900dd546ba2cf439157782d1ca1da96607af59a" },
+      { "name": "sequence-97", "inputHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60", "digestHex": "4fc17c6ad8e9a792eab04bae7152877332db31b9c3a16bd5e9e0ba6d66fd2fa5" }
+    ],
+    "leafValueUtf8": "value-vector",
+    "leafSuffixPattern": "nibble-at-index-i-is-i-mod-16",
+    "leaves": [
+      { "suffixLength": 0, "digestHex": "6bd91285dd3158e7ae158c2c9aabc53e75bde550fb325530a4d4e8a6d12cf513" },
+      { "suffixLength": 1, "digestHex": "060b5b48dad83ef67d8497fb142e0de923d16f5399335e8c820d1b2c21539663" },
+      { "suffixLength": 31, "digestHex": "0a94cef3173e0a625387ea9e79a5eef146e76cbd6e1db296edc9c053452a56eb" },
+      { "suffixLength": 32, "digestHex": "1aa341473fb8ff1ac503840e488fdebcd005cdf542df893a9ea15ba64f9642a9" },
+      { "suffixLength": 62, "digestHex": "61ce0f98a6b88166cc4c8ae3a690a1143615fac43135622587bb3c062b7eea56" },
+      { "suffixLength": 64, "digestHex": "3e90e907df3218d0008c7c6c475888ecca648dc932876b8c55c5ce806f29d0aa" }
+    ],
+    "branchPrefixNibbles": [1, 2, 3],
+    "branchChildUtf8": "child-vector",
+    "branches": [
+      "074dab47f44049fdf0e752b4dabf696287c4742b7f63a3d7036ab8a573fc734b",
+      "2c652fba283db6ada1c875a671b34e4d896f8af335b75b30784373a2216f6b4a",
+      "553c232b647209cfab16b879631d6c7af7097513f2ab20e068ef9847f3e93b45",
+      "6d760fec8851d325c74d6b90fd5bdfa1d1d22f040cb23c3acbb345e46cfa1a73",
+      "1164e74e7ca9bfe6cfb2297ff57e70dd7b5629f4ba81dab19d603425005bc960",
+      "1abd2d3ee877987d2591c5799cfe948917a9651f7fbabbf73da0975b212d5101",
+      "375884b351bac433859a73673e20d32e2516bd9f097c2e557e4cb0e7f45ba42a",
+      "28f74b138d79a5a9cd6194b0c35a74820048703b46e82446b7dbedb5ae45a5bc",
+      "4c80e24d40745c1266db421c0ac872f802f782bcd9f5061310bf3c1af4b69d0e",
+      "4fc8d2c6f7e3531b66109d818a5c2292f67e88146757b19feaadae267fcc63ed",
+      "239daa89f8f80fad4dc8411512e9ac580a1fec99b7ea834ec4f81b4295bfccf6",
+      "335efad09a9dafa47259829991bb7920c294795c95dec1f023882fa1d9da6b78",
+      "32a5333e5281eed247a9ec1e2c4a0f3def7fa838578f172c85f2a87e49449410",
+      "2a53a33cf15a4778d9e9199890a674a7a8e06d98092d0b232eef9b1da3b3d432",
+      "71f32c0ba89b6feb67844b065d6b697597c9003332e5ec7d41c329c8aa66eadb",
+      "05c7ded878d78a42be21a4c575ffc29382eb7784f1087eb2379c822514def6e3"
+    ],
+    "fixture": {
+      "entries": { "alpha": "one", "beta": "two", "gamma": "three" },
+      "rootHex": "5ac3487f1d8a88691fdb7261b284ac346a3f8b5569451a6a2eec92b9e0b0fd83",
+      "inclusionKey": "beta",
+      "inclusionProofForm": "branch-path",
+      "inclusionWireBase64": "gdh5ggBYgDU2zqPNiE0DOOCLjYkULl5QliEXO46R8Qrpkt1lUANdBVoA+qqVm514ezWWK3OB4fvgPBvvVy+5B8eT5AIYd5EFadPOtRR99jWaGRixHf/mlrY2FolGGKHdarpovw7ICRnC8u08+MvrXQZGf/0IUmWhQx5NKXCvXO7fEN15VuYd",
+      "inclusionDecoded": {
+        "kind": "branch",
+        "skip": 0,
+        "neighborsHex": [
+          "3536cea3cd884d0338e08b8d89142e5e509621173b8e91f10ae992dd6550035d",
+          "055a00faaa959b9d787b35962b7381e1fbe03c1bef572fb907c793e402187791",
+          "0569d3ceb5147df6359a1918b11dffe696b63616894618a1dd6aba68bf0ec809",
+          "19c2f2ed3cf8cbeb5d06467ffd085265a1431e4d2970af5ceedf10dd7956e61d"
+        ]
+      },
+      "exclusionKey": "delta",
+      "exclusionProofForm": "missing-branch",
+      "exclusionWireBase64": "gdh5ggBYgDU2zqPNiE0DOOCLjYkULl5QliEXO46R8Qrpkt1lUANdBVoA+qqVm514ezWWK3OB4fvgPBvvVy+5B8eT5AIYd5Fg/5Vo+kFXDoViAFRC74O64C8aHS86gW20HEYDyX+ucQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "exclusionDecoded": {
+        "kind": "branch",
+        "skip": 0,
+        "neighborsHex": [
+          "3536cea3cd884d0338e08b8d89142e5e509621173b8e91f10ae992dd6550035d",
+          "055a00faaa959b9d787b35962b7381e1fbe03c1bef572fb907c793e402187791",
+          "60ff9568fa41570e8562005442ef83bae02f1a1d2f3a816db41c4603c97fae71",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      }
+    },
+    "differentLeafFixture": {
+      "entryKeyUtf8": "only-key",
+      "entryValueUtf8": "only-value",
+      "queryKeyUtf8": "absent-key",
+      "rootHex": "7205f1e713c7283c49e936ee2ea2b15485d4dde39884e7f9cde5e120bb590bc5",
+      "proofForm": "different-leaf",
+      "wireBase64": "gdh7gwBYIFo9rxtyqWCrgGr6YiMky8WyU0qIoppU9MoltHw2NzLeWCAcdEhhAFBvUPaOMmU1NovF10eWUMSzT253teC8ZVzscA==",
+      "skip": 0,
+      "conflictingKeyHashHex": "5a3daf1b72a960ab806afa622324cbc5b2534a88a29a54f4ca25b47c363732de",
+      "conflictingValueHashHex": "1c74486100506f50f68e326535368bc5d7479650c4b34f6e77b5e0bc655cec70"
+    },
+    "negativeMutations": [
+      "root-bit-flip",
+      "query-key-to-conflicting-leaf",
+      "expected-value-bit-flip",
+      "wire-truncated-one-byte",
+      "wire-appended-zero",
+      "inclusion-flag-confusion",
+      "terminal-fork-rejected"
+    ]
+  },
+  "jmt": {
+    "profileId": "zeroj-poseidon-jmt-v1",
+    "format": {
+      "hashAlgorithmId": "zeroj-poseidon-bls12-381-t3-a5-jmt-v1",
+      "proofCodecId": "ccl-classic-jmt-proof-cbor-v1",
+      "hashLength": 32
+    },
+    "rawHashes": [
+      { "name": "empty", "inputHex": "", "digestHex": "008dcfcdf3980d3b3b87a0fc4f0e02dfca9c32fe5165be8f0871870744dc53ea" },
+      { "name": "zero", "inputHex": "00", "digestHex": "35e1225a0c67b2e010ae0679db6398178181b31a9b9bd8028418be064182a30f" },
+      { "name": "abc", "inputHex": "616263", "digestHex": "6bb01243685b87986a238ea4e633dd30d8b17a967f7cf31e7028a224f3ab1a19" },
+      { "name": "non-canonical-32", "inputHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "digestHex": "28e39b8416904789a1c3c17552322d94790cd8836357d78d95163ddccaec256b" },
+      { "name": "sequence-31", "pattern": "sequence-mod-251", "length": 31, "digestHex": "3849751c1ec37fd1bb9d185de6805c2848168ebbdfa931ff5198e7b2acf8116f" },
+      { "name": "sequence-32", "pattern": "sequence-mod-251", "length": 32, "digestHex": "116656ec60f3a47bd121a343a23264d63b9b59aee9d5d8674a5b8234e7d49e7b" },
+      { "name": "sequence-63", "pattern": "sequence-mod-251", "length": 63, "digestHex": "1aa4f56b31bacdd3752f122834d52544d31d88e039985db8c1d71dc5c4e0f03e" },
+      { "name": "sequence-64", "pattern": "sequence-mod-251", "length": 64, "digestHex": "53e8279b68c449387512720f66305c49324160591edbd4b8dc1f639dd9eb3c48" },
+      { "name": "sequence-95", "pattern": "sequence-mod-251", "length": 95, "digestHex": "564d00a9e7726e425bb468a703f0513d85b619f2b104da57a99d4e6c380fc65e" },
+      { "name": "sequence-96", "pattern": "sequence-mod-251", "length": 96, "digestHex": "04c8351f7586448927791fcb16cb2f1637abd67c1dc17a72383c15e16a666103" },
+      { "name": "sequence-97", "inputHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60", "digestHex": "30f49d2e0a1965090a97daed8ac68d2b2b47576bb916b4b71812732f21950140" }
+    ],
+    "emptyHex": "31e0999dd313c53f70b19357bb449bc162f7222d7402a27d30e54c0094bfcfa5",
+    "leafKeyUtf8": "key-vector",
+    "leafValueUtf8": "value-vector",
+    "keyHashHex": "1b323ba8a33581511d8e50dff0632cf60760da165369aa03febd04c9df76529d",
+    "valueHashHex": "292aebc5792afa3d6d1d6d5344290cbc40d1483a10960dc49533f35a41899c7c",
+    "leafHex": "0a8bc556645ee2ff0f555b9783cd74e6096e92bf44d814535ecf3ff795a878ca",
+    "branches": [
+      "56375f6ea1a103ceeb565a38c6c3465b3223bf7246adb2ab297e0e262834a86c",
+      "3921800fbf0f4d430deab31f2b9c467b50d22b1cb26edce024b3e96be985e4bb",
+      "334335ff60b687b859cad9bd671cef75931e37587fd1f018b04dc9d305a4014d",
+      "66091794ad0752875ce98481832a5e4c367d9b54bf5d5f4dfe333022b7b57c07",
+      "2c9ad9732ac08a4ee4eb8c2ce9bc380c2779039c4360b535b50a422bfbb5bd20",
+      "5c0f36bbc9208e17de1ef96726db2e52a0b320e321154ca2ad95b62e824c3078",
+      "618524445f30746cc00a8fea8d27a1520d53bbd63fc2f30f84f1280edb71da6d",
+      "5c39f71928cfa1690e1f34a17b67922e0b0d72d121a247b92aa6ff3f03a43ea1",
+      "45656e6b067b2b5ef6b0b4c2cb23ddec78d589a41831ac7a3192dc7ca86c5ef3",
+      "5718e040570c30b875e988067c74b0b14113e2aaa0a8c0193f90cec048ffd0f0",
+      "17510948e0a3d8179fd0e24b6fac39ab86b261a74312f9f7c20063ed319d61d0",
+      "71bbe08eaf845dd5a055711b3b1b12727ba26c16248d304e756accd35f1c903b",
+      "6014cc3074b8f550707f765917242cc21225b9abac59748c72c213eca0dd9b6e",
+      "326e8e0cc6a4763547d5cd5f4f17cf2281f175593628eb99c19996f67eb3bfc4",
+      "6edc6401f389ce35404a01a683128f4098ba3906769102643c82bb1858145bb8",
+      "54d862d2a5f68d5f63ae727d798e4dfe8414e862494386c64665185089cacda6"
+    ],
+    "cclFixture": {
+      "cclVersion": "0.8.0-pre5-dev1",
+      "version": 0,
+      "entries": {
+        "count": 24,
+        "keyPattern": "jmt-key-{index}",
+        "valuePattern": "jmt-value-{index}",
+        "indexRange": "0..23"
+      },
+      "rootHex": "51e27248ea8413002c9cdd8f3eded44cb8894d92881de42d5c5ee94e5e040d93",
+      "proofs": [
+        {
+          "name": "inclusion",
+          "type": "INCLUSION",
+          "keyUtf8": "jmt-key-7",
+          "valueUtf8": "jmt-value-7",
+          "leafKeyHashHex": "5fa01a5123f208df9a4dbb3c13beeececfb5c926aaa5ee54d359a42c202b08e4",
+          "leafSuffixHex": "a01a5123f208df9a4dbb3c13beeececfb5c926aaa5ee54d359a42c202b08e4",
+          "valueHashHex": "43f69bdc9ce3d38629be82189a3deb5aa8c240909f2456cd3000199aed1802ec",
+          "wireBase64": "g1kBFYpBABj/WCBEiOGEl3XHTps+gHa4Jul0459q5Ttfd/qFaTP+IhnWZVggD8g3m1nYwqVnwlT2T6/NCgy3puA24NdBJro0QPn4NgFYIALIyAsQJgs0G4zcEz98kTMALdrN3mAEXc3TaLNZybFTWCBKRCaxYMMULR2V4xcszPAXZdzYjgmFbhbe/zHyAUaxhlggHxaeqd4GptynHlh8xb5eDOjUR8ZRYUG833BzokF8PrlYIHLJKnz6KgP/JQu99vGXmhR8QAF45rZwEZ2C1Q+oYYTPWCAiX3X/wyc63hpUxSIwFr3VsgR5WY/lpra4KCXY0K4eVFggRMYtSwP5/DGDZ3dLyF3namhtfjac3lvDKkmEjaGVSGRYsIdBABnCoFggUWHq9Rnm323zHGTZLMhLWT7/UjgHmpYSR1T0P/Blq8dYIA67HX1IdcJUmPthbqzpW0MOAkz7FLOje0u3LWBzDz2aWCAvEhqj66/KDg7djn34h37tKPlQOIShDx7ZyN+OvwKTS1ggWJ2xTwvPbjhj19sG2IPpYvp2F9dK/JVI4bd3pJu2il9YIGxGGQ6AU4qhmhjzuGZN6TZAAbPcBFbUs34mcm7EoWttWEeDQQFYIF+gGlEj8gjfmk27PBO+7s7PtckmqqXuVNNZpCwgKwjkWCBD9pvcnOPThim+ghiaPetaqMJAkJ8kVs0wABma7RgC7A==",
+          "steps": [
+            {
+            "prefixLength": 0,
+            "prefixHex": "",
+            "childIndex": 5,
+            "hasSingleNeighbor": false,
+            "neighborNibble": 1,
+            "hasForkNeighbor": true,
+            "forkNeighborPrefixHex": "1",
+            "forkNeighborRootHex": "0fc8379b59d8c2a567c254f64fafcd0a0cb7a6e036e0d74126ba3440f9f83601",
+            "hasLeafNeighbor": false,
+            "childBitmapHex": "00ff",
+              "childHashesBase64": "RIjhhJd1x06bPoB2uCbpdOOfauU7X3f6hWkz/iIZ1mUPyDebWdjCpWfCVPZPr80KDLem4Dbg10EmujRA+fg2AQLIyAsQJgs0G4zcEz98kTMALdrN3mAEXc3TaLNZybFTSkQmsWDDFC0dleMXLMzwF2Xc2I4JhW4W3v8x8gFGsYYfFp6p3gam3KceWHzFvl4M6NRHxlFhQbzfcHOiQXw+uXLJKnz6KgP/JQu99vGXmhR8QAF45rZwEZ2C1Q+oYYTPIl91/8MnOt4aVMUiMBa91bIEeVmP5aa2uCgl2NCuHlRExi1LA/n8MYNnd0vIXedqaG1+NpzeW8MqSYSNoZVIZA=="
+            },
+            {
+            "prefixLength": 1,
+            "prefixHex": "5",
+            "childIndex": 15,
+            "hasSingleNeighbor": false,
+            "neighborNibble": 7,
+            "hasForkNeighbor": false,
+            "hasLeafNeighbor": true,
+            "leafNeighborKeyHashHex": "579aad8ae6667efe18ebe72ced91c62723f299d7cd6598b1463c9dc367d6913a",
+            "leafNeighborValueHashHex": "519ec053b271a28ed80269ffa5cdd34dc6a1992957c4cf24e0b8749de9ccd31f",
+            "childBitmapHex": "c2a0",
+              "childHashesBase64": "UWHq9Rnm323zHGTZLMhLWT7/UjgHmpYSR1T0P/Blq8cOux19SHXCVJj7YW6s6VtDDgJM+xSzo3tLty1gcw89mi8SGqPrr8oODt2OffiHfu0o+VA4hKEPHtnI346/ApNLWJ2xTwvPbjhj19sG2IPpYvp2F9dK/JVI4bd3pJu2il9sRhkOgFOKoZoY87hmTek2QAGz3ARW1LN+JnJuxKFrbQ=="
+            }
+          ]
+        },
+        {
+          "name": "non-inclusion-empty",
+          "type": "NON_INCLUSION_EMPTY",
+          "keyUtf8": "jmt-missing-0",
+          "wireBase64": "glkBFYpBABj/WCBEiOGEl3XHTps+gHa4Jul0459q5Ttfd/qFaTP+IhnWZVggD8g3m1nYwqVnwlT2T6/NCgy3puA24NdBJro0QPn4NgFYIALIyAsQJgs0G4zcEz98kTMALdrN3mAEXc3TaLNZybFTWCBKRCaxYMMULR2V4xcszPAXZdzYjgmFbhbe/zHyAUaxhlggHxaeqd4GptynHlh8xb5eDOjUR8ZRYUG833BzokF8PrlYIHLJKnz6KgP/JQu99vGXmhR8QAF45rZwEZ2C1Q+oYYTPWCAiX3X/wyc63hpUxSIwFr3VsgR5WY/lpra4KCXY0K4eVFggRMYtSwP5/DGDZ3dLyF3namhtfjac3lvDKkmEjaGVSGRYSoRBABlQAFggCBailKFmh7YYTC4RML+O7oYiqVWiOYwH4V7VbZLTjixYIFaLKwvzC8nPU6wOFPg6AyGG6KlUvBXJl4q302STiaMA",
+          "steps": [
+            {
+            "prefixLength": 0,
+            "prefixHex": "",
+            "childIndex": 1,
+            "hasSingleNeighbor": false,
+            "neighborNibble": 2,
+            "hasForkNeighbor": true,
+            "forkNeighborPrefixHex": "2",
+            "forkNeighborRootHex": "02c8c80b10260b341b8cdc133f7c9133002ddacdde60045dcdd368b359c9b153",
+            "hasLeafNeighbor": false,
+            "childBitmapHex": "00ff",
+              "childHashesBase64": "RIjhhJd1x06bPoB2uCbpdOOfauU7X3f6hWkz/iIZ1mUPyDebWdjCpWfCVPZPr80KDLem4Dbg10EmujRA+fg2AQLIyAsQJgs0G4zcEz98kTMALdrN3mAEXc3TaLNZybFTSkQmsWDDFC0dleMXLMzwF2Xc2I4JhW4W3v8x8gFGsYYfFp6p3gam3KceWHzFvl4M6NRHxlFhQbzfcHOiQXw+uXLJKnz6KgP/JQu99vGXmhR8QAF45rZwEZ2C1Q+oYYTPIl91/8MnOt4aVMUiMBa91bIEeVmP5aa2uCgl2NCuHlRExi1LA/n8MYNnd0vIXedqaG1+NpzeW8MqSYSNoZVIZA=="
+            },
+            {
+            "prefixLength": 1,
+            "prefixHex": "1",
+            "childIndex": 15,
+            "hasSingleNeighbor": false,
+            "neighborNibble": 14,
+            "hasForkNeighbor": false,
+            "hasLeafNeighbor": true,
+            "leafNeighborKeyHashHex": "1e1641619ec19e5524daa7b459bf2c23e4e3c1aa951c471c09fe976922d37c8c",
+            "leafNeighborValueHashHex": "05b1c3baa5b3dc7b248a6ae54edbf8d5ac8c7de19ee98fc658add7cde2659943",
+            "childBitmapHex": "5000",
+              "childHashesBase64": "CBailKFmh7YYTC4RML+O7oYiqVWiOYwH4V7VbZLTjixWiysL8wvJz1OsDhT4OgMhhuipVLwVyZeKt9Nkk4mjAA=="
+            }
+          ]
+        },
+        {
+          "name": "non-inclusion-different-leaf",
+          "type": "NON_INCLUSION_DIFFERENT_LEAF",
+          "keyUtf8": "jmt-missing-2",
+          "conflictingKeyHashHex": "6d26107be1b2cdef59b33e7a4343c15827a6c3a0bac3384b44e128c40b6518b2",
+          "conflictingValueHashHex": "2b9dbafe299c334b154fb2bb4951b84b1fd2cf2d28b56ca8326daa5c19002b2c",
+          "conflictingSuffixHex": "26107be1b2cdef59b33e7a4343c15827a6c3a0bac3384b44e128c40b6518b2",
+          "wireBase64": "g1kBFYpBABj/WCBEiOGEl3XHTps+gHa4Jul0459q5Ttfd/qFaTP+IhnWZVggD8g3m1nYwqVnwlT2T6/NCgy3puA24NdBJro0QPn4NgFYIALIyAsQJgs0G4zcEz98kTMALdrN3mAEXc3TaLNZybFTWCBKRCaxYMMULR2V4xcszPAXZdzYjgmFbhbe/zHyAUaxhlggHxaeqd4GptynHlh8xb5eDOjUR8ZRYUG833BzokF8PrlYIHLJKnz6KgP/JQu99vGXmhR8QAF45rZwEZ2C1Q+oYYTPWCAiX3X/wyc63hpUxSIwFr3VsgR5WY/lpra4KCXY0K4eVFggRMYtSwP5/DGDZ3dLyF3namhtfjac3lvDKkmEjaGVSGRYjoZBABmgIVggFLgrxzJgdBM9G0EVVRscMMQ+xA5R3VqLaK/53SCNKh5YICtAnP4PEyNf2VUyoZG4oYZzX6bPYBp+3VhlgT96oaCRWCBVuXyQamw53LKYeVywNKdmm24wnT2otOaIFJUsQzAOslggajTrme+DAlZFEWoST+VGUeyXCZu7v7D2OX/all/STZBYR4NBAVggbSYQe+Gyze9Zsz56Q0PBWCemw6C6wzhLROEoxAtlGLJYICuduv4pnDNLFU+yu0lRuEsf0s8tKLVsqDJtqlwZACss",
+          "steps": [
+            {
+            "prefixLength": 0,
+            "prefixHex": "",
+            "childIndex": 6,
+            "hasSingleNeighbor": false,
+            "neighborNibble": 1,
+            "hasForkNeighbor": true,
+            "forkNeighborPrefixHex": "1",
+            "forkNeighborRootHex": "0fc8379b59d8c2a567c254f64fafcd0a0cb7a6e036e0d74126ba3440f9f83601",
+            "hasLeafNeighbor": false,
+            "childBitmapHex": "00ff",
+              "childHashesBase64": "RIjhhJd1x06bPoB2uCbpdOOfauU7X3f6hWkz/iIZ1mUPyDebWdjCpWfCVPZPr80KDLem4Dbg10EmujRA+fg2AQLIyAsQJgs0G4zcEz98kTMALdrN3mAEXc3TaLNZybFTSkQmsWDDFC0dleMXLMzwF2Xc2I4JhW4W3v8x8gFGsYYfFp6p3gam3KceWHzFvl4M6NRHxlFhQbzfcHOiQXw+uXLJKnz6KgP/JQu99vGXmhR8QAF45rZwEZ2C1Q+oYYTPIl91/8MnOt4aVMUiMBa91bIEeVmP5aa2uCgl2NCuHlRExi1LA/n8MYNnd0vIXedqaG1+NpzeW8MqSYSNoZVIZA=="
+            },
+            {
+            "prefixLength": 1,
+            "prefixHex": "6",
+            "childIndex": 13,
+            "hasSingleNeighbor": false,
+            "neighborNibble": 5,
+            "hasForkNeighbor": false,
+            "hasLeafNeighbor": true,
+            "leafNeighborKeyHashHex": "6503801fe434c77cd9299bb7baedfb02070fb4c607ce1d04fc36becb59d2ccf7",
+            "leafNeighborValueHashHex": "49555556ae34584c0e3277b520772d5fef0dfa1f72b207ce5a94fb2d782a9809",
+            "childBitmapHex": "a021",
+              "childHashesBase64": "FLgrxzJgdBM9G0EVVRscMMQ+xA5R3VqLaK/53SCNKh4rQJz+DxMjX9lVMqGRuKGGc1+mz2Aaft1YZYE/eqGgkVW5fJBqbDncsph5XLA0p2abbjCdPai05ogUlSxDMA6yajTrme+DAlZFEWoST+VGUeyXCZu7v7D2OX/all/STZA="
+            }
+          ]
+        }
+      ],
+      "singleNeighborFixture": {
+        "version": 9,
+        "entries": {
+          "jmt-single-a": "jmt-single-value-a",
+          "jmt-single-b": "jmt-single-value-b"
+        },
+        "rootHex": "30250dda1a5eeec8b37e5cf1e14538776718ae93dc376fc6c5bcbf02ab37b11d",
+        "proof": {
+          "name": "single-neighbor-inclusion",
+          "type": "INCLUSION",
+          "keyUtf8": "jmt-single-a",
+          "valueUtf8": "jmt-single-value-a",
+          "leafKeyHashHex": "443b4ad3c7071e33b9d026901eb5df48c6ba025b3c89d661fe32e8cf6704f09f",
+          "leafSuffixHex": "43b4ad3c7071e33b9d026901eb5df48c6ba025b3c89d661fe32e8cf6704f09f",
+          "valueHashHex": "7296445c1724cce44e085a6452732ef780218eafc8e9d81df8faf08756522ead",
+          "wireBase64": "glhJhEEAGBhYICAbeZpPa9ULPJWrzynT1bpOC0jSUTVOitTyCsMocUL8WCAxsm31fsBJNO+hRKmtYcyJ1zACtbKRAp6K9DfJ8uvzNlhHg0EBWCBEO0rTxwceM7nQJpAetd9IxroCWzyJ1mH+MujPZwTwn1ggcpZEXBckzOROCFpkUnMu94Ahjq/I6dgd+Prwh1ZSLq0=",
+          "steps": [
+            {
+              "prefixLength": 0,
+              "prefixHex": "",
+              "childIndex": 4,
+              "hasSingleNeighbor": true,
+              "neighborNibble": 3,
+              "hasForkNeighbor": false,
+              "hasLeafNeighbor": true,
+              "leafNeighborKeyHashHex": "3630476d3563ef3325c44d570fcd089d0db6ce8f8e11cfcbb263889c4fcd05b0",
+              "leafNeighborValueHashHex": "299c94d0f09e826dadb5e9675a85a9b21064e9a3dace0097354d78ca8dff45f9",
+              "childBitmapHex": "0018",
+              "childHashesBase64": "IBt5mk9r1Qs8lavPKdPVuk4LSNJRNU6K1PIKwyhxQvwxsm31fsBJNO+hRKmtYcyJ1zACtbKRAp6K9DfJ8uvzNg=="
+            }
+          ]
+        }
+      },
+      "rootLeafFixture": {
+        "version": 1,
+        "entries": {
+          "only-key": "only-value"
+        },
+        "rootHex": "57388d6b12ac7f0e23a06115e3bd3fcf640fb91b9e86951eb2f0830fa1dc9d98",
+        "proof": {
+          "name": "root-leaf-non-inclusion",
+          "type": "NON_INCLUSION_DIFFERENT_LEAF",
+          "keyUtf8": "missing-key",
+          "conflictingKeyUtf8": "only-key",
+          "conflictingKeyHashHex": "09dfc5e606a064a19278db170b7a1aba46a18b00bb3e867d86b225d11ca5fbc8",
+          "conflictingValueHashHex": "21507436b82d7f9dd419bc0e3cd4e8097b10c3f7b5c0a83aadea141770a1d672",
+          "conflictingSuffixHex": "09dfc5e606a064a19278db170b7a1aba46a18b00bb3e867d86b225d11ca5fbc8",
+          "wireBase64": "gVhHg0EBWCAJ38XmBqBkoZJ42xcLehq6RqGLALs+hn2GsiXRHKX7yFggIVB0Nrgtf53UGbwOPNToCXsQw/e1wKg6reoUF3Ch1nI=",
+          "steps": []
+        }
+      },
+      "negativeMutations": [
+        "root-bit-flip",
+        "query-key-bit-flip",
+        "expected-value-bit-flip",
+        "wire-truncated-one-byte",
+        "wire-appended-zero",
+        "inclusion-flag-confusion",
+        "object-depth-gap",
+        "profile-descriptor-mismatch"
+      ]
+    }
+  }
+}

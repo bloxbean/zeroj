@@ -15,12 +15,10 @@ import com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle;
 import com.bloxbean.cardano.zeroj.examples.dsl.common.MiMCHash;
 import com.bloxbean.cardano.zeroj.prover.gnark.GnarkProver;
 import com.bloxbean.cardano.zeroj.prover.spi.ProveResponse;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfCodec;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfHash;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfTrie;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfValueCommitment;
-import com.bloxbean.cardano.zeroj.mpf.poseidon.PoseidonMpfWitness;
-import com.bloxbean.cardano.vds.mpf.MpfTrie;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.ccl.PoseidonMpfTrie;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfHash;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfValueCommitment;
+import com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.witness.PoseidonMpfBranchWitness;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -394,21 +392,23 @@ class AnnotatedCircuitExamplesTest {
 
     @Test
     void annotatedMpfPrivateRegistryInclusionUsesGeneratedCircuit() {
-        MpfTrie trie = PoseidonMpfTrie.inMemory();
+        PoseidonMpfTrie trie = PoseidonMpfTrie.inMemory();
         byte[] key = bytes("registry:member:1");
         byte[] value = bytes("active");
         trie.put(key, value);
+        trie.put(bytes("registry:member:2"), bytes("active"));
 
         byte[] proof = trie.getProofWire(key).orElseThrow();
-        PoseidonMpfWitness witness = PoseidonMpfCodec.toWitness(key, proof, 1, 2);
+        PoseidonMpfBranchWitness witness = PoseidonMpfBranchWitness.inclusion(
+                trie.getRootHash(), key, value, proof, 1);
         int[] keyPath = witness.keyPath().stream().mapToInt(BigInteger::intValueExact).toArray();
         BigInteger root = PoseidonMpfHash.fieldFromDigestBytes(trie.getRootHash());
         BigInteger keyPathNullifier = PoseidonMpfHash.keyPathNullifier(
                 PoseidonParamsBLS12_381T3.INSTANCE,
                 keyPath);
 
-        var circuit = AnnotatedMpfPrivateRegistryInclusionCircuit.build(1, 2);
-        var schema = AnnotatedMpfPrivateRegistryInclusionCircuit.schema(1, 2);
+        var circuit = AnnotatedMpfPrivateRegistryInclusionCircuit.build(1);
+        var schema = AnnotatedMpfPrivateRegistryInclusionCircuit.schema(1);
         assertEquals(List.of("registryRoot", "keyPathNullifier"), schema.publicInputs().names());
 
         var inputs = new ZkInputMap()

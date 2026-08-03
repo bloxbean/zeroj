@@ -14,6 +14,8 @@ V3.
 |---------|----------|--------|-------|
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381Verifier` | Working crypto-only validator | Default BLS12-381 Groth16 spending validator using Plutus V3 BLS builtins; supports arbitrary public-input counts, but does not bind `ScriptContext` |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381TxOutRefBindingVerifier` | Working bound validator example | Binds the first public input to `blake2b_256(spentTxId || spentOutputIndex32) mod Fr` to reject proof replay across UTxOs |
+| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16AuthenticatedStateTransitionValidator` | Experimental representative state-transition validator | Derives old/new roots from the spent and single continuing state-token UTxO, enforces version increment, signer, value/token conservation and no mint, and verifies one operation-specific Groth16 proof |
+| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `Groth16AuthenticatedStateTransitionScriptFactory`, `Groth16VerificationKeyCodec` | Experimental fail-closed release tooling | Binds exact circuit/manifest/R1CS/VK, audited validator-template digest, compiler profile, applied Plutus V3 script hash, typed network, state token/signer, and external one-shot genesis attestation |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib` | `Groth16BLS12381Lib` | Working on-chain library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
 | `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `SnarkjsToCardano`, `ProverToCardano` | Working off-chain helpers | Convert snarkjs and ZeroJ Groth16 artifacts to Cardano-compatible compressed bytes and Plutus data shapes |
 | `com.bloxbean.cardano.zeroj.onchain.julc.plonk.lib` | `PlonkBLS12381Lib` | Experimental opt-in on-chain library | Reusable `@OnchainLibrary` PlonK verification helper for custom validators; supports one-input and bounded MPI Cardano profiles |
@@ -57,6 +59,13 @@ message shapes (`BbsHashToScalarVmTest`) and the full `ProofVerify`
 accept/tampered-header paths against a real presentation
 (`BbsProofVerifyVmTest`).
 
+Authenticated-state coverage also builds real CCL MPF and JMT value transitions, proves them
+with their separate operation-specific circuits, verifies them in the representative validator,
+rejects cross-structure/operation/key replay, checks state-token transaction mutations, and
+strictly parses the nested artifact-bundle-v2 output from the retained five-million-entry runs.
+These are local VM/release checks; the profile remains gated on external review, production
+ceremonies, Yaci, and public-network transactions.
+
 ## Imports
 
 Use package names by role:
@@ -64,7 +73,10 @@ Use package names by role:
 ```java
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381TxOutRefBindingVerifier;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16AuthenticatedStateTransitionValidator;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.Groth16AuthenticatedStateTransitionScriptFactory;
+import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.Groth16VerificationKeyCodec;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 import com.bloxbean.cardano.zeroj.onchain.julc.plonk.lib.PlonkBLS12381Lib;

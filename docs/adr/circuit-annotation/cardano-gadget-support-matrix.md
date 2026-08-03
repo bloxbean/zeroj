@@ -115,7 +115,8 @@ Relevant source:
 | `ZkMerkle.HashType.MIMC` | Merkle with MiMC | BN254 only | Direct | No for Cardano on-chain | Mark as BN254/off-chain in docs. |
 | `ZkMerkle.HashType.POSEIDON` | Merkle with default Poseidon | BN254 by default today | Direct | No if using default enum path | Use params-aware `ZkMerkle.*Poseidon(...)` for Cardano. |
 | `ZkMerkle` with custom hash lambda | Merkle with caller-provided hash | Depends on lambda | Direct | Yes with a BLS12-381-compatible lambda | Keep as advanced escape hatch. |
-| `ZkMpf` / `zeroj-mpf-poseidon` | Private CCL MPF inclusion and conservative exclusion over a Poseidon-rooted commitment | BLS12-381 Poseidon only | Direct through `ZkMpfProof` flattened arrays and `PoseidonMpfCodec` witness generation | Path exists through Groth16 BLS12-381; MPF-specific proof/Yaci demo is deferred until constraint optimization. Not compatible with native Aiken/Blake2b MPF roots. | Completed at witness level. Terminal fork exclusions are rejected in v1. Use `Groth16BLS12381Lib` in custom validators for root/nullifier/domain checks. |
+| `ZkMpf*` / `zeroj-mpf-poseidon` | CCL Poseidon MPF inclusion, two non-inclusion forms, value update, and split insertion | BLS12-381 Poseidon authenticated-state v1 only | Strict CCL verification plus canonical operation-specific witnesses/templates | Pure-Java Groth16 and Julc VM paths passed on a retained 5M root; external review, production setup, Yaci, and public-network gates remain. Not compatible with native Aiken/Blake2b MPF roots. | S9 covered the measured 5M root at 56,635 constraints and ~4.17 s prove. Physical delete/canonical collapse is deferred. See ADR-0042. |
+| `ZkJmt*` / `zeroj-jmt-poseidon` | CCL Poseidon JMT inclusion, two non-inclusion forms, value/tombstone update, and split insertion | BLS12-381 Poseidon authenticated-state v1 only | Strict CCL host profile plus canonical operation-specific witnesses/templates | Pure-Java Groth16 and Julc VM paths passed on a retained 5M versioned root; the same external release gates remain. | S12 covered the measured 5M root at 14,057 constraints and ~2.90 s prove. Native JMT proof size is private and does not affect the 192-byte Groth16 proof. See ADR-0042. |
 | `JubjubPoint` | Off-circuit Jubjub point arithmetic | Jubjub over BLS12-381 scalar field | Used by symbolic wrappers | Yes for algebraic/public-data use in BLS12-381 circuits, pending external review | Generic secret-scalar use inherits ADR-0038's offline/reviewed-isolated-boundary restriction because Java `BigInteger` arithmetic is variable-time. |
 | `InCircuitJubjub` | In-circuit Jubjub arithmetic | Requires BLS12-381 scalar field | Direct through `ZkJubjubPoint` | Yes, pending external review (ADR-0037) | Prover-supplied points must be bound with `witnessAffine(...)`; the raw `Point` constructor is unchecked and gadget-internal. Subgroup membership is separate and not implied. |
 | `ZkJubjubPoint` | Symbolic Jubjub point | Requires BLS12-381 scalar field | Direct | Yes, pending external review | Safe by construction since ADR-0038 P2. `witnessAffine(...)` asserts the curve equation and pins `Z = 1`, `T = u·v` (5 constraints); `assertWellFormed()` emits the projective invariants including `Z != 0` (13 constraints, idempotent). `fromTrustedAffine` is deprecated and delegates. Subgroup membership is still separate. |
@@ -389,8 +390,9 @@ Exit criteria:
 
 ### Phase H: Poseidon MPF Gadget
 
-Status: completed. The design and implementation are tracked in
-[`zk-mpf-gadget.md`](zk-mpf-gadget.md).
+Status: historical phase completed, then superseded by the operation-specific MPF/JMT profile
+in [ADR-0042](../0042-operation-specific-poseidon-mpf-and-jmt-circuits.md). The original design
+is retained in [`zk-mpf-gadget.md`](zk-mpf-gadget.md).
 
 Goal: support private CCL MPF inclusion and conservative exclusion witnesses
 inside annotated BLS12-381 circuits.
@@ -400,7 +402,9 @@ Tasks:
 - Added `zeroj-mpf-poseidon` with a CCL `HashFunction`, custom
   `CommitmentScheme`, in-memory trie helpers, reference verifier, value
   commitments, and a proof-to-witness codec.
-- Added `ZkMpfProof` and `ZkMpf` symbolic helpers.
+- Added the original `ZkMpfProof` and `ZkMpf` helpers; ADR-0042 subsequently moved authenticated
+  state out of `zeroj-circuit-lib` and split it into named operations under
+  `zeroj-mpf-poseidon` and `zeroj-jmt-poseidon`.
 - Added BLS12-381 inclusion/exclusion differential tests against supported
   CCL-generated proofs, plus rejection for forged terminal-fork exclusion.
 - Added an annotated private-registry inclusion example using the generated

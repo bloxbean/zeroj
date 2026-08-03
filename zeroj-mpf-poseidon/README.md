@@ -1,24 +1,8 @@
 # ZeroJ Poseidon MPF
 
-`zeroj-mpf-poseidon` connects Cardano Client Lib MPF proofs to ZeroJ symbolic
-circuits.
-
-It is a separate commitment profile from native Cardano/Aiken MPF:
-
-| Profile | Hash | Verifier path |
-| --- | --- | --- |
-| Native MPF | Blake2b-256 | Aiken MPF verifier |
-| ZeroJ Poseidon MPF v2 | BLS12-381 Poseidon | ZeroJ Groth16 BLS12-381 verifier path |
-
-Use this module when an application needs to keep the MPF key, value, and proof
-private inside a symbolic circuit, with the Cardano path going through a
-Groth16 BLS12-381 proof. It uses the custom hash and commitment constructors in
-CCL `0.8.0-pre4`.
-
-The profile identifier persisted by load tooling is `zeroj-poseidon-mpf-v2`.
-Poseidon roots are not interchangeable with native Blake2b/Aiken MPF roots.
-
-## Gradle
+`zeroj-mpf-poseidon` connects CCL Merkle Patricia Forestry storage/proofs to
+operation-specific ZeroJ circuits. Its `zeroj-poseidon-mpf-v1` root profile uses
+BLS12-381 Poseidon and is incompatible with native Blake2b/Aiken MPF roots and with Poseidon JMT.
 
 ```gradle
 dependencies {
@@ -26,104 +10,103 @@ dependencies {
 }
 ```
 
-## Off-chain Flow
+## Recommended operation-specific flow
+
+Create or reopen the off-chain trie, request a strict CCL proof, normalize it with the factory for
+the exact statement, and compile the matching bounded template:
 
 ```java
-MpfTrie trie = PoseidonMpfTrie.inMemory();
+PoseidonMpfTrie trie = PoseidonMpfTrie.inMemory();
 trie.put(keyBytes, valueBytes);
 
 byte[] root = trie.getRootHash();
-byte[] proof = trie.getProofWire(keyBytes).orElseThrow();
+byte[] proofWire = trie.getProofWire(keyBytes).orElseThrow();
+int maxBranches = 8;
 
-PoseidonMpfWitness witness = PoseidonMpfCodec.toWitness(
-        keyBytes,
-        proof,
-        maxSteps,
-        2);
-BigInteger valueCommitment = PoseidonMpfValueCommitment.field(valueBytes);
+PoseidonMpfBranchWitness witness = PoseidonMpfBranchWitness.inclusion(
+        root, keyBytes, valueBytes, proofWire, maxBranches);
+
+ZkInputMap inputs = new ZkInputMap()
+        .put(PoseidonMpfCircuitTemplates.ROOT,
+                PoseidonMpfHash.fieldFromDigestBytes(root))
+        .put(PoseidonMpfCircuitTemplates.VALUE,
+                PoseidonMpfValueCommitment.field(valueBytes));
+witness.putInto(inputs);
+
+CircuitBuilder circuit = PoseidonMpfCircuitTemplates.inclusion(maxBranches);
+BigInteger[] circuitWitness = circuit.calculateWitness(
+        inputs.toWitnessMap(), CurveId.BLS12_381);
 ```
 
-The v2 hash accepts arbitrary key and value byte arrays. MPF-internal strings
-retain the fixed three-field-chunk encoding mirrored by `ZkMpf`; raw inputs that
-cannot use that encoding fall back to domain-separated 31-byte chunks. The
-default commitment scheme also has a bounded memoization cache for unchanged
-binary Merkle pairs. This changes only off-chain performance, never roots.
+Witness factories first perform strict MPF v1 verification through CCL's proof verifier and then
+fail-closed normalization. They reject the wrong proof form, malformed wire data, non-canonical
+fields, terminal forks, and paths deeper than the selected bound.
 
-For persistent high-volume state, use the non-published
-[`zeroj-mpf-poseidon-load`](../zeroj-mpf-poseidon-load/README.md) tool. It uses
-CCL RocksDB without adding RocksDB to this library's dependency surface and can
-resume from atomic `(completed entries, root)` checkpoints.
+## Implemented circuits
 
-The [2026-08-02 five-million-entry benchmark](../docs/benchmarks/poseidon-mpf-5m-2026-08-02.md)
-completed the RocksDB load, generated a 192-byte Groth16 proof, and verified the exact artifacts
-in the Julc Plutus V3 VM path. A later complete current-root scan measured 5-9 proof steps: the
-benchmarked 8-step circuit covers 4,999,782 entries but not the 218 nine-step paths. High-volume
-storage feasibility is established; a production bound/fallback policy, trusted setup, security
-review, and target-network deployment remain open.
+| Template/gadget | Public inputs | Host witness |
+|---|---|---|
+| `inclusion` / `ZkMpfInclusion` | `root` | `PoseidonMpfBranchWitness.inclusion` |
+| `non-inclusion-empty` / `ZkMpfNonInclusionEmpty` | `root` | `PoseidonMpfBranchWitness.emptyNonInclusion` |
+| `non-inclusion-different-leaf` / `ZkMpfNonInclusionDifferentLeaf` | `root` | `PoseidonMpfDifferentLeafWitness.nonInclusion` |
+| `value-update` / `ZkMpfValueUpdate` | `oldRoot,newRoot` | verified inclusion path plus old/new values |
+| `insert-empty` / `ZkMpfInsertEmpty` | `oldRoot,newRoot` | verified empty-child path plus inserted value |
+| `insert-different-leaf` / `ZkMpfInsertDifferentLeaf` | `oldRoot,newRoot` | verified conflicting leaf/path plus inserted value |
 
-See the [practical large-state MPF/MPT report](../docs/poseidon-mpf-large-state-production-report.md)
-for circuit-profile guidance, an application flow, update/root policies, alternative data
-structures, ecosystem comparisons, and the production work plan.
+`ZkMpfInsert` is a source-level facade over the two insertion shapes. Proof-form selection is not
+an attacker-controlled circuit flag, and no generic `...-insert-sN-p2` R1CS exists. Physical
+delete remains deferred because canonical Patricia branch collapse requires more authenticated
+rewrite data than an ordinary inclusion proof carries.
 
-`PoseidonMpfCodec` emits the flattened arrays expected by `ZkMpfProof` and can
-write them directly into a `ZkInputMap`.
+## Full-semantics compatibility circuit
 
-The default witness names emitted by `PoseidonMpfWitness.putInto(inputs)` are:
+`ZkMpf`, `ZkMpfProof`, `PoseidonMpfCodec`, and `PoseidonMpfWitness` remain in this module for
+reference/migration use when an application genuinely needs the historical union of MPF proof
+forms. New applications should use the smallest operation-specific template.
 
-```text
-key_path
-mpf_kind
-mpf_skip
-mpf_neighbor
-mpf_neighbor_nibble
-mpf_fork_prefix_length
-mpf_fork_prefix
-mpf_fork_root
-mpf_leaf_key_path
-mpf_leaf_value_digest
-mpf_valid
-```
+For the full-semantics layout, MPF's 64-nibble path has exactly two 32-nibble fork-prefix chunks:
+the chunk count is exactly `2` for a nonzero proof bound and exactly `0` for S0. The operation-
+specific branch witnesses do not expose this allocation parameter.
 
-Annotated circuits should use matching `@Secret(name = "...")` values. For
-non-empty proof bounds, use `maxForkPrefixChunks >= 2`.
+## Scale and profile selection
 
-## Circuit Flow
+The preserved five-million-entry RocksDB trie has root
+`5988af1bdc5883f6cf67b748c85b7fa32de9e4cbf309d971288d86d6d1129ad8`.
+An exact full-root census found proof depths 5-9: S8 covered 4,999,782 entries and missed 218;
+S9 covered that measured root. This is evidence for that deterministic dataset, not a universal
+capacity formula.
 
-```java
-ZkMpfProof proof = ZkMpfProof.fromArrays(
-        stepKind, stepSkip, neighbors, neighborNibble,
-        forkPrefixLength, forkPrefixChunks, forkRoot,
-        leafKeyPath, leafValueDigest, valid);
+Fresh benchmark-only setup material and three trials measured:
 
-ZkMpf.verifyInclusionPoseidon(
-        zk,
-        PoseidonParamsBLS12_381T3.INSTANCE,
-        keyPath,
-        valueCommitment,
-        registryRoot,
-        proof);
+| Profile | Constraints | Setup | Median prove | JVM Groth16 verify |
+|---|---:|---:|---:|---:|
+| S8 | 50,768 | 2.349 s | 3.999 s | 115.6 ms |
+| S9 | 56,635 | 2.421 s | 4.173 s | 119.2 ms |
+| S12 | 74,236 | 2.961 s | 4.489 s | 117.8 ms |
 
-ZkMpf.keyPathNullifier(zk, PoseidonParamsBLS12_381T3.INSTANCE, keyPath)
-        .assertEqual(publicNullifier);
-```
+Every compressed proof is 192 bytes and every one-public-input compressed VK is 432 bytes. Route
+common paths to a smaller profile only when the application has an explicit overflow/fallback
+policy. Proving cost is determined by the fixed circuit bound, not directly by the number of
+entries in RocksDB.
 
-## Limits
+For persistent state and reproducible benchmarks, use
+[`zeroj-mpf-poseidon-load`](../zeroj-mpf-poseidon-load/README.md). RocksDB remains outside this
+published library's dependency surface.
 
-- BLS12-381 Poseidon only.
-- Branch values are rejected by the current profile.
-- The circuit-compatible internal digest is fixed to three padded 32-byte
-  chunks; arbitrary raw keys and values use the v2 total-byte fallback.
-- Terminal fork exclusions from CCL are not accepted by the in-circuit verifier
-  because that proof shape carries an unauthenticated root. Empty-trie,
-  missing-branch, and different-leaf exclusions remain the supported exclusion
-  paths.
-- Raw key-to-path binding is application-specific; the gadget verifies the
-  CCL key path nibbles emitted by `PoseidonMpfCodec`.
-- For on-chain MPF applications, use `Groth16BLS12381Lib.verify(...)`
-  inside a custom validator when additional root, nullifier, or domain checks
-  are needed. Circuit cost grows with the configured proof-step bound, not with
-  the total number of entries in the off-chain trie; benchmark and pin that
-  bound before setup.
+## Security boundary
 
-See [ADR-0041](../docs/adr/0041-poseidon-mpf-production-readiness-and-load-benchmark.md)
-for the commitment contract and production gates.
+- Raw key-to-path/application identity binding remains an application-circuit responsibility.
+- A root-only inclusion template proves existential private membership; add the key/value
+  commitment, nullifier, owner, transaction, version, or policy fields your application needs.
+- Terminal-fork exclusions are rejected because the CCL shape does not authenticate the required
+  terminal root for this circuit statement.
+- Bounded padding is a constrained suffix and too-deep proofs fail before proving.
+- Generated local setup bundles are benchmark-only and `productionApproved=false`.
+- Production use still requires an exact-fingerprint ceremony, external review, representative
+  validator binding, current protocol-budget evaluation, and target-network testing.
+
+The compatibility contract is frozen in
+[the authenticated-state v1 specification](../docs/merkle/poseidon-authenticated-state-v1.md) and
+[ADR-0042](../docs/adr/0042-operation-specific-poseidon-mpf-and-jmt-circuits.md). ADR-0041 and the
+[five-million MPF report](../docs/benchmarks/poseidon-mpf-5m-2026-08-02.md) retain the historical
+pre-ADR-0042 benchmark provenance.
