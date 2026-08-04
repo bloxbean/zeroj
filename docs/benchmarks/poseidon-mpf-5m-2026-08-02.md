@@ -311,6 +311,13 @@ provenance. The old `v2` string was an unreleased metadata alias, not a differen
 algorithm. Normal opens now reject it, so migration is explicit and auditable rather than a
 silent runtime alias.
 
+Published CCL `0.8.0-pre5` was qualified on 2026-08-04. Its tag contains no changes below the
+CCL `verified-structures/` subtree relative to `0.8.0-pre5-dev1`. The published pre5 build
+reopened the preserved five-million-entry store, matched the recorded root, and verified the same 32
+deterministic values and proofs without rewriting the RocksDB store or its dev1 provenance
+manifest. The load tool's compatibility exception is exact and one-way; any other CCL version
+still fails closed pending another qualification or explicit migration.
+
 ## ADR-0042 operation-specific rerun
 
 After migration, the preserved root was reopened with CCL `0.8.0-pre5-dev1` and the new

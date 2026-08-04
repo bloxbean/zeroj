@@ -10,7 +10,7 @@ dependencies {
 }
 ```
 
-The profile uses CCL `0.8.0-pre5-dev1`'s custom `JmtProfile`: a complete-key Poseidon leaf and a
+The profile uses CCL `0.8.0-pre5`'s custom `JmtProfile`: a complete-key Poseidon leaf and a
 four-level binary Poseidon commitment over each radix-16 branch. A circuit witness carries four
 sibling fields per valid JMT level.
 
@@ -52,7 +52,7 @@ circuit inputs.
 | `tombstone-update` / `ZkJmtTombstoneUpdate` | `oldRoot,newRoot,jmt_tombstone_value_hash` | exact public tombstone replaces an included value |
 
 `ZkJmtInsert` is a source facade over the two insertion shapes; no generic attacker-selectable
-insert R1CS exists. CCL dev1 has no physical key deletion. A tombstone remains an included value
+insert R1CS exists. CCL `0.8.0-pre5` has no physical key deletion. A tombstone remains an included value
 and must never be presented as proof of absence.
 
 ## Version and persistence model

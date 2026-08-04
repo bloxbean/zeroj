@@ -154,7 +154,7 @@ level 3 is the branch commitment. A normalized proof carries
 four siblings per branch in bottom-up order. Bit `level` of the child nibble
 selects whether the running digest is left or right.
 
-CCL dev1 deliberately passes an empty prefix while creating stored branch
+CCL pre5 deliberately passes an empty prefix while creating stored branch
 hashes and a proof prefix while object-verifying them; its wire verifier also
 uses an empty prefix. Therefore `zeroj-poseidon-jmt-v1` branch commitments are
 prefix-independent. Circuit witnesses still constrain the ordered branch
@@ -164,7 +164,7 @@ the CCL lookup statement, not merely an arbitrary Merkle path.
 MPF and JMT domains, leaf formats, empty values, and branch formats are
 different. No root conversion or profile alias is defined.
 
-The proof codec identifier freezes CCL dev1's `ClassicJmtProofCodec` bounded
+The proof codec identifier freezes CCL pre5's `ClassicJmtProofCodec` bounded
 CBOR wire grammar for v1 vectors. It is profile metadata alongside (not inside)
 `JmtFormatDescriptor`, whose API stores only profile/hash/length identity.
 
@@ -317,7 +317,7 @@ deployment manifest.
 - JMT empty, complete-key leaves, all sixteen branch positions, and roots;
 - the MPF CCL root plus independently decoded/re-encoded branch-path
   inclusion, missing-branch, and different-leaf wire fixtures;
-- CCL dev1 JMT multi-level object and wire proofs for inclusion and both
+- CCL pre5 JMT multi-level object and wire proofs for inclusion and both
   non-inclusion forms, including all branch-neighbor metadata;
 - a JMT single-neighbor object/wire case and a literal valid root-leaf
   different-leaf proof with zero branch steps;
@@ -326,10 +326,11 @@ deployment manifest.
 - canonical field-boundary and malformed child-count checks.
 
 The MPF leaf suffix pattern is explicitly recorded alongside its vectors.
-The Phase 0A commitment/MPF corpus and Phase 0B CCL dev1 JMT object, wire,
+The Phase 0A commitment/MPF corpus and Phase 0B CCL pre5 JMT object, wire,
 persistence, profile-mismatch, and negative corpus are present. Phase 2 adds
 operation-specific circuit witness and R1CS vectors without changing these
-profile vectors.
+profile vectors. The JMT fixture was first frozen on `0.8.0-pre5-dev1` and was
+reverified byte-for-byte after promotion to published `0.8.0-pre5`.
 
 The literal vectors are checked both by the optimized profile implementation
 and a small reference checker that uses generic `PoseidonHash` and reconstructs

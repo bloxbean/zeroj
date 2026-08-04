@@ -25,6 +25,28 @@ import static org.junit.jupiter.api.Assertions.*;
 class PoseidonJmtLoadIntegrationTest {
 
     @Test
+    void pre5ReleaseReopensTheSourceIdenticalDev1StoreButNoOtherCclVersion(
+            @TempDir Path directory) throws Exception {
+        JmtLoadOptions options = options(directory, 20, 10, 4, 8, "none", false);
+        var loaded = new PoseidonJmtLoadRunner(options).run();
+        Path manifestPath = directory.resolve("manifest.json");
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var manifest = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(
+                manifestPath.toFile());
+        manifest.put("cclVersion", "0.8.0-pre5-dev1");
+        json.writeValue(manifestPath.toFile(), manifest);
+
+        assertEquals(loaded.rootHex(), new PoseidonJmtLoadRunner(options).run().rootHex());
+        assertEquals(4, new PoseidonJmtProofRunner(options).run().artifacts().size());
+
+        manifest.put("cclVersion", "0.8.0-pre5-dev2");
+        json.writeValue(manifestPath.toFile(), manifest);
+        IllegalStateException rejected = assertThrows(
+                IllegalStateException.class, () -> new PoseidonJmtLoadRunner(options).run());
+        assertTrue(rejected.getMessage().contains("verified-structures-compatible baseline"));
+    }
+
+    @Test
     void durableLoadResumesAtCommittedVersionsAndProofsVerify(@TempDir Path directory)
             throws Exception {
         JmtLoadOptions options = options(directory, 100, 20, 16, 8, "none", false);

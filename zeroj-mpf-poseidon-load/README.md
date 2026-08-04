@@ -39,6 +39,11 @@ RocksDB nodes: it verifies the root and deterministic proofs before and after, c
   --rocksdb-profile=high-throughput"
 ```
 
+The current build uses published CCL `0.8.0-pre5`. A v1 store whose manifest records the
+source-identical `0.8.0-pre5-dev1` predecessor may be reopened without relabelling its provenance.
+This is an exact, one-way exception; every other CCL mismatch still fails closed until separately
+qualified or explicitly migrated.
+
 The locally generated Groth16 setup is deliberately insecure and benchmark-only. Use
 `--setup=none` to measure load, CCL proof generation, strict CCL MPF v1 verification, circuit
 construction, witness generation, and R1CS compilation without generating parameters. Use
@@ -81,7 +86,7 @@ after the database commit but before the manifest replacement leaves the databas
 manifest and deliberately fails closed. The tool never guesses or automatically adopts that head;
 an operator must restore a matching backup or perform an explicit authenticated reconciliation.
 
-The harness uses CCL `0.8.0-pre5-dev1`'s `highThroughput()` RocksDB profile by default. The
+The harness uses CCL `0.8.0-pre5`'s `highThroughput()` RocksDB profile by default. The
 `balanced`, `low-memory`, and raw RocksDB `default` profiles remain selectable so benchmark
 reports identify the physical-store policy instead of conflating it with Poseidon cost.
 

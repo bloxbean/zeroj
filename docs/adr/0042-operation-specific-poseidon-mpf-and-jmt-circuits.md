@@ -49,21 +49,31 @@ These are local feasibility measurements, not release SLAs. The exact R1CS diges
 all trials, key size, heap/RSS, and artifact directory are retained in the preserved reports.
 The earlier 25,730/186,394-constraint JMT prototype measurements are superseded by this matrix.
 
+On 2026-08-04 the repository also moved from Julc `0.1.0-pre14` to published
+`0.1.0-pre16`. Fresh on-chain tests passed positive proofs, malformed/field/arity/replay
+rejections, authenticated MPF/JMT transitions, cross-structure substitution rejection, script
+size gates, and the examples suite. The authenticated-state release identity now binds
+`julc-0.1.0-pre16/plutus-v3`. Existing recorded Julc budgets and applied script bytes remain
+historical pre14 measurements; deployment must regenerate and remeasure pre16 artifacts rather
+than relabel them.
+
 The durable JMT qualification loaded five million entries, generated real CCL object/wire proofs,
 converted them into ZeroJ witnesses, and verified every selected circuit artifact in the Julc
 Plutus V3 VM. The 32 native JMT proof samples were 2,744-3,161 bytes (2,881-byte median); these
 bytes are private prover input. The Cardano-facing Groth16 proof remained 192 bytes, so native
 JMT proof size does not expand the on-chain proof.
 
-CCL `0.8.0-pre5-dev1` also changes the JMT decision materially. It provides a named custom
+CCL `0.8.0-pre5` also changes the JMT decision materially. It provides a named custom
 `JmtProfile` containing a format descriptor, hash function, commitment scheme, and proof codec.
 It fixes proof-key binding and persistence/replay/rollback/pruning defects present before the
-dev1 hardening work. Its production qualification remains intentionally bounded to serialized
+pre5 hardening work. The profile was first qualified on `0.8.0-pre5-dev1`; comparison with the
+published pre5 tag found no changes in CCL's `verified-structures` subtree. Its production
+qualification remains intentionally bounded to serialized
 off-chain state with one logical writer, durable storage, and an application-authenticated
 mapping between chain point, version, and root. See the
-[CCL JMT audit](https://github.com/bloxbean/cardano-client-lib/blob/v0.8.0-pre5-dev1/verified-structures/jellyfish-merkle/docs/security-performance-audit.md)
+[CCL JMT audit](https://github.com/bloxbean/cardano-client-lib/blob/v0.8.0-pre5/verified-structures/jellyfish-merkle/docs/security-performance-audit.md)
 and
-[production-readiness gates](https://github.com/bloxbean/cardano-client-lib/blob/v0.8.0-pre5-dev1/verified-structures/jellyfish-merkle/adr/002-production-readiness-gates.md).
+[production-readiness gates](https://github.com/bloxbean/cardano-client-lib/blob/v0.8.0-pre5/verified-structures/jellyfish-merkle/adr/002-production-readiness-gates.md).
 
 ## Terminology
 
@@ -91,32 +101,38 @@ can reuse one verification key.
 
 ## Decision
 
-### 1. Use CCL `0.8.0-pre5-dev1` throughout this branch
+### 1. Use CCL `0.8.0-pre5` throughout this branch
 
-The root `cclVersion` property is pinned to `0.8.0-pre5-dev1`. Every direct
+The root `cclVersion` property is pinned to `0.8.0-pre5`. Every direct
 `com.bloxbean.cardano:cardano-client-*` dependency resolves through that one root
-property and the existing resolution rule. ZeroJ will not place pre4 MPF and dev1 JMT artifacts
+property and the existing resolution rule. ZeroJ will not place pre4 MPF and pre5 JMT artifacts
 on the same runtime classpath because they publish the same Maven coordinates and Java packages.
 
 This supersedes ADR-0041's dependency-version decision. It does not change the existing Poseidon
 MPF commitment algorithm/root, preserved five-million-entry database, benchmark methodology, or
 production gates. Section 3 separately replaces the pre-release `v2` profile label with `v1`.
 
-The completed compatibility gate:
+The original dev1 compatibility gate and the subsequent published-pre5 promotion gate:
 
 1. ran the small MPF golden-root and wire-proof compatibility suites;
-2. reopened the preserved five-million-entry MPF database under dev1;
-3. verified its recorded root without mutation;
-4. generated and verified proofs for deterministic existing entries; and
-5. confirmed that no resolved CCL dependency remains on pre4.
+2. compared `v0.8.0-pre5-dev1...v0.8.0-pre5` and found no changed file below CCL's
+   `verified-structures/` subtree;
+3. reopened both preserved five-million-entry stores under published pre5 without changing their
+   dev1 provenance manifests;
+4. verified the recorded MPF root and 32 deterministic proofs, and generated/verified 32 JMT
+   object and wire proofs against its recorded root; and
+5. ran fresh roots, proof-wire, transitions, durability, malformed-proof, and Julc VM suites while
+   confirming that all resolved CCL artifacts use pre5.
 
 Source comparison found no intended MPF commitment/root-format change between these tags; the
 RocksDB MPF difference is resource-lifecycle cleanup. The same checks remain mandatory for future
 dependency changes because persisted roots are production data, not an assumption. Any root or
 wire-proof drift requires a separate migration ADR.
 
-`0.8.0-pre5-dev1` is a development release. ZeroJ will move to the first stable CCL release that
-contains the same JMT fixes and profile API after repeating the same compatibility gates.
+The non-published load tools retain the original CCL version as dataset provenance. They accept
+exactly `0.8.0-pre5-dev1` stores when the running build is `0.8.0-pre5`; the exception is one-way
+and does not accept pre4, a different development build, or any future CCL release. Every later
+dependency change must repeat this qualification or provide an explicit migration.
 
 ### 2. Retain the full-semantics `ZkMpf` circuit, but relocate it into the MPF module
 
@@ -281,7 +297,7 @@ JMT proof forms are simpler but remain distinct statements:
 | `ZkJmtMultiInclusion` | Several entries are included under one root | `root` | entries and deduplicated multipath | P2 |
 | `ZkJmtBatchTransition` | An ordered batch transforms one version root into the next | `oldRoot`, `newRoot`, optional batch/version commitment | operations and shared transition witness | P3 |
 
-`ZkJmtDelete` is deliberately not promised by this ADR. CCL dev1 has no native key deletion;
+`ZkJmtDelete` is deliberately not promised by this ADR. CCL `0.8.0-pre5` has no native key deletion;
 storing a tombstone still proves inclusion of that tombstone. A future physical/canonical delete
 requires CCL storage semantics, proof semantics, circuit semantics, pruning behavior, and test
 vectors to be specified together in a separate ADR.
@@ -437,7 +453,7 @@ The dependency rules are:
 3. `zeroj-jmt-poseidon` may depend on circuit-lib and only the CCL JMT/core artifacts it needs.
 4. Neither structure module depends on the other or reuses the other's profile class.
 5. RocksDB dependencies remain confined to load/integration modules.
-6. The root CCL version constraint still ensures both structures use `0.8.0-pre5-dev1`.
+6. The root CCL version constraint still ensures both structures use `0.8.0-pre5`.
 
 ZeroJ will not add a `zeroj-merkle` umbrella implementation JAR. The BOM provides version
 alignment without pulling both implementations into an application. ZeroJ will also not create a
@@ -469,7 +485,7 @@ the correct key in the validator parameters.
 ### Phase 0: Specifications and vectors
 
 Implementation status: complete after adversarial re-review. The frozen corpus now includes
-literal/cross-checked MPF wires, all dev1 JMT proof forms, neighbor metadata, a single-neighbor
+literal/cross-checked MPF wires, all pre5 JMT proof forms, neighbor metadata, a single-neighbor
 case, a valid zero-step root-leaf exclusion, manifest canonical bytes/hash, and depth-gap,
 proof-form, canonical-CBOR, and resource-bound regressions.
 
@@ -480,8 +496,8 @@ proof-form, canonical-CBOR, and resource-bound regressions.
 4. Record cross-language-friendly golden vectors for raw hashing, leaf commitments, every branch
    position, complete roots, object proofs, wire proofs, and negative mutations. The commitment
    vectors and MPF fixtures form Phase 0A. CCL JMT object/wire and persistence vectors form Phase
-   0B and close immediately after Phase 1 installs the required dev1 API; this explicit
-   prerequisite avoids pretending pre4 can generate dev1 JMT fixtures.
+   0B and close immediately after Phase 1 installs the required pre5 API; this explicit
+   prerequisite avoids pretending pre4 can generate pre5 JMT fixtures.
 5. Record the input schemas and soundness statement for every P0/P1 primitive.
 6. Assign versioned circuit/profile identifiers and manifest schemas.
 
@@ -490,13 +506,15 @@ independent vector checker agree on all v1 vectors. Under this plan, Phase 0 rem
 the narrow Phase 1 dependency prerequisite and closed only after the Phase 0B CCL JMT corpus
 passed; that criterion is now satisfied.
 
-### Phase 1: Common CCL dev1 baseline
+### Phase 1: Common CCL pre5 baseline
 
-Implementation status: complete. All resolved CCL artifacts use `0.8.0-pre5-dev1`; the preserved
-five-million-entry MPF root and sampled proofs remained unchanged across the explicit profile-label
-migration.
+Implementation status: complete. The work was first qualified on `0.8.0-pre5-dev1` and promoted
+to published `0.8.0-pre5` after proving the verified-structures source subtree unchanged. All
+resolved CCL artifacts now use pre5. The preserved five-million-entry MPF root and sampled proofs
+remained unchanged across the explicit profile-label migration and release promotion; the preserved
+JMT root and 32 sampled object/wire proofs also passed under pre5.
 
-1. Change the root CCL pin to `0.8.0-pre5-dev1`.
+1. Change the root CCL pin to `0.8.0-pre5`.
 2. Run dependency insight to prove one CCL version across all ZeroJ configurations.
 3. Run all MPF unit, wire, root, RocksDB, and circuit tests.
 4. Reopen and sample the preserved five-million-entry MPF database.
@@ -505,8 +523,8 @@ migration.
 6. Record the compatibility and relabelling result in ADR-0041's benchmark report without
    rewriting its original pre4 measurement provenance.
 
-Exit criterion: the stored root and selected proofs are unchanged and all CCL dependencies resolve
-to dev1, or the phase stops for a migration decision.
+Exit criterion: the stored roots and selected proofs are unchanged and all CCL dependencies resolve
+to published pre5, or the phase stops for a migration decision.
 
 ### Phase 2: Operation-specific MPF reads
 
@@ -550,7 +568,7 @@ and non-canonical rewrites are rejected.
 
 ### Phase 4: Poseidon JMT host profile
 
-Implementation status: complete. The dev1 custom profile, full-key leaf binding, prefix-independent
+Implementation status: complete. The pre5 custom profile, full-key leaf binding, prefix-independent
 radix-16 commitment, CCL object/wire bridge, strict reference verifier, durable RocksDB facade,
 profile manifest, rollback/pruning policy, in-flight crash recovery, and golden corpus are present.
 The durable store enforces one logical writer and fails closed on foreign or ahead manifests.
@@ -630,7 +648,7 @@ Exit criterion: no primitive is labelled production-ready solely because a local
 
 ### Phase 8: Optional multiproofs and batches
 
-Implementation status: deliberately deferred, as allowed by this optional phase. CCL dev1 exposes
+Implementation status: deliberately deferred, as allowed by this optional phase. CCL pre5 exposes
 the single-key proof APIs qualified here but no frozen cross-structure multiproof contract that can
 serve as an independent host oracle. Inventing a ZeroJ-only multipath format in this ADR would add
 a new commitment/proof protocol after the single-operation security boundary was frozen. A future
@@ -697,7 +715,7 @@ derived from constrained data.
   MPF root.
 - Preview users must update imports when `ZkMpf` moves into the MPF package.
 - Two structure artifacts and two load tools require coordinated documentation and BOM entries.
-- CCL dev1 is a pre-release dependency and must later be replaced by a qualified stable release.
+- Every later CCL version requires another source/behavior/store compatibility gate or migration.
 
 ## Risks and mitigations
 
@@ -708,7 +726,7 @@ derived from constrained data.
 | Wrong verification key or operation accepted on-chain | Embed or explicitly allowlist VK identifiers and bind the operation in validator policy |
 | MPF/JMT domain confusion | Structure-specific domains, persistent descriptors, golden vectors, and no root-conversion API |
 | The unreleased `v2` label is mistaken for a supported legacy profile | Document the rename, migrate only benchmark metadata explicitly, and publish only v1 |
-| CCL dev1 regresses the preserved MPF state | Mandatory five-million-entry reopen/root/proof gate before accepting the pin change |
+| A CCL upgrade regresses preserved MPF/JMT state | Mandatory five-million-entry reopen/root/proof gate before accepting the pin change; only the source-identical dev1-to-pre5 promotion is allowlisted |
 | A small path-bound circuit fails on production data | Complete depth scan or maintained bound, fail-closed overflow, and optional full-bound fallback |
 | Transition circuit disagrees with canonical host updates | Randomized state-machine testing against CCL before/after roots |
 | JMT tombstones are mistaken for absence | Name and document tombstone update as inclusion; use a real non-inclusion primitive for absence |
@@ -781,7 +799,7 @@ latency only with explicit overflow handling or a full-bound fallback.
 ### Claim JMT physical deletion through tombstones
 
 Rejected because a tombstone is still an included value. Native canonical deletion remains outside
-CCL dev1 and outside this ADR's accepted JMT feature set.
+CCL pre5 and outside this ADR's accepted JMT feature set.
 
 ## Final recommendation
 
@@ -790,7 +808,7 @@ commitment as the first v1 profile. For new application designs, choose and comp
 operation-specific primitive. Add JMT in the separate `zeroj-jmt-poseidon` artifact as a versioned
 off-chain authenticated-state option using the same reviewed Poseidon parameter family but its own
 v1 commitment profile. Keep structure-neutral helpers in `zeroj-circuit-lib`, RocksDB in the two
-load modules, and use one CCL `0.8.0-pre5-dev1` baseline throughout this branch. Do not call either
+load modules, and use one CCL `0.8.0-pre5` baseline throughout this branch. Do not call either
 structure or any new circuit production-ready until external operation-specific review,
 exact-fingerprint production setup, Yaci/current-protocol-budget validation, and public target-
 network transaction gates pass. Local scale, proof, artifact, and Julc VM qualification is

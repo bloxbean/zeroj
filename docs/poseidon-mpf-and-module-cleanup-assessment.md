@@ -15,7 +15,7 @@ and [practical large-state report](poseidon-mpf-large-state-production-report.md
 Statements below about version drift and missing tooling describe the baseline
 that motivated ADR-0041 and are retained as a point-in-time assessment.
 
-ADR-0042 update (2026-08-03): the repository now uses CCL `0.8.0-pre5-dev1`, the unreleased
+ADR-0042 update (2026-08-04): the repository now uses published CCL `0.8.0-pre5`, the unreleased
 MPF `v2` alias was explicitly migrated to `v1`, MPF and JMT are separate published structure
 modules with named operation-specific circuits, and both retained five-million-entry paths
 have current benchmarks. Use the

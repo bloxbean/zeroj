@@ -6,7 +6,8 @@
 - **Extends**: [Symbolic MPF Gadget for Poseidon-Rooted Cardano State](circuit-annotation/zk-mpf-gadget.md)
 - **Superseded in part by**:
   [ADR-0042](0042-operation-specific-poseidon-mpf-and-jmt-circuits.md) replaces the branch-wide
-  CCL `0.8.0-pre4` pin with `0.8.0-pre5-dev1` and renames the unreleased MPF `v2` candidate to
+  CCL `0.8.0-pre4` pin with published `0.8.0-pre5` (first qualified on
+  `0.8.0-pre5-dev1`) and renames the unreleased MPF `v2` candidate to
   the first supported `v1` profile without changing its cryptographic outputs. This ADR remains
   the provenance of the pre4 five-million-entry benchmark and its historical `v2` label.
 

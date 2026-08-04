@@ -36,7 +36,7 @@ public final class Groth16AuthenticatedStateTransitionScriptFactory {
             "zeroj-groth16-authenticated-state-deployment-v2";
     public static final String VALIDATOR_TEMPLATE_ID =
             "zeroj-groth16-authenticated-state-transition-validator-v1";
-    public static final String COMPILER_PROFILE = "julc-0.1.0-pre14/plutus-v3";
+    public static final String COMPILER_PROFILE = "julc-0.1.0-pre16/plutus-v3";
     public static final String STATE_TOKEN_SUPPLY_INVARIANT =
             "externally-attested-one-shot-policy-total-supply-one";
 

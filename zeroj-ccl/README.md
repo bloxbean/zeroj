@@ -49,6 +49,6 @@ dependencies {
 }
 ```
 
-The repository-wide CCL baseline is `0.8.0-pre5-dev1` (ADR-0042). All
+The repository-wide CCL baseline is `0.8.0-pre5` (ADR-0042). All
 `com.bloxbean.cardano:cardano-client-*` artifacts are resolved to that version so the
 integration, MPF adapter, and test oracles use one compatible release.

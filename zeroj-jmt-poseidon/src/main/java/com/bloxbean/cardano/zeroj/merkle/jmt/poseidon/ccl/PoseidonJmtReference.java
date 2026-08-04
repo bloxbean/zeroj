@@ -56,7 +56,7 @@ public final class PoseidonJmtReference {
             for (int stepIndex = 0; stepIndex < proof.steps().size(); stepIndex++) {
                 var step = proof.steps().get(stepIndex);
                 int prefixLength = step.prefix().length();
-                // CCL dev1 JMT proofs have one branch per key nibble and do not
+                // CCL pre5 JMT proofs have one branch per key nibble and do not
                 // support compressed/skipped levels. This equality is a
                 // soundness rule because v1 branch commitments deliberately
                 // do not bind the object-only prefix metadata.

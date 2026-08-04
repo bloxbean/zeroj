@@ -142,7 +142,7 @@ final class RunFiles {
 
     private static void validateIdentity(Manifest manifest, LoadOptions options) {
         requireEqual("profileId", PoseidonMpfHash.PROFILE_ID, manifest.profileId());
-        requireEqual("cclVersion", BuildInfo.cclVersion(), manifest.cclVersion());
+        requireCompatibleCclVersion(manifest.cclVersion());
         requireEqual("poseidonFingerprint", BuildInfo.poseidonFingerprint(), manifest.poseidonFingerprint());
         requireEqual("datasetSchema", DeterministicDataset.SCHEMA_ID, manifest.datasetSchema());
         requireEqual("seed", options.seed(), manifest.seed());
@@ -156,6 +156,14 @@ final class RunFiles {
         if (!Objects.equals(expected, actual)) {
             throw new IllegalStateException("Manifest mismatch for " + name + ": expected "
                     + expected + ", found " + actual);
+        }
+    }
+
+    private static void requireCompatibleCclVersion(String storedVersion) {
+        if (!BuildInfo.isVerifiedStructuresCompatibleCclVersion(storedVersion)) {
+            throw new IllegalStateException("Manifest mismatch for cclVersion: expected a "
+                    + "verified-structures-compatible baseline for " + BuildInfo.cclVersion()
+                    + ", found " + storedVersion);
         }
     }
 

@@ -6,7 +6,8 @@
   [bloxbean/cardano-client-lib](https://github.com/bloxbean/cardano-client-lib)
 - **Tracking enhancement**:
   [CCL #642](https://github.com/bloxbean/cardano-client-lib/issues/642)
-- **Baseline reviewed by ZeroJ**: `v0.8.0-pre5-dev1`
+- **Baseline reviewed by ZeroJ**: `v0.8.0-pre5` (verified-structures behavior originally
+  qualified on the source-identical `v0.8.0-pre5-dev1` tag)
 - **ZeroJ companion**:
   [ADR-0043](0043-bounded-multiproofs-batch-transitions-and-mpf-deletion.md)
 - **Scope in CCL**: `verified-structures/merkle-patricia-forestry` and
@@ -25,7 +26,7 @@ security acceptance criteria are the interoperability contract.
 
 ## Current baseline and gap
 
-At `v0.8.0-pre5-dev1` CCL provides:
+At `v0.8.0-pre5` CCL provides:
 
 - MPF `put`, `get`, physical `delete`, single-key wire proof generation, and single-key wire
   verification;

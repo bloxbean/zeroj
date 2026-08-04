@@ -14,7 +14,7 @@ import java.util.function.LongConsumer;
  * Benchmark-only current-root traversal that measures inclusion-proof branch depth.
  *
  * <p>This class deliberately lives in CCL's MPF package because the concrete node
- * types are package-private in CCL 0.8.0-pre5-dev1. It is part of the non-published load
+ * types are package-private in CCL 0.8.0-pre5. It is part of the non-published load
  * module, not the public Poseidon MPF adapter. CCL folds an extension prefix into
  * the following branch proof record, so only branch nodes increase the inclusion
  * proof-step count. A root that is itself a leaf therefore has zero proof steps.</p>

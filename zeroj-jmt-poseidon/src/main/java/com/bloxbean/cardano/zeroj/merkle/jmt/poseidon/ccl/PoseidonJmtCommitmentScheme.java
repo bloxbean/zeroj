@@ -30,7 +30,7 @@ public final class PoseidonJmtCommitmentScheme implements CommitmentScheme {
 
     @Override
     public byte[] commitBranch(NibblePath prefix, byte[][] childHashes) {
-        // CCL dev1 creates stored branch commitments with an empty prefix but
+        // CCL pre5 creates stored branch commitments with an empty prefix but
         // supplies the traversed prefix to its object verifier. The v1 profile
         // is therefore intentionally prefix-independent; the proof path/key
         // binding is checked separately by CCL and the ZeroJ normalizer.

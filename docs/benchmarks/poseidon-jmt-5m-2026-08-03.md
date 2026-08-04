@@ -40,6 +40,17 @@ This is a local engineering benchmark, not a production authorization. Its Groth
 a known, single-party benchmark trapdoor. External circuit review, a production setup for
 each exact R1CS identity, and Yaci/target-network validation remain release gates.
 
+### Published CCL pre5 compatibility update — 2026-08-04
+
+The load and timings below retain their original `0.8.0-pre5-dev1` provenance. After published
+CCL `0.8.0-pre5` became available, the tag comparison showed no changes below CCL's
+`verified-structures/` subtree. The published pre5 build then reopened this preserved
+dev1-manifest store without rewriting its manifest and generated and strictly verified the same 32
+deterministic
+object/wire proof samples against the recorded root. The sampled 6/7-level histogram and
+2,744-3,161-byte wire range were unchanged. The refreshed raw `proofs` section records the pre5
+run; the historical load, circuit, setup, and Julc measurements in this report are not relabelled.
+
 ## Preserved artifacts
 
 The reusable database, reports, proving keys, and Cardano artifacts are retained at:
@@ -56,7 +67,7 @@ local benchmark state rather than a backup; deleting the workspace can destroy i
 
 | Setting | Value |
 |---|---:|
-| CCL | `0.8.0-pre5-dev1` |
+| CCL used for the original measured load | `0.8.0-pre5-dev1` |
 | Host profile | `zeroj-poseidon-jmt-v1` |
 | Hash algorithm | `zeroj-poseidon-bls12-381-t3-a5-jmt-v1` |
 | Poseidon parameter fingerprint | `4bf489f3a231cbdba3e9b8c2d21966e052bf9132b9ddf6529aa3f569297a8fc2` |

@@ -134,7 +134,7 @@ final class JmtRunFiles {
         requireEqual("hashAlgorithmId", format.hashAlgorithmId(), manifest.hashAlgorithmId());
         requireEqual("hashLength", format.hashLength(), manifest.hashLength());
         requireEqual("proofCodecId", PoseidonJmtProfile.PROOF_CODEC_ID, manifest.proofCodecId());
-        requireEqual("cclVersion", BuildInfo.cclVersion(), manifest.cclVersion());
+        requireCompatibleCclVersion(manifest.cclVersion());
         requireEqual("poseidonFingerprint", BuildInfo.poseidonFingerprint(), manifest.poseidonFingerprint());
         requireEqual("datasetSchema", DeterministicJmtDataset.SCHEMA_ID, manifest.datasetSchema());
         requireEqual("versionPolicy", VERSION_POLICY, manifest.versionPolicy());
@@ -149,6 +149,14 @@ final class JmtRunFiles {
         if (!Objects.equals(expected, actual)) {
             throw new IllegalStateException("Manifest mismatch for " + name
                     + ": expected " + expected + ", found " + actual);
+        }
+    }
+
+    private static void requireCompatibleCclVersion(String storedVersion) {
+        if (!BuildInfo.isVerifiedStructuresCompatibleCclVersion(storedVersion)) {
+            throw new IllegalStateException("Manifest mismatch for cclVersion: expected a "
+                    + "verified-structures-compatible baseline for " + BuildInfo.cclVersion()
+                    + ", found " + storedVersion);
         }
     }
 

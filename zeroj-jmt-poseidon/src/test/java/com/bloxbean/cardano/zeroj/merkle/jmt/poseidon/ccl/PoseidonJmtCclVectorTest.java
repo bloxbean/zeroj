@@ -41,7 +41,7 @@ class PoseidonJmtCclVectorTest {
     @Test
     void cclObjectsWiresAndIndependentCheckerAgreeWithLiteralFixture() throws Exception {
         JsonNode fixture = vectors().path("jmt").path("cclFixture");
-        assertEquals("0.8.0-pre5-dev1", fixture.path("cclVersion").asText());
+        assertEquals("0.8.0-pre5", fixture.path("cclVersion").asText());
         assertEquals(Set.of(
                         "root-bit-flip", "query-key-bit-flip", "expected-value-bit-flip",
                         "wire-truncated-one-byte", "wire-appended-zero",

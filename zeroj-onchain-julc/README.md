@@ -3,6 +3,11 @@
 Reusable Julc validators and on-chain helpers for Cardano Plutus V3 proof
 verification.
 
+The build baseline is Julc `0.1.0-pre16`. The authenticated-state release tooling binds
+`julc-0.1.0-pre16/plutus-v3` into each release identity. A Julc compiler upgrade therefore
+requires regenerated script bytes, a new reviewed template digest/release manifest, and fresh
+protocol-budget validation; an older applied script is not silently relabelled.
+
 This module is the Cardano on-chain verification layer for ZeroJ. It contains
 Julc-compiled spending validators, proof/VK conversion helpers, and feasibility
 tools for estimating whether a proof system and curve are practical on Plutus

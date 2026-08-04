@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Fail-closed production facade over a CCL dev1 Poseidon JMT. */
+/** Fail-closed production facade over a CCL pre5 Poseidon JMT. */
 public final class PoseidonJmtTree {
     private final JellyfishMerkleTree delegate;
     private final PoseidonJmtHashFunction hash;

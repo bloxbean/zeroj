@@ -25,7 +25,7 @@ and one physical-delete primitive open:
 That deferral was not a statement that Groth16 cannot prove these operations. It was a protocol
 boundary. A sound circuit needs a canonical host-side definition of the proof or transition it
 checks, plus an implementation that can independently generate roots and witnesses. CCL
-`0.8.0-pre5-dev1` provides qualified single-key proof APIs, MPF physical deletion, and JMT
+`0.8.0-pre5` provides qualified single-key proof APIs, MPF physical deletion, and JMT
 atomic batch storage updates, but it does not provide a frozen shared multiproof or
 cryptographic transition-witness contract.
 
@@ -134,7 +134,7 @@ implemented, empty-terminal and different-leaf non-inclusion remain distinct cir
 unless a reviewed discriminator is fully constrained. The initial inclusion-only multiproof must
 not accept either non-inclusion terminal.
 
-There is no `ZkJmtDelete` in this catalog. CCL `0.8.0-pre5-dev1` rejects null values and has no
+There is no `ZkJmtDelete` in this catalog. CCL `0.8.0-pre5` rejects null values and has no
 logical key-delete API. JMT physical deletion requires a separate CCL storage, versioning,
 rollback, pruning, proof, and commitment decision. A tombstone update is useful, but it proves
 inclusion of the tombstone.

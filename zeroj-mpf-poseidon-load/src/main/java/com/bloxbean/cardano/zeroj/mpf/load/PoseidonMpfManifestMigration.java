@@ -147,7 +147,10 @@ public final class PoseidonMpfManifestMigration {
 
     private void requireCurrent(RunFiles.Manifest manifest) {
         require("profileId", PoseidonMpfHash.PROFILE_ID, manifest.profileId());
-        require("cclVersion", BuildInfo.cclVersion(), manifest.cclVersion());
+        if (!BuildInfo.isVerifiedStructuresCompatibleCclVersion(manifest.cclVersion())) {
+            throw new IllegalStateException("Current manifest uses an unqualified CCL baseline: "
+                    + manifest.cclVersion());
+        }
         require("poseidonFingerprint", BuildInfo.poseidonFingerprint(), manifest.poseidonFingerprint());
         requireDatasetIdentity(manifest);
     }

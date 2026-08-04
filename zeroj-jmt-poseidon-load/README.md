@@ -56,6 +56,12 @@ can leave the database ahead of the manifest. That state is rejected rather than
 adopted; an operator must restore a matching backup or perform an explicit authenticated
 reconciliation.
 
+The current build uses published CCL `0.8.0-pre5`. A store whose manifest records
+`0.8.0-pre5-dev1` may be reopened because the release comparison contains no changes in CCL's
+verified-structures subtree; the manifest is retained as original dataset provenance. This is an
+exact, one-way exception. Every other CCL mismatch remains a hard failure pending qualification or
+an explicit migration.
+
 The operations stage first validates and closes the retained database, then makes a disposable
 full file copy. Temporary updates, proof creation, rollback, and reopen verification run only on
 that copy, which is removed on normal completion. A crash may leave a directory named

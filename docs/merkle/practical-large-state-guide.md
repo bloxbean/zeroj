@@ -1,7 +1,7 @@
 # Practical large-state Poseidon MPF/JMT guide
 
 - **Status:** implemented local engineering guidance for ADR-0042
-- **Baseline:** CCL `0.8.0-pre5-dev1`
+- **Baseline:** CCL `0.8.0-pre5`
 - **Profile:** `zeroj-poseidon-authenticated-state-v1`
 - **Measurements:** [MPF 5M](../benchmarks/poseidon-mpf-5m-2026-08-02.md) and
   [JMT 5M](../benchmarks/poseidon-jmt-5m-2026-08-03.md)
