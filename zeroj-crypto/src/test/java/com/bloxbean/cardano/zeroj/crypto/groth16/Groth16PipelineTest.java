@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.crypto.groth16;
 
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.api.R1CSFlat;
+import com.bloxbean.cardano.zeroj.api.R1CSFlatIO;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.bls12381.ec.G1Point;
 import com.bloxbean.cardano.zeroj.bls12381.ec.G2Point;
@@ -14,9 +15,11 @@ import com.bloxbean.cardano.zeroj.bls12381.pairing.BLS12381Pairing;
 import com.bloxbean.cardano.zeroj.crypto.msm.FlatScalars;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -77,12 +80,26 @@ class Groth16PipelineTest {
 
         AtomicInteger compiles = new AtomicInteger();
         try (var keys = Groth16Keys.load(dir)) {
+            assertEquals(cc.fingerprint(), keys.circuitFingerprint());
             var proof = Groth16Pipeline.prove(keys, cache, cc.fingerprint(),
                     () -> { compiles.incrementAndGet(); return compiled(cons, n + 2, 1); },
                     () -> FlatScalars.pack(w, w.length),
                     0, ProverBackend.PURE_JAVA);
             assertEquals(0, compiles.get(), "cache hit must never compile");
             assertTrue(pairingVerify(keys, proof, w[1]), "cache-hit proof must verify");
+
+            byte[] corrupted = Files.readAllBytes(cache);
+            corrupted[corrupted.length - 1] ^= 1;
+            Files.write(cache, corrupted);
+            assertFalse(Groth16Pipeline.cacheMatches(cache, cc.fingerprint()));
+            var repairedProof = Groth16Pipeline.prove(keys, cache, cc.fingerprint(),
+                    () -> { compiles.incrementAndGet(); return compiled(cons, n + 2, 1); },
+                    () -> FlatScalars.pack(w, w.length),
+                    0, ProverBackend.PURE_JAVA);
+            assertEquals(1, compiles.get(), "a corrupt candidate cache must be recompiled once");
+            assertTrue(pairingVerify(keys, repairedProof, w[1]));
+            assertTrue(Groth16Pipeline.cacheMatches(cache, cc.fingerprint()),
+                    "the fallback compile must atomically repair the persistent cache");
         }
     }
 
@@ -96,6 +113,7 @@ class Groth16PipelineTest {
 
         // key store without a cache (simulates an imported/downloaded bundle)
         Groth16Keys.setupToStore(cc.flat(), n + 2, 1, tau, dir, true).close();
+        Groth16PkStore.bindCircuitFingerprint(dir, cc.fingerprint());
         Path cache = dir.resolve(Groth16Pipeline.R1CS_CACHE);
         Files.deleteIfExists(cache);
 
@@ -147,6 +165,200 @@ class Groth16PipelineTest {
     }
 
     @Test
+    void exactFingerprintBindsRelationNotOnlyDimensions_andUnboundKeysFailClosed(
+            @TempDir Path dir) throws Exception {
+        int n = 8;
+        var original = chain(n);
+        var altered = new ArrayList<>(original);
+        altered.set(0, new R1CSConstraint(
+                Map.of(2, BigInteger.ONE), Map.of(2, BigInteger.ONE),
+                Map.of(3, BigInteger.TWO)));
+        var first = compiled(original, n + 2, 1);
+        var second = compiled(altered, n + 2, 1);
+        assertEquals(Groth16Pipeline.fingerprint(n, n + 2, 1),
+                first.fingerprint().substring(0, first.fingerprint().indexOf("-r")));
+        assertNotEquals(first.fingerprint(), second.fingerprint());
+        assertTrue(Groth16Pipeline.isExactFingerprint(first.fingerprint()));
+
+        BigInteger tau = PowersOfTauBLS381.generate(5).tauScalar();
+        Groth16Keys.setupToStore(first.flat(), n + 2, 1, tau, dir, true).close();
+        try (var unbound = Groth16Keys.load(dir)) {
+            IllegalStateException error = assertThrows(IllegalStateException.class,
+                    () -> Groth16Pipeline.prove(
+                            unbound, null, first.fingerprint(), () -> first,
+                            () -> FlatScalars.pack(wit(n), n + 2),
+                            0, ProverBackend.PURE_JAVA));
+            assertTrue(error.getMessage().contains("unbound"));
+        }
+
+        Groth16PkStore.bindCircuitFingerprint(dir, first.fingerprint());
+        try (var bound = Groth16Keys.load(dir)) {
+            assertEquals(first.fingerprint(), bound.circuitFingerprint());
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16Pipeline.prove(
+                            bound, null, second.fingerprint(), () -> second,
+                            () -> FlatScalars.pack(wit(n), n + 2),
+                            0, ProverBackend.PURE_JAVA));
+        }
+        assertThrows(IllegalStateException.class,
+                () -> Groth16PkStore.bindCircuitFingerprint(dir, second.fingerprint()));
+        assertThrows(IllegalArgumentException.class,
+                () -> Groth16PkStore.bindCircuitFingerprint(dir, "c8-w10-p1-rnot-a-sha"));
+        assertThrows(IllegalArgumentException.class,
+                () -> Groth16PkStore.bindCircuitFingerprint(
+                        dir, "c999999999999999999999-w10-p1-r" + "00".repeat(32)));
+        assertThrows(IllegalArgumentException.class,
+                () -> Groth16PkStore.bindCircuitFingerprint(
+                        dir, "c8-w10-p10-r" + "00".repeat(32)));
+    }
+
+    @Test
+    void exactCacheBindingRejectsCopiedHeadersAndPayloadTampering(@TempDir Path dir)
+            throws Exception {
+        int n = 8;
+        var original = chain(n);
+        var altered = new ArrayList<>(original);
+        altered.set(0, new R1CSConstraint(
+                Map.of(2, BigInteger.ONE), Map.of(2, BigInteger.ONE),
+                Map.of(3, BigInteger.TWO)));
+        var first = compiled(original, n + 2, 1);
+        var second = compiled(altered, n + 2, 1);
+        Path cache = dir.resolve(Groth16Pipeline.R1CS_CACHE);
+
+        R1CSFlatIO.write(first.flat(), first.fingerprint(), cache);
+        assertTrue(Groth16Pipeline.cacheMatches(cache, first.fingerprint()));
+
+        byte[] payloadTampered = Files.readAllBytes(cache);
+        payloadTampered[payloadTampered.length - 1] ^= 1;
+        Files.write(cache, payloadTampered);
+        assertFalse(Groth16Pipeline.cacheMatches(cache, first.fingerprint()),
+                "an exact cache hit must commit to the decoded relation, not only its header");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> R1CSFlatIO.write(second.flat(), first.fingerprint(), cache),
+                "writers must not be able to label a foreign relation with another digest");
+
+        R1CSFlatIO.write(second.flat(), second.fingerprint(), cache);
+        byte[] copiedHeader = Files.readAllBytes(cache);
+        byte[] firstHeader = first.fingerprint().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] secondHeader = second.fingerprint().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(firstHeader.length, secondHeader.length);
+        assertArrayEquals(secondHeader,
+                java.util.Arrays.copyOfRange(copiedHeader, 10, 10 + secondHeader.length));
+        System.arraycopy(firstHeader, 0, copiedHeader, 10, firstHeader.length);
+        Files.write(cache, copiedHeader);
+        assertFalse(Groth16Pipeline.cacheMatches(cache, first.fingerprint()),
+                "a copied exact header must not turn a foreign R1CS into a cache hit");
+
+        byte[] fingerprint = first.fingerprint().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var hostile = java.nio.ByteBuffer.allocate(18 + fingerprint.length)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        hostile.putInt(0x5A4A5246).putInt(1).putShort((short) fingerprint.length)
+                .put(fingerprint).putInt(first.numConstraints()).putInt(Integer.MAX_VALUE);
+        Files.write(cache, hostile.array());
+        assertFalse(Groth16Pipeline.cacheMatches(cache, first.fingerprint()),
+                "hostile dimensions must be rejected before any attacker-sized allocation");
+        assertNull(R1CSFlatIO.readIfMatches(cache, first.fingerprint()));
+
+        String overflow = "c999999999999999999999-w10-p1-r" + "00".repeat(32);
+        String invalidPublicCount = "c8-w10-p10-r" + "00".repeat(32);
+        assertFalse(Groth16Pipeline.isExactFingerprint(overflow));
+        assertFalse(Groth16Pipeline.isExactFingerprint(invalidPublicCount));
+        assertThrows(IllegalArgumentException.class,
+                () -> R1CSFlatIO.write(first.flat(), overflow, cache));
+        assertThrows(IllegalArgumentException.class,
+                () -> R1CSFlatIO.write(first.flat(), invalidPublicCount, cache));
+    }
+
+    @Test
+    void independentPythonCheckerAgreesAndRejectsPayloadTampering(@TempDir Path dir)
+            throws Exception {
+        Path script = Path.of(System.getProperty("user.dir"), "..", "zeroj-test-vectors",
+                "scripts", "verify_zeroj_r1cs.py").toAbsolutePath().normalize();
+        if (!Files.isRegularFile(script)) {
+            script = Path.of(System.getProperty("user.dir"), "zeroj-test-vectors",
+                    "scripts", "verify_zeroj_r1cs.py").toAbsolutePath().normalize();
+        }
+        Assumptions.assumeTrue(Files.isRegularFile(script), "independent checker source unavailable");
+        try {
+            Process probe = new ProcessBuilder("python3", "--version")
+                    .redirectErrorStream(true).start();
+            probe.getInputStream().readAllBytes();
+            Assumptions.assumeTrue(probe.waitFor() == 0, "python3 unavailable");
+        } catch (IOException unavailable) {
+            Assumptions.assumeTrue(false, "python3 unavailable");
+        }
+
+        var compiled = compiled(chain(8), 10, 1);
+        Path cache = dir.resolve("r1cs.bin");
+        R1CSFlatIO.write(compiled.flat(), compiled.fingerprint(), cache);
+        assertEquals(0, runIndependentChecker(script, cache, compiled.fingerprint()),
+                "independent implementation must reproduce the Java canonical identity");
+
+        byte[] tampered = Files.readAllBytes(cache);
+        tampered[tampered.length - 1] ^= 1;
+        Path hostile = dir.resolve("tampered-r1cs.bin");
+        Files.write(hostile, tampered);
+        assertNotEquals(0, runIndependentChecker(script, hostile, compiled.fingerprint()),
+                "independent implementation must reject a relation mutation");
+    }
+
+    private static int runIndependentChecker(Path script, Path r1cs, String fingerprint)
+            throws Exception {
+        Process process = new ProcessBuilder(
+                "python3", script.toString(), r1cs.toString(),
+                "--expected-fingerprint", fingerprint, "--json")
+                .redirectErrorStream(true)
+                .start();
+        String output = new String(process.getInputStream().readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
+        int exit = process.waitFor();
+        if (exit != 0 && !r1cs.getFileName().toString().startsWith("tampered-")) {
+            fail("independent R1CS checker failed: " + output);
+        }
+        return exit;
+    }
+
+    @Test
+    void exactKeyManifestDimensionsAndPointCountsFailClosed(@TempDir Path dir) throws Exception {
+        int n = 8;
+        var compiled = compiled(chain(n), n + 2, 1);
+        Groth16Pipeline.setup(compiled, PowersOfTauBLS381.generate(5).tauScalar(), dir, true);
+        Path manifest = dir.resolve("manifest.properties");
+        byte[] original = Files.readAllBytes(manifest);
+
+        assertManifestMutationRejected(manifest, original,
+                properties -> properties.setProperty("numB2", Integer.toString(n + 3)));
+        assertManifestMutationRejected(manifest, original,
+                properties -> properties.setProperty("numPublic", "2"));
+        assertManifestMutationRejected(manifest, original,
+                properties -> properties.setProperty("numIc", "3"));
+        assertManifestMutationRejected(manifest, original,
+                properties -> properties.setProperty("domain", "4"));
+        assertManifestMutationRejected(manifest, original, properties ->
+                properties.setProperty("circuitFingerprint",
+                        "c" + n + "-w" + (n + 3) + "-p1-r" + compiled.r1csSha256()));
+
+        Files.write(manifest, original);
+        try (var keys = Groth16Keys.load(dir)) {
+            assertEquals(compiled.fingerprint(), keys.circuitFingerprint());
+        }
+    }
+
+    private static void assertManifestMutationRejected(
+            Path manifest, byte[] original,
+            java.util.function.Consumer<java.util.Properties> mutation) throws Exception {
+        var properties = new java.util.Properties();
+        properties.load(new java.io.ByteArrayInputStream(original));
+        mutation.accept(properties);
+        try (var output = Files.newOutputStream(manifest)) {
+            properties.store(output, "tampered test manifest");
+        }
+        assertThrows(java.io.IOException.class, () -> Groth16Keys.load(manifest.getParent()));
+        Files.write(manifest, original);
+    }
+
+    @Test
     void fingerprint_matchesCliFormat_andParsesBack() {
         String fp = Groth16Pipeline.fingerprint(19_075_097, 43_742_758, 28);
         assertEquals("c19075097-w43742758-p28", fp, "must stay byte-identical to CLI Bundle.fingerprint");
@@ -158,6 +370,11 @@ class Groth16PipelineTest {
         assertEquals(1 << 25, dims.domain(), "19M constraints -> 2^25 domain");
         assertNull(Groth16Pipeline.parseFingerprint("garbage"));
         assertNull(Groth16Pipeline.parseFingerprint(null));
+        assertNull(Groth16Pipeline.parseFingerprint("c1-w4-p1-rbad"));
+        assertNull(Groth16Pipeline.parseFingerprint("c1-w4-p1-r" + "00".repeat(32) + "tail"));
+        assertNull(Groth16Pipeline.parseFingerprint(
+                "c999999999999999999999-w4-p1-r" + "00".repeat(32)));
+        assertNull(Groth16Pipeline.parseFingerprint("c1-w1-p1-r" + "00".repeat(32)));
     }
 
     @Test

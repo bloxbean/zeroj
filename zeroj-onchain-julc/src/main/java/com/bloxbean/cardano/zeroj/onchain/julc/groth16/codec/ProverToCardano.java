@@ -3,6 +3,7 @@ package com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProofBLS381;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Keys;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 import supranational.blst.P1_Affine;
@@ -95,6 +96,24 @@ public final class ProverToCardano {
         }
 
         return new SnarkjsToCardano.VkCompressed(alpha, beta, gamma, delta, ic);
+    }
+
+    /**
+     * Compress VK components from the unified in-memory or store-backed key handle.
+     * This is the production-sized counterpart to {@link #compressVk(Groth16SetupBLS381.SetupResult)}.
+     */
+    public static SnarkjsToCardano.VkCompressed compressVk(Groth16Keys keys) {
+        var pk = keys.pk();
+        List<byte[]> ic = new ArrayList<>();
+        for (var icPoint : keys.ic()) {
+            ic.add(g1Compress(icPoint));
+        }
+        return new SnarkjsToCardano.VkCompressed(
+                g1Compress(pk.alphaG1()),
+                g2Compress(pk.betaG2()),
+                g2Compress(keys.gammaG2()),
+                g2Compress(pk.deltaG2()),
+                ic);
     }
 
     /**

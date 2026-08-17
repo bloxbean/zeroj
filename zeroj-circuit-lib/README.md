@@ -11,14 +11,14 @@ or Jubjub-style primitives.
 
 | Area | Key Types |
 |------|-----------|
-| Hashes | `Poseidon`, `PoseidonN`, `MiMC`, `MiMCSponge`, `Blake2b`, `Sha512`, `HmacSha512` |
+| Hashes | `Poseidon`, `PoseidonN`, optimized `FastPoseidonBls12381T3`, `MiMC`, `MiMCSponge`, `Blake2b`, `Sha512`, `HmacSha512` |
 | Cardano key derivation | `Cip1852Derivation`, `Bip32Ed25519`, `Ed25519Point`, `Fe25519` — in-circuit root key → payment key hash |
 | Merkle proofs | `Merkle`, `SignalMerkle` |
 | Comparisons | `Comparators`, `SignalComparators` |
 | Binary gadgets | `Binary`, `SignalBinary`, `AliasCheck` |
 | Selection | `Mux` |
 | Signal helpers | `SignalPoseidon`, `SignalMiMC` |
-| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkMpf`, `ZkMpfProof`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
+| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
 | Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
@@ -45,12 +45,12 @@ final proof, verification key data, and public inputs.
 | Poseidon T3 | `Poseidon`, `SignalPoseidon` | `ZkPoseidon` | BN254 default; BLS12-381 with explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | No-params overloads are BN254 for backward compatibility. |
 | Folded Poseidon N | `PoseidonN` | `ZkPoseidonN` | BN254 default in DSL overloads; symbolic API requires explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | Folded two-input Poseidon, not a separate variable-width Poseidon permutation. |
 | Merkle membership | `Merkle`, `SignalMerkle` | `ZkMerkle` | Hash-dependent | Ready with params-aware BLS12-381 Poseidon helpers | Use `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` for Cardano. `HashType.MIMC` and default `HashType.POSEIDON` are BN254-oriented convenience paths. |
-| Poseidon MPF | No `Signal*` facade; host witness helpers live in `zeroj-mpf-poseidon` | `ZkMpf`, `ZkMpfProof` | BLS12-381 Poseidon only | Technically usable through gnark Groth16, but experimental/heavy | Ready at witness/circuit level. Current MPF circuit is large, so MPF-specific Yaci demo and pure Java proving are deferred until optimization. Not compatible with native Aiken/Blake2b MPF roots. |
+| Poseidon MPF/JMT authenticated state | Operation APIs live in `zeroj-mpf-poseidon` and `zeroj-jmt-poseidon` | Named `ZkMpf*` / `ZkJmt*` operation classes in those modules | BLS12-381 Poseidon profile only | Experimental; pure-Java Groth16 and Julc paths locally benchmarked at 5M entries | Kept outside the generic circuit library to preserve host/profile boundaries. Inclusion, two non-inclusion forms, update, and split insert primitives are implemented; see ADR-0042. Not compatible with native Aiken/Blake2b roots. |
 | Jubjub point arithmetic | `InCircuitJubjub`, `JubjubPoint` | `ZkJubjubPoint` | BLS12-381 scalar field only | Ready for algebraic/public-data use on BLS12-381 Groth16, pending external review (ADR-0037/0038) | Generic off-circuit secret-scalar use remains offline/isolated because `BigInteger` arithmetic is variable-time. Bind every prover-supplied in-circuit point with `witnessAffine(...)` (curve equation, `Z = 1`, `T = u·v`; 5 constraints) or `assertWellFormed(...)` for projective input (13 constraints, idempotent). The raw `Point` constructor is unchecked and documented as gadget-internal. Neither binder establishes subgroup membership. `ZkJubjubPoint.fromTrustedAffine` is deprecated and delegates to `witnessAffine`. |
 | Pedersen commitment (in-circuit) | `InCircuitPedersen` | `ZkPedersen` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16, pending external review | 3,020 constraints for two 252-bit vectors. `InCircuitPedersen` proves the represented residues but does not establish integer `< l`; `ZkPedersen` adds that canonicality check. |
 | Pedersen commitment (off-circuit generation) | `PedersenCommitment.commit`; internal fixed-limb review candidate | — | Jubjub over BLS12-381 | Legacy is **offline/isolated only**; fixed-limb path is an unapproved ADR-0039 M9 candidate | The candidate is package-private, uses mutable explicit-width openings and fixed-limb schedules, and has separate timing/external/platform gates. Hiding and binding of the commitment itself are unaffected. |
 | EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub`, `JubjubSigner` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Verification ready pending external review; legacy signing offline-only; fixed-limb hedged profile remains an unapproved candidate | Two in-circuit entry points are named for their key-trust model. `JubjubSigners.validatedDedicatedHostJavaRequired` deliberately fails closed until ADR-0039 M4–M8 pass. Specs: [`jubjub-eddsa-v1`](../docs/specs/jubjub-eddsa-v1.md), [hedged candidate](../docs/specs/jubjub-eddsa-hedged-v1-candidate.md). |
-| Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR` | Used by `ZkPoseidon*`, `ZkMerkle`, `ZkMpf` | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. The in-circuit `Poseidon` gadget currently supports T3/alpha-5 only. |
+| Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR`, `PoseidonParameterFingerprint` | Used by `ZkPoseidon*`, `ZkMerkle`, and the separate MPF/JMT modules | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. `FastPoseidonBls12381T3` is the equivalence-tested optimized **host-side** path used for off-circuit roots and witnesses; circuit constraints still use the Poseidon gadget. |
 
 **Real-world crypto (Cardano key derivation).** These gadgets reproduce standard wallet/key
 primitives *inside* the circuit, so a proof can attest to Cardano key ownership without revealing the
@@ -316,10 +316,12 @@ The Cardano-oriented support matrix is maintained in
 
 The status table above was checked against the current implementation in
 `src/main/java`, especially `MiMC`, `Poseidon`, `PoseidonN`, `ZkMerkle`,
-`ZkMpf`, `ZkPedersen`, `ZkEdDSAJubjub`, the `hash/`, `field/`, and `ed25519/`
+`ZkPedersen`, `ZkEdDSAJubjub`, the `hash/`, `field/`, and `ed25519/`
 crypto gadgets (`Blake2b`, `Sha512`, `HmacSha512`, `Ed25519Point`,
 `Bip32Ed25519`, `Cip1852Derivation`), and the adapter coverage in
 `src/test/java/com/bloxbean/cardano/zeroj/circuit/lib/zk/ZkGadgetAdaptersTest.java`.
+The MPF/JMT rows are checked in their owning structure modules; they are not circuit-lib
+packages.
 
 ## Gradle
 

@@ -7,12 +7,12 @@ description = 'ZeroJ Poseidon-rooted Merkle Patricia Forestry integration for CC
 dependencies {
     api project(':zeroj-circuit-lib')
     api project(':zeroj-circuit-annotation-api')
-    api 'com.bloxbean.cardano:cardano-client-merkle-patricia-forestry:0.8.0-pre4'
-    api 'com.bloxbean.cardano:cardano-client-verified-structures-core:0.8.0-pre4'
+    api "com.bloxbean.cardano:cardano-client-merkle-patricia-forestry:${rootProject.ext.cclVersion}"
+    api "com.bloxbean.cardano:cardano-client-verified-structures-core:${rootProject.ext.cclVersion}"
 
     implementation 'co.nstant.in:cbor:0.9'
-
     testImplementation project(':zeroj-test-vectors')
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 }
 
 publishing {

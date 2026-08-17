@@ -43,17 +43,46 @@ public final class Groth16PkStore {
     private Groth16PkStore() {}
 
     private static final int FP_BYTES = 48;
+    private static final int MAX_PUBLIC_INPUTS = 1 << 20;
+    private static final long AUX_FIXED_BYTES = 3L * 2L * FP_BYTES + 3L * 4L * FP_BYTES;
     private static final String MANIFEST = "manifest.properties";
 
     /** Everything the prover needs, with the G1 key memory-mapped. Close to unmap. */
     public record Loaded(Groth16ProvingKeyBLS381 pk, Groth16ProverBLS381.G1Readers readers,
-                         AffineG2 gammaG2, AffineG1[] ic, int domain, Arena arena) implements AutoCloseable {
+                         AffineG2 gammaG2, AffineG1[] ic, int domain,
+                         String circuitFingerprint, Arena arena) implements AutoCloseable {
         @Override public void close() { arena.close(); }
     }
 
     /** True if {@code dir} holds a previously-saved key. */
     public static boolean exists(Path dir) {
         return Files.isRegularFile(dir.resolve(MANIFEST));
+    }
+
+    /** Bind an already-created local or imported key bundle to one exact circuit relation. */
+    public static void bindCircuitFingerprint(Path dir, String fingerprint) throws IOException {
+        if (!Groth16Pipeline.isExactFingerprint(fingerprint)) {
+            throw new IllegalArgumentException("exact circuit fingerprint is required");
+        }
+        Path manifest = dir.resolve(MANIFEST);
+        var properties = new Properties();
+        try (var in = Files.newInputStream(manifest)) { properties.load(in); }
+        validateManifestDimensions(properties, fingerprint);
+        String existing = properties.getProperty("circuitFingerprint");
+        if (existing != null && !existing.equals(fingerprint)) {
+            throw new IllegalStateException("key bundle is already bound to " + existing);
+        }
+        properties.setProperty("circuitFingerprint", fingerprint);
+        Path temporary = manifest.resolveSibling(MANIFEST + ".tmp");
+        try (var out = Files.newOutputStream(temporary)) {
+            properties.store(out, "ADR-0042 exact Groth16 circuit identity");
+        }
+        try {
+            Files.move(temporary, manifest, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+            Files.move(temporary, manifest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /** Write the setup output to {@code dir}. One-time; overwrites any existing store. */
@@ -109,10 +138,21 @@ public final class Groth16PkStore {
     public static Loaded load(Path dir) throws IOException {
         var m = new Properties();
         try (var in = Files.newInputStream(dir.resolve(MANIFEST))) { m.load(in); }
-        int numPublic = Integer.parseInt(m.getProperty("numPublic"));
-        int numB2 = Integer.parseInt(m.getProperty("numB2"));
-        int numIc = Integer.parseInt(m.getProperty("numIc"));
-        int domain = Integer.parseInt(m.getProperty("domain"));
+        String circuitFingerprint = m.getProperty("circuitFingerprint");
+        if (circuitFingerprint != null
+                && !Groth16Pipeline.isExactFingerprint(circuitFingerprint)) {
+            throw new IOException("Invalid exact circuit fingerprint in key manifest");
+        }
+        ManifestDimensions dimensions = validateManifestDimensions(m, circuitFingerprint);
+        int numPublic = dimensions.numPublic();
+        int numB2 = dimensions.numWires();
+        int numIc = dimensions.numIc();
+        int domain = dimensions.domain();
+        long expectedAuxBytes = Math.addExact(
+                AUX_FIXED_BYTES, Math.multiplyExact((long) numIc, 2L * FP_BYTES));
+        if (Files.size(dir.resolve("aux.bin")) != expectedAuxBytes) {
+            throw new IOException("Groth16 aux.bin size does not match the manifest IC count");
+        }
         boolean sparse = "sparse-v1".equals(m.getProperty("format")); // absent = dense (ADR-0035 M6a)
 
         AffineG1 alphaG1, betaG1, deltaG1; AffineG2 betaG2, deltaG2, gammaG2; AffineG1[] ic = new AffineG1[numIc];
@@ -139,11 +179,17 @@ public final class Groth16PkStore {
                     g1Reader(dir.resolve("pointsH.bin"), arena, sparse),
                     g1Reader(dir.resolve("pointsL.bin"), arena, sparse),
                     b2);
+            if (readers.a().count() != numB2 || readers.b1().count() != numB2
+                    || readers.b2().count() != numB2
+                    || readers.h().count() != domain
+                    || readers.l().count() != numB2 - numPublic - 1) {
+                throw new IOException("Groth16 proving-key file counts do not match the manifest");
+            }
             // G1 + G2 key arrays are read via the mmap readers, so the PK holds empty arrays.
             long[] empty = new long[0];
             var pk = new Groth16ProvingKeyBLS381(alphaG1, betaG1, betaG2, deltaG1, deltaG2,
                     empty, empty, new AffineG2[0], empty, empty, numPublic);
-            return new Loaded(pk, readers, gammaG2, ic, domain, arena);
+            return new Loaded(pk, readers, gammaG2, ic, domain, circuitFingerprint, arena);
         } catch (RuntimeException | IOException e) {
             arena.close();
             throw e;
@@ -156,6 +202,55 @@ public final class Groth16PkStore {
         return sparse ? new SparsePointFile.SparseG1Reader(seg)
                       : new PippengerFlatBLS381.SegmentG1Reader(seg);
     }
+
+    private static ManifestDimensions validateManifestDimensions(
+            Properties manifest, String fingerprint)
+            throws IOException {
+        final int numPublic;
+        final int numB2;
+        final int numIc;
+        final int domain;
+        try {
+            numPublic = Integer.parseInt(manifest.getProperty("numPublic"));
+            numB2 = Integer.parseInt(manifest.getProperty("numB2"));
+            numIc = Integer.parseInt(manifest.getProperty("numIc"));
+            domain = Integer.parseInt(manifest.getProperty("domain"));
+        } catch (RuntimeException error) {
+            throw new IOException("Malformed Groth16 key dimensions", error);
+        }
+        if (numPublic < 0 || numPublic > MAX_PUBLIC_INPUTS || numB2 < 1
+                || numPublic >= numB2 || numIc != (long) numPublic + 1L
+                || domain < 4 || Integer.bitCount(domain) != 1) {
+            throw new IOException("Inconsistent Groth16 key dimensions");
+        }
+        if (fingerprint == null) {
+            return new ManifestDimensions(numPublic, numB2, numIc, domain);
+        }
+        var exact = com.bloxbean.cardano.zeroj.api.R1CSFlatIO.parseExactFingerprint(fingerprint);
+        if (exact == null) throw new IOException("Invalid exact circuit fingerprint in key manifest");
+        if (numPublic != exact.publicInputs() || numB2 != exact.wires()) {
+            throw new IOException("Groth16 key dimensions do not match its exact circuit fingerprint");
+        }
+        int localDomain = nextPowerOfTwo(exact.constraints());
+        long snarkjsRows = (long) exact.constraints() + exact.publicInputs() + 1L;
+        int snarkjsDomain = snarkjsRows > (1L << 30)
+                ? -1 : nextPowerOfTwo((int) snarkjsRows);
+        if (domain != localDomain && domain != snarkjsDomain) {
+            throw new IOException("Groth16 key domain is incompatible with its exact circuit relation");
+        }
+        return new ManifestDimensions(numPublic, numB2, numIc, domain);
+    }
+
+    private static int nextPowerOfTwo(int value) throws IOException {
+        if (value < 1 || value > (1 << 30)) {
+            throw new IOException("Groth16 relation exceeds the supported FFT domain");
+        }
+        int result = Integer.highestOneBit(value);
+        if (result < value) result <<= 1;
+        return Math.max(result, 4);
+    }
+
+    private record ManifestDimensions(int numPublic, int numWires, int numIc, int domain) {}
 
     // ---- fixed 48-byte big-endian field elements ----
 

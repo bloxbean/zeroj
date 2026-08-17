@@ -58,16 +58,19 @@ public final class Groth16Keys implements AutoCloseable {
     private final AffineG1[] ic;
     private final int domain;
     private final int numWires;
+    private final String circuitFingerprint;
     private final Arena arena; // owns the mmap lifetime for store-backed keys; null when heap-backed
 
     private Groth16Keys(Groth16ProvingKeyBLS381 pk, Groth16ProverBLS381.G1Readers readers,
-                        AffineG2 gammaG2, AffineG1[] ic, int domain, int numWires, Arena arena) {
+                        AffineG2 gammaG2, AffineG1[] ic, int domain, int numWires,
+                        String circuitFingerprint, Arena arena) {
         this.pk = pk;
         this.readers = readers;
         this.gammaG2 = gammaG2;
         this.ic = ic;
         this.domain = domain;
         this.numWires = numWires;
+        this.circuitFingerprint = circuitFingerprint;
         this.arena = arena;
     }
 
@@ -109,7 +112,7 @@ public final class Groth16Keys implements AutoCloseable {
     public static Groth16Keys load(Path dir) throws IOException {
         var loaded = Groth16PkStore.load(dir);
         return new Groth16Keys(loaded.pk(), loaded.readers(), loaded.gammaG2(), loaded.ic(),
-                loaded.domain(), loaded.readers().b2().count(), loaded.arena());
+                loaded.domain(), loaded.readers().b2().count(), loaded.circuitFingerprint(), loaded.arena());
     }
 
     /**
@@ -118,14 +121,14 @@ public final class Groth16Keys implements AutoCloseable {
      */
     public static Groth16Keys of(Groth16PkStore.Loaded loaded) {
         return new Groth16Keys(loaded.pk(), loaded.readers(), loaded.gammaG2(), loaded.ic(),
-                loaded.domain(), loaded.readers().b2().count(), loaded.arena());
+                loaded.domain(), loaded.readers().b2().count(), loaded.circuitFingerprint(), loaded.arena());
     }
 
     /** Wrap a classic in-heap {@link Groth16SetupBLS381#setup} result in the unified handle. */
     public static Groth16Keys of(Groth16SetupBLS381.SetupResult sr) {
         var pk = sr.provingKey();
         return new Groth16Keys(pk, Groth16ProverBLS381.heapReaders(pk), sr.gammaG2(), sr.ic(),
-                Groth16ProvingKeyBLS381.count(pk.pointsH()), pk.pointsB2().length, null);
+                Groth16ProvingKeyBLS381.count(pk.pointsH()), pk.pointsB2().length, null, null);
     }
 
     // ---- proving ----------------------------------------------------------------------------
@@ -191,6 +194,9 @@ public final class Groth16Keys implements AutoCloseable {
 
     /** Total wire count — a valid witness has exactly this many scalars. */
     public int numWires() { return numWires; }
+
+    /** Exact relation fingerprint for bound persistent bundles; {@code null} for legacy/in-memory keys. */
+    public String circuitFingerprint() { return circuitFingerprint; }
 
     /** Unmaps a store-backed key (further proving with this handle fails); no-op for heap keys. */
     @Override

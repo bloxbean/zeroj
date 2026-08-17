@@ -1,0 +1,40 @@
+plugins {
+    id 'application'
+}
+
+description = 'Durable RocksDB load and Groth16 benchmark tool for ZeroJ Poseidon JMT'
+
+dependencies {
+    implementation project(':zeroj-jmt-poseidon')
+    implementation project(':zeroj-crypto')
+    implementation project(':zeroj-onchain-julc')
+    implementation "com.bloxbean.cardano:cardano-client-jellyfish-merkle-rocksdb:${rootProject.ext.cclVersion}"
+    implementation 'org.rocksdb:rocksdbjni:9.11.2'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.16'
+}
+
+application {
+    mainClass = 'com.bloxbean.cardano.zeroj.jmt.load.PoseidonJmtLoadMain'
+}
+
+tasks.named('run') {
+    if (project.hasProperty('benchmarkMaxHeap')) {
+        def requested = project.property('benchmarkMaxHeap').toString()
+        if (!(requested ==~ /[1-9][0-9]*[kKmMgG]/)) {
+            throw new GradleException('benchmarkMaxHeap must look like 4g, 512m, or 1048576k')
+        }
+        jvmArgs "-Xms${requested}", "-Xmx${requested}"
+    }
+}
+
+tasks.named('processResources') {
+    inputs.property('cclVersion', rootProject.ext.cclVersion)
+    filesMatching('zeroj-jmt-load.properties') {
+        expand(cclVersion: rootProject.ext.cclVersion)
+    }
+}
+
+test {
+    maxHeapSize = '2g'
+}

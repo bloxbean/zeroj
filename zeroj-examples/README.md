@@ -47,7 +47,9 @@ Write circuits as annotated Java classes and use generated companions for
 - **Guide**: [`docs/circuit-annotation-user-guide.md`](../docs/circuit-annotation-user-guide.md)
 - **Note**: MiMC-based annotation examples target BN254/off-chain. For
   Cardano/BLS12-381 circuits, use `ZkPoseidon` or `ZkPoseidonN` with explicit
-  BLS12-381 parameters.
+  BLS12-381 parameters. The MPF example consumes the operation-specific
+  `ZkMpfInclusion` primitive and canonical branch witness from the separate
+  `zeroj-mpf-poseidon` module.
 
 ### 1. Sealed-Bid Auction
 Prove your bid exceeds a reserve price without revealing the bid amount.

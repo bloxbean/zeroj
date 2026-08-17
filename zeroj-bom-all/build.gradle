@@ -29,6 +29,7 @@ dependencies {
         api project(':zeroj-circuit-annotation-api')
         api project(':zeroj-circuit-annotation-processor')
         api project(':zeroj-mpf-poseidon')
+        api project(':zeroj-jmt-poseidon')
         api project(':zeroj-prover-spi')
         api project(':zeroj-prover-gnark')
         api project(':zeroj-onchain-julc')
@@ -37,6 +38,9 @@ dependencies {
         api project(':zeroj-bls12381-wasm')
         api project(':zeroj-bbs')
         api project(':zeroj-bbs-wasm')
+        api project(':zeroj-crypto-blst')
+        api project(':zeroj-tools')
+        api project(':zeroj-ceremony')
 
         // Incubator modules
         api project(':zeroj-prover-wasm')

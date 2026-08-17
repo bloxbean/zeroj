@@ -5,6 +5,13 @@ plugins {
 description = 'ZeroJ core proof model, envelopes, and verification result types'
 
 dependencies {
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    testImplementation 'com.networknt:json-schema-validator:2.0.0'
+}
+
+test {
+    systemProperty 'zeroj.manifest.schema',
+            rootProject.file('docs/merkle/circuit-manifest-v1.schema.json').absolutePath
 }
 
 publishing {

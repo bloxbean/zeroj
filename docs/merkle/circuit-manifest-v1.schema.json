@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeroj.dev/schema/circuit-manifest-v1.json",
+  "title": "ZeroJ bounded authenticated-state circuit manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "templateId",
+    "structureProfile",
+    "operation",
+    "maxSteps",
+    "publicInputs",
+    "poseidonParameterFingerprint",
+    "r1csSha256",
+    "r1csFormat",
+    "dimensionFingerprint",
+    "provingSystem",
+    "curve",
+    "verificationKeyFormat",
+    "verificationKeySha256",
+    "setupProvenance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "zeroj-circuit-manifest-v1" },
+    "templateId": { "type": "string", "pattern": "^zeroj-(mpf|jmt)-v1-[a-z0-9-]+-s(0|[1-9][0-9]*)-p[1-9][0-9]*$" },
+    "structureProfile": { "enum": ["zeroj-poseidon-mpf-v1", "zeroj-poseidon-jmt-v1"] },
+    "operation": {
+      "enum": [
+        "inclusion",
+        "non-inclusion-empty",
+        "non-inclusion-different-leaf",
+        "value-update",
+        "insert-empty",
+        "insert-different-leaf",
+        "delete",
+        "tombstone-update"
+      ]
+    },
+    "maxSteps": { "type": "integer", "minimum": 0, "maximum": 64 },
+    "publicInputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "name", "type", "encoding"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "const": "field" },
+          "encoding": { "const": "canonical-unsigned-big-endian-32" }
+        }
+      }
+    },
+    "poseidonParameterFingerprint": {
+      "const": "4bf489f3a231cbdba3e9b8c2d21966e052bf9132b9ddf6529aa3f569297a8fc2"
+    },
+    "r1csFormat": { "const": "zeroj-r1cs-canonical-v1" },
+    "r1csSha256": { "$ref": "#/$defs/sha256" },
+    "dimensionFingerprint": { "type": "string", "pattern": "^c[1-9][0-9]*-w[1-9][0-9]*-p(0|[1-9][0-9]*)$" },
+    "provingSystem": { "const": "groth16" },
+    "curve": { "const": "bls12-381" },
+    "verificationKeyFormat": { "const": "zeroj-groth16-vk-bls12-381-v1" },
+    "verificationKeySha256": { "$ref": "#/$defs/sha256" },
+    "provingKeyFormat": { "const": "zeroj-groth16-pk-bls12-381-v1" },
+    "provingKeySha256": { "$ref": "#/$defs/sha256" },
+    "setupProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "setupId", "productionApproved"],
+      "properties": {
+        "kind": { "enum": ["benchmark-single-party", "multi-party-ceremony"] },
+        "setupId": { "type": "string", "minLength": 1 },
+        "transcriptSha256": { "$ref": "#/$defs/sha256" },
+        "productionApproved": { "const": false }
+      }
+    }
+  },
+  "dependentRequired": {
+    "provingKeyFormat": ["provingKeySha256"],
+    "provingKeySha256": ["provingKeyFormat"]
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

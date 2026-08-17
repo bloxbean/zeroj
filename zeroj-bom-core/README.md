@@ -11,6 +11,8 @@ dependencies {
 
     implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
     implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
+    implementation 'com.bloxbean.cardano:zeroj-mpf-poseidon'
+    implementation 'com.bloxbean.cardano:zeroj-jmt-poseidon'
     implementation 'com.bloxbean.cardano:zeroj-crypto'
     implementation 'com.bloxbean.cardano:zeroj-verifier-core'
     implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
@@ -31,6 +33,8 @@ dependencies {
 - `zeroj-crypto`
 - `zeroj-circuit-dsl`
 - `zeroj-circuit-lib`
+- `zeroj-mpf-poseidon`
+- `zeroj-jmt-poseidon`
 - `zeroj-prover-spi`
 - `zeroj-prover-gnark`
 - `zeroj-onchain-julc`

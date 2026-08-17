@@ -51,6 +51,10 @@ zeroj-api                  (foundation types)
   +-- zeroj-circuit-dsl    (→ zeroj-api, zeroj-codec)
   |     |
   |     +-- zeroj-circuit-lib (→ zeroj-circuit-dsl)
+  |             |
+  |             +-- zeroj-mpf-poseidon (→ CCL MPF/core; structure-owned circuits)
+  |             |
+  |             +-- zeroj-jmt-poseidon (→ CCL JMT/core; structure-owned circuits)
   |
   +-- zeroj-patterns       (→ zeroj-api, zeroj-verifier-core, zeroj-codec, zeroj-cardano)
   |
@@ -67,6 +71,8 @@ zeroj-api                  (foundation types)
   +-- zeroj-onchain-julc   (→ zeroj-crypto, julc-stdlib, BLS12-381 builtins)
   |
   +-- zeroj-test-vectors   (→ zeroj-api, test fixtures only)
+
+zeroj-mpf-poseidon-load / zeroj-jmt-poseidon-load (non-published durable benchmark tools)
 
 zeroj-bbs, zeroj-bbs-wasm, zeroj-bls12381-wasm (mainline opt-in)
 

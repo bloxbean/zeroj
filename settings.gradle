@@ -28,6 +28,9 @@ include 'zeroj-onchain-julc'
 // === Support and platform modules ===
 include 'zeroj-test-vectors'
 include 'zeroj-examples'
+include 'zeroj-mpf-poseidon-load'
+include 'zeroj-jmt-poseidon'
+include 'zeroj-jmt-poseidon-load'
 include 'zeroj-bom-core'
 include 'zeroj-bom-all'
 

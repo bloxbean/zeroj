@@ -11,6 +11,7 @@ import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 /**
  * The big-circuit setup/prove orchestration from ADR-0033/0034/0035, extracted from the
@@ -44,34 +45,90 @@ public final class Groth16Pipeline {
 
     /** File name of the packed-constraint cache inside a key-bundle directory. */
     public static final String R1CS_CACHE = "r1cs.bin";
+    private static final Pattern LEGACY_DIMENSION_FINGERPRINT = Pattern.compile(
+            "^c[1-9][0-9]*-w[1-9][0-9]*-p[0-9]+$");
 
     /**
      * A compiled circuit, reduced to what setup/prove need. Build it, then drop every reference
      * to the circuit graph / constraint system before the heavy phase (the pipeline cannot
      * release objects it never sees).
      */
-    public record Compiled(R1CSFlat flat, int numConstraints, int numWires, int numPublic) {
-        /** Canonical circuit fingerprint — gates the {@code r1cs.bin} cache and key bundles. */
+    public static final class Compiled {
+        private final R1CSFlat flat;
+        private final int numConstraints;
+        private final int numWires;
+        private final int numPublic;
+        private final String r1csSha256;
+        private final String fingerprint;
+
+        public Compiled(R1CSFlat flat, int numConstraints, int numWires, int numPublic) {
+            if (flat == null) throw new NullPointerException("flat");
+            if (numConstraints < 1) throw new IllegalArgumentException("numConstraints must be >= 1");
+            if (numWires < 1) throw new IllegalArgumentException("numWires must be >= 1");
+            if (numPublic < 0 || numPublic >= numWires) {
+                throw new IllegalArgumentException("numPublic must be in [0, numWires)");
+            }
+            if (flat.rows() != numConstraints) {
+                throw new IllegalArgumentException("flat row count does not match numConstraints");
+            }
+            this.flat = flat;
+            this.numConstraints = numConstraints;
+            this.numWires = numWires;
+            this.numPublic = numPublic;
+            this.r1csSha256 = R1CSFlatIO.canonicalSha256(flat, numWires, numPublic);
+            this.fingerprint = Groth16Pipeline.fingerprint(
+                    numConstraints, numWires, numPublic) + "-r" + r1csSha256;
+        }
+
+        public R1CSFlat flat() { return flat; }
+        public int numConstraints() { return numConstraints; }
+        public int numWires() { return numWires; }
+        public int numPublic() { return numPublic; }
+
+        /** Exact circuit fingerprint — gates the {@code r1cs.bin} cache and key bundles. */
         public String fingerprint() {
-            return Groth16Pipeline.fingerprint(numConstraints, numWires, numPublic);
+            return fingerprint;
+        }
+
+        /** Canonical content identity used by authenticated-state manifests. */
+        public String r1csSha256() {
+            return r1csSha256;
         }
     }
 
     /** Canonical fingerprint format: {@code c<constraints>-w<wires>-p<public>}. */
     public static String fingerprint(int numConstraints, int numWires, int numPublic) {
+        if (numConstraints < 1) throw new IllegalArgumentException("numConstraints must be >= 1");
+        if (numWires < 1) throw new IllegalArgumentException("numWires must be >= 1");
+        if (numPublic < 0 || numPublic >= numWires) {
+            throw new IllegalArgumentException("numPublic must be in [0, numWires)");
+        }
         return "c" + numConstraints + "-w" + numWires + "-p" + numPublic;
+    }
+
+    /** True only for a dimension label suffixed by one canonical lowercase SHA-256 digest. */
+    public static boolean isExactFingerprint(String fingerprint) {
+        return R1CSFlatIO.parseExactFingerprint(fingerprint) != null;
     }
 
     /** Circuit dimensions recovered from a {@link #fingerprint}; {@code null} if malformed. */
     public static Dims parseFingerprint(String fp) {
-        if (fp == null || fp.isEmpty() || fp.charAt(0) != 'c') return null;
+        var exact = R1CSFlatIO.parseExactFingerprint(fp);
+        if (exact != null) {
+            return new Dims(exact.constraints(), exact.wires(), exact.publicInputs());
+        }
+        if (fp == null || !LEGACY_DIMENSION_FINGERPRINT.matcher(fp).matches()) return null;
         int w = fp.indexOf("-w"), p = fp.indexOf("-p");
         if (w < 0 || p < w) return null;
         try {
-            return new Dims(Integer.parseInt(fp, 1, w, 10),
-                    Integer.parseInt(fp, w + 2, p, 10),
-                    Integer.parseInt(fp, p + 2, fp.length(), 10));
-        } catch (NumberFormatException e) {
+            int end = fp.indexOf("-r", p + 2);
+            if (end < 0) end = fp.length();
+            int constraints = Integer.parseInt(fp, 1, w, 10);
+            int wires = Integer.parseInt(fp, w + 2, p, 10);
+            int publicInputs = Integer.parseInt(fp, p + 2, end, 10);
+            if (publicInputs >= wires) return null;
+            return new Dims(constraints, wires, publicInputs);
+        } catch (IllegalArgumentException e) {
             return null;
         }
     }
@@ -126,13 +183,18 @@ public final class Groth16Pipeline {
         } catch (Exception e) {
             progress.constraintCacheWriteFailed(e);
         }
-        return Groth16SetupBLS381.setupToStore(cc.flat(), cc.numWires(), cc.numPublic(), tau, dir, sparse);
+        Groth16SetupBLS381.SetupResult result = Groth16SetupBLS381.setupToStore(
+                cc.flat(), cc.numWires(), cc.numPublic(), tau, dir, sparse);
+        Groth16PkStore.bindCircuitFingerprint(dir, cc.fingerprint());
+        return result;
     }
 
     // ---- prove ------------------------------------------------------------------------------
 
-    /** True when {@code constraintCache} exists and its header matches {@code fingerprint} —
-     *  the cheap probe that decides the compile-skip before any heavy work. */
+    /**
+     * True only when the decoded cache relation matches the exact fingerprint. Exact fingerprints
+     * incur one full streaming relation hash; use is primarily for diagnostics and setup checks.
+     */
     public static boolean cacheMatches(Path constraintCache, String fingerprint) {
         return constraintCache != null && fingerprint != null
                 && R1CSFlatIO.hasMatching(constraintCache, fingerprint);
@@ -171,7 +233,22 @@ public final class Groth16Pipeline {
                                            Supplier<Compiled> compile, Supplier<FlatScalars> witness,
                                            int snarkjsBindingRows, ProverBackend backend,
                                            Progress progress) throws IOException {
-        boolean hit = cacheMatches(constraintCache, fingerprint);
+        String storedFingerprint = keys.circuitFingerprint();
+        if (storedFingerprint != null && fingerprint == null) {
+            fingerprint = storedFingerprint;
+        } else if (storedFingerprint != null && fingerprint != null
+                && !storedFingerprint.equals(fingerprint)) {
+            throw new IllegalStateException("Circuit/key mismatch: stored key bundle fingerprint is "
+                    + storedFingerprint + " but the requested circuit is " + fingerprint);
+        } else if (storedFingerprint == null && isExactFingerprint(fingerprint)) {
+            throw new IllegalStateException("Exact circuit fingerprint " + fingerprint
+                    + " was requested, but the key bundle is unbound. Bind an independently "
+                    + "verified key bundle explicitly before proving.");
+        }
+        // Candidate-only preflight preserves the witness-first memory order. The mapped relation
+        // is parsed and exact-hashed once, after witness generation, before it can reach proving.
+        boolean hit = constraintCache != null && fingerprint != null
+                && R1CSFlatIO.hasMatchingHeader(constraintCache, fingerprint);
         R1CSFlat flat = null;
         String fp = fingerprint;
         if (!hit) {
@@ -201,7 +278,17 @@ public final class Groth16Pipeline {
                 flat = R1CSFlatIO.readMapped(constraintCache, fp, csArena);
                 if (flat == null) { // vanished/corrupted since the header probe — recompile
                     progress.constraintCacheUnreadable();
-                    flat = compileChecked(compile, fp).flat();
+                    csArena.close();
+                    csArena = null;
+                    Compiled compiled = compileChecked(compile, fp);
+                    flat = compiled.flat();
+                    try {
+                        long writeStarted = System.nanoTime();
+                        R1CSFlatIO.write(flat, compiled.fingerprint(), constraintCache);
+                        progress.constraintCacheWritten(constraintCache, secs(writeStarted));
+                    } catch (Exception e) {
+                        progress.constraintCacheWriteFailed(e);
+                    }
                 } else {
                     progress.constraintsMapped(flat.rows(), secs(t));
                 }
