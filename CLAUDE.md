@@ -1,11 +1,30 @@
-All package name in zeroj project should start with com.bloxbean.cardano.zeroj
-groupid: com.bloxbean.cardano
+# CLAUDE.md — ZeroJ
 
-Java:  Java25 , GraalVM compatible. So keep adding graalvm resource files in individual module for native image compilation by user application
+@AGENTS.md
 
-To set java 25 in path: sdk use java 25.0.2-graal
+## Claude Code
 
-ZK Circuit tooling:
-- circom: /Users/satya/.cargo/bin/circom
-- snarkjs: /Users/satya/.npm-global/bin/snarkjs
-- circomlib (npm): install via `npm install circomlib` in circuit directory
+Claude Code may be the primary implementer for ZeroJ.
+
+For R2/R3 changes:
+
+- Use Plan Mode before implementation.
+- Read the governing ADR and normative references completely.
+- State the threat model and security invariants before editing.
+- Do not invent cryptographic behavior when a specification is ambiguous.
+- Stop and report conflicts between the ADR, specification, and repository.
+- Implement in bounded milestones.
+- Add negative/adversarial tests alongside implementation.
+- Use authoritative vectors and independent implementations where available.
+- Never infer cryptographic security merely from passing tests.
+
+At completion report:
+
+1. risk classification
+2. ADR milestone
+3. modules/providers affected
+4. invariants verified
+5. tests/vectors run
+6. differential checks
+7. remaining assumptions
+8. areas requiring human/external review
