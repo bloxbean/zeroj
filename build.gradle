@@ -97,9 +97,12 @@ subprojects {
         }
     }
 
-    // Publishing for publishable modules
-    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples',
-                          'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load']
+    // Publishing for publishable modules. ADR-0044: the assurance (WASM differential providers),
+    // benchmark (MPF/JMT load tools), and integration-test projects are never published, even when
+    // their opt-in settings flag puts them in the build.
+    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples', 'zeroj-integration-tests',
+                          'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load',
+                          'zeroj-bls12381-wasm', 'zeroj-bbs-wasm']
     if (!nonPublishable.contains(project.name)) {
         apply plugin: 'maven-publish'
         apply plugin: 'signing'
@@ -157,6 +160,92 @@ subprojects {
                 sign publishing.publications
             }
         }
+    }
+}
+
+// === ADR-0044 structural guard =================================================================
+// Asserts that the default (stable) product graph never gains an edge to an assurance, benchmark,
+// incubator, or removed module, and that the boundaries the ADR keeps apart stay apart. Runs in CI,
+// snapshot, and release so optional code cannot silently return to the published surface.
+tasks.register('verifyDefaultModuleSurface') {
+    group = 'verification'
+    description = 'ADR-0044: assert the default module graph has no assurance/benchmark/removed edge.'
+
+    def forbiddenNames = [
+            // removed by ADR-0044 Decision 3
+            'zeroj-prover-gnark', 'zeroj-prover-spi', 'zeroj-verifier-halo2', 'zeroj-prover-wasm',
+            'zeroj-cardano', 'zeroj-ccl', 'zeroj-patterns', 'zeroj-examples', 'zeroj-bom-all',
+            // merged away by ADR-0044 Decision 5
+            'zeroj-verifier-core', 'zeroj-ceremony',
+            // kept, but outside the default build (Decision 4)
+            'zeroj-bls12381-wasm', 'zeroj-bbs-wasm',
+            'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load',
+    ]
+    // Modules that are themselves outside the stable surface: they may depend on each other, but
+    // nothing stable may depend on them.
+    def nonStableNames = [
+            'zeroj-integration-tests',
+            'zeroj-bls12381-wasm', 'zeroj-bbs-wasm',
+            'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load',
+    ]
+
+    // Two views. `graph` is every declared project edge (runtime + test); `runtimeGraph` is only
+    // what ends up in the published POM. A test-only edge to an optional provider is legitimate
+    // assurance wiring; a runtime edge to one is a product-surface leak.
+    def edgesOf = { sub, Closure filter ->
+        sub.configurations.findAll { filter(it.name) }
+                .collectMany { cfg -> cfg.dependencies.withType(ProjectDependency).collect { it.name } }
+                .toUnique()
+    }
+    def graph = rootProject.subprojects.collectEntries {
+        [(it.name): edgesOf(it) { true }]
+    }
+    def runtimeGraph = rootProject.subprojects.collectEntries {
+        [(it.name): edgesOf(it) { n -> n in ['api', 'implementation', 'compileOnly', 'runtimeOnly'] }]
+    }
+    def presentNames = rootProject.subprojects.collect { it.name }
+
+    doLast {
+        def failures = []
+
+        runtimeGraph.each { name, deps ->
+            if (nonStableNames.contains(name)) return
+            deps.findAll { forbiddenNames.contains(it) }.each {
+                failures << "stable module '${name}' has a runtime dependency on out-of-surface module '${it}'"
+            }
+        }
+
+        presentNames.findAll { forbiddenNames.contains(it) && !nonStableNames.contains(it) }.each {
+            failures << "removed/merged project '${it}' is still in the default settings.gradle"
+        }
+
+        // Boundaries ADR-0042 and ADR-0044 require to stay separate.
+        if (graph['zeroj-mpf-poseidon']?.contains('zeroj-jmt-poseidon')
+                || graph['zeroj-jmt-poseidon']?.contains('zeroj-mpf-poseidon')) {
+            failures << 'zeroj-mpf-poseidon and zeroj-jmt-poseidon must remain independent (ADR-0042)'
+        }
+        if (graph['zeroj-circuit-annotation-api']?.contains('zeroj-circuit-annotation-processor')) {
+            failures << 'the annotation API must not depend on the annotation processor'
+        }
+
+        // Pure-Java modules must not acquire a native or WASM dependency.
+        def nativeNames = ['zeroj-blst', 'zeroj-crypto-blst', 'zeroj-bls12381-wasm', 'zeroj-bbs-wasm']
+        def pureJavaNames = ['zeroj-api', 'zeroj-codec', 'zeroj-backend-spi', 'zeroj-bls12381',
+                             'zeroj-crypto', 'zeroj-circuit-dsl', 'zeroj-circuit-lib',
+                             'zeroj-circuit-annotation-api', 'zeroj-circuit-annotation-processor',
+                             'zeroj-verifier-plonk', 'zeroj-bbs', 'zeroj-mpf-poseidon',
+                             'zeroj-jmt-poseidon', 'zeroj-tools']
+        pureJavaNames.each { name ->
+            runtimeGraph[name]?.findAll { nativeNames.contains(it) }?.each {
+                failures << "pure-Java module '${name}' gained native/WASM dependency '${it}'"
+            }
+        }
+
+        if (!failures.isEmpty()) {
+            throw new GradleException("ADR-0044 module-surface check failed:\n  - "
+                    + failures.join("\n  - "))
+        }
+        logger.lifecycle("ADR-0044 module-surface check passed (${presentNames.size()} default projects).")
     }
 }
 

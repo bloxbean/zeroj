@@ -32,7 +32,6 @@ include 'zeroj-mpf-poseidon-load'
 include 'zeroj-jmt-poseidon'
 include 'zeroj-jmt-poseidon-load'
 include 'zeroj-bom-core'
-include 'zeroj-bom-all'
 
 // === Mainline opt-in modules, outside zeroj-bom-core ===
 include 'zeroj-bls12381-wasm'

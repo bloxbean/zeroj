@@ -10,9 +10,11 @@ Accepted
 
 ## Implementation status
 
-Not started. This ADR records the accepted target architecture; module, build,
-workflow, publication, and documentation changes require a separate
-implementation step.
+**In progress.** Implementation is under way on branch
+`refactor/adr-0044-module-cleanup`. Milestone progress is tracked in
+[the migration note](../migration/0044-module-cleanup.md); this status becomes
+"Implemented" only when every milestone and verification gate in this ADR has
+been completed.
 
 ## Risk classification
 
