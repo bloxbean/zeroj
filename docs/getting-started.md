@@ -29,16 +29,6 @@ We'll build a **private multiplier** circuit where the prover shows they know a 
 | Java | 25+ (GraalVM) | `sdk use java 25.0.2-graal` |
 | Yaci DevKit | latest | Local Cardano devnet (only for on-chain steps) |
 
-### Building the gnark native prover (optional)
-
-The gnark native library is only needed if you want to generate proofs using the optional in-process gnark FFM prover. The main flow in this guide uses the pure Java prover.
-
-If you want to use the gnark prover, you need **Go 1.21+** to build the native library once:
-
-```bash
-cd zeroj-prover-gnark/gnark-wrapper && make build
-```
-
 Start Yaci DevKit (only for on-chain Steps 5-7):
 ```bash
 yaci-cli:default> create-node -o --start
@@ -246,14 +236,17 @@ PrivateMultiplierCircuit.java (define in Java DSL)
 
 ## Running the Examples
 
-The `zeroj-examples` module contains complete working examples:
+The `zeroj-integration-tests` project contains complete working flows. They are
+regression tests first — the runnable applications and tutorials live in
+[zeroj-usecases](https://github.com/bloxbean/zeroj-usecases).
 
 ```bash
 # Off-chain: DSL circuit → prove → Java verify
-./gradlew :zeroj-examples:test
+./gradlew :zeroj-integration-tests:test
 
-# On-chain: full flow on Yaci DevKit (requires running Yaci)
-./gradlew :zeroj-examples:e2eTest
+# End-to-end: needs snarkjs on PATH and/or a running Yaci DevKit
+# (tests skip gracefully when a prerequisite is missing)
+./gradlew :zeroj-integration-tests:e2eTest
 ```
 
 ### Available Examples
@@ -269,12 +262,11 @@ The `zeroj-examples` module contains complete working examples:
 | `CircomToOnChainE2ETest` | Circom multiplier | Pure Java | **Julc VM** | Yes |
 | `ParameterizedCircuitE2ETest` | Hash chain, Merkle, multi-commit | Pure Java | Pairing | No |
 
-**FFM/CLI provers (native dependencies):**
+**Independent-prover interoperability (external CLI):**
 
 | Example | Circuit | Prove | Verify | On-Chain |
 |---------|---------|-------|--------|----------|
 | `SealedBidE2ETest` | Sealed bid auction | snarkjs | Pure Java | No |
-| `SealedBidGnarkE2ETest` | Sealed bid auction | gnark FFM | Pure Java | No |
 | `SealedBidOnChainE2ETest` | Sealed bid auction | Pre-generated | Julc/Plutus V3 | Yes (Yaci) |
 | `AnonymousVotingE2ETest` | Anonymous voting | snarkjs | Pure Java | No |
 | `BalanceThresholdE2ETest` | Balance threshold | snarkjs | Pure Java | No |
@@ -287,14 +279,14 @@ The `zeroj-examples` module contains complete working examples:
   with explicit BLS12-381 parameters.
 - **Balance Threshold** -- prove balance >= threshold without revealing exact balance
 
-See the [examples README](../zeroj-examples/README.md) for detailed descriptions of each flow.
+See the [integration-tests README](../zeroj-integration-tests/README.md) for what each test protects.
 
 ## Prover Options
 
 | Prover | Proof System | Curve | External Deps | Notes |
 |--------|-------------|-------|---------------|-------|
 | **Pure Java** | Groth16 + PlonK | BLS12-381 | **None** | Recommended default path |
-| **gnark FFM** | Groth16 + PlonK | BLS12-381 | Go native lib | Optional native backend |
+| **blst-accelerated** | Groth16 | BLS12-381 | bundled `libblst` (FFM) | Opt-in `zeroj-crypto-blst`; bit-identical proofs |
 | **snarkjs CLI** | Groth16 + PlonK | BLS12-381 | Node.js + snarkjs | External CLI workflow |
 
 **Pure Java** is the recommended prover for the core Cardano path -- zero native dependencies and covered by end-to-end on-chain tests. See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pipeline.

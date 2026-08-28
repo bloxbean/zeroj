@@ -427,10 +427,10 @@ testImplementation 'com.bloxbean.cardano:cardano-client-lib'
 
 ```bash
 # Unit tests (off-chain: circuit → prove → pairing verify)
-./gradlew :zeroj-examples:test
+./gradlew :zeroj-integration-tests:test
 
 # On-chain tests (requires Yaci DevKit running)
-./gradlew :zeroj-examples:e2eTest
+./gradlew :zeroj-integration-tests:e2eTest
 
 # Full crypto test suite
 ./gradlew :zeroj-crypto:test

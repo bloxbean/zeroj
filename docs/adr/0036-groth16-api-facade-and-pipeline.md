@@ -1,6 +1,9 @@
 # ADR-0036: Groth16 API facade (`Groth16Keys`) + reusable orchestration (`Groth16Pipeline`) + `zeroj-tools`
 
-- **Status**: accepted + implemented, 2026-07-11
+- **Status**: accepted + implemented, 2026-07-11. The `zeroj-ceremony` CLI
+  artifact boundary is superseded by [ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md),
+  which merged that module into `zeroj-tools` without changing the command name,
+  CLI behavior, or any ceremony cryptography.
 - **Depends on**: ADR-0029 (PkStore/mmap), ADR-0033 (prover memory), ADR-0034 (frontend/CSR + flat scalars), ADR-0035 (streaming setup + sparse store)
 
 ## Context

@@ -1,7 +1,17 @@
 # ADR-0031: Groth16 MPC Trusted-Setup Ceremony — snarkjs Path + ZeroJ-Native Contributor
 
 ## Status
-Proposed (2026-07-08) — planned on `feat/adr_0031_mpc_ceremony`.
+
+Proposed (2026-07-08) — planned on `feat/adr_0031_mpc_ceremony`. The **CLI
+artifact boundary** is superseded by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+
+ADR-0044 merged the `zeroj-ceremony` Gradle module into `zeroj-tools`. This is a
+packaging change only. The `zeroj-ceremony` command name, CLI behavior, release
+asset names, Picocli configuration, native-image metadata, transcript bytes,
+randomness and secret handling, the `zeroj.allowInsecureTrustedSetup` guard, and
+the requirement that `snarkjs zkey verify` remain the independent transcript
+verifier are all unchanged. No ceremony cryptography moved.
 
 ## Context
 

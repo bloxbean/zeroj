@@ -1,7 +1,17 @@
 # ADR-0018: Shared BLS12-381 Primitives and Optional WASM Provider
 
 ## Status
-Accepted
+
+Accepted. The **packaging** of the WASM provider is superseded by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+
+The zkcrypto WASM provider is no longer a published runtime artifact. It moved
+to `assurance/zeroj-bls12381-wasm`, outside the default build, and is selected
+with `-PincludeAssurance`. Its role as ZeroJ's **independent differential
+oracle** is unchanged and explicitly preserved: ADR-0044 does not authorize
+losing it, and `BbsBlsProviderConformanceTest` fails closed if the assurance
+build demands the provider and cannot construct it. Every primitive, provider
+SPI and conformance decision in this ADR stands.
 
 ## Date
 2026-05-07

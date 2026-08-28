@@ -1,7 +1,16 @@
 # ADR-0008: PlonK Support via gnark
 
 ## Status
-Accepted
+
+Accepted; the gnark **runtime provider** is superseded by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+
+This ADR remains the historical record of why PlonK entered ZeroJ through gnark.
+ADR-0044 removed the `zeroj-prover-gnark` Java/FFM runtime: PlonK proving and
+verification are now the pure-Java `zeroj-crypto` and `zeroj-verifier-plonk`
+path. The pinned gnark implementation survives only as a non-published fixture
+generator at `assurance/gnark-fixtures/`, which keeps the independent PlonK
+BLS12-381 vectors reproducible. No PlonK protocol decision here is changed.
 
 ## Date
 2026-03-27

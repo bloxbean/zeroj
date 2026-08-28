@@ -100,7 +100,7 @@ subprojects {
     // Publishing for publishable modules. ADR-0044: the assurance (WASM differential providers),
     // benchmark (MPF/JMT load tools), and integration-test projects are never published, even when
     // their opt-in settings flag puts them in the build.
-    def nonPublishable = ['zeroj-test-vectors', 'zeroj-examples', 'zeroj-integration-tests',
+    def nonPublishable = ['zeroj-test-vectors', 'zeroj-integration-tests',
                           'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load',
                           'zeroj-bls12381-wasm', 'zeroj-bbs-wasm']
     if (!nonPublishable.contains(project.name)) {

@@ -26,8 +26,8 @@ The ZeroJ Circuit DSL lets you define ZK arithmetic circuits in Java and compile
 
 | Backend | Proof System | Prover | Use Case |
 |---------|-------------|--------|----------|
-| R1CS | Groth16 | **Pure Java**, gnark FFM | Smallest proofs, cheapest on-chain verification |
-| PlonK | PlonK | **Pure Java**, gnark FFM | Universal setup, no per-circuit ceremony |
+| R1CS | Groth16 | **Pure Java** (optionally blst-accelerated) | Smallest proofs, cheapest on-chain verification |
+| PlonK | PlonK | **Pure Java** | Universal setup, no per-circuit ceremony |
 
 No circom, Go, or Rust is needed for the Java DSL plus pure-Java proving path.
 
@@ -677,7 +677,7 @@ var circuit = MultiFieldCommitCircuit.build("name", "age", "address", "balance")
 ```java
 var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
 
-// Serialize to iden3 .r1cs binary (for snarkjs or gnark import)
+// Serialize to iden3 .r1cs binary (for snarkjs import or a ceremony)
 byte[] r1csBytes = R1CSSerializer.serialize(r1cs);
 Files.write(Path.of("circuit.r1cs"), r1csBytes);
 
@@ -758,10 +758,8 @@ void multiplier_validWitness() {
 Java CircuitSpec / CircuitBuilder DSL
         │
         ├──▶ compileR1CS()  ──▶ Groth16ProverBLS381 (pure Java) ──▶ proof
-        │                    └──▶ gnark FFM ──▶ proof (see alternate-backends.md)
         │
         ├──▶ compilePlonK() ──▶ PlonKProverBLS381 (pure Java) ──▶ proof
-        │                    └──▶ gnark FFM ──▶ proof
         │
         └──▶ calculateWitness() ──▶ BigInteger[] (pure Java)
 
@@ -805,7 +803,6 @@ implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
 implementation 'com.bloxbean.cardano:zeroj-crypto'
 
 // Optional native prover
-// implementation 'com.bloxbean.cardano:zeroj-prover-gnark'    // gnark (Groth16 + PlonK)
 
 // Verifiers (pure Java, zero native deps)
 implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'    // Groth16 BLS12-381

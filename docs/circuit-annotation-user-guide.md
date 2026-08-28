@@ -174,7 +174,7 @@ Every annotated circuit should have tests for:
 - backend compilation for the curve and proof system you intend to use
 
 The examples in
-`zeroj-examples/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation`
+`zeroj-integration-tests/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation`
 show this pattern without requiring external prover tooling.
 
 ## Proof Flow Integration
@@ -209,16 +209,17 @@ var envelope = AgeVerificationCircuit.proofEnvelopeBuilder(
         circuit,
         ProofSystemId.GROTH16,
         CurveId.BLS12_381,
-        proof.proveResponse().proofJson().getBytes(StandardCharsets.UTF_8),
+        proofJson.getBytes(StandardCharsets.UTF_8),
         inputs,
         new VerificationKeyRef.ById("age-v1"))
     .build();
 ```
 
 Exporter- or prover-specific code remains outside the generated companions.
-For example, `AnnotatedAgeVerificationProofHelper` converts a generated witness
-to `.wtns` bytes with `WitnessExporter` and passes generated witness maps to the
-existing `GnarkProverHelper`.
+For example, `AnnotatedAgeVerificationProofHelper` in `zeroj-integration-tests`
+converts a generated witness to `.wtns` bytes for snarkjs, and binds a prover's
+output to an envelope only after checking that the reported curve and public
+signals agree with the generated inputs.
 
 ## Bit And Byte Inputs
 

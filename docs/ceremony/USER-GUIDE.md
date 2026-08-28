@@ -140,14 +140,14 @@ I confirm the entropy was generated fresh and destroyed after use.
 
 ```bash
 # fat jar (any JDK 25+)
-./gradlew :zeroj-ceremony:fatJar
-#   -> zeroj-ceremony/build/libs/zeroj-ceremony-<v>-all.jar
+./gradlew :zeroj-tools:fatJar
+#   -> zeroj-tools/build/libs/zeroj-ceremony-<v>-all.jar
 
 # native zip distribution — one command; requires a GraalVM JDK (e.g. `sdk use java 25.0.2-graal`)
-./gradlew :zeroj-ceremony:nativeDistZip
-#   -> zeroj-ceremony/build/distributions/zeroj-ceremony-<v>-<platform>.zip
+./gradlew :zeroj-tools:nativeDistZip
+#   -> zeroj-tools/build/distributions/zeroj-ceremony-<v>-<platform>.zip
 #   (platform auto-detected; override with -Pplatform=linux-x86_64 etc.
-#    the binary itself lands at zeroj-ceremony/build/native/zeroj-ceremony)
+#    the binary itself lands at zeroj-tools/build/native/zeroj-ceremony)
 ```
 
 ## 7. FAQ

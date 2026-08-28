@@ -393,11 +393,11 @@ Ready to build? Here's where to start:
 
 | Example | Use Case | Module |
 |---------|----------|--------|
-| `SealedBidCircuit` | Sealed-bid auction | `zeroj-examples` |
-| `AnonymousVotingCircuit` | Private voting | `zeroj-examples` |
-| `BalanceThresholdCircuit` | Balance/credit proof | `zeroj-examples` |
-| `HashChainCircuit` | Time-lock / PoW chain | `zeroj-examples` |
-| `MerkleMembershipCircuit` | Private set membership | `zeroj-examples` |
-| `MultiInputCommitmentCircuit` | Data commitment | `zeroj-examples` |
+| `SealedBidCircuit` | Sealed-bid auction | `zeroj-integration-tests` |
+| `AnonymousVotingCircuit` | Private voting | `zeroj-integration-tests` |
+| `BalanceThresholdCircuit` | Balance/credit proof | `zeroj-integration-tests` |
+| `HashChainCircuit` | Time-lock / PoW chain | `zeroj-integration-tests` |
+| `MerkleMembershipCircuit` | Private set membership | `zeroj-integration-tests` |
+| `MultiInputCommitmentCircuit` | Data commitment | `zeroj-integration-tests` |
 
 All run on **BLS12-381** with the **pure Java prover** — zero external dependencies, verified on-chain via Cardano Plutus V3.
