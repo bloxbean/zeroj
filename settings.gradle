@@ -1,46 +1,61 @@
 rootProject.name = 'zeroj'
 
-// === Core BOM modules ===
+// === ADR-0044: the default product surface =====================================================
+// The default build is pure Java. It requires no Go, Rust, Cargo, Node.js, WASM toolchain, or
+// RocksDB JNI. Assurance and benchmark projects are opt-in (see the bottom of this file).
+
+// --- Core modules, constrained by zeroj-bom-core ---
 include 'zeroj-api'
 include 'zeroj-codec'
 include 'zeroj-backend-spi'
 include 'zeroj-verifier-core'
 include 'zeroj-verifier-groth16'
-include 'zeroj-verifier-plonk'
 include 'zeroj-bls12381'
 include 'zeroj-blst'
-include 'zeroj-cardano'
-include 'zeroj-ccl'
-include 'zeroj-patterns'
 include 'zeroj-crypto'
 include 'zeroj-crypto-blst'
-include 'zeroj-ceremony'
-include 'zeroj-tools'
 include 'zeroj-circuit-dsl'
 include 'zeroj-circuit-lib'
 include 'zeroj-circuit-annotation-api'
 include 'zeroj-circuit-annotation-processor'
-include 'zeroj-mpf-poseidon'
-include 'zeroj-prover-spi'
-include 'zeroj-prover-gnark'
 include 'zeroj-onchain-julc'
-
-// === Support and platform modules ===
-include 'zeroj-test-vectors'
-include 'zeroj-integration-tests'
-include 'zeroj-mpf-poseidon-load'
-include 'zeroj-jmt-poseidon'
-include 'zeroj-jmt-poseidon-load'
+include 'zeroj-ceremony'
+include 'zeroj-tools'
 include 'zeroj-bom-core'
 
-// === Mainline opt-in modules, outside zeroj-bom-core ===
-include 'zeroj-bls12381-wasm'
-include 'zeroj-bbs-wasm'
+// --- Explicit opt-in product modules: published, but outside the stable BOM ---
+include 'zeroj-verifier-plonk'
 include 'zeroj-bbs'
+include 'zeroj-mpf-poseidon'
+include 'zeroj-jmt-poseidon'
 
-// === Incubator modules (experimental, alternative backends) ===
-include 'zeroj-prover-wasm'
-project(':zeroj-prover-wasm').projectDir = file('incubator/zeroj-prover-wasm')
+// --- Support projects: never published ---
+include 'zeroj-test-vectors'
+include 'zeroj-integration-tests'
 
-include 'zeroj-verifier-halo2'
-project(':zeroj-verifier-halo2').projectDir = file('incubator/zeroj-verifier-halo2')
+// === Opt-in: independent assurance providers (ADR-0044 Decision 4) ==============================
+// The zkcrypto BLS12-381 and zkryptium BBS WASM implementations are ZeroJ's independent
+// differential oracles. They are not runtime products and are never published. Building them needs
+// Rust/Cargo and the wasm32-unknown-unknown target, so they stay out of the default build.
+//
+//   ./gradlew -PincludeAssurance :zeroj-bls12381-wasm:test :zeroj-bbs-wasm:test
+if (providers.gradleProperty('includeAssurance').isPresent()) {
+    include 'zeroj-bls12381-wasm'
+    project(':zeroj-bls12381-wasm').projectDir = file('assurance/zeroj-bls12381-wasm')
+
+    include 'zeroj-bbs-wasm'
+    project(':zeroj-bbs-wasm').projectDir = file('assurance/zeroj-bbs-wasm')
+}
+
+// === Opt-in: benchmark and operator load tools (ADR-0044 Decision 4) ============================
+// Large-state MPF/JMT load and benchmark drivers. They need RocksDB JNI and multi-hour datasets, so
+// they stay out of the default build and are never published.
+//
+//   ./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:build :zeroj-jmt-poseidon-load:build
+if (providers.gradleProperty('includeBenchmarks').isPresent()) {
+    include 'zeroj-mpf-poseidon-load'
+    project(':zeroj-mpf-poseidon-load').projectDir = file('benchmarks/zeroj-mpf-poseidon-load')
+
+    include 'zeroj-jmt-poseidon-load'
+    project(':zeroj-jmt-poseidon-load').projectDir = file('benchmarks/zeroj-jmt-poseidon-load')
+}

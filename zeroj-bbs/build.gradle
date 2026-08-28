@@ -11,8 +11,20 @@ dependencies {
     implementation 'co.nstant.in:cbor:0.9'
 
     testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
-    testImplementation project(':zeroj-bls12381-wasm')
     testImplementation project(':zeroj-blst')
+}
+
+// ADR-0044 Decision 4: the zkcrypto WASM provider is an independent differential oracle that lives
+// outside the default build. When -PincludeAssurance selects it, BbsBlsProviderConformanceTest gains
+// a third provider row and is told to fail if that row cannot be constructed, so the oracle can
+// never be lost silently. Without the flag the test still runs the pure-Java and blst rows.
+if (findProject(':zeroj-bls12381-wasm') != null) {
+    dependencies {
+        testImplementation project(':zeroj-bls12381-wasm')
+    }
+    tasks.named('test') {
+        systemProperty 'zeroj.assurance.requireWasmProvider', 'true'
+    }
 }
 
 publishing {
