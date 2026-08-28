@@ -23,8 +23,11 @@ Completed and evidenced:
 - every security regression migrated out of `zeroj-examples` before its removal,
   green in `zeroj-integration-tests`, including snarkjs independent-prover
   interoperability for Groth16 and PlonK;
-- both mergers verified with identical test counts, packaged-JAR ServiceLoader
-  discovery, a working packaged `zeroj-ceremony` CLI, and the snarkjs mixed-tool
+- both mergers verified with identical test counts and byte-identical moved
+  sources, packaged-JAR ServiceLoader discovery, the full release
+  `:zeroj-tools:nativeDistZip` pipeline (GraalVM native binary reporting
+  `zeroj-ceremony 0.1.0-pre11` with all three subcommands, packaged as
+  `zeroj-ceremony-0.1.0-pre11-macos-arm64.zip`), and the snarkjs mixed-tool
   ceremony transcript check;
 - the zkcrypto/zkryptium WASM differential oracles preserved and fail-closed
   under `-PincludeAssurance` (mutation-tested);
