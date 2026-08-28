@@ -120,6 +120,19 @@ reason separately about `ScriptContext` binding, replay protection, nullifier
 registries, authorization, state/input/output binding, and business policy.
 ZeroJ's reusable verifier code does not provide those guarantees.
 
+## Verification status
+
+All structural milestones are complete and the default build is green. One
+verification gate is still open: the Yaci DevKit on-chain end-to-end tests were
+migrated and are correctly discovered, but skipped in the implementation
+environment because no local DevKit was running. See the
+[ADR's implementation status](../adr/0044-focused-module-surface-and-optional-provider-isolation.md#implementation-status).
+
+Nothing about this cleanup upgrades any maturity, audit, side-channel,
+production, or mainnet claim. The production gates in the governing ADRs for
+Groth16, PlonK, BBS, BLS12-381, MPF, JMT, trusted setup, and the on-chain
+validators are all unchanged and still open.
+
 ## If you depend on a removed module
 
 Pin the previous ZeroJ version until your application has migrated to the

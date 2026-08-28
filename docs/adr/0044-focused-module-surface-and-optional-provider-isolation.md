@@ -10,11 +10,43 @@ Accepted
 
 ## Implementation status
 
-**In progress.** Implementation is under way on branch
-`refactor/adr-0044-module-cleanup`. Milestone progress is tracked in
-[the migration note](../migration/0044-module-cleanup.md); this status becomes
-"Implemented" only when every milestone and verification gate in this ADR has
-been completed.
+**In progress — all structural work complete, one verification gate outstanding.**
+
+Implemented on branch `refactor/adr-0044-module-cleanup`. Every implementation
+milestone (M0–M6) is complete, and the coordinate migration table is published in
+[the migration note](../migration/0044-module-cleanup.md).
+
+Completed and evidenced:
+
+- default root projects reduced 35 → 21 (20 product + `zeroj-integration-tests`);
+- `./gradlew build` green; `./gradlew verifyDefaultModuleSurface` green;
+- every security regression migrated out of `zeroj-examples` before its removal,
+  green in `zeroj-integration-tests`, including snarkjs independent-prover
+  interoperability for Groth16 and PlonK;
+- both mergers verified with identical test counts, packaged-JAR ServiceLoader
+  discovery, a working packaged `zeroj-ceremony` CLI, and the snarkjs mixed-tool
+  ceremony transcript check;
+- the zkcrypto/zkryptium WASM differential oracles preserved and fail-closed
+  under `-PincludeAssurance` (mutation-tested);
+- the pinned gnark PlonK fixture generator preserved and shown to produce a fresh
+  independent artifact that ZeroJ's Java verifier and transcript still accept;
+- every surviving canonical resource — test vectors, ServiceLoader files,
+  native-image metadata — byte-identical before and after (SHA-256 compared);
+  the only removals are the 20 files owned by removed providers;
+- all 13 `zeroj-usecases` projects build, 46 of their tests pass, against the
+  candidate artifacts with the removed coordinates made unresolvable.
+
+Outstanding before this becomes "Implemented":
+
+1. **Execute the Yaci DevKit on-chain end-to-end suite.** The tests were migrated
+   and are correctly discovered, but they skipped because no local DevKit was
+   running in the implementation environment. Close this gate with a running
+   DevKit and `./gradlew :zeroj-integration-tests:e2eTest`, which must show
+   `SealedBidOnChainE2ETest` and `PureJavaProverYaciE2ETest` passing rather than
+   skipped.
+
+This ADR authorizes structural cleanup only and closes no production or audit
+gate; see "Production and audit gates" below.
 
 ## Risk classification
 
