@@ -1,7 +1,9 @@
 # ADR-0020: Module Cleanup and Core Restructure
 
 ## Status
-Accepted
+Superseded in part by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+Retained as the historical record of the first module cleanup.
 
 ## Date
 2026-05-17
