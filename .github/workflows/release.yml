@@ -112,6 +112,8 @@ jobs:
   # ================================================================
   # Stage 3: Ceremony CLI distributables -> GitHub release assets
   # (ADR-0031: contributors download one artifact and run the ceremony)
+  # ADR-0044: the CLI now ships from zeroj-tools. The command name, CLI
+  # behavior and every release asset name are unchanged.
   # ================================================================
 
   ceremony-cli-release:
@@ -156,8 +158,8 @@ jobs:
       - name: Build native zip distribution (fatJar -> native-image -> zip)
         shell: bash
         run: |
-          ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
-          zeroj-ceremony/build/native/zeroj-ceremony${{ matrix.ext }} --version
+          ./gradlew :zeroj-tools:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
+          zeroj-tools/build/native/zeroj-ceremony${{ matrix.ext }} --version
 
       # tag push -> attach to the GitHub release
       - name: Upload to GitHub release
@@ -165,8 +167,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
-            zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+            ${{ matrix.fatjar == true && 'zeroj-tools/build/libs/zeroj-ceremony-*-all.jar' || '' }}
+            zeroj-tools/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
 
       # manual dispatch (preview) -> workflow artifacts only
       - name: Upload preview artifacts
@@ -175,5 +177,5 @@ jobs:
         with:
           name: ceremony-cli-preview-${{ matrix.os }}
           path: |
-            ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
-            zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+            ${{ matrix.fatjar == true && 'zeroj-tools/build/libs/zeroj-ceremony-*-all.jar' || '' }}
+            zeroj-tools/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip

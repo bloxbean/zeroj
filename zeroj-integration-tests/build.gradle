@@ -39,6 +39,7 @@ dependencies {
     testImplementation project(':zeroj-bls12381')
     testImplementation project(':zeroj-blst')
     testImplementation project(':zeroj-test-vectors')
+    testImplementation project(':zeroj-bbs')  // ServiceLoader packaging test asserts the BBS backend is discovered
 
     // On-chain verifier module (Julc-based Plutus V3 validators)
     testImplementation project(':zeroj-onchain-julc')
