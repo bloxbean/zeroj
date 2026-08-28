@@ -1,0 +1,83 @@
+plugins {
+    id 'java'
+}
+
+description = 'ZeroJ cross-module integration and end-to-end regression tests (never published)'
+
+// ADR-0044 M2: the security-relevant regressions that used to live in zeroj-examples. This project
+// exists because these tests span several modules — circuit DSL, circuit lib, annotation processor,
+// pure-Java prover, verifier, codec, MPF and the Julc on-chain verifiers — so no single module owns
+// the invariant. The example circuits and proof helpers are test fixtures here, not product code:
+// nothing in this project is published, and nothing in the product graph depends on it.
+//
+// Tutorials and runnable applications live in https://github.com/bloxbean/zeroj-usecases.
+
+ext {
+    julcVersion = '0.1.0-pre16'
+}
+
+repositories {
+    maven {
+        url = uri("https://central.sonatype.com/repository/maven-snapshots")
+        content {
+            snapshotsOnly()
+        }
+    }
+}
+
+dependencies {
+    testImplementation project(':zeroj-api')
+    testImplementation project(':zeroj-codec')
+    testImplementation project(':zeroj-backend-spi')
+    testImplementation project(':zeroj-verifier-groth16')
+    testImplementation project(':zeroj-verifier-plonk')
+    testImplementation project(':zeroj-circuit-dsl')
+    testImplementation project(':zeroj-circuit-lib')
+    testImplementation project(':zeroj-circuit-annotation-api')
+    testImplementation project(':zeroj-mpf-poseidon')
+    testImplementation project(':zeroj-crypto')
+    testImplementation project(':zeroj-bls12381')
+    testImplementation project(':zeroj-blst')
+    testImplementation project(':zeroj-test-vectors')
+
+    // On-chain verifier module (Julc-based Plutus V3 validators)
+    testImplementation project(':zeroj-onchain-julc')
+    testAnnotationProcessor project(':zeroj-onchain-julc')
+
+    // Julc for on-chain compilation
+    testImplementation "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
+    testAnnotationProcessor project(':zeroj-circuit-annotation-processor')
+    testAnnotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
+
+    // Cardano Client Lib for tx building in E2E tests
+    testImplementation "com.bloxbean.cardano:cardano-client-lib:${rootProject.ext.cclVersion}"
+    testImplementation "com.bloxbean.cardano:cardano-client-backend-blockfrost:${rootProject.ext.cclVersion}"
+    testImplementation "com.bloxbean.cardano:julc-cardano-client-lib:${julcVersion}"
+    testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
+    testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
+}
+
+// Offline regressions. The pure-Java Groth16 setup+prove tests need more than the 1g root default.
+test {
+    useJUnitPlatform {
+        excludeTags 'e2e'
+    }
+    maxHeapSize = '2g'
+}
+
+// E2E integration tests — require external infrastructure (Yaci DevKit and/or snarkjs on PATH).
+// Run with: ./gradlew :zeroj-integration-tests:e2eTest
+tasks.register('e2eTest', Test) {
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'e2e'
+    }
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    maxHeapSize = '2g'
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
+}
