@@ -30,7 +30,12 @@ Completed and evidenced:
   `zeroj-ceremony-0.1.0-pre11-macos-arm64.zip`), and the snarkjs mixed-tool
   ceremony transcript check;
 - the zkcrypto/zkryptium WASM differential oracles preserved and fail-closed
-  under `-PincludeAssurance` (mutation-tested);
+  under `-PincludeAssurance` (mutation-tested), and the M2-required differential
+  job established as `.github/workflows/assurance.yml` — push, PR, nightly and
+  manual dispatch — which runs `:zeroj-bbs:test` alongside the two WASM suites so
+  the official CFRG vectors actually execute against the WASM provider row, plus
+  a second job that regenerates the pinned gnark vectors and requires the Java
+  verifier to accept them;
 - the pinned gnark PlonK fixture generator preserved and shown to produce a fresh
   independent artifact that ZeroJ's Java verifier and transcript still accept;
 - every surviving canonical resource — test vectors, ServiceLoader files,
