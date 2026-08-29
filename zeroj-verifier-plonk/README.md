@@ -4,7 +4,8 @@ PlonK proof verification for BLS12-381, the Cardano-supported pairing curve.
 
 This module provides pure Java PlonK verification for structured snarkjs/ZeroJ
 proof JSON. gnark's opaque binary PlonK proof JSON is not accepted by these
-verifiers yet; verify that format with gnark native verification until a
+verifiers, and ADR-0044 removed the gnark runtime that could verify it natively;
+use the structured snarkjs/ZeroJ JSON path until a
 dedicated adapter is added.
 
 | Backend | Curve | Implementation | Status |

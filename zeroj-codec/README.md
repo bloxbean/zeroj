@@ -14,7 +14,7 @@ This module bridges external proof tooling (snarkjs, gnark) and ZeroJ's internal
 | `CborEnvelopeCodec` | Deterministic CBOR serialization of `ZkProofEnvelope` (integer-keyed map) |
 | `CanonicalHash` | SHA-256 hash of canonical VK encoding for content addressing |
 | `EnvelopeValidator` | Validates envelope fields before verification |
-| `GnarkPlonkCodec` | Typed envelope codec for gnark binary PlonK proof artifacts; verification still uses gnark native verification until a structured adapter exists |
+| `GnarkPlonkCodec` | Typed envelope codec for gnark binary PlonK proof artifacts. ZeroJ cannot verify that format: ADR-0044 removed the gnark runtime and no structured adapter exists. Use the structured snarkjs/ZeroJ PlonK JSON path for verification |
 | `Halo2Codec` | Codec for Halo2 proof artifacts |
 
 Groth16 snarkjs JSON and CBOR envelope parsing use bounded input reads,

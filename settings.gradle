@@ -36,7 +36,13 @@ include 'zeroj-integration-tests'
 // differential oracles. They are not runtime products and are never published. Building them needs
 // Rust/Cargo and the wasm32-unknown-unknown target, so they stay out of the default build.
 //
-//   ./gradlew -PincludeAssurance :zeroj-bls12381-wasm:test :zeroj-bbs-wasm:test
+// :zeroj-bbs:test belongs in this command: under the flag it gains the zkcrypto provider and the
+// requireWasmProvider system property, which is what runs the official CFRG vectors through the
+// third (WASM) provider row. Without it the WASM oracle is built but never exercised.
+//
+//   ./gradlew -PincludeAssurance :zeroj-bls12381-wasm:test :zeroj-bbs-wasm:test :zeroj-bbs:test
+//
+// CI runs exactly this in .github/workflows/assurance.yml.
 if (providers.gradleProperty('includeAssurance').isPresent()) {
     include 'zeroj-bls12381-wasm'
     project(':zeroj-bls12381-wasm').projectDir = file('assurance/zeroj-bls12381-wasm')

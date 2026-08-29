@@ -1,0 +1,116 @@
+name: Assurance
+
+# ADR-0044 Decision 4 / M2: the independent differential oracles.
+#
+# The zkcrypto BLS12-381 and zkryptium BBS WASM implementations are the only independent
+# implementations integrated with ZeroJ's provider conformance suites. ADR-0044 moved them out of
+# the default build (they need Rust/Cargo and the wasm32 target) but explicitly does NOT authorize
+# losing them. This workflow is the job that keeps them runnable, and it is a required gate for
+# their removal from default-build membership.
+#
+# It is deliberately separate from ci.yml so the default build stays pure Java, and it is
+# independently runnable: push, PR, a nightly schedule, and manual dispatch.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # nightly, so an oracle that stops building is caught even without a relevant push
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wasm-differential:
+    name: BLS/BBS WASM differential oracles
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 25 (GraalVM)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+
+      - name: Set up Rust with the wasm32 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # :zeroj-bbs:test is NOT optional here. Under -PincludeAssurance the build puts the zkcrypto
+      # provider on the zeroj-bbs test classpath and sets zeroj.assurance.requireWasmProvider, which
+      # makes BbsBlsProviderConformanceTest run the official CFRG draft-10 vectors through
+      # pure-Java, blst AND wasm-zkcrypto — and fail if the WASM row cannot be constructed. Dropping
+      # it from this command would silently reduce the suite to the rows the default build already
+      # covers, which is exactly the regression this workflow exists to prevent.
+      - name: Run the independent differential suites
+        run: |
+          ./gradlew -PincludeAssurance \
+            :zeroj-bls12381-wasm:test \
+            :zeroj-bbs-wasm:test \
+            :zeroj-bbs:test \
+            --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assurance-test-reports
+          path: '**/build/reports/tests/'
+          retention-days: 14
+
+  gnark-fixtures:
+    name: gnark PlonK fixture oracle
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 25 (GraalVM)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The pinned gnark generator is not byte-reproducible (unsafekzg randomizes the SRS), so the
+      # property under test is not "the bytes match". It is that an artifact produced by an
+      # implementation ZeroJ does not control is still accepted by ZeroJ's pure-Java PlonK verifier
+      # and still yields the same Fiat-Shamir challenges (GnarkTranscriptCompatTest).
+      - name: Generate fresh independent gnark v0.14.0 PlonK vectors
+        working-directory: assurance/gnark-fixtures
+        run: make gen
+
+      - name: Verify the Java PlonK verifier accepts them
+        run: ./gradlew :zeroj-verifier-plonk:test --rerun-tasks --stacktrace
+
+      - name: Confirm the committed vectors were not silently changed
+        run: |
+          # `make gen` rewrites the committed vectors in place. They are an independent oracle, so a
+          # diff here must be reviewed by a human, never auto-committed. Restore them and report.
+          if ! git diff --quiet -- zeroj-test-vectors/src/main/resources/test-vectors/plonk-bls12381/; then
+            echo "::notice::Regenerated gnark vectors differ from the committed ones (expected: the SRS is randomized). The Java verifier accepted them, which is the property under test. Committed vectors left unchanged."
+            git checkout -- zeroj-test-vectors/src/main/resources/test-vectors/plonk-bls12381/
+          fi
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnark-fixture-test-reports
+          path: '**/build/reports/tests/'
+          retention-days: 14

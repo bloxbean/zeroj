@@ -1,8 +1,11 @@
 name: CI
 
 # ADR-0044: the default build is pure Java. It requires no Go, Rust, Cargo, Node.js, WASM
-# toolchain, or RocksDB JNI. The optional assurance (BLS/BBS WASM differential providers) and
-# benchmark (MPF/JMT load tools) builds are opt-in and run in `assurance.yml`.
+# toolchain, or RocksDB JNI.
+#
+# The independent differential oracles (BLS/BBS WASM providers, gnark PlonK fixtures) run in
+# `assurance.yml`. The MPF/JMT load tools are operator/benchmark tooling built on demand with
+# `-PincludeBenchmarks`; they are not part of any CI gate.
 
 on:
   push:

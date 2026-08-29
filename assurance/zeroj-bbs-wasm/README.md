@@ -6,7 +6,7 @@ to `wasm32-unknown-unknown`, executed through Chicory. ZeroJ's Java layer
 only serializes requests, parses responses, and supplies entropy via a single
 documented host import.
 
-See [ADR-0019](../docs/adr/0019-cfrg-bbs-pure-java-and-wasm-providers.md) §7
+See [ADR-0019](../../docs/adr/0019-cfrg-bbs-pure-java-and-wasm-providers.md) §7
 for the design rationale.
 
 ## When to use this module

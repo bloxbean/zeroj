@@ -17,8 +17,11 @@ Copyright (c) 2020-2024 ConsenSys Software Inc.
 Licensed under the Apache License, Version 2.0
 https://github.com/consensys/gnark
 
-The zeroj-prover-gnark module compiles gnark into a shared library
-(libzeroj_gnark.so/.dylib) loaded via Java FFM at runtime.
+gnark is NOT distributed in any ZeroJ artifact. The gnark Java/FFM runtime
+provider was removed (ADR-0044). A pinned gnark v0.14.0 Go program is retained
+at assurance/gnark-fixtures/ purely to regenerate the independent PlonK
+BLS12-381 test vectors that ZeroJ's pure-Java verifier is checked against. It is
+not built, published, or loaded by any released module.
 
 --------------------------------------------------------------------------
 gnark-crypto — Cryptographic Primitives for gnark
@@ -41,12 +44,6 @@ Copyright (c) 2022 ICON Foundation
 Licensed under the Apache License, Version 2.0
 https://github.com/icon-project/blst-java
 
-halo2 — Zero-Knowledge Proving System (incubator/zeroj-verifier-halo2)
---------------------------------------------------------------------------
-Copyright (c) 2020-2024 The Electric Coin Company
-Licensed under MIT License OR Apache License, Version 2.0 (at your option)
-https://github.com/zcash/halo2
-
 --------------------------------------------------------------------------
 Jackson — JSON Processing
 --------------------------------------------------------------------------
@@ -62,11 +59,14 @@ Licensed under the Apache License, Version 2.0
 https://github.com/c-rack/cbor-java
 
 --------------------------------------------------------------------------
-GraalVM Polyglot (incubator/zeroj-prover-wasm)
+Chicory — Pure-Java WebAssembly Runtime
 --------------------------------------------------------------------------
-Copyright (c) 2018-2024 Oracle and/or its affiliates
-Licensed under the Universal Permissive License v1.0 (UPL-1.0)
-https://github.com/oracle/graal
+Copyright (c) 2024 Dylibso, Inc.
+Licensed under the Apache License, Version 2.0
+https://github.com/dylibso/chicory
+
+Used only by the assurance/ WASM differential providers, which are outside the
+default build and are never published.
 
 --------------------------------------------------------------------------
 Cardano Client Lib

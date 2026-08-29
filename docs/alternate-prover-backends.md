@@ -36,7 +36,7 @@ multi-scalar multiplication into the `zeroj-crypto` prover backend. It is a
 proofs to the pure Java path, and cross-provider equivalence is tested.
 
 Since the large-circuit memory and FFT work in
-[ADR-0033](adr/0033-groth16-prover-memory-reduction.md) and
+[ADR-0033](adr/0033-prover-memory-reduction.md) and
 [ADR-0034](adr/0034-frontend-memory-reduction.md), the pure Java prover matches
 or beats blst at large circuit sizes. Measure before adopting it.
 

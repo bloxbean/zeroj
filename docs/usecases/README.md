@@ -385,9 +385,9 @@ Prove you own the NFT without revealing which wallet holds it.
 
 Ready to build? Here's where to start:
 
-1. **[Circuit DSL User Guide](circuit-dsl-user-guide.md)** — Define circuits in Java using `CircuitSpec`
-2. **[Pure Java Prover Guide](pure-java-prover-guide.md)** — Prove and verify with zero external tools
-3. **[Getting Started](getting-started.md)** — Complete walkthrough from circuit to on-chain verification
+1. **[Circuit DSL User Guide](../circuit-dsl-user-guide.md)** — Define circuits in Java using `CircuitSpec`
+2. **[Pure Java Prover Guide](../pure-java-prover-guide.md)** — Prove and verify with zero external tools
+3. **[Getting Started](../getting-started.md)** — Complete walkthrough from circuit to on-chain verification
 
 ### Already Implemented Examples
 

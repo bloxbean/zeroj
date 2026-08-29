@@ -1,11 +1,11 @@
 # ZeroJ Poseidon MPF load benchmark
 
 This non-published module implements the reproducible production-readiness run from
-[ADR-0041](../docs/adr/0041-poseidon-mpf-production-readiness-and-load-benchmark.md).
+[ADR-0041](../../docs/adr/0041-poseidon-mpf-production-readiness-and-load-benchmark.md).
 It keeps RocksDB out of the `zeroj-mpf-poseidon` library.
 
 The completed 2026-08-02 reference run and all timings are recorded in the
-[five-million-entry benchmark report](../docs/benchmarks/poseidon-mpf-5m-2026-08-02.md).
+[five-million-entry benchmark report](../../docs/benchmarks/poseidon-mpf-5m-2026-08-02.md).
 
 The default dataset contains five million deterministic entries and is resumable at committed
 batch boundaries:
@@ -13,7 +13,7 @@ batch boundaries:
 ```bash
 POSEIDON_MPF_BENCH_DIR="$(pwd)/.benchmark-data/poseidon-mpf-5m"
 
-./gradlew :zeroj-mpf-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:run \
   --args="--stage=all --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
   --batch=1000 --rocksdb-profile=high-throughput --pair-cache=262144 \
   --samples=32 --max-steps=8 --circuit-trials=3 --setup=store \
@@ -33,7 +33,7 @@ RocksDB nodes: it verifies the root and deterministic proofs before and after, c
 `report.json`:
 
 ```bash
-./gradlew :zeroj-mpf-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:run \
   --args="--stage=migrate-profile --work-dir=$POSEIDON_MPF_BENCH_DIR \
   --entries=5000000 --batch=1000 --seed=25 --samples=32 \
   --rocksdb-profile=high-throughput"
@@ -54,7 +54,7 @@ To measure the proof-step bound of every entry under the current root without ge
 wire proof, run the opt-in streaming depth scan:
 
 ```bash
-./gradlew :zeroj-mpf-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:run \
   --args="--stage=depth-scan --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
   --progress-every=500000 --rocksdb-profile=high-throughput"
 ```
@@ -94,7 +94,7 @@ After a circuit run has produced an artifact bundle, point the Julc property at 
 `bundle-*` leaf, not the `cardano-artifacts` root:
 
 ```bash
-./gradlew \
+./gradlew -PincludeBenchmarks \
   -Dzeroj.poseidonMpf.cardanoArtifacts=/absolute/path/to/bundle-... \
   :zeroj-onchain-julc:test \
   --tests '*PoseidonMpfCardanoArtifactTest'

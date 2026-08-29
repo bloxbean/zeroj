@@ -21,7 +21,7 @@ working directory, so a relative path can create a different empty database.
 Example durable load:
 
 ```bash
-./gradlew :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
 --stage=load \
 --work-dir=/absolute/path/poseidon-jmt-5m \
 --entries=5000000 --batch=5000 --seed=42 \
@@ -32,11 +32,11 @@ Example durable load:
 Example exact census and operation sample:
 
 ```bash
-./gradlew :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
 --stage=depth-scan --work-dir=/absolute/path/poseidon-jmt-5m \
 --entries=5000000 --batch=5000 --seed=42'
 
-./gradlew :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
 --stage=operations --work-dir=/absolute/path/poseidon-jmt-5m \
 --entries=5000000 --batch=5000 --seed=42 --operation-entries=1000'
 ```
@@ -90,7 +90,7 @@ git/source-tree provenance, and exact roots.
 Use one keys directory per exact R1CS fingerprint:
 
 ```bash
-./gradlew :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run -PbenchmarkMaxHeap=4g --args='\
 --stage=circuit --work-dir=/absolute/path/poseidon-jmt-5m \
 --entries=5000000 --seed=42 --samples=32 --max-levels=12 \
 --circuit-trials=3 --setup=store \
@@ -114,7 +114,7 @@ ordered 32-byte public inputs, per-file hashes/lengths, complete setup provenanc
 `productionApproved=false`. Point the optional Julc test property at the final `bundle-*` leaf:
 
 ```bash
-./gradlew \
+./gradlew -PincludeBenchmarks \
   -Dzeroj.poseidonJmt.cardanoArtifacts=/absolute/path/to/bundle-... \
   :zeroj-onchain-julc:test --tests '*PoseidonJmtCardanoArtifactTest'
 ```
