@@ -39,6 +39,15 @@ Use the Gradle wrapper.
 
 Do not embed developer-specific absolute paths for tools. Discover optional tools such as `circom` and `snarkjs` from PATH or documented configuration.
 
+## Java Style
+
+Prefer imports and simple class names at usage sites. For example, import
+`java.util.ArrayList` and use `ArrayList`, rather than writing
+`java.util.ArrayList` inline.
+
+Use a fully qualified class name only when it is necessary to resolve a name
+collision or another source constraint makes an import impractical.
+
 ## Read Before Significant Work
 
 Inspect:
