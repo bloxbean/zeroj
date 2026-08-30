@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * </ol>
  * <p>
  * This test is tagged {@code e2e} and skips gracefully if Yaci DevKit is not running.
- * Run with: {@code ./gradlew :zeroj-examples:e2eTest --tests "*SealedBidOnChainE2ETest"}
+ * Run with: {@code ./gradlew :zeroj-integration-tests:e2eTest --tests "*SealedBidOnChainE2ETest"}
  */
 @Tag("e2e")
 class SealedBidOnChainE2ETest extends ZkE2ETestBase {

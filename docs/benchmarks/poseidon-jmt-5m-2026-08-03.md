@@ -239,15 +239,15 @@ module working directory would create a different database.
 ```bash
 POSEIDON_JMT_BENCH_DIR="$(pwd)/.benchmark-data/poseidon-jmt-5m"
 
-./gradlew :zeroj-jmt-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run \
   --args="--stage=proofs --work-dir=$POSEIDON_JMT_BENCH_DIR --entries=5000000 \
   --seed=42 --samples=32 --max-levels=12 --pair-cache=262144"
 
-./gradlew :zeroj-jmt-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run \
   --args="--stage=depth-scan --work-dir=$POSEIDON_JMT_BENCH_DIR --entries=5000000 \
   --seed=42 --progress-every=100000"
 
-./gradlew :zeroj-jmt-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-jmt-poseidon-load:run \
   --args="--stage=circuit --work-dir=$POSEIDON_JMT_BENCH_DIR --entries=5000000 \
   --seed=42 --samples=32 --max-levels=12 --circuit-trials=3 --setup=load \
   --keys-dir=$POSEIDON_JMT_BENCH_DIR/groth16-keys-release-v2-s12 \
@@ -258,7 +258,7 @@ JMT_ARTIFACT_BUNDLE="$(jq -r \
   "$POSEIDON_JMT_BENCH_DIR/report.json")"
 test -d "$JMT_ARTIFACT_BUNDLE"
 
-./gradlew \
+./gradlew -PincludeBenchmarks \
   -Dzeroj.poseidonJmt.cardanoArtifacts="$JMT_ARTIFACT_BUNDLE" \
   :zeroj-onchain-julc:test \
   --tests com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.PoseidonJmtCardanoArtifactTest

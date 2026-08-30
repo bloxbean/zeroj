@@ -60,7 +60,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * </pre>
  *
  * <p>Requires Yaci DevKit running. Run with:
- * {@code ./gradlew :zeroj-examples:e2eTest --tests "*PureJavaProverYaciE2ETest"}</p>
+ * {@code ./gradlew :zeroj-integration-tests:e2eTest --tests "*PureJavaProverYaciE2ETest"}</p>
  */
 @Tag("e2e")
 class PureJavaProverYaciE2ETest {

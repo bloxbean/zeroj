@@ -238,9 +238,14 @@ is not revoked under root R, and has not used this claim before under
 nullifier N.
 ```
 
-Today, pattern verifiers such as `NullifierClaimVerifier` and
-`MembershipVerifier` in `zeroj-patterns` already encode this style at the
-application boundary.
+This style belongs at the **application** boundary, not in the SDK. ZeroJ
+shipped typed `NullifierClaimVerifier` / `MembershipVerifier` helpers in
+`zeroj-patterns` for a time; [ADR-0044](adr/0044-focused-module-surface-and-optional-provider-isolation.md)
+removed them as a scope correction. Cryptographic proof validity is not
+application authorization, and a generic helper cannot supply the
+`ScriptContext` binding, replay protection, nullifier registry, and business
+policy that make such a statement meaningful. Worked examples of the pattern now
+live in [zeroj-usecases](https://github.com/bloxbean/zeroj-usecases).
 
 ---
 
@@ -290,13 +295,20 @@ Shipping today:
 * public / private signal declarations, comparators, hashes, Merkle
 * pure-Java Groth16 over BN254 and BLS12-381
 * pure-Java PlonK over BLS12-381
-* native acceleration through `zeroj-blst` (BLS12-381 via JNI/SWIG) and
-  `zeroj-prover-gnark` (gnark Groth16/PlonK prover via FFM)
+* opt-in native acceleration through `zeroj-blst` / `zeroj-crypto-blst`
+  (BLS12-381 MSM via FFM, bit-identical proofs); the pure-Java prover matches or
+  beats it at large circuit sizes since ADR-0033/0034
 * on-chain Plutus V3 verifier for Groth16 on BLS12-381, plus an experimental
   PlonK Julc prototype with KZG pairing verification still deferred
-* pattern verifiers (nullifier claims, membership, range)
-* `zeroj-cardano` and `zeroj-ccl` integration for transaction layout and
-  submission
+* the `zeroj-ceremony` CLI and reusable snarkjs-compatible phase-2 contributor in
+  `zeroj-tools`
+* authenticated state via `zeroj-mpf-poseidon` and `zeroj-jmt-poseidon`
+
+Deliberately **not** shipped as SDK layers ([ADR-0044](adr/0044-focused-module-surface-and-optional-provider-isolation.md)):
+the gnark and Halo2 native runtime providers, generic application pattern
+verifiers, and Cardano transaction-layout helpers. Applications use Cardano
+Client Lib directly and own their authorization policy; see
+[zeroj-usecases](https://github.com/bloxbean/zeroj-usecases).
 
 Example circuit (real, matches the codebase):
 

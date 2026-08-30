@@ -15,7 +15,9 @@ SNARKJS="${SNARKJS:-$(command -v snarkjs || echo "$HOME/.npm-global/bin/snarkjs"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BC_JAR=$(find ~/.gradle/caches/modules-2/files-2.1/org.bouncycastle -name 'bcprov-jdk18on-1.83.jar' | head -1)
 PICO_JAR=$(find ~/.gradle/caches/modules-2/files-2.1/info.picocli -name 'picocli-4.7.6.jar' | head -1)
-CP="$ROOT/zeroj-ceremony/build/classes/java/main:$ROOT/zeroj-ceremony/build/classes/java/test"
+# ADR-0044 merged the zeroj-ceremony module into zeroj-tools. CeremonyCli kept its package;
+# only the module that builds it changed. MulFixtureCircuit lives in that module's tests.
+CP="$ROOT/zeroj-tools/build/classes/java/main:$ROOT/zeroj-tools/build/classes/java/test"
 CP="$CP:$ROOT/zeroj-crypto/build/classes/java/main:$ROOT/zeroj-circuit-dsl/build/classes/java/main"
 CP="$CP:$ROOT/zeroj-api/build/classes/java/main:$ROOT/zeroj-bls12381/build/classes/java/main:$BC_JAR:$PICO_JAR"
 CLI="java -cp $CP com.bloxbean.cardano.zeroj.ceremony.CeremonyCli"

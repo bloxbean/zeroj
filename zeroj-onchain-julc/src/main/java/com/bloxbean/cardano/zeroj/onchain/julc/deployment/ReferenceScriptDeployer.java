@@ -4,7 +4,8 @@ package com.bloxbean.cardano.zeroj.onchain.julc.deployment;
  * Structured deployment configuration for Cardano CIP-0033 reference scripts.
  *
  * <p>The class does not submit transactions. It records the deployment pattern
- * and data needed by transaction-building integrations such as zeroj-ccl.</p>
+ * and the data a transaction builder needs; the application supplies that
+ * builder, typically Cardano Client Lib used directly.</p>
  */
 public final class ReferenceScriptDeployer {
 

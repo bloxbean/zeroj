@@ -1,7 +1,8 @@
 # ADR-0007: Multi-Module Structure and Boundaries
 
 ## Status
-Superseded by [ADR-0020](0020-module-cleanup-and-core-restructure.md)
+Superseded by [ADR-0020](0020-module-cleanup-and-core-restructure.md), then by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md)
 
 ## Date
 2026-03-25
@@ -13,6 +14,15 @@ Superseded by [ADR-0020](0020-module-cleanup-and-core-restructure.md)
 > `zeroj-prover-sidecar`, `zeroj-prover-rapidsnark`,
 > `zeroj-onchain-experimental`, and replaces `zeroj-bom` with
 > `zeroj-bom-core` / `zeroj-bom-all`.
+>
+> ADR-0044 then narrowed the surface again: `zeroj-bom-all`,
+> `zeroj-prover-gnark`, `zeroj-prover-spi`, `zeroj-verifier-halo2`,
+> `zeroj-prover-wasm`, `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` and
+> `zeroj-examples` were removed, `zeroj-verifier-core` was merged into
+> `zeroj-backend-spi` and `zeroj-ceremony` into `zeroj-tools`, and the WASM
+> assurance providers and MPF/JMT load tools moved outside the default build.
+> The module table below is the 2026-03 structure, not the current one — see
+> [the migration note](../migration/0044-module-cleanup.md).
 
 ZeroJ serves three distinct audiences:
 1. **Java developers** who want a standalone ZK verification library (no Cardano dependency)
