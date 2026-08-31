@@ -10,7 +10,7 @@ Accepted
 
 ## Implementation status
 
-**In progress — all structural work complete, one verification gate outstanding.**
+**Implemented — all structural milestones and verification gates complete.**
 
 Implemented on branch `refactor/adr-0044-module-cleanup`. Every implementation
 milestone (M0–M6) is complete, and the coordinate migration table is published in
@@ -42,16 +42,22 @@ Completed and evidenced:
   native-image metadata — byte-identical before and after (SHA-256 compared);
   the only removals are the 20 files owned by removed providers;
 - all 13 `zeroj-usecases` projects build, 46 of their tests pass, against the
-  candidate artifacts with the removed coordinates made unresolvable.
+  candidate artifacts with the removed coordinates made unresolvable;
+- the final Yaci DevKit gate passed on 2026-08-31: both
+  `PureJavaProverYaciE2ETest` (fresh pure-Java BLS12-381 proof) and
+  `SealedBidOnChainE2ETest` (committed snarkjs BLS12-381 proof) submitted real
+  lock and ZK-verified unlock transactions, and every transaction was confirmed.
 
-Outstanding before this becomes "Implemented":
+The final gate was closed with a running Yaci DevKit and the focused command:
 
-1. **Execute the Yaci DevKit on-chain end-to-end suite.** The tests were migrated
-   and are correctly discovered, but they skipped because no local DevKit was
-   running in the implementation environment. Close this gate with a running
-   DevKit and `./gradlew :zeroj-integration-tests:e2eTest`, which must show
-   `SealedBidOnChainE2ETest` and `PureJavaProverYaciE2ETest` passing rather than
-   skipped.
+```bash
+./gradlew :zeroj-integration-tests:e2eTest \
+  --tests '*SealedBidOnChainE2ETest' \
+  --tests '*PureJavaProverYaciE2ETest' \
+  --rerun-tasks
+```
+
+Both tests passed rather than skipping (`BUILD SUCCESSFUL`, 48 tasks executed).
 
 This ADR authorizes structural cleanup only and closes no production or audit
 gate; see "Production and audit gates" below.

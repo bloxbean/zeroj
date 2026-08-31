@@ -122,10 +122,10 @@ ZeroJ's reusable verifier code does not provide those guarantees.
 
 ## Verification status
 
-All structural milestones are complete and the default build is green. One
-verification gate is still open: the Yaci DevKit on-chain end-to-end tests were
-migrated and are correctly discovered, but skipped in the implementation
-environment because no local DevKit was running. See the
+All structural milestones are complete and the default build is green. The
+final Yaci DevKit gate passed on 2026-08-31: `SealedBidOnChainE2ETest` and
+`PureJavaProverYaciE2ETest` both submitted confirmed lock and ZK-verified unlock
+transactions and passed rather than skipping. See the
 [ADR's implementation status](../adr/0044-focused-module-surface-and-optional-provider-isolation.md#implementation-status).
 
 Nothing about this cleanup upgrades any maturity, audit, side-channel,
