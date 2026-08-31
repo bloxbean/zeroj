@@ -1,7 +1,16 @@
 # ADR-0019: CFRG BBS Pure Java and Optional WASM Providers
 
 ## Status
-Accepted
+
+Accepted. The **packaging** of the WASM provider is superseded by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+
+The zkryptium WASM provider moved to `assurance/zeroj-bbs-wasm`, outside the
+default build and no longer published; select it with `-PincludeAssurance`.
+`zeroj-bbs` itself remains a published opt-in product module. The pure-Java and
+blst provider rows of the official CFRG draft-10 conformance suite still run in
+the default build. Every BBS protocol, RNG-boundary and conformance decision in
+this ADR stands.
 
 ## Date
 2026-05-07

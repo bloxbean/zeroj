@@ -2,18 +2,26 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ verifier SPI — backend discovery, ZkVerifier interface'
+description = 'ZeroJ verifier SPI and orchestration — ZkVerifier interface, backend discovery, registry and routing'
 
 dependencies {
     api project(':zeroj-api')
 }
+
+// ADR-0044 Decision 5: zeroj-verifier-core was merged into this artifact. VerifierRegistry and
+// VerifierOrchestrator kept their com.bloxbean.cardano.zeroj.verifier.core package, and their
+// native-image directory is carried over verbatim under
+// META-INF/native-image/com.bloxbean.cardano/zeroj-verifier-core/, so the merger is a packaging
+// change only: backend selection, descriptor matching, verification-key resolution, result
+// semantics and failure behavior are unchanged.
 
 publishing {
     publications {
         mavenJava(MavenPublication) {
             pom {
                 name = 'ZeroJ Backend SPI'
-                description = 'Service Provider Interface for ZK verification backends'
+                description = 'Service Provider Interface for ZK verification backends, plus the ' +
+                        'verifier registry and orchestrator absorbed from zeroj-verifier-core'
             }
         }
     }

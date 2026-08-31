@@ -35,7 +35,7 @@ remaining production gates are tracked in
 
 | Area | Components | Status |
 |------|-----------|--------|
-| Core proof model, codecs, verifier SPI/orchestrator | `zeroj-api`, `zeroj-codec`, `zeroj-backend-spi`, `zeroj-verifier-core` | **Beta** |
+| Core proof model, codecs, verifier SPI/orchestrator | `zeroj-api`, `zeroj-codec`, `zeroj-backend-spi` | **Beta** |
 | Circuit definition (DSL, symbolic annotations, gadgets) | `zeroj-circuit-dsl`, `zeroj-circuit-annotation-*`, `zeroj-circuit-lib` ([per-gadget table](zeroj-circuit-lib/README.md)) | **Beta** |
 | Groth16 BLS12-381 — pure Java prove + verify | `zeroj-crypto`, `zeroj-verifier-groth16` | **Beta** (production trusted setup requires an external snarkjs MPC ceremony; in-repo setup is dev-only and flag-gated) |
 | Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16BLS12381TxOutRefBindingVerifier`) |
@@ -45,26 +45,22 @@ remaining production gates are tracked in
 | BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — default pure-Java provider is not constant-time; prefer the blst provider for issuer keys |
 | BLS12-381 pure Java primitives | `zeroj-bls12381` | **Beta** — verification-grade; prover performance (allocation-lean, mmap'd key) in [ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md) |
 | blst native acceleration | `zeroj-blst` | **Beta, opt-in** — FFM binding; `libblst` built from source, pinned v0.3.15; a faster Groth16 prover backend ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)) |
-| Cardano anchoring + CCL helpers | `zeroj-cardano`, `zeroj-ccl`, `zeroj-patterns` | **Beta** |
-| WASM backends | `zeroj-bls12381-wasm`, `zeroj-bbs-wasm` | **Experimental, opt-in** |
-| gnark native prover | `zeroj-prover-gnark` | **Experimental, opt-in** (Go native library) |
+| BLS/BBS WASM differential providers | `assurance/zeroj-bls12381-wasm`, `assurance/zeroj-bbs-wasm` | **Assurance only** — independent zkcrypto/zkryptium oracles, outside the default build and never published ([ADR-0044](docs/adr/0044-focused-module-surface-and-optional-provider-isolation.md)) |
 | Poseidon authenticated state | `zeroj-mpf-poseidon`, `zeroj-jmt-poseidon` | **Experimental — high-volume paths benchmarked** (both 5M local end-to-end runs passed with operation-specific circuits; production ceremonies, external review, and Yaci/public-network gates remain open) |
 | BN254 (Groth16 + PlonK, off-chain) | legacy classes | **Disabled by default** — `-Dzeroj.allowLegacyBn254=true`; not a Cardano curve |
-| Halo2 verifier, WASM prover | `incubator/*` | **Incubator** |
 
 ## What You Can Do Today
 
 ### Define ZK Circuits
 - **CircuitSpec Java DSL** (recommended) — define circuits as reusable Java classes with `CircuitSpec`
 - **Inline lambda DSL** — quick prototyping with `CircuitBuilder.define(api -> ...)`
-- **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`; `.wasm` witness calculation in incubator)
+- **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`)
 - **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, plus operation-specific Poseidon MPF/JMT circuits in their authenticated-state modules; see the [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md) gadget table and [large-state guide](docs/merkle/practical-large-state-guide.md)
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
 - **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible. Allocation-lean flat arithmetic, an `mmap`-able proving key, and a streaming trusted setup keep large circuits (millions of constraints) within commodity memory, no JNI (ADR-0029/0033/0034/0035).
 - **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); a faster Groth16 proving backend, bit-identical proofs. `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
-- **gnark FFM** — optional in-process Groth16/PlonK proving via Go native library
 - **snarkjs CLI** — external CLI for circom-based circuits
 - **snarkjs key import** — import `.zkey` files, prove with the pure Java prover
 
@@ -178,19 +174,8 @@ the trusted setup to a disk-backed, `mmap`-loaded proving key rather than holdin
 in heap, so proving stays within commodity memory. See the
 [Groth16 Dev Guide](docs/groth16-dev-guide.md).
 
-### Alternative: gnark FFM
-
-```java
-// Same circuit, but prove via gnark (requires Go native lib)
-try (var prover = new GnarkProver()) {
-    var result = prover.groth16FullProve(r1cs, witness, CurveId.BLS12_381);
-    String proofJson = result.proveResponse().proofJson();
-    String vkJson = result.vkJson();
-    List<BigInteger> publicSignals = result.proveResponse().publicSignals();
-}
-```
-
-See [Alternate Prover Backends](docs/alternate-prover-backends.md).
+See [Alternate Prover Backends](docs/alternate-prover-backends.md) for the
+blst-accelerated backend and snarkjs interoperability.
 
 ## Prerequisites
 
@@ -212,7 +197,6 @@ sdk use java 25.0.2-graal
 
 | Dependency | Version | Required By | Notes |
 |------------|---------|-------------|-------|
-| **Go** | 1.21+ | `zeroj-prover-gnark` | For the optional gnark native prover |
 | **circom** | 2.x | Circuit compilation (if using circom) | `cargo install circom` |
 | **snarkjs** | 0.7+ | Proof generation (if using snarkjs) | `npm install -g snarkjs` |
 
@@ -225,13 +209,13 @@ The **pure Java prover and verifier require no optional dependencies**.
 ./gradlew build
 
 # Build the core privacy path only
-./gradlew :zeroj-bom-core:build :zeroj-verifier-core:build :zeroj-verifier-groth16:build :zeroj-verifier-plonk:build :zeroj-crypto:build :zeroj-onchain-julc:build
+./gradlew :zeroj-bom-core:build :zeroj-backend-spi:build :zeroj-verifier-groth16:build :zeroj-verifier-plonk:build :zeroj-crypto:build :zeroj-onchain-julc:build
 
 # Run all tests
 ./gradlew test
 
 # Run end-to-end on-chain tests (requires Yaci DevKit)
-./gradlew :zeroj-examples:e2eTest
+./gradlew :zeroj-integration-tests:e2eTest
 ```
 
 ## Architecture
@@ -247,8 +231,8 @@ The **pure Java prover and verifier require no optional dependencies**.
                              │
               ┌──────────────┴──────────────┐
               │                             │
-     Pure Java Prover               gnark FFM Prover
-     (Groth16ProverBLS381)          (GnarkProver)
+     Pure Java Prover               blst-accelerated backend
+     (Groth16ProverBLS381)          (BlstProverBackend)
      Zero native deps               Optional native backend
               │                             │
               └──────────┬──────────────────┘
@@ -270,50 +254,50 @@ The **pure Java prover and verifier require no optional dependencies**.
 |--------|-------------|
 | [`zeroj-api`](zeroj-api/) | Core proof model, envelopes, verification result types |
 | [`zeroj-codec`](zeroj-codec/) | Proof serialization — snarkjs JSON, CBOR, canonical hashing |
-| [`zeroj-backend-spi`](zeroj-backend-spi/) | Service Provider Interface for verification backends |
-| [`zeroj-verifier-core`](zeroj-verifier-core/) | Verifier orchestration and backend routing |
+| [`zeroj-backend-spi`](zeroj-backend-spi/) | Service Provider Interface for verification backends, plus verifier orchestration and backend routing |
 | [`zeroj-verifier-groth16`](zeroj-verifier-groth16/) | Groth16 verification — BLS12-381 pure Java/native blst; BN254 legacy verifier disabled by default |
-| [`zeroj-verifier-plonk`](zeroj-verifier-plonk/) | PlonK verification — BLS12-381 pure Java; BN254 legacy verifier disabled by default |
 | [`zeroj-bls12381`](zeroj-bls12381/) | Pure Java BLS12-381 field, curve, and pairing primitives |
 | [`zeroj-blst`](zeroj-blst/) | Native BLS12-381 via blst — FFM MSM binding (`libblst` built from source) + pairing; standalone, reusable by other JVM projects |
 | [`zeroj-crypto`](zeroj-crypto/) | **Pure Java prover** — Montgomery field arithmetic, EC operations, Groth16 + PlonK for BLS12-381; big-circuit ready: mmap'd sparse/dense key stores + a streaming trusted setup keep proving of large circuits (millions of constraints — e.g. the ~19M-constraint account-ownership circuit) within commodity memory (ADR-0029/0033/0034/0035). Start at `Groth16Keys` + `Groth16Pipeline` ([dev guide](docs/groth16-dev-guide.md)); no native deps; BN254 high-level proving APIs require legacy opt-in |
 | [`zeroj-crypto-blst`](zeroj-crypto-blst/) | **Opt-in blst prover backend** — thin bridge wiring `zeroj-blst`'s native MSM into the `zeroj-crypto` prover SPI (keeps `zeroj-crypto` pure-Java by default; pure Java matches blst at large sizes since ADR-0033/0034) |
-| [`zeroj-tools`](zeroj-tools/) | Reusable operator tools (library, no CLI) — snarkjs-compatible Groth16 phase-2 contributor (`ZkeyContributor`), hash-to-G2 challenge derivation; embeddable in coordinator services and wallets |
+| [`zeroj-tools`](zeroj-tools/) | Reusable operator tools and the `zeroj-ceremony` CLI — snarkjs-compatible Groth16 phase-2 contributor (`ZkeyContributor`), hash-to-G2 challenge derivation; embeddable in coordinator services and wallets |
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
 | [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit Blake2b / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
-| [`zeroj-prover-spi`](zeroj-prover-spi/) | Minimal prover request/response SPI shared by prover implementations |
-| [`zeroj-prover-gnark`](zeroj-prover-gnark/) | gnark native prover (Groth16 + PlonK) via FFM |
-| [`zeroj-patterns`](zeroj-patterns/) | High-level ZK patterns — state transitions, nullifier claims, membership proofs |
-| [`zeroj-cardano`](zeroj-cardano/) | Cardano anchoring — proof anchor model, metadata encoding |
-| [`zeroj-ccl`](zeroj-ccl/) | Cardano Client Lib integration — fluent transaction helpers |
-| [`zeroj-mpf-poseidon`](zeroj-mpf-poseidon/) | Poseidon-rooted CCL MPF adapter, strict witness normalization, and operation-specific inclusion/non-inclusion/update/insert circuits ([5M benchmark](docs/benchmarks/poseidon-mpf-5m-2026-08-02.md)) |
-| [`zeroj-jmt-poseidon`](zeroj-jmt-poseidon/) | Poseidon-rooted CCL JMT host profile plus operation-specific inclusion/non-inclusion/update/insert/tombstone circuits ([5M benchmark](docs/benchmarks/poseidon-jmt-5m-2026-08-03.md)) |
 | [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
-#### Mainline Opt-In Modules (`zeroj-bom-all` only)
+#### Explicit Opt-In Product Modules
+
+Published, but deliberately **outside** `zeroj-bom-core` — declare them with an explicit version.
+Opt-in means the module is not pulled into the default dependency graph and its maturity is
+documented independently; it does not mean untested.
 
 | Module | Description |
 |--------|-------------|
+| [`zeroj-verifier-plonk`](zeroj-verifier-plonk/) | PlonK verification — BLS12-381 pure Java; BN254 legacy verifier disabled by default |
 | [`zeroj-bbs`](zeroj-bbs/) | BBS/BBS+ selective disclosure credential backend |
-| [`zeroj-bbs-wasm`](zeroj-bbs-wasm/) | WASM-backed BBS provider |
-| [`zeroj-bls12381-wasm`](zeroj-bls12381-wasm/) | WASM-backed BLS12-381 provider |
+| [`zeroj-mpf-poseidon`](zeroj-mpf-poseidon/) | Poseidon-rooted CCL MPF adapter, strict witness normalization, and operation-specific inclusion/non-inclusion/update/insert circuits ([5M benchmark](docs/benchmarks/poseidon-mpf-5m-2026-08-02.md)) |
+| [`zeroj-jmt-poseidon`](zeroj-jmt-poseidon/) | Poseidon-rooted CCL JMT host profile plus operation-specific inclusion/non-inclusion/update/insert/tombstone circuits ([5M benchmark](docs/benchmarks/poseidon-jmt-5m-2026-08-03.md)) |
 
-#### Support Modules
+#### Support Projects (never published)
 
-| Module | Description |
+| Project | Description |
 |--------|-------------|
 | [`zeroj-test-vectors`](zeroj-test-vectors/) | Shared test fixtures — pre-generated proofs and VKs |
-| [`zeroj-examples`](zeroj-examples/) | End-to-end demos: circuit definition to on-chain verification |
-| [`zeroj-mpf-poseidon-load`](zeroj-mpf-poseidon-load/) | Non-published resumable RocksDB load, proof, circuit, Groth16, and Cardano artifact benchmark tool |
-| [`zeroj-jmt-poseidon-load`](zeroj-jmt-poseidon-load/) | Non-published durable/versioned JMT load, depth, operations, Groth16, and Cardano artifact benchmark tool |
-| [`zeroj-bom-core`](zeroj-bom-core/) | BOM for the v3 core path |
-| [`zeroj-bom-all`](zeroj-bom-all/) | BOM for core plus opt-in and incubator modules |
+| [`zeroj-integration-tests`](zeroj-integration-tests/) | Cross-module security and end-to-end regressions (Groth16/PlonK E2E, tampering, invalid witness, snarkjs interop, Julc/Yaci on-chain) |
+| [`zeroj-bom-core`](zeroj-bom-core/) | The single stable BOM for the default product surface |
 
-#### Incubator Modules (`incubator/`)
+#### Opt-In Assurance and Benchmark Projects
 
-| Module | Description |
-|--------|-------------|
-| [`zeroj-prover-wasm`](incubator/zeroj-prover-wasm/) | Circom witness calculation via GraalVM WebAssembly |
+Outside the default build and never published. See
+[ADR-0044](docs/adr/0044-focused-module-surface-and-optional-provider-isolation.md).
+
+| Project | Description | Enable with |
+|--------|-------------|-------------|
+| [`assurance/zeroj-bls12381-wasm`](assurance/zeroj-bls12381-wasm/) | zkcrypto BLS12-381 WASM provider — independent differential oracle (needs Rust/Cargo) | `-PincludeAssurance` |
+| [`assurance/zeroj-bbs-wasm`](assurance/zeroj-bbs-wasm/) | zkryptium BBS WASM provider — independent differential oracle (needs Rust/Cargo) | `-PincludeAssurance` |
+| [`assurance/gnark-fixtures`](assurance/gnark-fixtures/) | Pinned gnark v0.14.0 PlonK fixture generator; keeps the committed independent PlonK vectors reproducible. Not a Gradle project, not a runtime provider | `make` (needs Go) |
+| [`benchmarks/zeroj-mpf-poseidon-load`](benchmarks/zeroj-mpf-poseidon-load/) | Resumable RocksDB load, proof, circuit, Groth16 and Cardano artifact benchmark tool (needs RocksDB JNI) | `-PincludeBenchmarks` |
+| [`benchmarks/zeroj-jmt-poseidon-load`](benchmarks/zeroj-jmt-poseidon-load/) | Durable/versioned JMT load, depth, operations, Groth16 and Cardano artifact benchmark tool (needs RocksDB JNI) | `-PincludeBenchmarks` |
 
 ## Dependency (Gradle)
 
@@ -329,15 +313,15 @@ dependencies {
     implementation 'com.bloxbean.cardano:zeroj-crypto'
 
     // Verification (pure Java, zero native deps)
-    implementation 'com.bloxbean.cardano:zeroj-verifier-core'
+    implementation 'com.bloxbean.cardano:zeroj-backend-spi'
     implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
-    implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'
+
+    // Opt-in product artifacts are outside the stable BOM — give them a version
+    implementation 'com.bloxbean.cardano:zeroj-verifier-plonk:0.1.0'
 
     // On-chain verification (Cardano Plutus V3)
     implementation 'com.bloxbean.cardano:zeroj-onchain-julc'
 
-    // Optional: gnark FFM prover (requires Go native lib)
-    // implementation 'com.bloxbean.cardano:zeroj-prover-gnark'
 }
 ```
 
@@ -353,7 +337,7 @@ dependencies {
 - **[Circuit DSL User Guide](docs/circuit-dsl-user-guide.md)** — CircuitSpec, Signal API, standard library
 - **[Circuit Annotation User Guide](docs/circuit-annotation-user-guide.md)** — the `@ZKCircuit` symbolic DSL
 - **[Circuit Library Gadget Status](zeroj-circuit-lib/README.md#gadget-status)** — the gadget catalog: curve, symbolic, and Cardano-readiness status for each reusable gadget (incl. the Blake2b / Ed25519 / CIP-1852 key-derivation family)
-- **[Alternate Prover Backends](docs/alternate-prover-backends.md)** — gnark FFM and snarkjs
+- **[Alternate Prover Backends](docs/alternate-prover-backends.md)** — blst acceleration and snarkjs interoperability
 - **[Architecture Overview](docs/architecture-overview.md)** — module design and layer separation
 - **[PlonK Support](docs/plonk-support.md)** — PlonK proving, off-chain verification, and the experimental Julc validators
 
@@ -390,11 +374,12 @@ A full, self-maintaining list lives in [`docs/adr/`](docs/adr/). Highlights:
 | `Groth16BLS381ZkeyEndToEndTest` | snarkjs `.zkey` import → Java prove → pairing verify |
 
 ```bash
-# Run all examples (off-chain)
-./gradlew :zeroj-examples:test
+# Cross-module regressions (off-chain, no external tooling)
+./gradlew :zeroj-integration-tests:test
 
-# Run on-chain tests (requires Yaci DevKit)
-./gradlew :zeroj-examples:e2eTest
+# End-to-end tests (need snarkjs on PATH and/or a running Yaci DevKit;
+# they skip gracefully when the prerequisite is missing)
+./gradlew :zeroj-integration-tests:e2eTest
 ```
 
 ## License

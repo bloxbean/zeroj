@@ -77,14 +77,14 @@ The reusable public gadget is
 with the flattened witness shape in
 [`ZkMpfProof`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/circuit/ZkMpfProof.java).
 The public annotated example is
-[`AnnotatedMpfPrivateRegistryInclusion`](../zeroj-examples/src/main/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java).
+[`AnnotatedMpfPrivateRegistryInclusion`](../zeroj-integration-tests/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java).
 
 CCL proof conversion and the explicit bound check are in
 [`PoseidonMpfCodec`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/ccl/PoseidonMpfCodec.java).
 The exact circuit used for the high-volume run is
-[`PoseidonMpfInclusionCircuit`](../zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/PoseidonMpfInclusionCircuit.java),
+[`PoseidonMpfInclusionCircuit`](../benchmarks/zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/PoseidonMpfInclusionCircuit.java),
 and the benchmark CLI defaults `--max-steps` to 8 in
-[`LoadOptions`](../zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/LoadOptions.java).
+[`LoadOptions`](../benchmarks/zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/LoadOptions.java).
 
 Consequently, “the 8-step circuit” is not a hard-coded limit throughout ZeroJ. `maxSteps` is a
 circuit parameter. The benchmark circuit is package-private in a non-published load module;

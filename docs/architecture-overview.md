@@ -16,17 +16,25 @@
 ## Design Philosophy
 
 ZeroJ is a privacy-first ZK platform for Java and Cardano. Circuits can be
-defined in Java or imported from external toolchains. Proofs can be generated
-with the pure Java prover or the gnark native accelerator. Verification is Java
-first, and on-chain verification uses Julc-compiled Plutus V3 validators. gnark
-binary PlonK artifacts remain on the gnark native verification path until a
-structured proof adapter is added.
+defined in Java or imported from external toolchains. Proofs are generated with
+the pure Java prover, optionally accelerated by blst. Verification is Java first,
+and on-chain verification uses Julc-compiled Plutus V3 validators. The default
+build is pure Java and needs no Go, Rust, Cargo, Node.js, WASM toolchain, or
+RocksDB JNI.
 
 ## Module Organization
 
-Modules are organized into core modules, mainline opt-in modules, and incubator
-modules. `zeroj-bom-core` covers the v3 core privacy path. `zeroj-bom-all`
-covers core plus opt-in BBS/WASM and incubator modules.
+Per [ADR-0044](adr/0044-focused-module-surface-and-optional-provider-isolation.md),
+projects fall into four groups:
+
+- **Core product modules**, constrained by `zeroj-bom-core` — the single stable BOM.
+- **Explicit opt-in product modules** — published, but declared by coordinate and
+  version rather than through the stable BOM: `zeroj-verifier-plonk`, `zeroj-bbs`,
+  `zeroj-mpf-poseidon`, `zeroj-jmt-poseidon`.
+- **Support projects**, never published: `zeroj-test-vectors`, `zeroj-integration-tests`.
+- **Opt-in assurance and benchmark projects**, outside the default build and never
+  published: `assurance/` (independent WASM differential providers, the pinned gnark
+  fixture generator) and `benchmarks/` (MPF/JMT load tools).
 
 ## Module Dependency Graph
 
@@ -35,9 +43,7 @@ zeroj-api                  (foundation types)
   |
   +-- zeroj-codec          (→ zeroj-api, jackson, cbor)
   |
-  +-- zeroj-backend-spi    (→ zeroj-api)
-  |     |
-  |     +-- zeroj-verifier-core    (→ zeroj-api, zeroj-backend-spi)
+  +-- zeroj-backend-spi    (→ zeroj-api; SPI + verifier registry/orchestrator)
   |     |
   |     +-- zeroj-verifier-groth16 (→ zeroj-backend-spi, zeroj-codec, zeroj-bls12381, zeroj-blst)
   |     |
@@ -56,27 +62,22 @@ zeroj-api                  (foundation types)
   |             |
   |             +-- zeroj-jmt-poseidon (→ CCL JMT/core; structure-owned circuits)
   |
-  +-- zeroj-patterns       (→ zeroj-api, zeroj-verifier-core, zeroj-codec, zeroj-cardano)
-  |
-  +-- zeroj-cardano        (→ zeroj-api, cbor)
-  |     |
-  |     +-- zeroj-ccl      (→ zeroj-cardano, zeroj-api, cardano-client-lib)
-  |
-  +-- zeroj-prover-spi     (prover request/response contracts)
-  |     |
-  |     +-- zeroj-prover-gnark (→ zeroj-api, zeroj-codec, zeroj-circuit-dsl, Go FFM)
-  |
-  +-- zeroj-prover-wasm      (→ zeroj-api, GraalVM WASM) [incubator]
+  +-- zeroj-tools          (→ zeroj-bls12381, zeroj-crypto; ceremony library + zeroj-ceremony CLI)
   |
   +-- zeroj-onchain-julc   (→ zeroj-crypto, julc-stdlib, BLS12-381 builtins)
   |
   +-- zeroj-test-vectors   (→ zeroj-api, test fixtures only)
 
-zeroj-mpf-poseidon-load / zeroj-jmt-poseidon-load (non-published durable benchmark tools)
+zeroj-bbs                (→ zeroj-api, zeroj-backend-spi, zeroj-bls12381)  [opt-in product]
 
-zeroj-bbs, zeroj-bbs-wasm, zeroj-bls12381-wasm (mainline opt-in)
+zeroj-integration-tests  (cross-module regressions; never published)
 
-zeroj-bom-core / zeroj-bom-all (platform modules, no code)
+zeroj-bom-core           (the single stable BOM; no code)
+
+--- outside the default build, never published -------------------------------
+assurance/zeroj-bls12381-wasm, assurance/zeroj-bbs-wasm   -PincludeAssurance
+assurance/gnark-fixtures  (pinned gnark PlonK fixture generator; not a Gradle project)
+benchmarks/zeroj-mpf-poseidon-load, benchmarks/zeroj-jmt-poseidon-load  -PincludeBenchmarks
 ```
 
 ## Layer Separation
@@ -92,7 +93,7 @@ Immutable data types shared across all modules:
 ### Layer 2: Serialization (`zeroj-codec`)
 Proof format parsers and serializers:
 - snarkjs JSON format (proof.json, verification_key.json, public.json)
-- gnark PlonK/Groth16 format
+- gnark-compatible PlonK/Groth16 format
 - CBOR binary format for network transmission
 - Canonical hashing for deterministic proof identification
 
@@ -116,25 +117,34 @@ Java circuit definition and compilation:
 - Compiles to R1CS (Groth16) or PlonK gates
 - `zeroj-circuit-lib` -- Poseidon, MiMC, Merkle, comparators, binary ops
 
-### Layer 6: Orchestration (`zeroj-verifier-core`)
-Routes verification requests to the correct backend based on proof system and curve.
+### Layer 6: Orchestration (`zeroj-backend-spi`)
+`VerifierRegistry` and `VerifierOrchestrator` route verification requests to the
+correct backend based on proof system and curve. They live in
+`zeroj-backend-spi` and keep their `com.bloxbean.cardano.zeroj.verifier.core`
+package; ADR-0044 merged the former `zeroj-verifier-core` artifact into the SPI
+artifact without changing selection, key lookup, result, or failure semantics.
 
 ### Layer 7: Proving
-Proof generation backends:
-- `zeroj-crypto` -- pure Java Groth16 and PlonK proving where supported
-- `zeroj-prover-spi` -- minimal prover-side request/response contract
-- `zeroj-prover-gnark` -- optional native Groth16/PlonK proving via Go FFM
-- `zeroj-prover-wasm` -- Circom witness calculation via GraalVM WASM (incubator)
+- `zeroj-crypto` -- pure Java Groth16 and PlonK proving; the product proving path
+- `zeroj-crypto-blst` -- opt-in bridge wiring blst's native MSM into the
+  `zeroj-crypto` prover backend, producing bit-identical proofs
 
-### Layer 8: High-Level Patterns (`zeroj-patterns`)
-Domain-specific APIs:
-- State transitions, nullifier claims, membership proofs
-- Typed inputs, enriched results, pre-built policies
+ZeroJ ships no provider-neutral proving SPI. ADR-0044 removed the unimplemented
+`zeroj-prover-spi` abstraction rather than move it into a retained module; a
+future unified contract would have to model setup/key reuse, artifact ownership,
+secret lifetime, progress and cancellation, and needs its own accepted design.
 
-### Layer 9: Cardano Integration
-Anchoring verified results on L1:
-- `zeroj-cardano` -- Anchor model, CIP-10 metadata encoding
-- `zeroj-ccl` -- Cardano Client Lib transaction builder integration
+### Layer 8: Application Policy — deliberately out of scope
+ZeroJ ships no generic membership, nullifier, or state-transition helpers.
+Cryptographic proof validity is not application authorization: `ScriptContext`
+binding, replay protection, nullifier registries, and business policy are the
+application's responsibility. See
+[zeroj-usecases](https://github.com/bloxbean/zeroj-usecases) for worked examples.
+
+### Layer 9: Operator Tooling (`zeroj-tools`)
+- `ZkeyContributor`, `SnarkjsHashToG2`, `ChaChaRng` -- the snarkjs-compatible
+  Groth16 phase-2 contribution engine, embeddable as a library
+- `CeremonyCli` -- the `zeroj-ceremony` command (export-r1cs, contribute, finalize)
 
 ### Layer 10: On-Chain Verification (`zeroj-onchain-julc`)
 Reusable Plutus V3 spending validators compiled via Julc:
@@ -157,7 +167,7 @@ Reusable Plutus V3 spending validators compiled via Julc:
 
 - **Pure Java is the default** for both proving and verification; it matches blst's speed at large circuit sizes (ADR-0033/0034), so blst is opt-in acceleration, not a requirement.
 - `zeroj-blst` binds `libblst` (built from source) via the Java **FFM** API — not JNI/SWIG.
-- BLS12-381 pure Java verifier uses field arithmetic validated against gnark.
+- BLS12-381 pure Java verifier uses field arithmetic validated against independent implementations (gnark-generated PlonK vectors, snarkjs artifacts, zkcrypto WASM and blst providers).
 - BN254 pure Java arithmetic remains for legacy/off-chain tests, but BN254 verifiers are disabled by default and are not ServiceLoader-registered.
 - **In-circuit crypto gadgets** (Blake2b, SHA-512, HMAC-SHA512, Ed25519, BIP32, CIP-1852 — ADR-0027) let circuits reproduce Cardano key derivation; large circuits (millions of constraints) prove within commodity memory via a streaming setup + `mmap`'d key (ADR-0033/0034/0035), driven by the `Groth16Keys`/`Groth16Pipeline` facade (ADR-0036).
 
@@ -171,7 +181,7 @@ On-chain ZK verification uses Julc (Java-to-Plutus compiler) to create reusable 
 | PlonK | BLS12-381 | Experimental opt-in full verifiers for current Cardano profiles; audit pending | `zeroj-onchain-julc` |
 | Groth16/PlonK | BN254 | Not feasible | No Plutus BN254 builtins |
 
-The `zeroj-examples` module includes complete end-to-end tests (DSL to on-chain execution on Yaci DevKit).
+The `zeroj-integration-tests` project holds the cross-module end-to-end regressions (DSL to on-chain execution on Yaci DevKit, snarkjs interoperability, proof tampering and invalid-witness rejection).
 
 ## GraalVM Native Image
 

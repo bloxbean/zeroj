@@ -5,7 +5,6 @@ import com.bloxbean.cardano.zeroj.bbs.spi.BbsProvider;
 import com.bloxbean.cardano.zeroj.bbs.spi.BbsProviders;
 import com.bloxbean.cardano.zeroj.bls12381.spi.Bls12381Provider;
 import com.bloxbean.cardano.zeroj.bls12381.spi.Bls12381Providers;
-import com.bloxbean.cardano.zeroj.bls12381.wasm.WasmBls12381Provider;
 import com.bloxbean.cardano.zeroj.blst.BlstBls12381Provider;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,6 +16,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -164,12 +164,39 @@ class BbsBlsProviderConformanceTest {
     }
 
     private static Stream<Arguments> providerSuites() {
-        List<ProviderFixture> providers = List.of(
-                new ProviderFixture("pure-java", Bls12381Providers.pureJava()),
-                new ProviderFixture("wasm-zkcrypto", WasmBls12381Provider.createDefault()),
-                new ProviderFixture("blst", BlstBls12381Provider.createDefault()));
+        List<ProviderFixture> providers = new ArrayList<>();
+        providers.add(new ProviderFixture("pure-java", Bls12381Providers.pureJava()));
+        providers.add(new ProviderFixture("blst", BlstBls12381Provider.createDefault()));
+        wasmProvider().ifPresent(bls -> providers.add(new ProviderFixture("wasm-zkcrypto", bls)));
         return providers.stream()
                 .flatMap(provider -> SUITES.stream().map(suite -> Arguments.of(provider, suite)));
+    }
+
+    /**
+     * The zkcrypto WASM provider is ZeroJ's independent BLS12-381 differential oracle. ADR-0044
+     * moved it out of the default build, so it is only on the test classpath under
+     * {@code -PincludeAssurance}.
+     *
+     * <p>When that flag selects it, the build sets {@code zeroj.assurance.requireWasmProvider} and
+     * this method throws rather than returning empty. The oracle can therefore be absent (default
+     * build) or present (assurance build), but it can never be silently lost from a run that was
+     * supposed to include it.</p>
+     */
+    private static Optional<Bls12381Provider> wasmProvider() {
+        boolean required = Boolean.getBoolean("zeroj.assurance.requireWasmProvider");
+        try {
+            Class<?> type = Class.forName("com.bloxbean.cardano.zeroj.bls12381.wasm.WasmBls12381Provider");
+            return Optional.of((Bls12381Provider) type.getMethod("createDefault").invoke(null));
+        } catch (ClassNotFoundException e) {
+            if (required) {
+                throw new IllegalStateException(
+                        "zeroj.assurance.requireWasmProvider is set but the zkcrypto WASM provider is "
+                                + "not on the test classpath", e);
+            }
+            return Optional.empty();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to construct the zkcrypto WASM BLS12-381 provider", e);
+        }
     }
 
     private record ProviderFixture(String name, Bls12381Provider bls) {

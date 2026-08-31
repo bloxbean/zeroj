@@ -385,19 +385,19 @@ Prove you own the NFT without revealing which wallet holds it.
 
 Ready to build? Here's where to start:
 
-1. **[Circuit DSL User Guide](circuit-dsl-user-guide.md)** — Define circuits in Java using `CircuitSpec`
-2. **[Pure Java Prover Guide](pure-java-prover-guide.md)** — Prove and verify with zero external tools
-3. **[Getting Started](getting-started.md)** — Complete walkthrough from circuit to on-chain verification
+1. **[Circuit DSL User Guide](../circuit-dsl-user-guide.md)** — Define circuits in Java using `CircuitSpec`
+2. **[Pure Java Prover Guide](../pure-java-prover-guide.md)** — Prove and verify with zero external tools
+3. **[Getting Started](../getting-started.md)** — Complete walkthrough from circuit to on-chain verification
 
 ### Already Implemented Examples
 
 | Example | Use Case | Module |
 |---------|----------|--------|
-| `SealedBidCircuit` | Sealed-bid auction | `zeroj-examples` |
-| `AnonymousVotingCircuit` | Private voting | `zeroj-examples` |
-| `BalanceThresholdCircuit` | Balance/credit proof | `zeroj-examples` |
-| `HashChainCircuit` | Time-lock / PoW chain | `zeroj-examples` |
-| `MerkleMembershipCircuit` | Private set membership | `zeroj-examples` |
-| `MultiInputCommitmentCircuit` | Data commitment | `zeroj-examples` |
+| `SealedBidCircuit` | Sealed-bid auction | `zeroj-integration-tests` |
+| `AnonymousVotingCircuit` | Private voting | `zeroj-integration-tests` |
+| `BalanceThresholdCircuit` | Balance/credit proof | `zeroj-integration-tests` |
+| `HashChainCircuit` | Time-lock / PoW chain | `zeroj-integration-tests` |
+| `MerkleMembershipCircuit` | Private set membership | `zeroj-integration-tests` |
+| `MultiInputCommitmentCircuit` | Data commitment | `zeroj-integration-tests` |
 
 All run on **BLS12-381** with the **pure Java prover** — zero external dependencies, verified on-chain via Cardano Plutus V3.

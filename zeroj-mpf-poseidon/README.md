@@ -90,7 +90,7 @@ policy. Proving cost is determined by the fixed circuit bound, not directly by t
 entries in RocksDB.
 
 For persistent state and reproducible benchmarks, use
-[`zeroj-mpf-poseidon-load`](../zeroj-mpf-poseidon-load/README.md). RocksDB remains outside this
+[`zeroj-mpf-poseidon-load`](../benchmarks/zeroj-mpf-poseidon-load/README.md) (opt-in, `-PincludeBenchmarks`). RocksDB remains outside this
 published library's dependency surface.
 
 ## Security boundary

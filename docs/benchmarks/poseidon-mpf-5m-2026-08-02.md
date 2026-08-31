@@ -256,15 +256,15 @@ absolute work directory because Gradle runs the application from its module dire
 ```bash
 POSEIDON_MPF_BENCH_DIR="$(pwd)/.benchmark-data/poseidon-mpf-5m"
 
-./gradlew :zeroj-mpf-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:run \
   --args="--stage=proofs --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
   --samples=32 --max-steps=9 --rocksdb-profile=high-throughput"
 
-./gradlew :zeroj-mpf-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:run \
   --args="--stage=depth-scan --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
   --progress-every=500000 --rocksdb-profile=high-throughput"
 
-./gradlew :zeroj-mpf-poseidon-load:run \
+./gradlew -PincludeBenchmarks :zeroj-mpf-poseidon-load:run \
   --args="--stage=circuit --work-dir=$POSEIDON_MPF_BENCH_DIR --entries=5000000 \
   --samples=32 --max-steps=9 --circuit-trials=3 --setup=load \
   --keys-dir=$POSEIDON_MPF_BENCH_DIR/groth16-keys-release-v2-s9 \
@@ -275,7 +275,7 @@ MPF_ARTIFACT_BUNDLE="$(jq -r \
   "$POSEIDON_MPF_BENCH_DIR/report.json")"
 test -d "$MPF_ARTIFACT_BUNDLE"
 
-./gradlew \
+./gradlew -PincludeBenchmarks \
   -Dzeroj.poseidonMpf.cardanoArtifacts="$MPF_ARTIFACT_BUNDLE" \
   :zeroj-onchain-julc:test \
   --tests com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.PoseidonMpfCardanoArtifactTest

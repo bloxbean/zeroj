@@ -63,7 +63,7 @@ one logical writer. A Cardano state validator should authenticate the current ro
 the state-token instance, signer/release, and the exact transition VK.
 
 Persistent RocksDB operation belongs to the non-published
-[`zeroj-jmt-poseidon-load`](../zeroj-jmt-poseidon-load/README.md) module. Its production-durability
+[`zeroj-jmt-poseidon-load`](../benchmarks/zeroj-jmt-poseidon-load/README.md) (opt-in, `-PincludeBenchmarks`) module. Its production-durability
 profile keeps WAL and sync enabled, writes a checkpoint manifest only after the CCL commit, fails
 closed on ahead/foreign manifests, exercises graceful and in-flight-kill recovery, and exposes
 rollback/pruning as explicit operator actions. Pruning historical nodes does not change the latest

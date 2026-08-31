@@ -4,7 +4,7 @@ plugins {
     id 'signing'
 }
 
-description = 'ZeroJ Core Bill of Materials — stable v3 privacy and Cardano verification path'
+description = 'ZeroJ Core Bill of Materials — the single stable BOM for the default ZeroJ product surface'
 
 javaPlatform {
     allowDependencies()
@@ -12,27 +12,24 @@ javaPlatform {
 
 dependencies {
     constraints {
+        // ADR-0044 Decision 1: the single stable BOM constrains only the default product surface.
+        // Explicit opt-in product artifacts (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon,
+        // zeroj-jmt-poseidon) are declared by coordinate and version by the application until their
+        // support classification warrants inclusion here.
         api project(':zeroj-api')
         api project(':zeroj-codec')
         api project(':zeroj-backend-spi')
-        api project(':zeroj-verifier-core')
         api project(':zeroj-verifier-groth16')
-        api project(':zeroj-verifier-plonk')
         api project(':zeroj-bls12381')
         api project(':zeroj-blst')
         api project(':zeroj-crypto')
+        api project(':zeroj-crypto-blst')
         api project(':zeroj-circuit-dsl')
         api project(':zeroj-circuit-lib')
         api project(':zeroj-circuit-annotation-api')
         api project(':zeroj-circuit-annotation-processor')
-        api project(':zeroj-mpf-poseidon')
-        api project(':zeroj-jmt-poseidon')
-        api project(':zeroj-prover-spi')
-        api project(':zeroj-prover-gnark')
         api project(':zeroj-onchain-julc')
-        api project(':zeroj-cardano')
-        api project(':zeroj-ccl')
-        api project(':zeroj-patterns')
+        api project(':zeroj-tools')
     }
 }
 
@@ -42,7 +39,7 @@ publishing {
             from components.javaPlatform
             pom {
                 name = 'ZeroJ Core BOM'
-                description = 'Core Bill of Materials for ZeroJ v3 privacy and Cardano verification modules'
+                description = 'Bill of Materials for the default ZeroJ product surface (ADR-0044). Opt-in product artifacts are declared explicitly by the application.'
                 url = 'https://github.com/bloxbean/zeroj'
                 licenses {
                     license {

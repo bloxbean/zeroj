@@ -1,7 +1,14 @@
 # ADR-0009: Halo2 Support Strategy
 
 ## Status
-Proposed (planning for future implementation)
+
+Not pursued. The packaging/default-build aspects are superseded by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+
+ADR-0044 removed the `zeroj-verifier-halo2` incubator module; it had no consumer
+and no committed product path. This ADR is retained as the historical record of
+the strategy. Reintroducing Halo2 requires a current product goal and a new or
+updated ADR.
 
 ## Date
 2026-03-27

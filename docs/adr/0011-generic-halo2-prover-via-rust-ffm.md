@@ -1,7 +1,12 @@
 # ADR-0011: Generic Halo2 Prover via Rust FFM
 
 ## Status
-Proposed
+
+Not pursued. The packaging/default-build aspects are superseded by
+[ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+
+ADR-0044 removed the Halo2 Rust FFM module and its native build and release
+jobs. Preserved through Git history; see ADR-0009 for the wider disposition.
 
 ## Date
 2026-03-29
@@ -244,4 +249,5 @@ incubator/zeroj-halo2-rust/           (existing Rust source)
 - ADR-0010: Java DSL for ZK Circuit Definition
 - [Halo2 Book — Simple Example](https://zcash.github.io/halo2/user/simple-example.html)
 - [halo2_proofs Circuit trait](https://docs.rs/halo2_proofs/0.3.0/halo2_proofs/plonk/trait.Circuit.html)
-- [gnark wrapper main.go — GenericR1CS pattern](zeroj-prover-gnark/gnark-wrapper/main.go)
+- gnark wrapper `main.go` — GenericR1CS pattern (removed by ADR-0044 with the
+  `zeroj-prover-gnark` runtime; see Git history)

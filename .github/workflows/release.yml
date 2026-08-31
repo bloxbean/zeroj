@@ -1,5 +1,9 @@
 name: Release
 
+# ADR-0044: releases publish the default product surface only. The gnark (Go) and Halo2 (Rust)
+# runtime providers were removed, so the release no longer builds or bundles their native
+# libraries. libblst is still built from source per release for zeroj-blst.
+
 on:
   push:
     tags:
@@ -13,85 +17,11 @@ permissions:
 
 jobs:
   # ================================================================
-  # Stage 1: Build native libraries on each platform
+  # Stage 1: Build libblst from source for every supported platform
+  # (pinned tag in zeroj-blst/scripts/build-blst.sh) so released jars
+  # never ship stale/unverified blst binaries.
   # ================================================================
 
-  build-gnark-native:
-    name: gnark native (${{ matrix.os }})
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - os: linux-x86_64
-            runner: ubuntu-latest
-            lib: libzeroj_gnark.so
-          - os: linux-arm64
-            runner: ubuntu-24.04-arm
-            lib: libzeroj_gnark.so
-          - os: macos-arm64
-            runner: macos-14
-            lib: libzeroj_gnark.dylib
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-
-      - name: Build gnark shared library
-        working-directory: zeroj-prover-gnark/gnark-wrapper
-        run: make build
-
-      - name: Upload native library
-        uses: actions/upload-artifact@v4
-        with:
-          name: gnark-native-${{ matrix.os }}
-          path: zeroj-prover-gnark/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
-          retention-days: 1
-
-  build-halo2-native:
-    name: halo2 native (${{ matrix.os }})
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - os: linux-x86_64
-            runner: ubuntu-latest
-            lib: libzeroj_halo2.so
-          - os: linux-arm64
-            runner: ubuntu-24.04-arm
-            lib: libzeroj_halo2.so
-          - os: macos-arm64
-            runner: macos-14
-            lib: libzeroj_halo2.dylib
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build halo2 shared library
-        working-directory: incubator/zeroj-verifier-halo2/halo2-rust
-        run: cargo build --release
-
-      - name: Copy library to resource path
-        run: |
-          mkdir -p incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}
-          cp incubator/zeroj-verifier-halo2/halo2-rust/target/release/${{ matrix.lib }} \
-             incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/
-
-      - name: Upload native library
-        uses: actions/upload-artifact@v4
-        with:
-          name: halo2-native-${{ matrix.os }}
-          path: incubator/zeroj-verifier-halo2/src/main/resources/native/${{ matrix.os }}/${{ matrix.lib }}
-          retention-days: 1
-
-  # libblst from source (pinned tag in zeroj-blst/scripts/build-blst.sh) — same per-release
-  # pattern as gnark/halo2, so released jars never ship stale/unverified blst binaries.
   build-blst-native:
     name: blst native (${{ matrix.os }}/${{ matrix.arch }})
     if: startsWith(github.ref, 'refs/tags/')
@@ -121,13 +51,13 @@ jobs:
           retention-days: 1
 
   # ================================================================
-  # Stage 2: Build JARs with all native libraries and publish
+  # Stage 2: Build JARs with the blst natives bundled and publish
   # ================================================================
 
   publish:
     name: Publish to Maven Central
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [ build-gnark-native, build-halo2-native, build-blst-native ]
+    needs: [ build-blst-native ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -140,19 +70,6 @@ jobs:
           java-version: '25'
           distribution: 'graalvm'
 
-      # Download ALL native libraries into resource directories
-      - name: Download gnark natives
-        uses: actions/download-artifact@v4
-        with:
-          pattern: gnark-native-*
-          merge-multiple: false
-
-      - name: Download halo2 natives
-        uses: actions/download-artifact@v4
-        with:
-          pattern: halo2-native-*
-          merge-multiple: false
-
       - name: Download blst natives
         uses: actions/download-artifact@v4
         with:
@@ -161,16 +78,6 @@ jobs:
 
       - name: Place native libraries in resource directories
         run: |
-          for platform in linux-x86_64 linux-arm64 macos-arm64; do
-            # gnark
-            mkdir -p zeroj-prover-gnark/src/main/resources/native/$platform
-            cp gnark-native-$platform/* zeroj-prover-gnark/src/main/resources/native/$platform/ || true
-
-            # halo2
-            mkdir -p incubator/zeroj-verifier-halo2/src/main/resources/native/$platform
-            cp halo2-native-$platform/* incubator/zeroj-verifier-halo2/src/main/resources/native/$platform/ || true
-          done
-
           # blst (source-built, replaces the committed dev binaries in the released jars)
           for target in linux/amd64 linux/aarch64 mac/aarch64; do
             os=${target%/*}; arch=${target#*/}
@@ -178,10 +85,6 @@ jobs:
             cp blst-native-$os-$arch/* zeroj-blst/src/main/resources/native/$target/ || true
           done
 
-          echo "=== gnark native libraries ==="
-          find zeroj-prover-gnark/src/main/resources/native -type f
-          echo "=== halo2 native libraries ==="
-          find incubator/zeroj-verifier-halo2/src/main/resources/native -type f
           echo "=== blst native libraries ==="
           find zeroj-blst/src/main/resources/native -type f
 
@@ -190,8 +93,9 @@ jobs:
 
       - name: Build and test
         run: ./gradlew build --stacktrace
-        env:
-          GOMAXPROCS: '2'
+
+      - name: Assert the default graph has no assurance/benchmark/removed-provider edge
+        run: ./gradlew verifyDefaultModuleSurface --stacktrace
 
       - name: Decode GPG Key
         run: |
@@ -208,6 +112,8 @@ jobs:
   # ================================================================
   # Stage 3: Ceremony CLI distributables -> GitHub release assets
   # (ADR-0031: contributors download one artifact and run the ceremony)
+  # ADR-0044: the CLI now ships from zeroj-tools. The command name, CLI
+  # behavior and every release asset name are unchanged.
   # ================================================================
 
   ceremony-cli-release:
@@ -252,8 +158,8 @@ jobs:
       - name: Build native zip distribution (fatJar -> native-image -> zip)
         shell: bash
         run: |
-          ./gradlew :zeroj-ceremony:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
-          zeroj-ceremony/build/native/zeroj-ceremony${{ matrix.ext }} --version
+          ./gradlew :zeroj-tools:nativeDistZip -Pplatform=${{ matrix.os }} --no-daemon
+          zeroj-tools/build/native/zeroj-ceremony${{ matrix.ext }} --version
 
       # tag push -> attach to the GitHub release
       - name: Upload to GitHub release
@@ -261,8 +167,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
-            zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+            ${{ matrix.fatjar == true && 'zeroj-tools/build/libs/zeroj-ceremony-*-all.jar' || '' }}
+            zeroj-tools/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
 
       # manual dispatch (preview) -> workflow artifacts only
       - name: Upload preview artifacts
@@ -271,5 +177,5 @@ jobs:
         with:
           name: ceremony-cli-preview-${{ matrix.os }}
           path: |
-            ${{ matrix.fatjar == true && 'zeroj-ceremony/build/libs/zeroj-ceremony-*-all.jar' || '' }}
-            zeroj-ceremony/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+            ${{ matrix.fatjar == true && 'zeroj-tools/build/libs/zeroj-ceremony-*-all.jar' || '' }}
+            zeroj-tools/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
