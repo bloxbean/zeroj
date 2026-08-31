@@ -114,8 +114,8 @@ JuLC + ZeroJ answer that with:
 * **Same toolchain.** IntelliJ / VS Code / Eclipse, Gradle / Maven, JUnit,
   the JVM debugger and profiler, JFR — for validators *and* circuits.
 * **Pure-Java default.** Witnesses, proofs, and verification run on the JVM
-  with no native dependencies required. Native acceleration (e.g. `blst`,
-  gnark via FFM) is opt-in for hot paths.
+  with no native dependencies required. The retained `blst` acceleration is
+  an explicit opt-in for supported hot paths.
 * **GraalVM-ready.** Modules ship `META-INF/native-image` configs so
   applications can compile down to native images for cold-start-sensitive
   proving services, CLIs, and edge use cases.
@@ -293,11 +293,13 @@ Shipping today:
 
 * `CircuitSpec` / `SignalBuilder` Java circuit DSL
 * public / private signal declarations, comparators, hashes, Merkle
-* pure-Java Groth16 over BN254 and BLS12-381
+* pure-Java Groth16 over BLS12-381; the retained BN254 implementation is a
+  legacy, off-chain path that requires explicit opt-in
 * pure-Java PlonK over BLS12-381
 * opt-in native acceleration through `zeroj-blst` / `zeroj-crypto-blst`
-  (BLS12-381 MSM via FFM, bit-identical proofs); the pure-Java prover matches or
-  beats it at large circuit sizes since ADR-0033/0034
+  (BLS12-381 MSM via FFM, with cross-provider proof-equivalence tests); at the
+  measured 19-million-constraint scale, the pure-Java and blst backends had
+  comparable proving times in ADR-0033/0034
 * on-chain Plutus V3 verifier for Groth16 on BLS12-381, plus an experimental
   PlonK Julc prototype with KZG pairing verification still deferred
 * the `zeroj-ceremony` CLI and reusable snarkjs-compatible phase-2 contributor in
@@ -344,8 +346,9 @@ public class AgeCredentialCircuit implements CircuitSpec {
 
 `zeroj-crypto` is the common cryptographic substrate: field and EC
 arithmetic, pairing operations, FFT/MSM, canonical serialization. Pure-Java
-first, with `zeroj-blst` providing JNI/SWIG-backed BLS12-381 acceleration where
-performance matters.
+comes first. The opt-in `zeroj-crypto-blst` adapter uses `zeroj-blst`'s FFM MSM
+binding for Groth16 proving; `zeroj-blst` also retains its JNI/SWIG provider for
+pairing and BBS paths.
 
 `zeroj-circuit-lib` provides the standard gadget catalog: Poseidon, MiMC,
 Merkle/IMT, range checks, comparators, and credential primitives.
@@ -536,8 +539,9 @@ backend-*explicit* at deployment, cost estimation, and audit boundaries.
 | Capability                                        | Status today                | Notes                                                                |
 |---------------------------------------------------|-----------------------------|----------------------------------------------------------------------|
 | Java circuit definition with `CircuitSpec`        | **Shipping**                | Core developer path.                                                 |
-| Pure-Java Groth16 (BN254 and BLS12-381)           | **Shipping**                | Default for zero-native-dependency workflows.                        |
-| Native Groth16/PlonK proving via gnark / blst     | **Shipping**                | Opt-in acceleration through gnark FFM and blst JNI/SWIG.             |
+| Pure-Java Groth16 on BLS12-381                    | **Shipping**                | Default for zero-native-dependency workflows.                        |
+| Pure-Java Groth16 on BN254                        | Legacy opt-in               | Off-chain experiments only; disabled by default.                     |
+| Native Groth16 acceleration through blst          | **Shipping, opt-in**        | BLS12-381 MSM acceleration via Java 25 FFM.                           |
 | Pure-Java PlonK on BLS12-381                      | **Shipping**                | Includes full Fiat-Shamir transcript verification.                   |
 | Groth16 BLS12-381 on-chain verification           | **Shipping**                | `Groth16BLS12381Verifier` against Plutus V3 builtins.                |
 | PlonK BLS12-381 off-chain verification            | **Shipping**                | Pure Java verifier with full KZG pairing check.                       |
