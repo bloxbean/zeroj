@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.zeroj.crypto.groth16;
 
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+import com.bloxbean.cardano.zeroj.api.R1CSValidation;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG2BLS381;
@@ -28,6 +29,12 @@ import java.util.Map;
  * heap, dense-store, and sparse-store keys alike. The entry points below are the expert layer
  * (reader seams, split H computation, packed scalars) for differential tests and memory-tuned
  * pipelines.</p>
+ *
+ * <p><b>Relation validation (issue #46).</b> Every prove and {@code computeH} entry point
+ * rejects, with an {@link IllegalArgumentException} and before any FFT or MSM work: a relation
+ * whose wire indices fall outside the witness, a witness or H vector whose length does not match
+ * the proving key, and an FFT domain that is not a power of two or cannot hold the relation.
+ * Malformed terms are never skipped: skipping used to prove a silently weakened relation.</p>
  */
 public final class Groth16ProverBLS381 {
 
@@ -138,6 +145,11 @@ public final class Groth16ProverBLS381 {
     public static Groth16ProofBLS381 proveWithReaders(
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
             List<R1CSConstraint> constraints, int numWires, int domainSize) {
+        if (witness == null || witness.length == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        if (witness.length != numWires)
+            throw new IllegalArgumentException(
+                    "witness.length (" + witness.length + ") must match numWires (" + numWires + ")");
         BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
         return proveWithHCoeffs(pk, readers, backend, witness, hCoeffs);
     }
@@ -175,6 +187,7 @@ public final class Groth16ProverBLS381 {
 
         G2AffineReader b2 = readers.b2() != null
                 ? readers.b2() : new G2AffineReader.HeapG2Reader(pk.pointsB2());
+        requireKeyDimensions(pk, readers, b2, witness, hCoeffs);
         var piA = computePiA(pk, readers.a(), backend.g1(), witness, r);
         var piB = computePiB_G2(pk, b2, backend.g2(), witness, s);
         var piB1 = computePiB_G1(pk, readers.b1(), backend.g1(), witness, s);
@@ -219,7 +232,15 @@ public final class Groth16ProverBLS381 {
      */
     public static FlatScalars computeHFlat(com.bloxbean.cardano.zeroj.api.R1CSFlat flat, FlatScalars witness,
                                   int snarkjsBindingRows, int domainSize) {
+        if (witness == null || witness.count() == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        // Issue #46: a term whose wire lies outside the witness used to be skipped silently.
+        R1CSValidation.requireWireIndices(flat, witness.count());
+        if (snarkjsBindingRows < 0 || snarkjsBindingRows > witness.count())
+            throw new IllegalArgumentException("snarkjsBindingRows (" + snarkjsBindingRows
+                    + ") must be in [0, witness count " + witness.count() + "]");
         if (domainSize < 2) domainSize = 2;
+        requireFftDomain(domainSize, (long) flat.rows() + snarkjsBindingRows);
         int logN = Integer.numberOfTrailingZeros(domainSize);
         final int domain = domainSize;
 
@@ -245,11 +266,9 @@ public final class Groth16ProverBLS381 {
                     evalRowInto(bM, dictMont, i, witness, wCount, bEval, i * 4, wCanon, wMont, term);
                 } else {
                     // snarkjs binding row s: A={s:1}, B={} — aEval = witness[s], bEval stays 0
-                    int s = i - circuitRows;
-                    if (s < wCount) {
-                        witness.copyLimbs(s, wCanon, 0);
-                        FrArith381.mul(aEval, i * 4, wCanon, 0, FR_R2_LIMBS, 0); // canonical → Montgomery
-                    }
+                    int s = i - circuitRows; // < wCount: snarkjsBindingRows <= witness count (validated)
+                    witness.copyLimbs(s, wCanon, 0);
+                    FrArith381.mul(aEval, i * 4, wCanon, 0, FR_R2_LIMBS, 0); // canonical → Montgomery
                 }
             } // beyond evalUpper: zeros (MontFr381.ZERO == all-zero limbs)
         });
@@ -282,13 +301,11 @@ public final class Groth16ProverBLS381 {
             int row, FlatScalars witness, int wCount, long[] out, int outOff,
             long[] wCanon, long[] wMont, long[] term) {
         for (int k = m.start(row), e = m.end(row); k < e; k++) {
-            int wire = m.wire(k);
-            if (wire < wCount) {
-                witness.copyLimbs(wire, wCanon, 0);
-                FrArith381.mul(wMont, 0, wCanon, 0, FR_R2_LIMBS, 0);          // canonical → Montgomery
-                FrArith381.mul(term, 0, dictMont, m.coeffIndex(k) * 4, wMont, 0);
-                FrArith381.add(out, outOff, out, outOff, term, 0);
-            }
+            int wire = requireWire(m.wire(k), wCount);
+            witness.copyLimbs(wire, wCanon, 0);
+            FrArith381.mul(wMont, 0, wCanon, 0, FR_R2_LIMBS, 0);          // canonical → Montgomery
+            FrArith381.mul(term, 0, dictMont, m.coeffIndex(k) * 4, wMont, 0);
+            FrArith381.add(out, outOff, out, outOff, term, 0);
         }
     }
 
@@ -300,7 +317,14 @@ public final class Groth16ProverBLS381 {
     public static BigInteger[] computeH(List<R1CSConstraint> constraints, BigInteger[] witness,
                                   int numConstraints, int domainSize) {
         BigInteger mod = MontFr381.modulus();
+        if (witness == null || witness.length == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        // Issue #46: a term whose wire lies outside the witness used to be skipped silently.
+        R1CSValidation.requireWireIndices(constraints, witness.length);
+        if (numConstraints < 0)
+            throw new IllegalArgumentException("numConstraints must be >= 0 (got " + numConstraints + ")");
         if (domainSize < 2) domainSize = 2;
+        requireFftDomain(domainSize, Math.min(numConstraints, constraints.size()));
         int logN = Integer.numberOfTrailingZeros(domainSize);
 
         // ADR-0029 M2c: Fr coefficients held as flat long[] (4 limbs/element) with the allocation-lean
@@ -477,13 +501,62 @@ public final class Groth16ProverBLS381 {
     private static MontFr381 evalLinComb(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
         MontFr381 sum = MontFr381.ZERO;
         for (var entry : lc.entrySet()) {
-            int wire = entry.getKey();
+            int wire = requireWire(entry.getKey(), witness.length);
             BigInteger coeff = entry.getValue();
-            if (wire < witness.length && coeff.signum() != 0) {
+            if (coeff.signum() != 0) {
                 sum = sum.add(MontFr381.fromBigInteger(coeff).mul(MontFr381.fromBigInteger(witness[wire])));
             }
         }
         return sum;
+    }
+
+    /**
+     * Fail closed on a wire outside {@code [0, bound)} (issue #46). Relations are validated at
+     * ingress; this keeps the evaluation loops themselves incapable of skipping a term.
+     */
+    private static int requireWire(int wire, int bound) {
+        if (wire < 0 || wire >= bound) {
+            throw new IllegalArgumentException("R1CS term references wire " + wire
+                    + " outside [0, " + bound + ")");
+        }
+        return wire;
+    }
+
+    /** The FFT domain must be a power of two that holds every evaluated row (issue #46). */
+    private static void requireFftDomain(int domainSize, long rows) {
+        if (domainSize < 2 || Integer.bitCount(domainSize) != 1) {
+            throw new IllegalArgumentException("domainSize must be a power of two >= 2 (got " + domainSize + ")");
+        }
+        if (rows > domainSize) {
+            throw new IllegalArgumentException("relation has " + rows + " rows but the FFT domain holds "
+                    + domainSize + " — the constraints do not belong to this proving key");
+        }
+    }
+
+    /**
+     * The witness and H vectors must match the proving key exactly (issue #46). The MSMs used to
+     * run over {@code min(vector, key)} points and silently ignore the remainder of either side.
+     */
+    private static void requireKeyDimensions(Groth16ProvingKeyBLS381 pk, G1Readers readers,
+                                             G2AffineReader b2, FlatScalars witness, FlatScalars hCoeffs) {
+        int n = witness.count();
+        if (n == 0) throw new IllegalArgumentException("Witness must not be empty");
+        if (pk.numPublic() < 0 || pk.numPublic() >= n) {
+            throw new IllegalArgumentException("proving key numPublic (" + pk.numPublic()
+                    + ") must be in [0, witness count " + n + ")");
+        }
+        requireCount("A", readers.a().count(), n, "witness scalars");
+        requireCount("B1", readers.b1().count(), n, "witness scalars");
+        requireCount("B2", b2.count(), n, "witness scalars");
+        requireCount("L", readers.l().count(), n - pk.numPublic() - 1, "private witness scalars");
+        requireCount("H", readers.h().count(), hCoeffs.count(), "H coefficients");
+    }
+
+    private static void requireCount(String points, int have, int expected, String what) {
+        if (have != expected) {
+            throw new IllegalArgumentException("proving key has " + have + " " + points + " points but there are "
+                    + expected + " " + what + " — the witness/relation does not belong to this key");
+        }
     }
 
     private static BigInteger randomScalar(SecureRandom rng) {

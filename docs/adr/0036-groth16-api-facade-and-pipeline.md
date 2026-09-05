@@ -103,3 +103,40 @@ on `Groth16SetupBLS381`, `Groth16ProverBLS381`, `Groth16PkStore` points new inte
 facade. `docs/zeroj-ceremony-review-2026-07-10.md` records the transferable-optimization
 backlog for the ceremony tool (contribute flat-limb + batch inversion, `finalize --sparse`,
 co-located `r1cs.bin`).
+
+## Amendment 2026-09-05 — relation validation at every setup/prove ingress (issue #46)
+
+- **Risk**: R2 — caller-supplied relation validation at the proof-system boundary. No
+  cryptographic algorithm, encoding, transcript, or provider semantics change.
+- **Finding** (K3 F4 / consolidated triage C-03): the direct heap and streaming setups and every
+  prover path skipped any R1CS term whose wire index was `>= numWires` (`>= witness.length` at
+  prove time). Because setup and prover skipped the same terms, the resulting proof *verified*
+  against a silently weakened relation. `Groth16Keys.setupInMemory` and the list-based
+  `Groth16Keys.prove` reached this behaviour, while `Groth16Pipeline.Compiled`, `R1CSImporter`
+  and `R1CSFlatIO` already rejected such wires — semantics were path-dependent. Negative indices
+  already failed with an `ArrayIndexOutOfBoundsException`; indices above 2^29 could alias onto a
+  valid slot through `wire * 4` overflow in the flat paths.
+- **Decision**: one shared check, `R1CSValidation` (`zeroj-api`), invoked once at each public
+  ingress before any QAP/FFT/MSM work: `Groth16SetupBLS381.setup` and `setupToStore` (every
+  overload), `Groth16ProverBLS381.prove`, `proveWithReaders`, `proveUnblindedWithReaders`,
+  `computeH` (list and CSR) and `computeHFlat`; `Groth16Keys` and `Groth16Pipeline` inherit it.
+  Invariants: `numWires >= 1`; `0 <= numPublic < numWires`; every A/B/C wire in
+  `[0, numWires)` at setup and `[0, witness.length)` at prove; CSR row offsets monotone and
+  covering exactly the stored terms; coefficient indices inside the dictionary. The prover
+  additionally requires the witness and H vectors to match the key's A/B1/B2/L/H point counts
+  exactly (the MSMs used to run over the minimum of the two), `snarkjsBindingRows` in
+  `[0, witness length]`, and an FFT domain that is a power of two holding every evaluated row.
+  The inner accumulation/evaluation loops now throw instead of skipping, as defence in depth.
+  The legacy BN254 `Groth16Setup`/`Groth16Prover` received the same ingress checks so the
+  semantics do not vary by curve.
+- **Compatibility**: a valid relation produces byte-identical keys and proofs (the streaming-vs-
+  heap and CSR-vs-list differential gates are unchanged). Callers that previously passed a
+  malformed relation now receive an `IllegalArgumentException` naming the matrix, row and wire;
+  a streaming setup fails before the key-store directory is created.
+- **Evidence**: `R1CSValidationTest` (`zeroj-api`) and `Groth16RelationValidationTest`
+  (`zeroj-crypto`): A/B/C × {`numWires`, `numWires+1`, 2^30, `Integer.MAX_VALUE`, -1,
+  `Integer.MIN_VALUE`} across heap, streaming, facade, pipeline and every prover entry point;
+  witness/key dimension mismatches; the `numWires - 1` boundary proving and pairing-verifying;
+  the weakened-relation reproducer.
+- **Out of scope**: the infinity-IC profile for unused public wires (issue #52) and coefficient
+  canonicality (values are reduced mod r by the consumers, as before).
