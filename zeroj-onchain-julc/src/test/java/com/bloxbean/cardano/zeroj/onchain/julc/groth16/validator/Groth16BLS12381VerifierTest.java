@@ -208,6 +208,27 @@ class Groth16BLS12381VerifierTest extends ContractTest {
                 false);
     }
 
+    /**
+     * ADR-0045 V1: every {@code IC[i]} (not only {@code IC[0]}) is rejected at infinity on-chain,
+     * in the canonical compressed encoding {@code 0xC0 || 0…0}. An infinity {@code IC[i]} would
+     * leave public input {@code i} unbound by the verification equation.
+     */
+    @Test
+    void vkIcInfinityPoint_nonFirstEntries_fail() {
+        int entries = threePublicInputs.vk().ic().size();
+        assertEquals(4, entries, "three public inputs → four IC entries");
+        for (int i = 1; i < entries; i++) {
+            List<byte[]> ic = new ArrayList<>(threePublicInputs.vk().ic());
+            ic.set(i, compressedInfinityG1());
+            assertVerification(
+                    threePublicInputs.vk(),
+                    threePublicInputs.proof(),
+                    datum(threePublicInputs.publicInputs()),
+                    vkIcData(ic),
+                    false);
+        }
+    }
+
     @Test
     void txOutRefBoundValidator_acceptsBoundSpendAndRejectsReplay() {
         var txOutRef = TestDataBuilder.randomTxOutRef_typed();

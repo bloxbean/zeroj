@@ -5,6 +5,13 @@ Accepted — BLS12-381 Groth16 and PlonK public-testnet blockers implemented;
 value-bearing/mainnet use still requires independent audit and release-assurance
 gates
 
+Proposed amendment 2026-09-06:
+[ADR-0045](0045-groth16-infinity-ic-profile-and-public-wire-binding.md) (status
+Proposed, awaiting review) keeps the non-infinity rule for proof, VK, and every
+`IC` entry as decided here on all providers, and adds the producer-side invariants
+(native setup and zkey import fail closed instead of emitting an infinity `IC`) and
+the prover's blinder resampling policy (issue #52).
+
 ## Date
 2026-06-29
 

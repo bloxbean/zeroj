@@ -2,6 +2,8 @@ package com.bloxbean.cardano.zeroj.crypto.groth16;
 
 import com.bloxbean.cardano.zeroj.api.R1CSFlat;
 import com.bloxbean.cardano.zeroj.api.R1CSFlatIO;
+import com.bloxbean.cardano.zeroj.api.R1CSValidation;
+import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.msm.FlatScalars;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 
@@ -75,7 +77,11 @@ public final class Groth16Pipeline {
             this.numConstraints = numConstraints;
             this.numWires = numWires;
             this.numPublic = numPublic;
+            // canonicalSha256 validates wire ranges and CSR structure first (issue #46), so an
+            // out-of-range wire is reported as such rather than as an unbound public wire.
             this.r1csSha256 = R1CSFlatIO.canonicalSha256(flat, numWires, numPublic);
+            // ADR-0045 S1: still before any r1cs.bin cache or key store is written.
+            R1CSValidation.requirePublicWiresConstrained(flat, numPublic, MontFr381.modulus());
             this.fingerprint = Groth16Pipeline.fingerprint(
                     numConstraints, numWires, numPublic) + "-r" + r1csSha256;
         }

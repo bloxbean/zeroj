@@ -105,12 +105,14 @@ public final class ZkeyPkStoreImporter {
             AffineG2 gammaG2 = g2(z, p);            p += 192;
             AffineG1 deltaG1 = g1(z, p);            p += 96;
             AffineG2 deltaG2 = g2(z, p);
-            requireOnCurve(alphaG1.isOnCurve(), "alphaG1");
-            requireOnCurve(betaG1.isOnCurve(), "betaG1");
-            requireOnCurve(betaG2.isOnCurve(), "betaG2");
-            requireOnCurve(gammaG2.isOnCurve(), "gammaG2");
-            requireOnCurve(deltaG1.isOnCurve(), "deltaG1");
-            requireOnCurve(deltaG2.isOnCurve(), "deltaG2");
+            // ADR-0025/ADR-0045 profile: single VK points and every IC entry must be on-curve and
+            // not the point at infinity; an infinity IC[i] would leave public input i unbound.
+            requireNonInfinityOnCurve(alphaG1.isOnCurve(), alphaG1.isInfinity(), "alphaG1");
+            requireNonInfinityOnCurve(betaG1.isOnCurve(), betaG1.isInfinity(), "betaG1");
+            requireNonInfinityOnCurve(betaG2.isOnCurve(), betaG2.isInfinity(), "betaG2");
+            requireNonInfinityOnCurve(gammaG2.isOnCurve(), gammaG2.isInfinity(), "gammaG2");
+            requireNonInfinityOnCurve(deltaG1.isOnCurve(), deltaG1.isInfinity(), "deltaG1");
+            requireNonInfinityOnCurve(deltaG2.isOnCurve(), deltaG2.isInfinity(), "deltaG2");
 
             // section 3: IC (nPublic + 1 points)
             long[] ic3 = sections.get(3)[0] == 0 ? null : sections.get(3);
@@ -118,7 +120,7 @@ public final class ZkeyPkStoreImporter {
             AffineG1[] ic = new AffineG1[nPublic + 1];
             for (int i = 0; i <= nPublic; i++) {
                 ic[i] = g1(z, ic3[0] + i * 96L);
-                requireOnCurve(ic[i].isOnCurve() || ic[i].isInfinity(), "IC[" + i + "]");
+                requireNonInfinityOnCurve(ic[i].isOnCurve(), ic[i].isInfinity(), "IC[" + i + "]");
             }
 
             int nPrivate = nVars - nPublic - 1;
@@ -277,5 +279,14 @@ public final class ZkeyPkStoreImporter {
 
     private static void requireOnCurve(boolean ok, String label) throws IOException {
         if (!ok) throw new IOException(".zkey " + label + " is not on the curve");
+    }
+
+    /** ADR-0045 I1: a VK point that is off-curve or the point at infinity is rejected at import. */
+    private static void requireNonInfinityOnCurve(boolean onCurve, boolean infinity, String label) throws IOException {
+        if (infinity) {
+            throw new IOException(".zkey " + label + " is the point at infinity, which the Groth16 verifier"
+                    + " profile rejects (ADR-0045)");
+        }
+        requireOnCurve(onCurve, label);
     }
 }

@@ -56,6 +56,16 @@ import java.util.Map;
  * {@code [0, numWires)}, with an {@link IllegalArgumentException} before any key material is
  * computed or written. Malformed terms are never skipped: skipping used to change the relation
  * being set up without any signal.</p>
+ *
+ * <p><b>Public-wire binding (ADR-0045, issue #52).</b> Every verifier profile (pure Java, blst,
+ * on-chain JuLC) rejects a verification key whose {@code IC[s]} is the point at infinity, and a
+ * key with such an entry would leave public input {@code s} unbound by the verification
+ * equation. Both setup paths therefore fail closed instead of emitting one: a relation in which a
+ * public wire {@code s in [0, numPublic]} (the constant wire included) has no nonzero coefficient
+ * is rejected at ingress ({@link IllegalArgumentException}, invariant S1), and the derived
+ * {@code IC} scalars are checked for zero before any proving-key point is generated or any store
+ * file is written ({@link IllegalStateException}, invariant S2). A native setup never writes
+ * {@code AffineG1.INFINITY} into {@code IC}.</p>
  */
 public final class Groth16SetupBLS381 {
 
@@ -93,6 +103,8 @@ public final class Groth16SetupBLS381 {
         // Issue #46: fail closed on a malformed relation before any QAP/point work.
         R1CSValidation.requireDimensions(numWires, numPublic);
         R1CSValidation.requireWireIndices(constraints, numWires);
+        // ADR-0045 S1: every public wire (and the constant wire) must be bound by some row.
+        R1CSValidation.requirePublicWiresConstrained(constraints, numPublic, FR);
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
@@ -148,6 +160,11 @@ public final class Groth16SetupBLS381 {
             accumulate(vs, constraint.b(), lc);
             accumulate(ws, constraint.c(), lc);
         }
+
+        // ADR-0045 S2: the public-query scalars (beta*u_s + alpha*v_s + w_s)/gamma are checked for
+        // zero here, before any point is generated, so a key the verifiers would reject is never
+        // built (and a large relation fails in seconds rather than after the MSM work).
+        BigInteger[] icScalars = publicQueryScalars(us, vs, ws, numPublic, alpha, beta, gammaInv);
 
         // Compute group elements
         var g1 = JacobianG1BLS381.GENERATOR;
@@ -226,11 +243,10 @@ public final class Groth16SetupBLS381 {
         AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
 
         // IC[s] = (beta*u_s + alpha*v_s + w_s) / gamma * G1  for public wires s = 0..numPublic
+        // (scalars pre-checked nonzero by publicQueryScalars — never AffineG1.INFINITY, ADR-0045)
         AffineG1[] ic = new AffineG1[numPublic + 1];
         for (int s = 0; s <= numPublic; s++) {
-            BigInteger icVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
-                    .multiply(gammaInv).mod(FR);
-            ic[s] = icVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(icVal);
+            ic[s] = FixedBaseG1BLS381.mulAffine(icScalars[s]);
         }
 
         // Securely discard toxic waste (best-effort — see PowersOfTauBLS381.java for caveats)
@@ -241,6 +257,36 @@ public final class Groth16SetupBLS381 {
                 pointsA, pointsB1, pointsB2, pointsH, pointsL, numPublic);
 
         return new SetupResult(pk, gammaG2, ic);
+    }
+
+    /**
+     * The public-query scalars {@code (beta*u_s + alpha*v_s + w_s)/gamma} for
+     * {@code s = 0..numPublic}, each required to be nonzero (ADR-0045 invariant S2).
+     *
+     * @throws IllegalStateException naming the first public wire whose scalar is zero
+     */
+    static BigInteger[] publicQueryScalars(BigInteger[] us, BigInteger[] vs, BigInteger[] ws, int numPublic,
+                                           BigInteger alpha, BigInteger beta, BigInteger gammaInv) {
+        BigInteger[] out = new BigInteger[numPublic + 1];
+        for (int s = 0; s <= numPublic; s++) {
+            BigInteger icVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
+                    .multiply(gammaInv).mod(FR);
+            if (icVal.signum() == 0) throw zeroPublicQuery(s, numPublic);
+            out[s] = icVal;
+        }
+        return out;
+    }
+
+    /**
+     * The S2 failure: the relation binds wire {@code s} (S1 passed) but the sampled randomness
+     * cancelled its public-query combination, an event of probability on the order of
+     * {@code N/r}. The key is not produced; a re-run with fresh randomness resolves it.
+     */
+    private static IllegalStateException zeroPublicQuery(int s, int numPublic) {
+        return new IllegalStateException("Groth16 setup aborted: the public-query scalar for public wire " + s
+                + " (of " + numPublic + ") is zero, so IC[" + s + "] would be the point at infinity, which every"
+                + " verifier profile rejects (ADR-0045). The relation binds the wire; the sampled setup"
+                + " randomness cancelled its combination (probability ~N/r). Re-run setup with fresh randomness.");
     }
 
     /**
@@ -305,6 +351,8 @@ public final class Groth16SetupBLS381 {
         // Issue #46: fail closed on a malformed relation before any QAP work or store output.
         R1CSValidation.requireDimensions(numWires, numPublic);
         R1CSValidation.requireWireIndices(flat, numWires);
+        // ADR-0045 S1: every public wire (and the constant wire) must be bound by some row.
+        R1CSValidation.requirePublicWiresConstrained(flat, numPublic, FR);
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381, streaming) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
@@ -377,7 +425,9 @@ public final class Groth16SetupBLS381 {
         long[] deltaInvMont = MontFr381.fromBigInteger(deltaInv).toLimbs();
         long[] gammaInvMont = MontFr381.fromBigInteger(gammaInv).toLimbs();
 
-        // IC[s] = (beta*u_s + alpha*v_s + w_s) / gamma * G1 for public wires (numPublic+1 points)
+        // IC[s] = (beta*u_s + alpha*v_s + w_s) / gamma * G1 for public wires (numPublic+1 points).
+        // ADR-0045 S2: a zero scalar fails closed here — before Files.createDirectories below, so
+        // no store file is ever written for a key the verifiers would reject.
         AffineG1[] ic = new AffineG1[numPublic + 1];
         {
             long[] t = new long[4], acc = new long[4], canon = new long[4];
@@ -385,8 +435,8 @@ public final class Groth16SetupBLS381 {
                 icLcMont(acc, t, usM, vsM, wsM, s, betaMont, alphaMont);
                 FrArith381.mul(acc, 0, acc, 0, gammaInvMont, 0);
                 FrArith381.mul(canon, 0, acc, 0, ONE_LIMBS, 0);
-                ic[s] = (canon[0] | canon[1] | canon[2] | canon[3]) == 0 ? AffineG1.INFINITY
-                        : FixedBaseG1BLS381.mulAffine(new BigInteger(1, beFromCanon(canon)));
+                if ((canon[0] | canon[1] | canon[2] | canon[3]) == 0) throw zeroPublicQuery(s, numPublic);
+                ic[s] = FixedBaseG1BLS381.mulAffine(new BigInteger(1, beFromCanon(canon)));
             }
         }
 

@@ -48,7 +48,11 @@ class Groth16RelationValidationTest {
 
     private static final BigInteger ONE = BigInteger.ONE;
 
-    /** Multiplier {@code a * b = c} over wires {@code [1, c, a, b]}. */
+    /**
+     * Multiplier {@code a * b = c} over wires {@code [1, c, a, b]}, plus the trivially satisfied
+     * {@code 1 * 1 = 1} row so the constant wire is bound (ADR-0045 S1 rejects a relation with no
+     * constant term; the wire-range checks under test here run first either way).
+     */
     private static final int NUM_WIRES = 4;
     private static final int NUM_PUBLIC = 1;
     private static final BigInteger[] WITNESS = {
@@ -62,8 +66,10 @@ class Groth16RelationValidationTest {
         tau = PowersOfTauBLS381.generate(4).tauScalar();
     }
 
+    private static final R1CSConstraint ONE_ROW = new R1CSConstraint(Map.of(0, ONE), Map.of(0, ONE), Map.of(0, ONE));
+
     private static List<R1CSConstraint> multiplier() {
-        return List.of(new R1CSConstraint(Map.of(2, ONE), Map.of(3, ONE), Map.of(1, ONE)));
+        return List.of(new R1CSConstraint(Map.of(2, ONE), Map.of(3, ONE), Map.of(1, ONE)), ONE_ROW);
     }
 
     /** The multiplier with matrix {@code m}'s single term moved to {@code wire}. */
@@ -71,7 +77,7 @@ class Groth16RelationValidationTest {
         Map<Integer, BigInteger> a = m.equals("A") ? Map.of(wire, ONE) : Map.of(2, ONE);
         Map<Integer, BigInteger> b = m.equals("B") ? Map.of(wire, ONE) : Map.of(3, ONE);
         Map<Integer, BigInteger> c = m.equals("C") ? Map.of(wire, ONE) : Map.of(1, ONE);
-        return List.of(new R1CSConstraint(a, b, c));
+        return List.of(new R1CSConstraint(a, b, c), ONE_ROW);
     }
 
     private static R1CSFlat flatOf(List<R1CSConstraint> cons) {
@@ -119,9 +125,11 @@ class Groth16RelationValidationTest {
                 () -> Groth16Keys.setupInMemory(bad, NUM_WIRES, NUM_PUBLIC, tau));
         assertThrows(IllegalArgumentException.class,
                 () -> Groth16Keys.setupToStore(flatOf(bad), NUM_WIRES, NUM_PUBLIC, tau, tmp.resolve("k"), true));
-        // the canonical pipeline path already rejected this; it must keep doing so
-        assertThrows(IllegalArgumentException.class,
-                () -> new Groth16Pipeline.Compiled(flatOf(bad), 1, NUM_WIRES, NUM_PUBLIC));
+        // the canonical pipeline path already rejected this; it must keep doing so, and it must
+        // report the wire-range error, not the ADR-0045 unbound-public-wire error
+        var ex = assertThrows(IllegalArgumentException.class,
+                () -> new Groth16Pipeline.Compiled(flatOf(bad), bad.size(), NUM_WIRES, NUM_PUBLIC));
+        assertFalse(ex.getMessage().contains("not referenced by any constraint"), ex.getMessage());
     }
 
     @Test
@@ -219,7 +227,7 @@ class Groth16RelationValidationTest {
         assertThrows(IllegalArgumentException.class,
                 () -> Groth16ProverBLS381.computeHFlat(flat, packed, NUM_WIRES + 1, domain));
         assertThrows(IllegalArgumentException.class,
-                () -> Groth16ProverBLS381.computeHFlat(flat, packed, NUM_WIRES, domain), "1 + 4 rows > domain 4");
+                () -> Groth16ProverBLS381.computeHFlat(flat, packed, NUM_WIRES, domain), "2 + 4 rows > domain 4");
         // an FFT domain that is not a power of two
         assertThrows(IllegalArgumentException.class,
                 () -> Groth16ProverBLS381.computeH(cons, WITNESS, cons.size(), 3));
@@ -258,7 +266,7 @@ class Groth16RelationValidationTest {
     @Test
     void silentlyWeakenedRelation_isRejectedInsteadOfProved() {
         var weakened = List.of(new R1CSConstraint(
-                Map.of(2, ONE, NUM_WIRES, ONE), Map.of(3, ONE), Map.of(1, ONE)));
+                Map.of(2, ONE, NUM_WIRES, ONE), Map.of(3, ONE), Map.of(1, ONE)), ONE_ROW);
         assertThrows(IllegalArgumentException.class,
                 () -> Groth16SetupBLS381.setup(weakened, NUM_WIRES, NUM_PUBLIC, tau));
 

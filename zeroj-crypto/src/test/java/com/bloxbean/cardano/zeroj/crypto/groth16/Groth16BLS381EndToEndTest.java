@@ -27,12 +27,17 @@ class Groth16BLS381EndToEndTest {
     @Test
     void fullPipeline_multiplier_proveAndPairingVerify() {
         // Circuit: c = a * b (multiplier)
-        // R1CS: 1 constraint, 4 wires [1, c, a, b]
+        // R1CS: 2 constraints, 4 wires [1, c, a, b] — the trivially satisfied 1 * 1 = 1 row binds
+        // the constant wire (ADR-0045 S1: a relation with no constant term has IC[0] = infinity)
         var constraints = List.of(
                 new R1CSConstraint(
                         Map.of(2, BigInteger.ONE),    // A: wire 2 (a)
                         Map.of(3, BigInteger.ONE),    // B: wire 3 (b)
-                        Map.of(1, BigInteger.ONE))    // C: wire 1 (c)
+                        Map.of(1, BigInteger.ONE)),   // C: wire 1 (c)
+                new R1CSConstraint(
+                        Map.of(0, BigInteger.ONE),    // 1 * 1 = 1
+                        Map.of(0, BigInteger.ONE),
+                        Map.of(0, BigInteger.ONE))
         );
         int numWires = 4;
         int numPublic = 1; // wire 1 = c (public output)
