@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.crypto.setup;
 
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
 import com.bloxbean.cardano.zeroj.api.R1CSFlat;
+import com.bloxbean.cardano.zeroj.api.R1CSValidation;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianArith381;
 import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
@@ -49,6 +50,12 @@ import java.util.Map;
  * <p><b>New integrations: start at {@link com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Keys}</b>
  * — {@code setupInMemory} / {@code setupToStore} wrap the entry points below and return a single
  * handle that proves against any key home.</p>
+ *
+ * <p><b>Relation validation (issue #46).</b> Every entry point rejects a relation whose wire
+ * indices fall outside {@code [0, numWires)}, or whose {@code numPublic} is not in
+ * {@code [0, numWires)}, with an {@link IllegalArgumentException} before any key material is
+ * computed or written. Malformed terms are never skipped: skipping used to change the relation
+ * being set up without any signal.</p>
  */
 public final class Groth16SetupBLS381 {
 
@@ -83,6 +90,9 @@ public final class Groth16SetupBLS381 {
                                      int numPublic, BigInteger tau,
                                      BigInteger alpha, BigInteger beta, BigInteger gamma, BigInteger delta) {
         TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
+        // Issue #46: fail closed on a malformed relation before any QAP/point work.
+        R1CSValidation.requireDimensions(numWires, numPublic);
+        R1CSValidation.requireWireIndices(constraints, numWires);
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
@@ -292,6 +302,9 @@ public final class Groth16SetupBLS381 {
                                            BigInteger alpha, BigInteger beta, BigInteger gamma, BigInteger delta,
                                            Path dir, boolean sparse) throws IOException {
         TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
+        // Issue #46: fail closed on a malformed relation before any QAP work or store output.
+        R1CSValidation.requireDimensions(numWires, numPublic);
+        R1CSValidation.requireWireIndices(flat, numWires);
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup (BLS12-381, streaming) — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
@@ -333,25 +346,19 @@ public final class Groth16SetupBLS381 {
         for (int c = 0; c < rows; c++) {
             int lc = c * 4;
             for (int k = aM.start(c), e = aM.end(c); k < e; k++) {
-                int w = aM.wire(k);
-                if (w < numWires) {
-                    FrArith381.mul(term, 0, dictMont, aM.coeffIndex(k) * 4, lag, lc);
-                    FrArith381.add(usM, w * 4, usM, w * 4, term, 0);
-                }
+                int w = requireWire(aM.wire(k), numWires);
+                FrArith381.mul(term, 0, dictMont, aM.coeffIndex(k) * 4, lag, lc);
+                FrArith381.add(usM, w * 4, usM, w * 4, term, 0);
             }
             for (int k = bM.start(c), e = bM.end(c); k < e; k++) {
-                int w = bM.wire(k);
-                if (w < numWires) {
-                    FrArith381.mul(term, 0, dictMont, bM.coeffIndex(k) * 4, lag, lc);
-                    FrArith381.add(vsM, w * 4, vsM, w * 4, term, 0);
-                }
+                int w = requireWire(bM.wire(k), numWires);
+                FrArith381.mul(term, 0, dictMont, bM.coeffIndex(k) * 4, lag, lc);
+                FrArith381.add(vsM, w * 4, vsM, w * 4, term, 0);
             }
             for (int k = cM.start(c), e = cM.end(c); k < e; k++) {
-                int w = cM.wire(k);
-                if (w < numWires) {
-                    FrArith381.mul(term, 0, dictMont, cM.coeffIndex(k) * 4, lag, lc);
-                    FrArith381.add(wsM, w * 4, wsM, w * 4, term, 0);
-                }
+                int w = requireWire(cM.wire(k), numWires);
+                FrArith381.mul(term, 0, dictMont, cM.coeffIndex(k) * 4, lag, lc);
+                FrArith381.add(wsM, w * 4, wsM, w * 4, term, 0);
             }
         }
         lagMont = null; // main-domain Lagrange values are done — free ~1 GB before point generation
@@ -731,11 +738,21 @@ public final class Groth16SetupBLS381 {
 
     private static void accumulate(BigInteger[] target, Map<Integer, BigInteger> sparse, BigInteger lagrange) {
         for (var entry : sparse.entrySet()) {
-            int wire = entry.getKey();
-            if (wire < target.length) {
-                target[wire] = target[wire].add(entry.getValue().multiply(lagrange)).mod(FR);
-            }
+            int wire = requireWire(entry.getKey(), target.length);
+            target[wire] = target[wire].add(entry.getValue().multiply(lagrange)).mod(FR);
         }
+    }
+
+    /**
+     * Fail closed on a wire outside {@code [0, numWires)} (issue #46). The relation is validated
+     * at ingress; this keeps the accumulation loops themselves incapable of skipping a term.
+     */
+    private static int requireWire(int wire, int numWires) {
+        if (wire < 0 || wire >= numWires) {
+            throw new IllegalArgumentException("R1CS term references wire " + wire
+                    + " outside [0, " + numWires + ")");
+        }
+        return wire;
     }
 
     private static BigInteger randomScalar(SecureRandom rng) {

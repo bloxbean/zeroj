@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.crypto.groth16;
 
 import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+import com.bloxbean.cardano.zeroj.api.R1CSValidation;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG2BN254;
@@ -155,7 +156,18 @@ public final class Groth16Prover {
     static BigInteger[] computeH(List<R1CSConstraint> constraints, BigInteger[] witness,
                                   int numConstraints, int domainSize) {
         BigInteger mod = MontFr254.modulus();
+        if (witness == null || witness.length == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        // Issue #46: a term whose wire lies outside the witness used to be skipped silently.
+        R1CSValidation.requireWireIndices(constraints, witness.length);
+        if (numConstraints < 0)
+            throw new IllegalArgumentException("numConstraints must be >= 0 (got " + numConstraints + ")");
         if (domainSize < 2) domainSize = 2;
+        if (Integer.bitCount(domainSize) != 1)
+            throw new IllegalArgumentException("domainSize must be a power of two >= 2 (got " + domainSize + ")");
+        if (Math.min(numConstraints, constraints.size()) > domainSize)
+            throw new IllegalArgumentException("relation has " + Math.min(numConstraints, constraints.size())
+                    + " rows but the FFT domain holds " + domainSize + " — the constraints do not belong to this proving key");
         int logN = Integer.numberOfTrailingZeros(domainSize);
 
         // Step 1: Build A, B evaluations on the standard domain from R1CS constraints
@@ -373,13 +385,25 @@ public final class Groth16Prover {
     private static MontFr254 evalLinComb(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
         MontFr254 sum = MontFr254.ZERO;
         for (var entry : lc.entrySet()) {
-            int wire = entry.getKey();
+            int wire = requireWire(entry.getKey(), witness.length);
             BigInteger coeff = entry.getValue();
-            if (wire < witness.length && coeff.signum() != 0) {
+            if (coeff.signum() != 0) {
                 sum = sum.add(MontFr254.fromBigInteger(coeff).mul(MontFr254.fromBigInteger(witness[wire])));
             }
         }
         return sum;
+    }
+
+    /**
+     * Fail closed on a wire outside {@code [0, bound)} (issue #46). Relations are validated at
+     * ingress; this keeps the loops themselves incapable of skipping a term.
+     */
+    private static int requireWire(int wire, int bound) {
+        if (wire < 0 || wire >= bound) {
+            throw new IllegalArgumentException("R1CS term references wire " + wire
+                    + " outside [0, " + bound + ")");
+        }
+        return wire;
     }
 
     private static BigInteger randomScalar(SecureRandom rng) {

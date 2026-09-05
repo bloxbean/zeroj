@@ -2,6 +2,7 @@ package com.bloxbean.cardano.zeroj.crypto.setup;
 
 import com.bloxbean.cardano.zeroj.api.LegacyCurvePolicy;
 import com.bloxbean.cardano.zeroj.api.R1CSConstraint;
+import com.bloxbean.cardano.zeroj.api.R1CSValidation;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254;
 import com.bloxbean.cardano.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
@@ -54,6 +55,10 @@ public final class Groth16Setup {
                                            int numPublic, BigInteger tau) {
         LegacyCurvePolicy.requireLegacyBn254Enabled();
         TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
+        // Issue #46: fail closed on a malformed relation before any QAP/point work (same
+        // semantics as the BLS12-381 setup — validation must not vary by curve).
+        R1CSValidation.requireDimensions(numWires, numPublic);
+        R1CSValidation.requireWireIndices(constraints, numWires);
         System.err.println("WARNING: Single-party Groth16 Phase 2 setup — "
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
@@ -190,11 +195,21 @@ public final class Groth16Setup {
 
     private static void accumulate(BigInteger[] target, Map<Integer, BigInteger> sparse, BigInteger lagrange) {
         for (var entry : sparse.entrySet()) {
-            int wire = entry.getKey();
-            if (wire < target.length) {
-                target[wire] = target[wire].add(entry.getValue().multiply(lagrange)).mod(FR);
-            }
+            int wire = requireWire(entry.getKey(), target.length);
+            target[wire] = target[wire].add(entry.getValue().multiply(lagrange)).mod(FR);
         }
+    }
+
+    /**
+     * Fail closed on a wire outside {@code [0, bound)} (issue #46). Relations are validated at
+     * ingress; this keeps the loops themselves incapable of skipping a term.
+     */
+    private static int requireWire(int wire, int bound) {
+        if (wire < 0 || wire >= bound) {
+            throw new IllegalArgumentException("R1CS term references wire " + wire
+                    + " outside [0, " + bound + ")");
+        }
+        return wire;
     }
 
     private static BigInteger randomScalar(SecureRandom rng) {

@@ -103,6 +103,23 @@ codecs. The handle exposes the VK components (`keys.pk().alphaG1()`, `keys.pk().
 `keys.gammaG2()`, `keys.pk().deltaG2()`, `keys.ic()`) if you need to emit a `vk.json` or run a
 raw pairing check — see `Groth16KeysTest.pairingVerify` for the four-pairing equation inline.
 
+## Relation validation (fail closed)
+
+Every setup and prove entry point — `Groth16Keys`, `Groth16Pipeline`, and the expert seams
+below — validates the relation's *shape* before doing any work and throws an
+`IllegalArgumentException` instead of proceeding:
+
+- `numWires >= 1` and `0 <= numPublic < numWires`;
+- every A/B/C term references a wire in `[0, numWires)` (at prove time: `[0, witness.length)`);
+- packed (`R1CSFlat`) relations have well-formed CSR offsets and in-dictionary coefficients;
+- the witness and H vectors match the proving key's point counts exactly, and the FFT domain
+  is a power of two that holds every constraint row (plus any snarkjs binding rows).
+
+A term outside the wire range used to be dropped silently by the direct setup/prove paths,
+which changed the relation being proved without any signal (issue #46). If you hit one of
+these exceptions, the relation, `numWires`/`numPublic`, or the witness you passed does not
+describe the circuit the key was made for — fix the caller; do not catch and retry.
+
 ## The pipeline layer — `Groth16Pipeline` (big-circuit orchestration)
 
 For CLI-grade behaviour at 19M scale — the compile-skip constraint cache, the deferred mmap'd
