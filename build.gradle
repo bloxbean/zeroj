@@ -273,6 +273,10 @@ tasks.register('verifyDefaultModuleSurface') {
     }
 }
 
+// ADR-0046: the guard is part of the local verification lifecycle, not only a separate CI step,
+// so `./gradlew build` (root `check`) fails on a test-fixtures runtime edge or a removed module edge.
+tasks.named('check') { dependsOn 'verifyDefaultModuleSurface' }
+
 def getCheckedOutGitCommitHash() {
     try {
         grgit.head().abbreviatedId

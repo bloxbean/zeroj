@@ -98,9 +98,18 @@ published its witnesses' fingerprints on-chain.
 - J. Groth, *On the Size of Pairing-based Non-interactive Arguments*, EUROCRYPT 2016
   (ePrint 2016/260), §3.1 (proof generation with `r, s <- F`) and §3.2 (zero-knowledge
   simulator picks `A, B` uniformly).
-- arkworks `groth16/src/prover.rs` (`create_random_proof` samples `r, s` from the caller's
-  RNG; there is no unblinded prover in the public API) and snarkjs `src/groth16_prove.js`
-  (`r, s` from `getRandomBytes`), as the maintained reference behaviour.
+- arkworks `groth16` v0.5.0, `src/prover.rs`
+  (https://github.com/arkworks-rs/groth16/blob/v0.5.0/src/prover.rs):
+  `create_random_proof_with_reduction` samples `r, s` from the caller's RNG. The same file
+  also exposes, as public functions, `create_proof_with_reduction_no_zk` (explicitly
+  `r = s = 0`) and `create_proof_with_reduction` / `create_proof_with_reduction_and_matrices`
+  with caller-supplied `r, s`. ZeroJ's boundary is therefore deliberately stricter than
+  arkworks': that no published entry point fixes or accepts the blinders is this ADR's own
+  decision, not a claim about reference behaviour (corrected in PR #57 review).
+- snarkjs v0.7.6, `src/groth16_prove.js`
+  (https://github.com/iden3/snarkjs/blob/v0.7.6/src/groth16_prove.js): `r` and `s` come from
+  `curve.Fr.random()` inside `groth16Prove`, and the exported function accepts no
+  caller-supplied or fixed blinders. This matches ZeroJ's public surface.
 - ADR-0045 (P1 resampling, P2 fail-closed unblinded path) and ADR-0036 amendment
   2026-09-05 (relation validation at every prove ingress), whose properties the moved path
   must retain.
@@ -129,8 +138,9 @@ published its witnesses' fingerprints on-chain.
   generation fails if a variant with that name ever reappears, and `check` runs that
   generation so `./gradlew build` catches it. Test fixtures are consumed only by test
   configurations: the ADR-0044 module-surface guard fails any `api`/`implementation`/
-  `compileOnly`/`runtimeOnly` project dependency that requests a test-fixtures capability. The
-  fixture is loaded from a different code source than the prover.
+  `compileOnly`/`runtimeOnly` project dependency that requests a test-fixtures capability, and
+  the root `check` task depends on that guard so a plain `./gradlew build` runs it (PR #57
+  review). The fixture is loaded from a different code source than the prover.
 - **Z4 — the oracle is unchanged.** The fixture reproduces the removed method's computation
   exactly: the issue #46 ingress validation via the public `computeH`, the same
   `computeProofPoints` evaluation with `(0, 0)` through `proveBlinded`, and the ADR-0045 P2
@@ -165,7 +175,9 @@ fixture":**
    `testFixturesRuntimeElements` from `components.java`, fails `GenerateModuleMetadata` if the
    generated module metadata mentions a test-fixtures variant, and makes `check` depend on
    that generation. The root `verifyDefaultModuleSurface` (ADR-0044) additionally fails any
-   runtime-scoped project dependency that requests a test-fixtures capability.
+   runtime-scoped project dependency that requests a test-fixtures capability, and the root
+   `check` depends on it, so `./gradlew build` runs both guards locally (CI also invokes the
+   module-surface task explicitly).
    `zeroj-crypto-blst` consumes the fixture with
    `testImplementation testFixtures(project(':zeroj-crypto'))`; the `zeroj-crypto` test source
    set sees it automatically.
@@ -213,8 +225,8 @@ fixture":**
   update the allowlist in the same change and confirm the method draws its blinders from
   `secureRandomBlinders()` (or, for PlonK, a fresh or caller-supplied `SecureRandom`).
 - The ADR-0044 module-surface guard now also rejects test-fixture edges in runtime
-  configurations, and `check` runs the metadata guard, so `./gradlew build` catches both
-  leak classes without a publish.
+  configurations, and `check` runs both that guard and the metadata guard, so
+  `./gradlew build` catches both leak classes without a publish.
 
 ## Compatibility
 
