@@ -10,6 +10,10 @@ dependencies {
     // junit is provided by the root subprojects block.
     api project(':zeroj-crypto')
     api project(':zeroj-blst')
+
+    // ADR-0046: the deterministic (unblinded) prover used by the pure-Java-vs-blst byte-equality
+    // differentials is a zeroj-crypto test fixture, never a published artifact.
+    testImplementation testFixtures(project(':zeroj-crypto'))
 }
 
 publishing {

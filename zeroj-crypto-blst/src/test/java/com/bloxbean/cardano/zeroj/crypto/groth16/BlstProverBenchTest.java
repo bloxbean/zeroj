@@ -64,8 +64,8 @@ class BlstProverBenchTest {
     void blstBackedProof_equalsPureJava() {
         var s = setup(1024);
         var readers = Groth16ProverBLS381.heapReaders(s.pk);
-        var pure = Groth16ProverBLS381.proveUnblindedWithReaders(s.pk, readers, ProverBackend.PURE_JAVA, s.w, s.cons, s.domain);
-        var blst = Groth16ProverBLS381.proveUnblindedWithReaders(s.pk, readers, BLST, s.w, s.cons, s.domain);
+        var pure = Groth16UnblindedTestProver.proveUnblinded(s.pk, readers, ProverBackend.PURE_JAVA, s.w, s.cons, s.domain);
+        var blst = Groth16UnblindedTestProver.proveUnblinded(s.pk, readers, BLST, s.w, s.cons, s.domain);
 
         assertEquals(pure.a().x().toBigInteger(), blst.a().x().toBigInteger(), "piA.x");
         assertEquals(pure.a().y().toBigInteger(), blst.a().y().toBigInteger(), "piA.y");

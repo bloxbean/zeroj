@@ -169,8 +169,8 @@ can exceed it — measure your real floor). A `Progress` listener surfaces stage
 
 ## The expert layer (when `Groth16Keys`/`Groth16Pipeline` aren't enough)
 
-Everything above is delegation — these seams stay public for differential tests and for
-pipelines with needs the orchestrator doesn't cover:
+Everything above is delegation — these seams stay public for pipelines with needs the
+orchestrator doesn't cover:
 
 | entry point | what it's for |
 |---|---|
@@ -181,6 +181,16 @@ pipelines with needs the orchestrator doesn't cover:
 | `Groth16ProverBLS381.proveWithHCoeffs(...)` | prove from a precomputed H (pairs with the above) |
 | `Groth16ProverBLS381.proveWithReaders(...)` | reader-supplied key without the handle |
 | `R1CSFlatIO.write/readIfMatches` | fingerprint-gated `r1cs.bin` constraint cache — skip the frontend compile on warm proves |
+
+**There is no public unblinded or deterministic prove.** Every entry point above draws fresh
+`(r, s)` from `SecureRandom`; nothing lets a caller fix, seed, or omit the blinders. A Groth16
+proof with `r = s = 0` is a deterministic function of the key and the witness and is **not
+zero-knowledge** (two proofs of the same witness are identical, and a low-entropy witness can be
+recovered by enumeration), so that path exists only for ZeroJ's own byte-equality differential
+tests, as `Groth16UnblindedTestProver` in the unpublished `zeroj-crypto` test fixtures
+([ADR-0046](adr/0046-groth16-unblinded-proving-test-boundary.md)). It is not in any published
+artifact. If you need reproducible proofs for debugging, record the proof you got — do not try
+to reproduce the blinders.
 
 Memory numbers, formats, and the full optimization history: ADR-0033 (prove memory),
 ADR-0034 (frontend + prove speed), ADR-0035 (setup memory/time + sparse store).

@@ -1,8 +1,30 @@
 plugins {
     id 'java-library'
+    id 'java-test-fixtures'
 }
 
 description = 'Pure Java optimized cryptographic primitives — Montgomery field arithmetic, EC operations, FFT, MSM'
+
+// ADR-0046 (issue #50): the deterministic (unblinded, r = s = 0) Groth16 prover that the
+// byte-equality differential tests need is a test fixture (src/testFixtures), not product code.
+// The two test-fixtures variants are removed from the published Java component so neither the
+// POM nor the Gradle module metadata of zeroj-crypto can ever carry it; the guard below fails
+// metadata generation if a variant with that name reappears, and `check` runs that generation so
+// a plain `./gradlew build` catches it, not only the publish job.
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
+
+def moduleName = project.name
+tasks.withType(GenerateModuleMetadata).configureEach {
+    doLast {
+        def metadata = outputFile.get().asFile.text
+        if (metadata.contains('test-fixtures') || metadata.contains('testFixtures')) {
+            throw new GradleException("ADR-0046: ${moduleName} must not publish a test-fixtures variant "
+                    + "(the unblinded Groth16 test prover is not product code)")
+        }
+    }
+}
+tasks.named('check') { dependsOn tasks.withType(GenerateModuleMetadata) }
 
 test {
     // zeroj-crypto still exercises legacy BN254 arithmetic/prover regression

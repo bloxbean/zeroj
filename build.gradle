@@ -205,6 +205,26 @@ tasks.register('verifyDefaultModuleSurface') {
     }
     def presentNames = rootProject.subprojects.collect { it.name }
 
+    // ADR-0046: test fixtures (the unblinded Groth16 test prover) are consumed by test
+    // configurations only. A runtime edge would carry the fixture capability into a published
+    // POM/module file, so it is a product-surface leak like any other.
+    def requestsTestFixtures = { dep ->
+        def selectors = dep.hasProperty('capabilitySelectors') ? dep.capabilitySelectors : dep.requestedCapabilities
+        selectors.any { sel ->
+            (sel.hasProperty('featureName') && sel.featureName == 'test-fixtures')
+                    || (sel.hasProperty('name') && sel.name.endsWith('-test-fixtures'))
+        }
+    }
+    def fixtureRuntimeEdges = rootProject.subprojects.collectMany { sub ->
+        sub.configurations
+                .findAll { it.name in ['api', 'implementation', 'compileOnly', 'runtimeOnly'] }
+                .collectMany { cfg ->
+                    cfg.dependencies.withType(ProjectDependency)
+                            .findAll { requestsTestFixtures(it) }
+                            .collect { "${sub.name} -> ${it.name} test fixtures via '${cfg.name}'" }
+                }
+    }
+
     doLast {
         def failures = []
 
@@ -239,6 +259,10 @@ tasks.register('verifyDefaultModuleSurface') {
             runtimeGraph[name]?.findAll { nativeNames.contains(it) }?.each {
                 failures << "pure-Java module '${name}' gained native/WASM dependency '${it}'"
             }
+        }
+
+        fixtureRuntimeEdges.each {
+            failures << "ADR-0046: ${it} (test fixtures are never product code)"
         }
 
         if (!failures.isEmpty()) {

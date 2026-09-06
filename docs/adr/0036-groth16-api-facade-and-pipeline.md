@@ -118,7 +118,8 @@ co-located `r1cs.bin`).
   valid slot through `wire * 4` overflow in the flat paths.
 - **Decision**: one shared check, `R1CSValidation` (`zeroj-api`), invoked once at each public
   ingress before any QAP/FFT/MSM work: `Groth16SetupBLS381.setup` and `setupToStore` (every
-  overload), `Groth16ProverBLS381.prove`, `proveWithReaders`, `proveUnblindedWithReaders`,
+  overload), `Groth16ProverBLS381.prove`, `proveWithReaders`, `proveUnblindedWithReaders`
+  (removed by ADR-0046 on 2026-09-06; the test fixture now calls `computeH` directly),
   `computeH` (list and CSR) and `computeHFlat`; `Groth16Keys` and `Groth16Pipeline` inherit it.
   Invariants: `numWires >= 1`; `0 <= numPublic < numWires`; every A/B/C wire in
   `[0, numWires)` at setup and `[0, witness.length)` at prove; CSR row offsets monotone and
@@ -140,3 +141,22 @@ co-located `r1cs.bin`).
   the weakened-relation reproducer.
 - **Out of scope**: the infinity-IC profile for unused public wires (issue #52) and coefficient
   canonicality (values are reduced mod r by the consumers, as before).
+
+## Amendment 2026-09-06 — no public unblinded prove (issue #50, ADR-0046)
+
+- **Risk**: R3 — the zero-knowledge blinders `(r, s)` and which code may omit them.
+- **Change**: `Groth16ProverBLS381.proveUnblindedWithReaders` (public, `r = s = 0`) is removed
+  from the expert layer, and the prover keeps no fixed-blinder path. The deterministic proofs
+  the differential tests need now come from `Groth16UnblindedTestProver` in the unpublished
+  `zeroj-crypto` test fixtures, which calls the public `computeH` and then the package-private
+  `proveBlinded` with a single-shot `(0, 0)` blinder source. The 2026-09-05 ingress list
+  therefore reads `prove`, `proveWithReaders`, `computeH` (list and CSR), and `computeHFlat`;
+  `proveWithHCoeffs` takes a caller-computed `H` and receives only the key-dimension check, as
+  before.
+- **Guard**: `Groth16ProverApiSurfaceTest` pins the exact public method set of
+  `Groth16ProverBLS381`, `Groth16Keys`, `Groth16Pipeline`, and `Groth16Prover`, and the set of
+  public proof-returning methods across the `groth16`/`plonk` packages; adding one requires
+  updating that allowlist after a blinder-policy review.
+- **Facade**: `Groth16Keys` and `Groth16Pipeline` are unchanged; they never exposed an
+  unblinded path.
+

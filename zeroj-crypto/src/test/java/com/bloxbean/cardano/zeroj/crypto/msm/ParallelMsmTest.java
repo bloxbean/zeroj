@@ -6,6 +6,7 @@ import com.bloxbean.cardano.zeroj.bls12381.ec.JacobianG1BLS381;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16UnblindedTestProver;
 import com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend;
 import com.bloxbean.cardano.zeroj.crypto.setup.Groth16SetupBLS381;
 import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
@@ -78,8 +79,8 @@ class ParallelMsmTest {
         int domain = Groth16ProvingKeyBLS381.count(pk.pointsH());
         var readers = Groth16ProverBLS381.heapReaders(pk);
 
-        var serial = Groth16ProverBLS381.proveUnblindedWithReaders(pk, readers, ProverBackend.PURE_JAVA_SERIAL, w, cons, domain);
-        var parallel = Groth16ProverBLS381.proveUnblindedWithReaders(pk, readers, ProverBackend.PURE_JAVA, w, cons, domain);
+        var serial = Groth16UnblindedTestProver.proveUnblinded(pk, readers, ProverBackend.PURE_JAVA_SERIAL, w, cons, domain);
+        var parallel = Groth16UnblindedTestProver.proveUnblinded(pk, readers, ProverBackend.PURE_JAVA, w, cons, domain);
 
         assertEquals(serial.a().x().toBigInteger(), parallel.a().x().toBigInteger(), "piA.x");
         assertEquals(serial.b().x().re().toBigInteger(), parallel.b().x().re().toBigInteger(), "piB.x.c0");

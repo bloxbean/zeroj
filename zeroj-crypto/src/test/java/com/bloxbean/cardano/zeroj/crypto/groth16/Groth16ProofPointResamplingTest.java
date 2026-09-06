@@ -163,7 +163,7 @@ class Groth16ProofPointResamplingTest {
         var pk = cancelled.provingKey();
         int domain = Groth16ProvingKeyBLS381.count(pk.pointsH());
         var ex = assertThrows(IllegalStateException.class,
-                () -> Groth16ProverBLS381.proveUnblindedWithReaders(pk, Groth16ProverBLS381.heapReaders(pk),
+                () -> Groth16UnblindedTestProver.proveUnblinded(pk, Groth16ProverBLS381.heapReaders(pk),
                         ProverBackend.PURE_JAVA, WITNESS, RELATION, domain));
         assertTrue(ex.getMessage().contains("point at infinity"), ex.getMessage());
 
@@ -194,19 +194,20 @@ class Groth16ProofPointResamplingTest {
         return pairingVerify(setup, proof, pub);
     }
 
-    private static boolean pairingVerify(Groth16SetupBLS381.SetupResult s, Groth16ProofBLS381 proof, BigInteger pub) {
+    /** Groth16 verification straight from the setup's VK components; shared with {@code Groth16ProverApiSurfaceTest}. */
+    static boolean pairingVerify(Groth16SetupBLS381.SetupResult s, Groth16ProofBLS381 proof, BigInteger pub) {
         G1Point vkX = toG1(s.ic()[0]).add(toG1(s.ic()[1]).scalarMul(pub));
         return BLS12381Pairing.pairingCheck(
                 new G1Point[]{toG1(proof.a()), toG1(s.provingKey().alphaG1()).negate(), vkX.negate(), toG1(proof.c()).negate()},
                 new G2Point[]{toG2(proof.b()), toG2(s.provingKey().betaG2()), toG2(s.gammaG2()), toG2(s.provingKey().deltaG2())});
     }
 
-    private static G1Point toG1(JacobianG1BLS381.AffineG1 p) {
+    static G1Point toG1(JacobianG1BLS381.AffineG1 p) {
         if (p.isInfinity()) return G1Point.INFINITY;
         return new G1Point(Fp.of(p.xBigInt()), Fp.of(p.yBigInt()));
     }
 
-    private static G2Point toG2(JacobianG2BLS381.AffineG2 p) {
+    static G2Point toG2(JacobianG2BLS381.AffineG2 p) {
         if (p.isInfinity()) return G2Point.INFINITY;
         return new G2Point(
                 Fp2.of(Fp.of(p.x().reBigInt()), Fp.of(p.x().imBigInt())),

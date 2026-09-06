@@ -97,22 +97,11 @@ public final class Groth16Prover {
         // Step 1: Compute h(x) polynomial
         BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
-        // Step 2: Random blinding factors (set to 0 for debugging with proveUnblinded)
+        // Step 2: Random blinding factors — fresh per proof; there is no unblinded path (ADR-0046)
         var rng = new SecureRandom();
         BigInteger r = randomScalar(rng);
         BigInteger s = randomScalar(rng);
 
-        return proveInternal(pk, witness, hCoeffs, r, s);
-    }
-
-    /** Prove without blinding (r=0, s=0) — for debugging only. */
-    static Groth16Proof proveUnblinded(
-            Groth16ProvingKey pk, BigInteger[] witness,
-            List<R1CSConstraint> constraints, int numWires, int domainSize) {
-        LegacyCurvePolicy.requireLegacyBn254Enabled();
-        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
-        BigInteger r = BigInteger.ZERO;
-        BigInteger s = BigInteger.ZERO;
         return proveInternal(pk, witness, hCoeffs, r, s);
     }
 

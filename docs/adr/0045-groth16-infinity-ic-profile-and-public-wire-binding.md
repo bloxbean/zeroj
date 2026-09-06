@@ -170,10 +170,14 @@ therefore already consistent with the ADR-0025 profile. Only the native setup di
   up to a small fixed bound (8 attempts), then fail closed with `IllegalStateException`. The
   event has probability on the order of `3/r` per attempt for an honest key and witness, so
   the bound is unreachable in practice; it exists so the loop is provably finite. The check
-  is on the Jacobian results inside `proveInternal`'s caller, so both the pure-Java and blst
+  is on the Jacobian results inside `proveBlinded` (at the time, `proveInternal`'s caller;
+  ADR-0046 later folded `proveInternal` away), so both the pure-Java and blst
   MSM backends get it.
 - **P2.** The deterministic, test-only unblinded paths (`r = s = 0`) do not resample; they
-  throw `IllegalStateException` instead of returning a proof the profile rejects.
+  throw `IllegalStateException` instead of returning a proof the profile rejects. (Since
+  ADR-0046 the only such path is the unpublished test fixture `Groth16UnblindedTestProver`,
+  which feeds `(0, 0)` once through the package-private `BlinderSource` seam of
+  `proveBlinded`; the source throws on the second draw an infinity point would trigger.)
 - **P3.** Rejection sampling on an event of probability ~`2^-253` does not measurably change
   the distribution of `(r, s)`; the zero-knowledge argument of Groth16 §3.2 (simulator picks
   uniformly random group elements) is unaffected. This is recorded here so the change is
