@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.zeroj.examples.dsl.common;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +56,7 @@ public class SnarkjsProver {
                 home + "/.nvm/versions/node/current/bin/snarkjs",
         };
         for (String candidate : candidates) {
-            if (java.nio.file.Files.isExecutable(Path.of(candidate))) {
+            if (Files.isExecutable(Path.of(candidate))) {
                 return candidate;
             }
         }
@@ -76,14 +77,12 @@ public class SnarkjsProver {
      */
     public boolean isAvailable() {
         try {
-            // snarkjs --version exits with code 99 but prints version info
-            var pb = new ProcessBuilder(snarkjsBin, "--version")
-                    .redirectErrorStream(true);
-            var process = pb.start();
-            String output = new String(process.getInputStream().readAllBytes());
-            process.waitFor(10, TimeUnit.SECONDS);
-            return output.contains("snarkjs");
-        } catch (Exception e) {
+            // snarkjs --version exits with code 99 but prints version info.
+            return execute(null, 10, snarkjsBin, "--version").output().contains("snarkjs");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (IOException e) {
             return false;
         }
     }
@@ -264,20 +263,37 @@ public class SnarkjsProver {
     }
 
     private void run(Path workDir, String... command) throws IOException, InterruptedException {
-        var pb = new ProcessBuilder(command)
-                .directory(workDir.toFile())
-                .redirectErrorStream(true);
-        var process = pb.start();
-        String output = new String(process.getInputStream().readAllBytes());
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            throw new IOException("snarkjs timed out after " + timeoutSeconds + "s: "
-                    + String.join(" ", command));
+        var result = execute(workDir, timeoutSeconds, command);
+        if (result.exitCode() != 0) {
+            throw new IOException("snarkjs failed (exit " + result.exitCode() + "): "
+                    + String.join(" ", command) + "\n" + result.output());
         }
-        if (process.exitValue() != 0) {
-            throw new IOException("snarkjs failed (exit " + process.exitValue() + "): "
-                    + String.join(" ", command) + "\n" + output);
+    }
+
+    record CommandResult(int exitCode, String output) {}
+
+    /** Redirect before waiting: reading a pipe to EOF first defeats the process timeout. */
+    static CommandResult execute(Path workDir, long timeoutSeconds, String... command)
+            throws IOException, InterruptedException {
+        Path log = Files.createTempFile("zeroj-snarkjs-", ".log");
+        Process process = null;
+        try {
+            process = new ProcessBuilder(command)
+                    .directory(workDir == null ? null : workDir.toFile())
+                    .redirectErrorStream(true)
+                    .redirectOutput(log.toFile())
+                    .start();
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                throw new IOException("snarkjs timed out after " + timeoutSeconds + "s: "
+                        + String.join(" ", command));
+            }
+            return new CommandResult(process.exitValue(), Files.readString(log, StandardCharsets.UTF_8));
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+            }
+            Files.deleteIfExists(log);
         }
     }
 }

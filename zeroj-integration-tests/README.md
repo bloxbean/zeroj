@@ -20,8 +20,12 @@ Tutorials and runnable applications are **not** here. They live in
 ## Running
 
 ```bash
-# Offline regressions — no external tooling required
+# Default regressions — live snarkjs suites skip if the pinned oracle is unavailable
 ./gradlew :zeroj-integration-tests:test
+
+# Bidirectional Groth16/PlonK interop — require snarkjs 0.7.6 (same gate as assurance CI)
+npm install -g snarkjs@0.7.6
+./gradlew -PrequireSnarkjs :zeroj-integration-tests:test --tests 'com.bloxbean.cardano.zeroj.it.snarkjs.*'
 
 # End-to-end tests — require external infrastructure, and skip gracefully without it
 ./gradlew :zeroj-integration-tests:e2eTest
@@ -42,6 +46,8 @@ given oracle actually ran.
 
 | Test | Invariant |
 |---|---|
+| `it.snarkjs.*` | ADR-0047: snarkjs 0.7.6 verifies exported ZeroJ Groth16/PlonK proofs and rejects tampering; ZeroJ verifies fresh snarkjs proofs. Offline tests pin export round trips and selector-infinity policy. |
+| `SnarkjsProcessTest` | A hung external process cannot bypass the timeout by keeping its output open; large output cannot deadlock the runner. |
 | `ComparatorRelationPinningTest` | ADR-0037 comparator soundness: an oversized operand must be **rejected**, not wrap into a small residue that clears a threshold. Pins both shipped comparison circuits. |
 | `SealedBidCircuitTest` | Circuit relation and curve policy: bids below reserve and wrong commitments fail witness calculation; BN254 compilation is refused for BLS12-381 Poseidon parameters. |
 | `AnnotatedCircuitExamplesTest` | Annotation-processor companions: generated schemas, public/secret input split, public-input **ordering**, circuit metadata, and envelope binding that rejects mismatched public signals and a wrong curve. |

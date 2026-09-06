@@ -193,7 +193,8 @@ Circuit: `X * Y = Z` (multiplier), Witness: X=3, Y=11, Z=33
 
 The BLS12-381 off-chain verifier also includes a structured snarkjs PlonK
 multiplier vector under
-`zeroj-verifier-plonk/src/test/resources/test-vectors/snarkjs-plonk-bls12381/`.
+`zeroj-test-vectors/src/main/resources/test-vectors/snarkjs-plonk-bls12381/` (shared with the
+ADR-0047 exporter known-answer tests, which pin the exporter byte-for-byte against it).
 
 ## Related ADRs
 - [ADR-0008: PlonK Support via gnark](adr/0008-plonk-support-via-gnark.md)
