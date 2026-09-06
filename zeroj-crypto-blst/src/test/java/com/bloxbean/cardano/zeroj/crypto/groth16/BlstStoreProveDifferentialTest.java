@@ -70,11 +70,11 @@ class BlstStoreProveDifferentialTest {
             assertFalse(loaded.readers().b2().get(2).isInfinity(), "pointsB2[2] should be a real point");
 
             int domain = loaded.domain();
-            var inRam = Groth16ProverBLS381.proveUnblindedWithReaders(
+            var inRam = Groth16UnblindedTestProver.proveUnblinded(
                     pk, Groth16ProverBLS381.heapReaders(pk), ProverBackend.PURE_JAVA, w, cons, domain);
-            var storeJava = Groth16ProverBLS381.proveUnblindedWithReaders(
+            var storeJava = Groth16UnblindedTestProver.proveUnblinded(
                     loaded.pk(), loaded.readers(), ProverBackend.PURE_JAVA, w, cons, domain);
-            var storeBlst = Groth16ProverBLS381.proveUnblindedWithReaders(
+            var storeBlst = Groth16UnblindedTestProver.proveUnblinded(
                     loaded.pk(), loaded.readers(), BLST, w, cons, domain);
 
             assertProofEquals(inRam, storeJava, "store/pure-java");

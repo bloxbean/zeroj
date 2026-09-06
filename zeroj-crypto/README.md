@@ -42,6 +42,13 @@ development, tests, and local demos. They are disabled by default and require
 deployments should use imported ceremony outputs appropriate to the proof system
 and circuit, with pinned artifact hashes.
 
+Every public Groth16 prove path blinds the proof with fresh `SecureRandom` scalars
+`(r, s)`. There is no public unblinded or deterministic prove: such a proof is a
+deterministic function of the witness and is not zero-knowledge. The deterministic
+prover that ZeroJ's own byte-equality differential tests use
+(`Groth16UnblindedTestProver`) lives in this module's unpublished test fixtures and
+is never part of a published artifact (ADR-0046).
+
 ## Gradle
 
 ```gradle

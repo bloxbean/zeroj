@@ -5,6 +5,8 @@ import com.bloxbean.cardano.zeroj.api.R1CSFlat;
 import com.bloxbean.cardano.zeroj.api.TrustedSetupPolicy;
 import com.bloxbean.cardano.zeroj.bls12381.field.MontFr381;
 import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16PkStore;
+import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16UnblindedTestProver;
+import com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -147,12 +149,10 @@ class StreamingSetupDifferentialTest {
 
             // identical deterministic proof from both stores
             BigInteger[] w = witness(n);
-            var pd = com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381.proveUnblindedWithReaders(
-                    dl.pk(), dl.readers(), com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend.PURE_JAVA,
-                    w, cons, dl.domain());
-            var ps = com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381.proveUnblindedWithReaders(
-                    sl.pk(), sl.readers(), com.bloxbean.cardano.zeroj.crypto.groth16.ProverBackend.PURE_JAVA,
-                    w, cons, sl.domain());
+            var pd = Groth16UnblindedTestProver.proveUnblinded(
+                    dl.pk(), dl.readers(), ProverBackend.PURE_JAVA, w, cons, dl.domain());
+            var ps = Groth16UnblindedTestProver.proveUnblinded(
+                    sl.pk(), sl.readers(), ProverBackend.PURE_JAVA, w, cons, sl.domain());
             assertEquals(pd.a().x().toBigInteger(), ps.a().x().toBigInteger(), "piA");
             assertEquals(pd.b().x().re().toBigInteger(), ps.b().x().re().toBigInteger(), "piB");
             assertEquals(pd.c().x().toBigInteger(), ps.c().x().toBigInteger(), "piC");

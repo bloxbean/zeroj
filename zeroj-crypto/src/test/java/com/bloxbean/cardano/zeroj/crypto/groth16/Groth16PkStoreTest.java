@@ -53,14 +53,14 @@ class Groth16PkStoreTest {
         var sr = Groth16SetupBLS381.setup(cons, n + 2, 1, tau);
         int domain = Groth16ProvingKeyBLS381.count(sr.provingKey().pointsH());
 
-        var fresh = Groth16ProverBLS381.proveUnblindedWithReaders(sr.provingKey(),
+        var fresh = Groth16UnblindedTestProver.proveUnblinded(sr.provingKey(),
                 Groth16ProverBLS381.heapReaders(sr.provingKey()), ProverBackend.PURE_JAVA, w, cons, domain);
 
         Groth16PkStore.save(sr, dir);
         assertTrue(Groth16PkStore.exists(dir), "store should exist after save");
 
         try (var loaded = Groth16PkStore.load(dir)) {
-            var fromStore = Groth16ProverBLS381.proveUnblindedWithReaders(loaded.pk(),
+            var fromStore = Groth16UnblindedTestProver.proveUnblinded(loaded.pk(),
                     loaded.readers(), ProverBackend.PURE_JAVA, w, cons, domain);
 
             assertEquals(fresh.a().x().toBigInteger(), fromStore.a().x().toBigInteger(), "piA.x");

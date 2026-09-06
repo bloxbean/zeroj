@@ -27,8 +27,16 @@ import java.util.Map;
  *
  * <p><b>New integrations: start at {@link Groth16Keys}</b> — one handle + one {@code prove} for
  * heap, dense-store, and sparse-store keys alike. The entry points below are the expert layer
- * (reader seams, split H computation, packed scalars) for differential tests and memory-tuned
- * pipelines.</p>
+ * (reader seams, split H computation, packed scalars) for memory-tuned pipelines.</p>
+ *
+ * <p><b>Zero-knowledge blinding (ADR-0046, issue #50).</b> Every public prove entry point draws
+ * a fresh {@code (r, s)} pair from {@link SecureRandom}; no public API fixes, seeds, or omits the
+ * blinders, and this class contains no {@code r = s = 0} path. The deterministic proofs that the
+ * byte-equality differential tests need exist only in the unpublished {@code zeroj-crypto} test
+ * fixture {@code Groth16UnblindedTestProver}, which feeds {@code (0, 0)} once through the
+ * package-private {@code BlinderSource} seam of {@code proveBlinded}. An unblinded proof is
+ * <b>not zero-knowledge</b>: it is a deterministic function of the key and the full witness. See
+ * ADR-0046 for the boundary and {@code Groth16ProverApiSurfaceTest} for what enforces it.</p>
  *
  * <p><b>Relation validation (issue #46).</b> Every prove and {@code computeH} entry point
  * rejects, with an {@link IllegalArgumentException} and before any FFT or MSM work: a relation
@@ -41,8 +49,8 @@ import java.util.Map;
  * state only by scalar cancellation with probability on the order of {@code 1/r} per point. The
  * randomized entry points therefore resample {@code (r, s)} and recompute when it happens (at
  * most {@link #MAX_BLINDER_RESAMPLES} times, then fail closed); the deterministic unblinded
- * test paths cannot resample and throw instead. No prove path returns a proof point at
- * infinity.</p>
+ * test path cannot resample (its blinder source refuses a second draw) and fails closed
+ * instead. No prove path returns a proof point at infinity.</p>
  */
 public final class Groth16ProverBLS381 {
 
@@ -97,15 +105,6 @@ public final class Groth16ProverBLS381 {
                 secureRandomBlinders());
     }
 
-    static Groth16ProofBLS381 proveUnblinded(
-            Groth16ProvingKeyBLS381 pk, BigInteger[] witness,
-            List<R1CSConstraint> constraints, int numWires, int domainSize) {
-        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
-        return proveInternal(pk, heapReaders(pk), ProverBackend.PURE_JAVA,
-                FlatScalars.pack(witness, witness.length), FlatScalars.pack(hCoeffs, hCoeffs.length),
-                BigInteger.ZERO, BigInteger.ZERO);
-    }
-
     /**
      * The proving-key point arrays as readers (heap or mmap-backed). {@code b2} is the G2 key
      * (ADR-0033 M3); when {@code null} (the pre-M3 G1-only constructor) the prover falls back to
@@ -119,16 +118,6 @@ public final class Groth16ProverBLS381 {
                          PippengerFlatBLS381.G1AffineReader h, PippengerFlatBLS381.G1AffineReader l) {
             this(a, b1, h, l, null);
         }
-    }
-
-    /** Deterministic (unblinded) prove with reader-supplied G1 key + MSM backend — for differential tests. */
-    public static Groth16ProofBLS381 proveUnblindedWithReaders(
-            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, BigInteger[] witness,
-            List<R1CSConstraint> constraints, int domainSize) {
-        BigInteger[] hCoeffs = computeH(constraints, witness, constraints.size(), domainSize);
-        return proveInternal(pk, readers, backend,
-                FlatScalars.pack(witness, witness.length), FlatScalars.pack(hCoeffs, hCoeffs.length),
-                BigInteger.ZERO, BigInteger.ZERO);
     }
 
     /** In-RAM readers over the PK's flat G1 arrays + G2 array. */
@@ -191,7 +180,12 @@ public final class Groth16ProverBLS381 {
         return proveBlinded(pk, readers, backend, witness, hCoeffs, secureRandomBlinders());
     }
 
-    /** A source of fresh {@code (r, s)} blinder pairs (ADR-0045 P1); package-private test seam. */
+    /**
+     * A source of {@code (r, s)} blinder pairs (ADR-0045 P1). Package-private on purpose: it is
+     * the only seam through which a test may fix the blinders (ADR-0045 forced-infinity tests,
+     * ADR-0046 unblinded test fixture), and {@code Groth16ProverApiSurfaceTest} fails if it or
+     * {@link #proveBlinded} ever becomes public.
+     */
     @FunctionalInterface
     interface BlinderSource {
         /** @return {@code {r, s}}, each a canonical scalar in {@code [0, r)} */
@@ -207,7 +201,9 @@ public final class Groth16ProverBLS381 {
     /**
      * Randomized prove with resampling (ADR-0045 P1): draws {@code (r, s)} from {@code blinders},
      * computes the proof, and retries with a fresh pair while any of {@code A/B/C} is the point at
-     * infinity, at most {@link #MAX_BLINDER_RESAMPLES} times before failing closed.
+     * infinity, at most {@link #MAX_BLINDER_RESAMPLES} times before failing closed. A source that
+     * throws on its second draw turns this into a deterministic single-shot prove that fails
+     * closed on an infinity point (ADR-0045 P2) — the unblinded test fixture relies on that.
      */
     static Groth16ProofBLS381 proveBlinded(
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
@@ -223,23 +219,6 @@ public final class Groth16ProverBLS381 {
         throw new IllegalStateException("Groth16 prove aborted: a proof point was the point at infinity on "
                 + MAX_BLINDER_RESAMPLES + " consecutive (r, s) samples, which every verifier profile rejects"
                 + " (ADR-0045). This is not reachable with a sound key and uniformly random blinders.");
-    }
-
-    /**
-     * Deterministic prove with caller-fixed {@code (r, s)} (the unblinded test paths, ADR-0045 P2):
-     * no resampling is possible, so a proof point at infinity fails closed instead of being
-     * returned.
-     */
-    private static Groth16ProofBLS381 proveInternal(
-            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
-            FlatScalars hCoeffs, BigInteger r, BigInteger s) {
-        ProofPoints points = computeProofPoints(pk, readers, backend, witness, hCoeffs, r, s);
-        if (points.hasInfinity()) {
-            throw new IllegalStateException("Groth16 prove aborted: a proof point is the point at infinity for the"
-                    + " fixed blinders (r, s) of this deterministic path, which every verifier profile rejects"
-                    + " (ADR-0045)");
-        }
-        return points.toProof();
     }
 
     /** The three Jacobian proof points of one {@code (r, s)} evaluation. */

@@ -178,7 +178,7 @@ class Groth16RelationValidationTest {
                 () -> Groth16ProverBLS381.proveWithReaders(pk, readers, ProverBackend.PURE_JAVA,
                         WITNESS, bad, NUM_WIRES, domain));
         assertThrows(IllegalArgumentException.class,
-                () -> Groth16ProverBLS381.proveUnblindedWithReaders(pk, readers, ProverBackend.PURE_JAVA,
+                () -> Groth16UnblindedTestProver.proveUnblinded(pk, readers, ProverBackend.PURE_JAVA,
                         WITNESS, bad, domain));
         assertThrows(IllegalArgumentException.class,
                 () -> Groth16ProverBLS381.computeH(bad, WITNESS, bad.size(), domain));

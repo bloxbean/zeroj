@@ -361,6 +361,7 @@ A full, self-maintaining list lives in [`docs/adr/`](docs/adr/). Highlights:
 - [ADR-0035: Setup Memory & Time Reduction](docs/adr/0035-setup-memory-time-reduction.md)
 - [ADR-0036: Groth16 API Facade & Pipeline](docs/adr/0036-groth16-api-facade-and-pipeline.md)
 - [ADR-0045: Groth16 Infinity-IC Profile & Public-Wire Binding](docs/adr/0045-groth16-infinity-ic-profile-and-public-wire-binding.md)
+- [ADR-0046: Groth16 Unblinded Proving Is a Test Fixture, Not a Public API](docs/adr/0046-groth16-unblinded-proving-test-boundary.md)
 
 ## Examples
 
