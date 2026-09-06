@@ -49,6 +49,13 @@ import java.util.List;
  * {@link Groth16ProverBLS381#proveWithHCoeffs}, {@link Groth16PkStore}) remain public as the
  * expert layer — differential tests and memory-tuned pipelines (e.g. the account-ownership CLI)
  * need those seams — but new integrations should not need anything beyond this class.</p>
+ *
+ * <p><b>Relation requirements.</b> Setup rejects a relation whose wire indices fall outside
+ * {@code [0, numWires)} (issue #46) and one in which any public wire {@code 0..numPublic} — the
+ * constant wire included — carries no nonzero coefficient (ADR-0045, issue #52): such a wire
+ * would give an {@code IC} entry at infinity, which every verifier rejects and which would leave
+ * that public input unbound. Bind an otherwise-unused public input with a trivially satisfied
+ * row (for example {@code p * 1 = p}) or remove it from the public inputs.</p>
  */
 public final class Groth16Keys implements AutoCloseable {
 

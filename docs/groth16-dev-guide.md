@@ -120,6 +120,24 @@ which changed the relation being proved without any signal (issue #46). If you h
 these exceptions, the relation, `numWires`/`numPublic`, or the witness you passed does not
 describe the circuit the key was made for — fix the caller; do not catch and retry.
 
+Setup additionally requires **every public wire to be bound** (ADR-0045, issue #52): each wire
+`0..numPublic` — the constant `ONE` wire included — must carry a nonzero coefficient in at least
+one A/B/C row. A public wire that appears in no row would produce an `IC` entry at the point at
+infinity, which every ZeroJ verifier (pure Java, blst, on-chain) rejects, and which would leave
+that public input unbound by the verification equation. The native setup therefore refuses the
+relation at ingress with the wire named, on the heap, streaming, `Groth16Keys`, and
+`Groth16Pipeline.setup` paths, instead of emitting an unusable key. `Groth16Pipeline.Compiled`
+and `Groth16Pipeline.prove` are not gated: proving under an imported snarkjs ceremony key passes
+the original circuit relation plus `snarkjsBindingRows`, and snarkjs's own binding rows are what
+make such a key's `IC` entries finite. DSL circuits bind the constant wire
+through `assertEqual`; a hand-written `a * b = c` alone needs one row that references wire 0
+(for example `1 * 1 = 1`), and an otherwise-unused public input `p` needs a binding row such as
+`p * 1 = p` or should be dropped from the public inputs. The setup also aborts, with an
+`IllegalStateException` and before writing any key material, in the negligible case that the
+sampled randomness cancels a bound wire's public-query scalar; re-run it. Note that snarkjs
+binds unused public signals itself by appending such rows, so the same circuit may set up
+under snarkjs and be refused by the native setup — the imported ceremony key is unaffected.
+
 ## The pipeline layer — `Groth16Pipeline` (big-circuit orchestration)
 
 For CLI-grade behaviour at 19M scale — the compile-skip constraint cache, the deferred mmap'd

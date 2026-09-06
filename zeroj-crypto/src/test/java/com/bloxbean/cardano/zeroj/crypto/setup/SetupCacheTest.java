@@ -96,7 +96,12 @@ class SetupCacheTest {
                 new R1CSConstraint(
                         Map.of(2, BigInteger.ONE),
                         Map.of(3, BigInteger.ONE),
-                        Map.of(1, BigInteger.ONE))
+                        Map.of(1, BigInteger.ONE)),
+                // 1 * 1 = 1 binds the constant wire (ADR-0045 S1)
+                new R1CSConstraint(
+                        Map.of(0, BigInteger.ONE),
+                        Map.of(0, BigInteger.ONE),
+                        Map.of(0, BigInteger.ONE))
         );
         var srs = PowersOfTauBLS381.generate(4);
         var setup = Groth16SetupBLS381.setup(constraints, 4, 1, srs.tauScalar());

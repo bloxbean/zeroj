@@ -35,8 +35,22 @@ import java.util.Map;
  * whose wire indices fall outside the witness, a witness or H vector whose length does not match
  * the proving key, and an FFT domain that is not a power of two or cannot hold the relation.
  * Malformed terms are never skipped: skipping used to prove a silently weakened relation.</p>
+ *
+ * <p><b>Proof-point profile (ADR-0045 P1/P2).</b> Every verifier profile rejects a proof whose
+ * {@code A}, {@code B}, or {@code C} is the point at infinity. An honest prover reaches that
+ * state only by scalar cancellation with probability on the order of {@code 1/r} per point. The
+ * randomized entry points therefore resample {@code (r, s)} and recompute when it happens (at
+ * most {@link #MAX_BLINDER_RESAMPLES} times, then fail closed); the deterministic unblinded
+ * test paths cannot resample and throw instead. No prove path returns a proof point at
+ * infinity.</p>
  */
 public final class Groth16ProverBLS381 {
+
+    /**
+     * Upper bound on {@code (r, s)} resamples per proof (ADR-0045 P1). Each attempt fails with
+     * probability on the order of {@code 3/r}, so the bound only makes the loop provably finite.
+     */
+    static final int MAX_BLINDER_RESAMPLES = 8;
 
     private Groth16ProverBLS381() {}
 
@@ -78,12 +92,9 @@ public final class Groth16ProverBLS381 {
         int numConstraints = constraints.size();
         BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
-        var rng = new SecureRandom();
-        BigInteger r = randomScalar(rng);
-        BigInteger s = randomScalar(rng);
-
-        return proveInternal(pk, heapReaders(pk), ProverBackend.PURE_JAVA,
-                FlatScalars.pack(witness, witness.length), FlatScalars.pack(hCoeffs, hCoeffs.length), r, s);
+        return proveBlinded(pk, heapReaders(pk), ProverBackend.PURE_JAVA,
+                FlatScalars.pack(witness, witness.length), FlatScalars.pack(hCoeffs, hCoeffs.length),
+                secureRandomBlinders());
     }
 
     static Groth16ProofBLS381 proveUnblinded(
@@ -177,11 +188,72 @@ public final class Groth16ProverBLS381 {
     public static Groth16ProofBLS381 proveWithHCoeffs(
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend,
             FlatScalars witness, FlatScalars hCoeffs) {
-        var rng = new SecureRandom();
-        return proveInternal(pk, readers, backend, witness, hCoeffs, randomScalar(rng), randomScalar(rng));
+        return proveBlinded(pk, readers, backend, witness, hCoeffs, secureRandomBlinders());
     }
 
+    /** A source of fresh {@code (r, s)} blinder pairs (ADR-0045 P1); package-private test seam. */
+    @FunctionalInterface
+    interface BlinderSource {
+        /** @return {@code {r, s}}, each a canonical scalar in {@code [0, r)} */
+        BigInteger[] next();
+    }
+
+    /** The production blinder source: two uniformly random scalars from {@link SecureRandom}. */
+    static BlinderSource secureRandomBlinders() {
+        var rng = new SecureRandom();
+        return () -> new BigInteger[]{randomScalar(rng), randomScalar(rng)};
+    }
+
+    /**
+     * Randomized prove with resampling (ADR-0045 P1): draws {@code (r, s)} from {@code blinders},
+     * computes the proof, and retries with a fresh pair while any of {@code A/B/C} is the point at
+     * infinity, at most {@link #MAX_BLINDER_RESAMPLES} times before failing closed.
+     */
+    static Groth16ProofBLS381 proveBlinded(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
+            FlatScalars hCoeffs, BlinderSource blinders) {
+        for (int attempt = 0; attempt < MAX_BLINDER_RESAMPLES; attempt++) {
+            BigInteger[] rs = blinders.next();
+            if (rs == null || rs.length != 2 || rs[0] == null || rs[1] == null)
+                throw new IllegalStateException("blinder source must return a non-null {r, s} pair");
+            ProofPoints points = computeProofPoints(pk, readers, backend, witness, hCoeffs, rs[0], rs[1]);
+            if (!points.hasInfinity()) return points.toProof();
+            // (r, s) cancelled a proof point (probability ~1/r each): resample, never emit infinity.
+        }
+        throw new IllegalStateException("Groth16 prove aborted: a proof point was the point at infinity on "
+                + MAX_BLINDER_RESAMPLES + " consecutive (r, s) samples, which every verifier profile rejects"
+                + " (ADR-0045). This is not reachable with a sound key and uniformly random blinders.");
+    }
+
+    /**
+     * Deterministic prove with caller-fixed {@code (r, s)} (the unblinded test paths, ADR-0045 P2):
+     * no resampling is possible, so a proof point at infinity fails closed instead of being
+     * returned.
+     */
     private static Groth16ProofBLS381 proveInternal(
+            Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
+            FlatScalars hCoeffs, BigInteger r, BigInteger s) {
+        ProofPoints points = computeProofPoints(pk, readers, backend, witness, hCoeffs, r, s);
+        if (points.hasInfinity()) {
+            throw new IllegalStateException("Groth16 prove aborted: a proof point is the point at infinity for the"
+                    + " fixed blinders (r, s) of this deterministic path, which every verifier profile rejects"
+                    + " (ADR-0045)");
+        }
+        return points.toProof();
+    }
+
+    /** The three Jacobian proof points of one {@code (r, s)} evaluation. */
+    private record ProofPoints(JacobianG1BLS381 a, JacobianG2BLS381 b, JacobianG1BLS381 c) {
+        boolean hasInfinity() {
+            return a.isInfinity() || b.isInfinity() || c.isInfinity();
+        }
+
+        Groth16ProofBLS381 toProof() {
+            return new Groth16ProofBLS381(a.toAffine(), b.toAffine(), c.toAffine());
+        }
+    }
+
+    private static ProofPoints computeProofPoints(
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
             FlatScalars hCoeffs, BigInteger r, BigInteger s) {
 
@@ -193,7 +265,7 @@ public final class Groth16ProverBLS381 {
         var piB1 = computePiB_G1(pk, readers.b1(), backend.g1(), witness, s);
         var piC = computePiC(pk, readers.h(), readers.l(), backend.g1(), hCoeffs, witness, r, s, piA, piB1);
 
-        return new Groth16ProofBLS381(piA.toAffine(), piB.toAffine(), piC.toAffine());
+        return new ProofPoints(piA, piB, piC);
     }
 
     /**
