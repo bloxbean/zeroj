@@ -100,8 +100,22 @@ Proof + public inputs travel as snarkjs-compatible JSON; verification lives in
 `zeroj-verifier-groth16` (`Groth16BLS12381PureJavaVerifier`, or the blst-backed
 `Groth16BLS12381Verifier`) behind the `ZkVerifier` SPI, and on-chain via the Plutus validator
 codecs. The handle exposes the VK components (`keys.pk().alphaG1()`, `keys.pk().betaG2()`,
-`keys.gammaG2()`, `keys.pk().deltaG2()`, `keys.ic()`) if you need to emit a `vk.json` or run a
-raw pairing check — see `Groth16KeysTest.pairingVerify` for the four-pairing equation inline.
+`keys.gammaG2()`, `keys.pk().deltaG2()`, `keys.ic()`) if you need to run a raw pairing check —
+see `Groth16KeysTest.pairingVerify` for the four-pairing equation inline.
+
+To hand a proof or a ZeroJ-native key to snarkjs (or any snarkjs-format consumer), use the
+ADR-0047 exporters in `com.bloxbean.cardano.zeroj.crypto.snarkjs`; they write exactly what
+snarkjs 0.7.6 writes and fail closed on anything non-canonical:
+
+```java
+Files.writeString(dir.resolve("verification_key.json"), SnarkjsGroth16Json.verificationKeyJson(keys));
+Files.writeString(dir.resolve("proof.json"),            SnarkjsGroth16Json.proofJson(proof));
+Files.writeString(dir.resolve("public.json"),           SnarkjsGroth16Json.publicJson(publicInputs)); // wires 1..numPublic
+// snarkjs groth16 verify verification_key.json public.json proof.json
+```
+
+`SnarkjsPlonkJson` does the same for `PlonKProverBLS381.prove` output. The assurance workflow's
+`snarkjs-interop` job verifies both directions against the pinned snarkjs CLI continuously.
 
 ## Relation validation (fail closed)
 

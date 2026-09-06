@@ -10,6 +10,7 @@ This module contains test resources used across multiple ZeroJ modules. It is **
 |-----------|-------------|
 | `test-vectors/groth16-bls12381/` | Groth16/BLS12-381 proof, VK, public inputs |
 | `test-vectors/plonk-bls12381/` | PlonK/BLS12-381 test vectors (gnark format) |
+| `test-vectors/snarkjs-plonk-bls12381/` | snarkjs 0.7.6 PlonK/BLS12-381 proof, VK, public inputs (byte-for-byte pin for the ADR-0047 exporter) |
 | `test-vectors/groth16-bn254/` | Legacy Groth16/BN254 proof, VK, public inputs (snarkjs format) |
 | `test-vectors/groth16-bn254-cubic/` | Legacy Groth16/BN254 cubic circuit vector |
 | `test-vectors/groth16-bn254-invalid/` | Legacy BN254 tampered proof/input/VK cases for negative tests |

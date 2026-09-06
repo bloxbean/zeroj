@@ -8,6 +8,9 @@ name: Assurance
 # losing them. This workflow is the job that keeps them runnable, and it is a required gate for
 # their removal from default-build membership.
 #
+# ADR-0047 adds the snarkjs bidirectional interop job: the pinned snarkjs CLI verifies ZeroJ-produced
+# Groth16/PlonK proofs and keys, and ZeroJ's verifiers check live snarkjs proofs, with negatives.
+#
 # It is deliberately separate from ci.yml so the default build stays pure Java, and it is
 # independently runnable: push, PR, a nightly schedule, and manual dispatch.
 
@@ -65,6 +68,53 @@ jobs:
         with:
           name: assurance-test-reports
           path: '**/build/reports/tests/'
+          retention-days: 14
+
+  snarkjs-interop:
+    name: snarkjs bidirectional proof interop (ADR-0047)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 25 (GraalVM)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Pinned: ADR-0047 names snarkjs 0.7.6 as the normative reference for the JSON formats and the
+      # verifier behaviour the suites assert. The suites themselves refuse any other version under
+      # -PrequireSnarkjs, so bumping this line without amending the ADR fails visibly.
+      - name: Install the pinned snarkjs oracle
+        run: |
+          npm install -g snarkjs@0.7.6
+          snarkjs --version || true   # snarkjs exits 99 after printing its version
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Both directions, with negatives: ZeroJ Groth16/PlonK proofs and ZeroJ-native verification
+      # keys are checked by `snarkjs groth16 verify` / `snarkjs plonk verify` (tampered proofs and
+      # public inputs must be rejected), and live `snarkjs ... prove` output is checked by the
+      # pure-Java and blst ZeroJ verifiers. -PrequireSnarkjs makes a missing oracle a failure.
+      - name: Run the bidirectional interop suites
+        run: |
+          ./gradlew -PrequireSnarkjs \
+            :zeroj-integration-tests:test --tests 'com.bloxbean.cardano.zeroj.it.snarkjs.*' \
+            --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snarkjs-interop-test-reports
+          path: 'zeroj-integration-tests/build/reports/tests/'
           retention-days: 14
 
   gnark-fixtures:

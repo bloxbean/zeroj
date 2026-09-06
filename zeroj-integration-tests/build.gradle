@@ -64,6 +64,15 @@ test {
         excludeTags 'e2e'
     }
     maxHeapSize = '2g'
+    // ADR-0047: the snarkjs interop suites (it.snarkjs.*) skip when snarkjs is absent locally. The
+    // assurance workflow passes -PrequireSnarkjs so that absence, or a snarkjs other than the pinned
+    // 0.7.6, fails the job instead of silently reducing the suite to its offline half.
+    if (project.hasProperty('requireSnarkjs')) {
+        systemProperty 'zeroj.assurance.requireSnarkjs', 'true'
+        // The oracle is an external binary Gradle cannot fingerprint: never report the interop run
+        // as UP-TO-DATE / FROM-CACHE after a snarkjs change (same rule as the opt-in oracle tasks).
+        outputs.upToDateWhen { false }
+    }
 }
 
 // E2E integration tests — require external infrastructure (Yaci DevKit and/or snarkjs on PATH).

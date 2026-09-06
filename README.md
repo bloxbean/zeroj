@@ -296,6 +296,7 @@ Outside the default build and never published. See
 | [`assurance/zeroj-bls12381-wasm`](assurance/zeroj-bls12381-wasm/) | zkcrypto BLS12-381 WASM provider — independent differential oracle (needs Rust/Cargo) | `-PincludeAssurance` |
 | [`assurance/zeroj-bbs-wasm`](assurance/zeroj-bbs-wasm/) | zkryptium BBS WASM provider — independent differential oracle (needs Rust/Cargo) | `-PincludeAssurance` |
 | [`assurance/gnark-fixtures`](assurance/gnark-fixtures/) | Pinned gnark v0.14.0 PlonK fixture generator; keeps the committed independent PlonK vectors reproducible. Not a Gradle project, not a runtime provider | `make` (needs Go) |
+| snarkjs interop suites (`zeroj-integration-tests`, `it.snarkjs.*`) | Bidirectional Groth16/PlonK proof + verification-key interop against the pinned snarkjs 0.7.6 CLI, with tamper negatives; skip locally without snarkjs, fail in the `snarkjs-interop` assurance job ([ADR-0047](docs/adr/0047-snarkjs-bidirectional-interop-export-and-ci.md)) | `-PrequireSnarkjs` (needs Node + `snarkjs@0.7.6`) |
 | [`benchmarks/zeroj-mpf-poseidon-load`](benchmarks/zeroj-mpf-poseidon-load/) | Resumable RocksDB load, proof, circuit, Groth16 and Cardano artifact benchmark tool (needs RocksDB JNI) | `-PincludeBenchmarks` |
 | [`benchmarks/zeroj-jmt-poseidon-load`](benchmarks/zeroj-jmt-poseidon-load/) | Durable/versioned JMT load, depth, operations, Groth16 and Cardano artifact benchmark tool (needs RocksDB JNI) | `-PincludeBenchmarks` |
 
@@ -362,6 +363,7 @@ A full, self-maintaining list lives in [`docs/adr/`](docs/adr/). Highlights:
 - [ADR-0036: Groth16 API Facade & Pipeline](docs/adr/0036-groth16-api-facade-and-pipeline.md)
 - [ADR-0045: Groth16 Infinity-IC Profile & Public-Wire Binding](docs/adr/0045-groth16-infinity-ic-profile-and-public-wire-binding.md)
 - [ADR-0046: Groth16 Unblinded Proving Is a Test Fixture, Not a Public API](docs/adr/0046-groth16-unblinded-proving-test-boundary.md)
+- [ADR-0047: snarkjs-Compatible JSON Export & Bidirectional Interop CI](docs/adr/0047-snarkjs-bidirectional-interop-export-and-ci.md)
 
 ## Examples
 

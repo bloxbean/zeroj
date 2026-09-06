@@ -61,6 +61,8 @@ dependencies {
     testImplementation project(':zeroj-circuit-dsl')
     testImplementation project(':zeroj-verifier-groth16')
     testImplementation project(':zeroj-codec')
+    // ADR-0047: snarkjs export KATs pin the exporter byte-for-byte against the shared snarkjs vectors
+    testImplementation project(':zeroj-test-vectors')
 }
 
 publishing {

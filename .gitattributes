@@ -1,0 +1,5 @@
+# ADR-0047: the snarkjs-written vectors are compared byte-for-byte against the exporter's output
+# (SnarkjsGroth16JsonKatTest, SnarkjsPlonkJsonKatTest). Keep their line endings LF on every
+# checkout so a core.autocrlf=true clone cannot fail those tests for a non-semantic reason.
+zeroj-test-vectors/src/main/resources/test-vectors/**/*.json text eol=lf
+zeroj-crypto/src/test/resources/test-circuits/**/*.json text eol=lf
