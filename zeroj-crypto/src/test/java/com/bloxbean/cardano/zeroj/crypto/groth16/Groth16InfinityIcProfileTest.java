@@ -113,10 +113,17 @@ class Groth16InfinityIcProfileTest {
         assertThrows(IllegalArgumentException.class,
                 () -> Groth16Keys.setupToStore(flatOf(UNBOUND_P), NUM_WIRES, NUM_PUBLIC, tau, tmp.resolve("k"), true));
         assertFalse(Files.exists(tmp.resolve("k")));
-        // the pipeline rejects at Compiled construction, i.e. before any r1cs.bin cache or store
-        var ex = assertThrows(IllegalArgumentException.class,
-                () -> new Groth16Pipeline.Compiled(flatOf(UNBOUND_P), UNBOUND_P.size(), NUM_WIRES, NUM_PUBLIC));
-        assertTrue(ex.getMessage().contains("public wire 2"), ex.getMessage());
+        // Compiled itself stays generic (imported ceremony keys prove the original relation plus
+        // snarkjs binding rows through the same pipeline); the native pipeline setup rejects the
+        // relation before creating the bundle directory, the r1cs.bin cache, or any store file.
+        var cc = new Groth16Pipeline.Compiled(flatOf(UNBOUND_P), UNBOUND_P.size(), NUM_WIRES, NUM_PUBLIC);
+        Path bundle = tmp.resolve("bundle");
+        for (boolean sparse : new boolean[]{true, false}) {
+            var ex = assertThrows(IllegalArgumentException.class,
+                    () -> Groth16Pipeline.setup(cc, tau, bundle, sparse, new Groth16Pipeline.Progress() {}));
+            assertTrue(ex.getMessage().contains("public wire 2"), ex.getMessage());
+        }
+        assertFalse(Files.exists(bundle), "pipeline setup must fail before creating the bundle directory");
     }
 
     @Test

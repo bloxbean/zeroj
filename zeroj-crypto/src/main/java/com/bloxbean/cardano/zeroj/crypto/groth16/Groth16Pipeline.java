@@ -77,11 +77,11 @@ public final class Groth16Pipeline {
             this.numConstraints = numConstraints;
             this.numWires = numWires;
             this.numPublic = numPublic;
-            // canonicalSha256 validates wire ranges and CSR structure first (issue #46), so an
-            // out-of-range wire is reported as such rather than as an unbound public wire.
+            // canonicalSha256 validates wire ranges and CSR structure (issue #46). The ADR-0045
+            // public-wire binding check is deliberately NOT applied here: Compiled also carries
+            // the original circuit relation when proving under an imported snarkjs ceremony key,
+            // whose binding rows are added at H time (snarkjsBindingRows); see setup(...).
             this.r1csSha256 = R1CSFlatIO.canonicalSha256(flat, numWires, numPublic);
-            // ADR-0045 S1: still before any r1cs.bin cache or key store is written.
-            R1CSValidation.requirePublicWiresConstrained(flat, numPublic, MontFr381.modulus());
             this.fingerprint = Groth16Pipeline.fingerprint(
                     numConstraints, numWires, numPublic) + "-r" + r1csSha256;
         }
@@ -173,6 +173,11 @@ public final class Groth16Pipeline {
      * Single-party dev/test setup, streamed into a key store at {@code dir} with the
      * {@code r1cs.bin} constraint cache emitted in the same pass (best-effort — a failed cache
      * write is reported and skipped, never fatal). ~8 GB heap at 19M constraints (ADR-0035).
+     * Rejects, before creating anything, a relation in which a public wire (or the constant
+     * wire) has no nonzero coefficient (ADR-0045 S1) — such a key would have an {@code IC} entry
+     * at infinity that every verifier rejects. This applies to native setup only: proving under
+     * an imported snarkjs ceremony key passes the original relation plus
+     * {@code snarkjsBindingRows} to {@link #prove} and is not subject to this check.
      *
      * <p>Returns the {@link Groth16SetupBLS381.SetupResult} whose proving key holds only the
      * single points (the store on disk is the key) — export the VK from it. To prove, open the
@@ -180,6 +185,11 @@ public final class Groth16Pipeline {
      */
     public static Groth16SetupBLS381.SetupResult setup(Compiled cc, BigInteger tau, Path dir,
                                                        boolean sparse, Progress progress) throws IOException {
+        // ADR-0045 S1 (native setup only): every public wire, the constant wire included, must be
+        // bound by the relation itself — a native key has no snarkjs binding rows. Checked here so
+        // the failure happens before the r1cs.bin cache or any store file exists; setupToStore
+        // re-checks it at its own ingress.
+        R1CSValidation.requirePublicWiresConstrained(cc.flat(), cc.numPublic(), MontFr381.modulus());
         Files.createDirectories(dir);
         Path cache = dir.resolve(R1CS_CACHE);
         try {

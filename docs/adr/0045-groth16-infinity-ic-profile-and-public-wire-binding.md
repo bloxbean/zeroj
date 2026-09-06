@@ -137,9 +137,13 @@ therefore already consistent with the ADR-0025 profile. Only the native setup di
   A, B, or C row. Enforced at ingress by
   `R1CSValidation.requirePublicWiresConstrained(...)` (list and CSR forms) in
   `Groth16SetupBLS381.setup(...)`, `Groth16SetupBLS381.setupToStore(...)`, and
-  `Groth16Pipeline.Compiled` (so the pipeline fails before writing an `r1cs.bin` cache or a
-  key store). The error names the offending wire and, for wire `0`, explains that the
-  relation has no constant term.
+  `Groth16Pipeline.setup(...)` (so the native pipeline fails before creating the bundle
+  directory, the `r1cs.bin` cache, or any store file). The error names the offending wire
+  and, for wire `0`, explains that the relation has no constant term.
+  `Groth16Pipeline.Compiled` is deliberately **not** an enforcement point: it also carries
+  the original circuit relation when proving under an imported snarkjs ceremony key, whose
+  binding rows are added at H time via `snarkjsBindingRows`; applying S1 there rejected
+  valid ceremony keys for circuits with no constant term (PR #56 review finding).
 - **S2 — exact (probabilistic remainder).** After the QAP evaluations `u_s, v_s, w_s(tau)` are
   known and before any proving-key point is generated or any store file is written, the setup
   computes every `IC` scalar and throws `IllegalStateException` if one is zero. A native
@@ -231,8 +235,8 @@ therefore already consistent with the ADR-0025 profile. Only the native setup di
 
 - **M1** — `R1CSValidation.requirePublicWiresConstrained` (list + CSR) with unit tests
   in `zeroj-api`.
-- **M2** — S1 at both setup ingresses and `Groth16Pipeline.Compiled`; S2 in both setup
-  paths ahead of point generation; Javadoc.
+- **M2** — S1 at both setup ingresses and `Groth16Pipeline.setup` (native setup only; not
+  `Compiled`); S2 in both setup paths ahead of point generation; Javadoc.
 - **M3** — I1 in `ZkeyPkStoreImporter` with a mutated-zkey negative test.
 - **M4** — P1/P2 in `Groth16ProverBLS381` with forced-infinity tests.
 - **M5** — Negative vectors: `IC[0]` and `IC[i>0]` infinity for pure-Java JSON, blst JSON
@@ -243,8 +247,12 @@ therefore already consistent with the ADR-0025 profile. Only the native setup di
 ## Verification and test-vector strategy
 
 - **Reproducer as regression:** the relation above must be rejected at setup (S1) on every
-  entry point; a sibling relation that satisfies S1 must set up, prove, and verify on pure
-  Java and blst.
+  native entry point; a sibling relation that satisfies S1 must set up, prove, and verify on
+  pure Java and blst.
+- **Ceremony-key regression:** the checked-in snarkjs multiplier zkey (original relation
+  `-a·b = -c`, no constant term, two snarkjs binding rows) must import, bind, and prove through
+  `Groth16Pipeline.prove` with the cache disabled, on a cache miss, and on a cache hit, and the
+  proofs must pairing-verify — S1 must never reach that path.
 - **S2 independently forced:** with the explicit-randomness setup overload, choose `beta`
   so that `beta · u_s(tau) + w_s(tau) = 0` for a wire used only in A and C, computing
   `u_s(tau), w_s(tau)` from the Lagrange formula in the test (independent of the setup's

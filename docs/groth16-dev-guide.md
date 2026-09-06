@@ -126,7 +126,10 @@ one A/B/C row. A public wire that appears in no row would produce an `IC` entry 
 infinity, which every ZeroJ verifier (pure Java, blst, on-chain) rejects, and which would leave
 that public input unbound by the verification equation. The native setup therefore refuses the
 relation at ingress with the wire named, on the heap, streaming, `Groth16Keys`, and
-`Groth16Pipeline` paths, instead of emitting an unusable key. DSL circuits bind the constant wire
+`Groth16Pipeline.setup` paths, instead of emitting an unusable key. `Groth16Pipeline.Compiled`
+and `Groth16Pipeline.prove` are not gated: proving under an imported snarkjs ceremony key passes
+the original circuit relation plus `snarkjsBindingRows`, and snarkjs's own binding rows are what
+make such a key's `IC` entries finite. DSL circuits bind the constant wire
 through `assertEqual`; a hand-written `a * b = c` alone needs one row that references wire 0
 (for example `1 * 1 = 1`), and an otherwise-unused public input `p` needs a binding row such as
 `p * 1 = p` or should be dropped from the public inputs. The setup also aborts, with an
