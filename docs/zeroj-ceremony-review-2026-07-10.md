@@ -99,7 +99,7 @@ its deps as `implementation`, nothing is exposed transitively anyway.
 transcript verifier, bundle inspector, dense↔sparse converter — have a home; guard-rail: library
 code stays out, this is for things an operator runs/embeds):
 - Moves: `ZkeyContributor`, `SnarkjsHashToG2`, `ChaChaRng` under
-  `com.bloxbean.cardano.zeroj.tools.zkey` (+ the self-contained hash-to-G2 test; the
+  `org.zeroj.tools.zkey` (+ the self-contained hash-to-G2 test; the
   contributor *interop* test stays in `zeroj-ceremony` — it drives `CeremonyCli.run` end-to-end).
 - Deps: `zeroj-crypto`, `zeroj-bls12381` (api — G2 points in signatures), BouncyCastle.
 - `zeroj-ceremony` (CLI) keeps picocli + depends on the new module.

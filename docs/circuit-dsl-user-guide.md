@@ -130,8 +130,8 @@ A `CircuitSpec` is a Java class that defines a ZK circuit. This is the **preferr
 ### Anatomy of a CircuitSpec
 
 ```java
-import com.bloxbean.cardano.zeroj.circuit.*;
-import com.bloxbean.cardano.zeroj.circuit.lib.*;
+import org.zeroj.circuit.*;
+import org.zeroj.circuit.lib.*;
 
 public class MyCircuit implements CircuitSpec {
 
@@ -372,9 +372,9 @@ BigInteger[] witness = circuit.calculateWitness(inputs, CurveId.BLS12_381);
 
 ## Standard Library (zeroj-circuit-lib)
 
-Import: `com.bloxbean.cardano.zeroj.circuit.lib.*`. For explicit BLS12-381
+Import: `org.zeroj.circuit.lib.*`. For explicit BLS12-381
 Poseidon parameters, also import
-`com.bloxbean.cardano.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3`.
+`org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3`.
 
 ### Hash Functions
 
@@ -791,20 +791,20 @@ See the [Pure Java Prover Guide](pure-java-prover-guide.md) for the complete pip
 ## Module Dependencies
 
 ```gradle
-implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
+implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
 
 // Circuit DSL (define and compile circuits)
-implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
+implementation 'org.zeroj:zeroj-circuit-dsl'
 
 // Standard library (Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck)
-implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
+implementation 'org.zeroj:zeroj-circuit-lib'
 
 // Pure Java prover
-implementation 'com.bloxbean.cardano:zeroj-crypto'
+implementation 'org.zeroj:zeroj-crypto'
 
 // Optional native prover
 
 // Verifiers (pure Java, zero native deps)
-implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'    // Groth16 BLS12-381
-implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'      // PlonK BLS12-381
+implementation 'org.zeroj:zeroj-verifier-groth16'    // Groth16 BLS12-381
+implementation 'org.zeroj:zeroj-verifier-plonk'      // PlonK BLS12-381
 ```

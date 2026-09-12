@@ -19,9 +19,9 @@ ZeroJ intentionally creates a fresh WASM instance for each `proofGen` call so
 the caller-supplied `SecureRandom` is honored for every proof.
 
 ```java
-import com.bloxbean.cardano.zeroj.bbs.BbsCiphersuite;
-import com.bloxbean.cardano.zeroj.bbs.BbsService;
-import com.bloxbean.cardano.zeroj.bbs.wasm.WasmBbsProvider;
+import org.zeroj.bbs.BbsCiphersuite;
+import org.zeroj.bbs.BbsService;
+import org.zeroj.bbs.wasm.WasmBbsProvider;
 
 var provider = WasmBbsProvider.createDefault(BbsCiphersuite.BLS12381_SHA256);
 var service = new BbsService(provider);

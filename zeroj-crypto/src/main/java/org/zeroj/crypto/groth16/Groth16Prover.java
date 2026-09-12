@@ -1,0 +1,447 @@
+package org.zeroj.crypto.groth16;
+
+import org.zeroj.api.LegacyCurvePolicy;
+import org.zeroj.api.R1CSConstraint;
+import org.zeroj.api.R1CSValidation;
+import org.zeroj.crypto.ec.JacobianG1BN254;
+import org.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
+import org.zeroj.crypto.ec.JacobianG2BN254;
+import org.zeroj.crypto.ec.JacobianG2BN254.AffineG2;
+import org.zeroj.crypto.field.MontFr254;
+import org.zeroj.crypto.msm.Pippenger;
+import org.zeroj.crypto.poly.FieldFFT;
+
+import java.math.BigInteger;
+import java.security.SecureRandom;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Pure Java Groth16 prover for BN254.
+ *
+ * <p>Given an R1CS constraint system, a proving key (from trusted setup), and a
+ * witness, produces a Groth16 proof (A ∈ G1, B ∈ G2, C ∈ G1).</p>
+ *
+ * <h3>Algorithm</h3>
+ * <ol>
+ *   <li>Compute h(x) = (A(x)*B(x) - C(x)) / Z_H(x) via FFT</li>
+ *   <li>Sample random blinding factors r, s</li>
+ *   <li>Compute proof elements:
+ *     <ul>
+ *       <li>π_A = α + Σ(w_i * A_i) + r*δ (G1 MSM)</li>
+ *       <li>π_B = β + Σ(w_i * B_i) + s*δ (G2 scalar muls + adds)</li>
+ *       <li>π_C = Σ(h_i * H_i) + Σ(w_j * L_j) + s*π_A + r*π_B1 - r*s*δ (G1 MSM)</li>
+ *     </ul>
+ *   </li>
+ * </ol>
+ */
+public final class Groth16Prover {
+
+    private Groth16Prover() {}
+
+    /**
+     * Generate a Groth16 proof.
+     *
+     * @param pk          proving key from trusted setup
+     * @param witness     full witness vector [1, public..., private..., intermediates...]
+     * @param constraints R1CS constraints as (A, B, C) maps: wireIndex → coefficient
+     * @param numWires    total number of wires
+     * @return Groth16 proof (A, B, C)
+     */
+    public static Groth16Proof prove(
+            Groth16ProvingKey pk,
+            BigInteger[] witness,
+            List<R1CSConstraint> constraints,
+            int numWires) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
+        // Domain size = length of H points array in proving key
+        int domainSize = pk.pointsH().length;
+        return prove(pk, witness, constraints, numWires, domainSize);
+    }
+
+    public static Groth16Proof prove(
+            Groth16ProvingKey pk,
+            BigInteger[] witness,
+            List<R1CSConstraint> constraints,
+            int numWires,
+            int domainSize) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
+
+        // --- Input validation ---
+        if (witness == null || witness.length == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        if (!BigInteger.ONE.equals(witness[0]))
+            throw new IllegalArgumentException("witness[0] must be 1 (the constant wire), got " + witness[0]);
+        if (witness.length != numWires)
+            throw new IllegalArgumentException(
+                    "witness.length (" + witness.length + ") must match numWires (" + numWires + ")");
+
+        // On-curve validation for key points
+        if (!pk.alphaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key alphaG1 is not on curve");
+        if (!pk.betaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key betaG1 is not on curve");
+        if (!pk.betaG2().isOnCurve())
+            throw new IllegalArgumentException("Proving key betaG2 is not on curve");
+        if (!pk.deltaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key deltaG1 is not on curve");
+        if (!pk.deltaG2().isOnCurve())
+            throw new IllegalArgumentException("Proving key deltaG2 is not on curve");
+
+        int numConstraints = constraints.size();
+
+        // Note: witness validation is available via validateWitness() for R1CS-standard constraints.
+        // Not called here because .zkey Section 4 constraints use a different encoding
+        // where C is implicit (the R1CS C matrix is absorbed into the proving key L points).
+
+        // Step 1: Compute h(x) polynomial
+        BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
+
+        // Step 2: Random blinding factors — fresh per proof; there is no unblinded path (ADR-0046)
+        var rng = new SecureRandom();
+        BigInteger r = randomScalar(rng);
+        BigInteger s = randomScalar(rng);
+
+        return proveInternal(pk, witness, hCoeffs, r, s);
+    }
+
+    private static Groth16Proof proveInternal(
+            Groth16ProvingKey pk, BigInteger[] witness, BigInteger[] hCoeffs,
+            BigInteger r, BigInteger s) {
+
+        // Step 3a: π_A = α + Σ(w_i * pk.A_i) + r * δ  (in G1)
+        var piA = computePiA(pk, witness, r);
+
+        // Step 3b: π_B in G2 = β + Σ(w_i * pk.B2_i) + s * δ  (in G2)
+        var piB = computePiB_G2(pk, witness, s);
+
+        // Step 3c: π_B in G1 (needed for C computation)
+        var piB1 = computePiB_G1(pk, witness, s);
+
+        // Step 3d: π_C = Σ(h_i * H_i) + Σ(w_j * L_j) + s*A + r*B1 - r*s*δ  (in G1)
+        var piC = computePiC(pk, hCoeffs, witness, r, s, piA, piB1);
+
+        return new Groth16Proof(piA.toAffine(), piB.toAffine(), piC.toAffine());
+    }
+
+    /**
+     * Compute h(x) scalars for the H-point MSM, using snarkjs's coset evaluation approach.
+     *
+     * <p>The .zkey's H points (Section 9) are odd-indexed Lagrange basis elements,
+     * so the MSM scalars must be coset evaluations of (A*B - C), NOT monomial coefficients.</p>
+     *
+     * <p>Algorithm (matching snarkjs groth16_prove.js):
+     * <ol>
+     *   <li>Build A, B evaluations on the standard domain from constraints + witness</li>
+     *   <li>Compute C = A * B pointwise (on the standard domain)</li>
+     *   <li>For each of A, B, C: IFFT → shift by coset generator → FFT (coset evaluation)</li>
+     *   <li>Compute (A_coset * B_coset - C_coset) pointwise</li>
+     *   <li>Return these coset evaluations as the MSM scalars (no final IFFT)</li>
+     * </ol>
+     *
+     * <p>The coset generator is omega_{2n} = the primitive (2*domainSize)-th root of unity,
+     * which equals the square root of the domain's omega_n.</p>
+     */
+    static BigInteger[] computeH(List<R1CSConstraint> constraints, BigInteger[] witness,
+                                  int numConstraints, int domainSize) {
+        BigInteger mod = MontFr254.modulus();
+        if (witness == null || witness.length == 0)
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        // Issue #46: a term whose wire lies outside the witness used to be skipped silently.
+        R1CSValidation.requireWireIndices(constraints, witness.length);
+        if (numConstraints < 0)
+            throw new IllegalArgumentException("numConstraints must be >= 0 (got " + numConstraints + ")");
+        if (domainSize < 2) domainSize = 2;
+        if (Integer.bitCount(domainSize) != 1)
+            throw new IllegalArgumentException("domainSize must be a power of two >= 2 (got " + domainSize + ")");
+        if (Math.min(numConstraints, constraints.size()) > domainSize)
+            throw new IllegalArgumentException("relation has " + Math.min(numConstraints, constraints.size())
+                    + " rows but the FFT domain holds " + domainSize + " — the constraints do not belong to this proving key");
+        int logN = Integer.numberOfTrailingZeros(domainSize);
+
+        // Step 1: Build A, B evaluations on the standard domain from R1CS constraints
+        MontFr254[] aEval = new MontFr254[domainSize];
+        MontFr254[] bEval = new MontFr254[domainSize];
+
+        int constraintCount = constraints.size();
+        for (int i = 0; i < domainSize; i++) {
+            if (i < numConstraints && i < constraintCount) {
+                R1CSConstraint constraint = constraints.get(i);
+                aEval[i] = evalLinComb(constraint.a(), witness, mod);
+                bEval[i] = evalLinComb(constraint.b(), witness, mod);
+            } else {
+                aEval[i] = MontFr254.ZERO;
+                bEval[i] = MontFr254.ZERO;
+            }
+        }
+
+        // C = A * B pointwise on the standard domain
+        // This is what snarkjs does: C is NOT from the R1CS C matrix.
+        // The R1CS constraint A*B = C means that on the standard domain,
+        // the product equals the C evaluation. The difference A*B - C = 0
+        // on the standard domain (for valid witness), but NOT on a coset.
+        MontFr254[] cEval = new MontFr254[domainSize];
+        for (int i = 0; i < domainSize; i++) {
+            cEval[i] = aEval[i].mul(bEval[i]);
+        }
+
+        // Step 2: Coset shift — IFFT, multiply by inc^i, FFT
+        // inc = omega_{2n} (primitive 2*domainSize-th root of unity)
+        MontFr254 inc = FieldFFT.rootOfUnity(logN + 1);
+
+        var aCoset = cosetFFT(aEval, inc);
+        var bCoset = cosetFFT(bEval, inc);
+        var cCoset = cosetFFT(cEval, inc);
+
+        // Step 3: Pointwise (A*B - C) on the coset
+        // A_coset[i] * B_coset[i] is the "true" product at coset point i
+        // C_coset[i] is the coset evaluation of the degree-(n-1) product polynomial
+        // The difference captures the high-degree terms — exactly h(x) * Z_H(x) on the coset
+        // Combined with the Lagrange-basis H points, this gives the correct h contribution
+        BigInteger[] result = new BigInteger[domainSize];
+        for (int i = 0; i < domainSize; i++) {
+            var val = aCoset[i].mul(bCoset[i]).sub(cCoset[i]);
+            result[i] = val.toBigInteger();
+        }
+        return result;
+    }
+
+    /**
+     * Coset FFT: evaluate polynomial on the coset {inc * omega^i}.
+     * Computed as: IFFT → multiply coeff[i] by inc^i → FFT.
+     */
+    private static MontFr254[] cosetFFT(MontFr254[] evals, MontFr254 inc) {
+        // IFFT: evaluations → coefficients
+        var coeffs = FieldFFT.ifft(evals);
+
+        // Shift: coeff[i] *= inc^i
+        MontFr254 power = MontFr254.ONE;
+        for (int i = 0; i < coeffs.length; i++) {
+            coeffs[i] = coeffs[i].mul(power);
+            power = power.mul(inc);
+        }
+
+        // FFT: coefficients → evaluations on coset
+        return FieldFFT.fft(coeffs);
+    }
+
+    // --- Proof element computation ---
+
+    private static JacobianG1BN254 computePiA(Groth16ProvingKey pk, BigInteger[] witness, BigInteger r) {
+        // π_A = α + Σ(w_i * A_i) + r * δ
+        var result = JacobianG1BN254.fromAffine(pk.alphaG1().x(), pk.alphaG1().y());
+
+        // MSM: Σ(w_i * A_i)
+        int n = Math.min(witness.length, pk.pointsA().length);
+        if (n > 0) {
+            AffineG1[] points = new AffineG1[n];
+            BigInteger[] scalars = new BigInteger[n];
+            System.arraycopy(pk.pointsA(), 0, points, 0, n);
+            System.arraycopy(witness, 0, scalars, 0, n);
+            result = result.add(Pippenger.msm(points, scalars));
+        }
+
+        // + r * δ
+        result = result.add(JacobianG1BN254.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(r));
+
+        return result;
+    }
+
+    private static JacobianG2BN254 computePiB_G2(Groth16ProvingKey pk, BigInteger[] witness, BigInteger s) {
+        // π_B = β + Σ(w_i * B2_i) + s * δ  (in G2)
+        var result = JacobianG2BN254.fromAffine(pk.betaG2().x(), pk.betaG2().y());
+
+        // G2 MSM — same bucket approach as Pippenger but for G2 points
+        int n = Math.min(witness.length, pk.pointsB2().length);
+        result = result.add(g2Msm(pk.pointsB2(), witness, n));
+
+        // + s * δ
+        result = result.add(JacobianG2BN254.fromAffine(pk.deltaG2().x(), pk.deltaG2().y()).scalarMul(s));
+
+        return result;
+    }
+
+    /** Simple Pippenger-style MSM for G2 points. */
+    private static JacobianG2BN254 g2Msm(AffineG2[] points, BigInteger[] scalars, int n) {
+        if (n == 0) return JacobianG2BN254.INFINITY;
+
+        BigInteger fr = MontFr254.modulus();
+        int c = Math.max(3, Math.min(31 - Integer.numberOfLeadingZeros(n), 12));
+        int numBuckets = (1 << c) - 1;
+        int numWindows = (254 + c - 1) / c;
+
+        JacobianG2BN254 result = JacobianG2BN254.INFINITY;
+        for (int w = numWindows - 1; w >= 0; w--) {
+            if (!result.isInfinity()) {
+                for (int d = 0; d < c; d++) result = result.doublePoint();
+            }
+
+            JacobianG2BN254[] buckets = new JacobianG2BN254[numBuckets + 1];
+            for (int i = 0; i <= numBuckets; i++) buckets[i] = JacobianG2BN254.INFINITY;
+
+            int bitOffset = w * c;
+            for (int i = 0; i < n; i++) {
+                BigInteger s_i = scalars[i].signum() < 0 ? scalars[i].mod(fr) : scalars[i];
+                int digit = 0;
+                for (int b = 0; b < c; b++) {
+                    int bitPos = bitOffset + b;
+                    if (bitPos < s_i.bitLength() && s_i.testBit(bitPos)) digit |= (1 << b);
+                }
+                if (digit != 0 && !points[i].isInfinity()) {
+                    buckets[digit] = buckets[digit].add(
+                            JacobianG2BN254.fromAffine(points[i].x(), points[i].y()));
+                }
+            }
+
+            JacobianG2BN254 runningSum = JacobianG2BN254.INFINITY;
+            JacobianG2BN254 windowSum = JacobianG2BN254.INFINITY;
+            for (int j = numBuckets; j >= 1; j--) {
+                runningSum = runningSum.add(buckets[j]);
+                windowSum = windowSum.add(runningSum);
+            }
+            result = result.add(windowSum);
+        }
+        return result;
+    }
+
+    private static JacobianG1BN254 computePiB_G1(Groth16ProvingKey pk, BigInteger[] witness, BigInteger s) {
+        // π_B1 = β + Σ(w_i * B1_i) + s * δ  (in G1, for C computation)
+        var result = JacobianG1BN254.fromAffine(pk.betaG1().x(), pk.betaG1().y());
+
+        int n = Math.min(witness.length, pk.pointsB1().length);
+        if (n > 0) {
+            AffineG1[] points = new AffineG1[n];
+            BigInteger[] scalars = new BigInteger[n];
+            System.arraycopy(pk.pointsB1(), 0, points, 0, n);
+            System.arraycopy(witness, 0, scalars, 0, n);
+            result = result.add(Pippenger.msm(points, scalars));
+        }
+
+        result = result.add(JacobianG1BN254.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(s));
+
+        return result;
+    }
+
+    private static JacobianG1BN254 computePiC(
+            Groth16ProvingKey pk, BigInteger[] hCoeffs, BigInteger[] witness,
+            BigInteger r, BigInteger s,
+            JacobianG1BN254 piA, JacobianG1BN254 piB1) {
+
+        JacobianG1BN254 result = JacobianG1BN254.INFINITY;
+
+        // Σ(h_i * H_i) — h polynomial MSM
+        int hLen = Math.min(hCoeffs.length, pk.pointsH().length);
+        if (hLen > 0) {
+            AffineG1[] hPoints = new AffineG1[hLen];
+            BigInteger[] hScalars = new BigInteger[hLen];
+            System.arraycopy(pk.pointsH(), 0, hPoints, 0, hLen);
+            System.arraycopy(hCoeffs, 0, hScalars, 0, hLen);
+            result = result.add(Pippenger.msm(hPoints, hScalars));
+        }
+
+        // Σ(w_j * L_j) — private witness wires MSM
+        int numPrivate = witness.length - pk.numPublic() - 1; // exclude wire 0 and public
+        if (numPrivate > 0 && pk.pointsL().length > 0) {
+            int lLen = Math.min(numPrivate, pk.pointsL().length);
+            AffineG1[] lPoints = new AffineG1[lLen];
+            BigInteger[] lScalars = new BigInteger[lLen];
+            System.arraycopy(pk.pointsL(), 0, lPoints, 0, lLen);
+            // Private wires start at index numPublic + 1
+            System.arraycopy(witness, pk.numPublic() + 1, lScalars, 0, lLen);
+            result = result.add(Pippenger.msm(lPoints, lScalars));
+        }
+
+        // + s * π_A
+        result = result.add(piA.scalarMul(s));
+
+        // + r * π_B1
+        result = result.add(piB1.scalarMul(r));
+
+        // - r * s * δ
+        BigInteger rs = r.multiply(s).mod(MontFr254.modulus());
+        result = result.add(
+                JacobianG1BN254.fromAffine(pk.deltaG1().x(), pk.deltaG1().y()).scalarMul(rs).negate());
+
+        return result;
+    }
+
+    // --- Helpers ---
+
+    /**
+     * Evaluate a linear combination Σ(coeff_i * witness[wire_i]).
+     * Wires beyond witness length are treated as 0 (supports .zkey virtual wires).
+     */
+    private static MontFr254 evalLinComb(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
+        MontFr254 sum = MontFr254.ZERO;
+        for (var entry : lc.entrySet()) {
+            int wire = requireWire(entry.getKey(), witness.length);
+            BigInteger coeff = entry.getValue();
+            if (coeff.signum() != 0) {
+                sum = sum.add(MontFr254.fromBigInteger(coeff).mul(MontFr254.fromBigInteger(witness[wire])));
+            }
+        }
+        return sum;
+    }
+
+    /**
+     * Fail closed on a wire outside {@code [0, bound)} (issue #46). Relations are validated at
+     * ingress; this keeps the loops themselves incapable of skipping a term.
+     */
+    private static int requireWire(int wire, int bound) {
+        if (wire < 0 || wire >= bound) {
+            throw new IllegalArgumentException("R1CS term references wire " + wire
+                    + " outside [0, " + bound + ")");
+        }
+        return wire;
+    }
+
+    private static BigInteger randomScalar(SecureRandom rng) {
+        // Sample 512 bits and reduce mod r for negligible bias (~2^{-258}).
+        // Using only 256 bits would give ~20% relative bias (2^256/r ≈ 5.29).
+        byte[] bytes = new byte[64];
+        rng.nextBytes(bytes);
+        return new BigInteger(1, bytes).mod(MontFr254.modulus());
+    }
+
+    /**
+     * Validate that the witness satisfies all non-empty R1CS constraints.
+     * Throws IllegalArgumentException if any constraint is violated.
+     *
+     * <p>Use this with standard R1CS constraints (from .r1cs files), NOT with .zkey
+     * Section 4 constraints which use a different encoding where C is implicit.</p>
+     */
+    public static void validateWitness(List<R1CSConstraint> constraints, BigInteger[] witness, int numConstraints) {
+        BigInteger mod = MontFr254.modulus();
+        for (int i = 0; i < numConstraints; i++) {
+            var c = constraints.get(i);
+            // Empty constraints (0*0=0) are trivially satisfied — skip
+            if (c.a().isEmpty() && c.b().isEmpty() && c.c().isEmpty()) continue;
+
+            BigInteger aVal = evalLCBigInt(c.a(), witness, mod);
+            BigInteger bVal = evalLCBigInt(c.b(), witness, mod);
+            BigInteger cVal = evalLCBigInt(c.c(), witness, mod);
+            BigInteger lhs = aVal.multiply(bVal).mod(mod);
+
+            if (!lhs.equals(cVal)) {
+                throw new IllegalArgumentException(
+                        "Witness does not satisfy R1CS constraint " + i
+                                + ": A·w * B·w = " + lhs + " but C·w = " + cVal);
+            }
+        }
+    }
+
+    private static BigInteger evalLCBigInt(Map<Integer, BigInteger> lc, BigInteger[] witness, BigInteger mod) {
+        BigInteger sum = BigInteger.ZERO;
+        for (var entry : lc.entrySet()) {
+            int wireIdx = entry.getKey();
+            if (wireIdx >= witness.length)
+                throw new IllegalArgumentException(
+                        "Constraint references wire " + wireIdx + " but witness has only " + witness.length + " entries");
+            if (entry.getValue().signum() != 0) {
+                sum = sum.add(entry.getValue().multiply(witness[wireIdx]));
+            }
+        }
+        return sum.mod(mod);
+    }
+
+}

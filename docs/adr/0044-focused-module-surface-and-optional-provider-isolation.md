@@ -341,7 +341,7 @@ The default root build retains these modules:
 | `zeroj-bom-core` | Retain as the single stable BOM coordinate. |
 
 `zeroj-backend-spi` keeps its artifact coordinate to minimize migration. The
-existing `com.bloxbean.cardano.zeroj.verifier.core` packages may remain during
+existing `org.zeroj.verifier.core` packages may remain during
 the compatibility window even after their classes move into the surviving JAR.
 A rename to `zeroj-verifier-api` is not part of this ADR.
 

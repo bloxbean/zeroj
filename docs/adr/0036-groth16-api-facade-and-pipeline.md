@@ -48,7 +48,7 @@ Three additive layers, no changes to any existing entry point:
    suppliers are exactly the two circuit-specific pieces an app must own.
 
 3. **`zeroj-tools` (new module)** — `ZkeyContributor`, `SnarkjsHashToG2`, `ChaChaRng` moved
-   (git mv) to `com.bloxbean.cardano.zeroj.tools.zkey`; deps `zeroj-crypto` +
+   (git mv) to `org.zeroj.tools.zkey`; deps `zeroj-crypto` +
    `zeroj-bls12381` (api) + BouncyCastle. `zeroj-ceremony` keeps only the picocli CLI and
    depends on it. `zeroj-crypto` stays third-party-free (the reason the contributor does not
    move there: its blake2b-512 needs BC; the circuit-lib Blake2b is an in-circuit gadget).

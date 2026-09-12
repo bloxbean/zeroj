@@ -43,7 +43,7 @@ future circuits.
 
 ```bash
 # from the frozen circuit (the @ZKCircuit class, compiled into your circuits jar):
-java -cp zeroj-ceremony.jar:your-circuits.jar com.bloxbean.cardano.zeroj.ceremony.CeremonyCli \
+java -cp zeroj-ceremony.jar:your-circuits.jar org.zeroj.ceremony.CeremonyCli \
      export-r1cs --circuit com.example.OwnershipProof --out ownership.r1cs
 
 snarkjs groth16 setup ownership.r1cs pot25_final.ptau key_0000.zkey
@@ -79,7 +79,7 @@ snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey
 snarkjs zkey export verificationkey key_final.zkey verification_key.json
 
 # Into ZeroJ (streaming; handles multi-GB keys):
-java -cp zeroj-ceremony.jar com.bloxbean.cardano.zeroj.ceremony.CeremonyCli \
+java -cp zeroj-ceremony.jar org.zeroj.ceremony.CeremonyCli \
      finalize --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 

@@ -222,7 +222,7 @@ Purpose: public compile-time and runtime API used by application code.
 Suggested package:
 
 ```text
-com.bloxbean.cardano.zeroj.circuit.annotation
+org.zeroj.circuit.annotation
 ```
 
 Dependencies:
@@ -253,7 +253,7 @@ Purpose: compile-time source generator.
 Suggested package:
 
 ```text
-com.bloxbean.cardano.zeroj.circuit.annotation.processor
+org.zeroj.circuit.annotation.processor
 ```
 
 Dependencies:
@@ -268,8 +268,8 @@ Consumer Gradle usage:
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-circuit-annotation-api'
-    annotationProcessor 'com.bloxbean.cardano:zeroj-circuit-annotation-processor'
+    implementation 'org.zeroj:zeroj-circuit-annotation-api'
+    annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
 }
 ```
 
@@ -970,7 +970,7 @@ ZkMerkle.verifyPoseidon(
 Proposed package for these adapters:
 
 ```text
-com.bloxbean.cardano.zeroj.circuit.lib.zk
+org.zeroj.circuit.lib.zk
 ```
 
 MVP adapters:

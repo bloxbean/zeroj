@@ -116,14 +116,14 @@ zeroj-ccl           <-- depends on zeroj-cardano, cardano-client-lib
 
 ### Package Naming
 
-All packages: `com.bloxbean.cardano.zeroj.<module-suffix>`
+All packages: `org.zeroj.<module-suffix>`
 
 Examples:
-- `com.bloxbean.cardano.zeroj.api`
-- `com.bloxbean.cardano.zeroj.codec`
-- `com.bloxbean.cardano.zeroj.verifier.groth16`
-- `com.bloxbean.cardano.zeroj.submission`
-- `com.bloxbean.cardano.zeroj.cardano`
+- `org.zeroj.api`
+- `org.zeroj.codec`
+- `org.zeroj.verifier.groth16`
+- `org.zeroj.submission`
+- `org.zeroj.cardano`
 
 ## Consequences
 

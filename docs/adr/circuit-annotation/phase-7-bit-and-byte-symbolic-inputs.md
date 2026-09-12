@@ -27,13 +27,13 @@ field/range/hash/Merkle authoring surface.
 
 ## Verification
 
-- `./gradlew :zeroj-circuit-annotation-api:test --tests com.bloxbean.cardano.zeroj.circuit.annotation.ZkSymbolicTypesTest`
+- `./gradlew :zeroj-circuit-annotation-api:test --tests org.zeroj.circuit.annotation.ZkSymbolicTypesTest`
   passed.
-- `./gradlew :zeroj-circuit-annotation-processor:test --tests com.bloxbean.cardano.zeroj.circuit.annotation.processor.CircuitAnnotationProcessorTest`
+- `./gradlew :zeroj-circuit-annotation-processor:test --tests org.zeroj.circuit.annotation.processor.CircuitAnnotationProcessorTest`
   passed.
 - `./gradlew :zeroj-circuit-dsl:test`
   passed.
-- `./gradlew :zeroj-circuit-lib:test --tests com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest`
+- `./gradlew :zeroj-circuit-lib:test --tests org.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest`
   passed.
 
 Exit criteria results:

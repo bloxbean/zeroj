@@ -67,10 +67,10 @@ pipeline.
 
 ## Verification
 
-- `./gradlew :zeroj-circuit-annotation-processor:test --tests com.bloxbean.cardano.zeroj.circuit.annotation.processor.CircuitAnnotationProcessorTest` passed.
+- `./gradlew :zeroj-circuit-annotation-processor:test --tests org.zeroj.circuit.annotation.processor.CircuitAnnotationProcessorTest` passed.
 - `./gradlew :zeroj-circuit-annotation-processor:test` passed.
-- `./gradlew :zeroj-circuit-annotation-api:test :zeroj-circuit-lib:test --tests com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest` passed.
-- `./gradlew :zeroj-circuit-annotation-processor:test :zeroj-circuit-annotation-api:test :zeroj-circuit-lib:test --tests com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest :zeroj-circuit-dsl:test` passed.
+- `./gradlew :zeroj-circuit-annotation-api:test :zeroj-circuit-lib:test --tests org.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest` passed.
+- `./gradlew :zeroj-circuit-annotation-processor:test :zeroj-circuit-annotation-api:test :zeroj-circuit-lib:test --tests org.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest :zeroj-circuit-dsl:test` passed.
 - `rg -n "[[:blank:]]$" docs/adr/circuit-annotation zeroj-circuit-annotation-processor` found no trailing whitespace.
 - `git diff --cached --check` passed.
 

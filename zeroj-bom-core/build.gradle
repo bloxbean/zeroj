@@ -1,6 +1,9 @@
 plugins {
     id 'java-platform'
     id 'maven-publish'
+    // The root `subprojects` block returns early for BOM projects, so it never reaches this one;
+    // without this apply the BOM would drop out of the Central deployment.
+    id 'com.gradleup.nmcp'
     id 'signing'
 }
 

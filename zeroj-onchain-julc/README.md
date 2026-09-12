@@ -17,21 +17,21 @@ V3.
 
 | Package | Contents | Status | Notes |
 |---------|----------|--------|-------|
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381Verifier` | Working crypto-only validator | Default BLS12-381 Groth16 spending validator using Plutus V3 BLS builtins; supports arbitrary public-input counts, but does not bind `ScriptContext` |
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381TxOutRefBindingVerifier` | Working bound validator example | Binds the first public input to `blake2b_256(spentTxId || spentOutputIndex32) mod Fr` to reject proof replay across UTxOs |
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator` | `Groth16AuthenticatedStateTransitionValidator` | Experimental representative state-transition validator | Derives old/new roots from the spent and single continuing state-token UTxO, enforces version increment, signer, value/token conservation and no mint, and verifies one operation-specific Groth16 proof |
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `Groth16AuthenticatedStateTransitionScriptFactory`, `Groth16VerificationKeyCodec` | Experimental fail-closed release tooling | Binds exact circuit/manifest/R1CS/VK, audited validator-template digest, compiler profile, applied Plutus V3 script hash, typed network, state token/signer, and external one-shot genesis attestation |
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib` | `Groth16BLS12381Lib` | Working on-chain library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
-| `com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec` | `SnarkjsToCardano`, `ProverToCardano` | Working off-chain helpers | Convert snarkjs and ZeroJ Groth16 artifacts to Cardano-compatible compressed bytes and Plutus data shapes |
-| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.lib` | `PlonkBLS12381Lib` | Experimental opt-in on-chain library | Reusable `@OnchainLibrary` PlonK verification helper for custom validators; supports one-input and bounded MPI Cardano profiles |
-| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381Verifier` | Experimental opt-in validator | Cardano-profile compressed-transcript verifier with full KZG batch-opening pairing check for the current one-public-input shape; third-party audit still pending |
-| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381MultiInputVerifier` | Experimental opt-in validator | Bounded MPI Cardano profile verifier for `1..8` datum-supplied public inputs with profile/count transcript binding and verified inverse witnesses; third-party audit still pending |
-| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381MultiInputParamVerifier` | Experimental opt-in validator | Bounded MPI Cardano profile verifier for `1..8` script-parameter public inputs; use when statement values should be pinned by the script hash |
-| `com.bloxbean.cardano.zeroj.onchain.julc.plonk.codec` | `PlonKProverToCardano` | Working off-chain helper | Converts ZeroJ BLS12-381 PlonK proofs/VKs to compressed Cardano redeemer/parameter bytes |
-| `com.bloxbean.cardano.zeroj.onchain.julc.bbs.lib` | `BbsHashToScalar` | Working on-chain library | Reusable `@OnchainLibrary` BBS `hash_to_scalar` (`expand_message_xmd(SHA-256)`); ciphersuite-generic, composable by any BBS validator |
-| `com.bloxbean.cardano.zeroj.onchain.julc.bbs.lib` | `BbsProofVerify` | Working on-chain library (fixed profile) | Reusable `@OnchainLibrary` native BBS `ProofVerify` (T1/T2 + Fiat–Shamir challenge + pairing) for the SHA-256 ciphersuite. Current profile: 5-message credential disclosing 2 (~2.4×10⁹ CPU / 0.18M mem); arbitrary-disclosure generalization tracked as follow-up |
-| `com.bloxbean.cardano.zeroj.onchain.julc.analysis` | `ScriptBudgetEstimator`, `OnChainFeasibility` | Planning helpers | Estimate Plutus CPU/memory budgets and report proof system / curve feasibility |
-| `com.bloxbean.cardano.zeroj.onchain.julc.deployment` | `ReferenceScriptDeployer` | Config helper | Describes CIP-0033 reference-script deployment patterns; does not submit transactions |
+| `org.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381Verifier` | Working crypto-only validator | Default BLS12-381 Groth16 spending validator using Plutus V3 BLS builtins; supports arbitrary public-input counts, but does not bind `ScriptContext` |
+| `org.zeroj.onchain.julc.groth16.validator` | `Groth16BLS12381TxOutRefBindingVerifier` | Working bound validator example | Binds the first public input to `blake2b_256(spentTxId || spentOutputIndex32) mod Fr` to reject proof replay across UTxOs |
+| `org.zeroj.onchain.julc.groth16.validator` | `Groth16AuthenticatedStateTransitionValidator` | Experimental representative state-transition validator | Derives old/new roots from the spent and single continuing state-token UTxO, enforces version increment, signer, value/token conservation and no mint, and verifies one operation-specific Groth16 proof |
+| `org.zeroj.onchain.julc.groth16.codec` | `Groth16AuthenticatedStateTransitionScriptFactory`, `Groth16VerificationKeyCodec` | Experimental fail-closed release tooling | Binds exact circuit/manifest/R1CS/VK, audited validator-template digest, compiler profile, applied Plutus V3 script hash, typed network, state token/signer, and external one-shot genesis attestation |
+| `org.zeroj.onchain.julc.groth16.lib` | `Groth16BLS12381Lib` | Working on-chain library | Reusable `@OnchainLibrary` proof verification helper for custom validators |
+| `org.zeroj.onchain.julc.groth16.codec` | `SnarkjsToCardano`, `ProverToCardano` | Working off-chain helpers | Convert snarkjs and ZeroJ Groth16 artifacts to Cardano-compatible compressed bytes and Plutus data shapes |
+| `org.zeroj.onchain.julc.plonk.lib` | `PlonkBLS12381Lib` | Experimental opt-in on-chain library | Reusable `@OnchainLibrary` PlonK verification helper for custom validators; supports one-input and bounded MPI Cardano profiles |
+| `org.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381Verifier` | Experimental opt-in validator | Cardano-profile compressed-transcript verifier with full KZG batch-opening pairing check for the current one-public-input shape; third-party audit still pending |
+| `org.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381MultiInputVerifier` | Experimental opt-in validator | Bounded MPI Cardano profile verifier for `1..8` datum-supplied public inputs with profile/count transcript binding and verified inverse witnesses; third-party audit still pending |
+| `org.zeroj.onchain.julc.plonk.validator` | `PlonkBLS12381MultiInputParamVerifier` | Experimental opt-in validator | Bounded MPI Cardano profile verifier for `1..8` script-parameter public inputs; use when statement values should be pinned by the script hash |
+| `org.zeroj.onchain.julc.plonk.codec` | `PlonKProverToCardano` | Working off-chain helper | Converts ZeroJ BLS12-381 PlonK proofs/VKs to compressed Cardano redeemer/parameter bytes |
+| `org.zeroj.onchain.julc.bbs.lib` | `BbsHashToScalar` | Working on-chain library | Reusable `@OnchainLibrary` BBS `hash_to_scalar` (`expand_message_xmd(SHA-256)`); ciphersuite-generic, composable by any BBS validator |
+| `org.zeroj.onchain.julc.bbs.lib` | `BbsProofVerify` | Working on-chain library (fixed profile) | Reusable `@OnchainLibrary` native BBS `ProofVerify` (T1/T2 + Fiat–Shamir challenge + pairing) for the SHA-256 ciphersuite. Current profile: 5-message credential disclosing 2 (~2.4×10⁹ CPU / 0.18M mem); arbitrary-disclosure generalization tracked as follow-up |
+| `org.zeroj.onchain.julc.analysis` | `ScriptBudgetEstimator`, `OnChainFeasibility` | Planning helpers | Estimate Plutus CPU/memory budgets and report proof system / curve feasibility |
+| `org.zeroj.onchain.julc.deployment` | `ReferenceScriptDeployer` | Config helper | Describes CIP-0033 reference-script deployment patterns; does not submit transactions |
 
 ## Why It Is Useful
 
@@ -76,19 +76,19 @@ ceremonies, Yaci, and public-network transactions.
 Use package names by role:
 
 ```java
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381TxOutRefBindingVerifier;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16AuthenticatedStateTransitionValidator;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.Groth16AuthenticatedStateTransitionScriptFactory;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.Groth16VerificationKeyCodec;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
-import com.bloxbean.cardano.zeroj.onchain.julc.plonk.lib.PlonkBLS12381Lib;
-import com.bloxbean.cardano.zeroj.onchain.julc.bbs.lib.BbsHashToScalar;
-import com.bloxbean.cardano.zeroj.onchain.julc.bbs.lib.BbsProofVerify;
+import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381TxOutRefBindingVerifier;
+import org.zeroj.onchain.julc.groth16.validator.Groth16AuthenticatedStateTransitionValidator;
+import org.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
+import org.zeroj.onchain.julc.groth16.codec.Groth16AuthenticatedStateTransitionScriptFactory;
+import org.zeroj.onchain.julc.groth16.codec.Groth16VerificationKeyCodec;
+import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import org.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
+import org.zeroj.onchain.julc.plonk.lib.PlonkBLS12381Lib;
+import org.zeroj.onchain.julc.bbs.lib.BbsHashToScalar;
+import org.zeroj.onchain.julc.bbs.lib.BbsProofVerify;
 // off-chain codec (zeroj-bbs):
-import com.bloxbean.cardano.zeroj.bbs.cardano.BbsToCardano;
+import org.zeroj.bbs.cardano.BbsToCardano;
 ```
 
 Custom validators should define their own local redeemer record, compose the
@@ -127,7 +127,7 @@ undisclosed attributes staying hidden. `BbsHashToScalar` is the reusable
 `hash_to_scalar` primitive it (and any other BBS validator) composes.
 
 The off-chain half lives in `zeroj-bbs` as
-`com.bloxbean.cardano.zeroj.bbs.cardano.BbsToCardano`: it derives the issuer
+`org.zeroj.bbs.cardano.BbsToCardano`: it derives the issuer
 verification material (validator `@Param`s) and flattens a `BbsPresentation` into
 the redeemer values. End-to-end:
 
@@ -179,6 +179,6 @@ in `zeroj-usecases` reusable-kyc.
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-onchain-julc'
+    implementation 'org.zeroj:zeroj-onchain-julc'
 }
 ```

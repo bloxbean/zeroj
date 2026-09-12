@@ -205,7 +205,7 @@ Goal: move from hand-picked negative tests to ongoing release gates.
 ```bash
 ./gradlew :zeroj-verifier-plonk:test --tests '*Plonk*' --tests '*Transcript*'
 ./gradlew :zeroj-codec:test
-./gradlew :zeroj-crypto:test --tests 'com.bloxbean.cardano.zeroj.crypto.plonk.*'
+./gradlew :zeroj-crypto:test --tests 'org.zeroj.crypto.plonk.*'
 ```
 
 Deliverable: recurring CI gates for malformed inputs, fuzzing, differential

@@ -29,9 +29,9 @@ not only from the ADR and processor tests.
 
 ## Verification
 
-- `./gradlew :zeroj-examples:test --tests com.bloxbean.cardano.zeroj.examples.annotation.AnnotatedCircuitExamplesTest` passed.
-- `./gradlew :zeroj-examples:test --tests com.bloxbean.cardano.zeroj.examples.annotation.AnnotatedCircuitExamplesTest :zeroj-circuit-annotation-api:test :zeroj-circuit-annotation-processor:test :zeroj-circuit-lib:test --tests com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest :zeroj-circuit-dsl:test` passed.
-- `./gradlew :zeroj-examples:clean :zeroj-examples:test --tests com.bloxbean.cardano.zeroj.examples.annotation.AnnotatedCircuitExamplesTest` passed in review, confirming generated companions rebuild cleanly.
+- `./gradlew :zeroj-examples:test --tests org.zeroj.examples.annotation.AnnotatedCircuitExamplesTest` passed.
+- `./gradlew :zeroj-examples:test --tests org.zeroj.examples.annotation.AnnotatedCircuitExamplesTest :zeroj-circuit-annotation-api:test :zeroj-circuit-annotation-processor:test :zeroj-circuit-lib:test --tests org.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest :zeroj-circuit-dsl:test` passed.
+- `./gradlew :zeroj-examples:clean :zeroj-examples:test --tests org.zeroj.examples.annotation.AnnotatedCircuitExamplesTest` passed in review, confirming generated companions rebuild cleanly.
 - `rg -n "[[:blank:]]$" docs/adr/circuit-annotation docs/circuit-annotation-user-guide.md zeroj-examples zeroj-circuit-annotation-api zeroj-circuit-annotation-processor` found no trailing whitespace.
 - `git diff --cached --check` passed.
 

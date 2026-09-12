@@ -1,0 +1,173 @@
+package org.zeroj.circuit;
+
+import org.zeroj.api.CurveId;
+import org.zeroj.circuit.r1cs.R1CSCompiler;
+import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
+import org.zeroj.circuit.plonk.PlonKCompiler;
+import org.zeroj.circuit.plonk.PlonKConstraintSystem;
+import org.zeroj.circuit.halo2.Halo2Compiler;
+import org.zeroj.circuit.halo2.Halo2CircuitSystem;
+
+import java.math.BigInteger;
+import java.util.*;
+
+/**
+ * Fluent API for defining ZK arithmetic circuits.
+ *
+ * <p>Usage:</p>
+ * <pre>{@code
+ * var circuit = CircuitBuilder.create("multiplier")
+ *     .publicVar("z")
+ *     .secretVar("x")
+ *     .secretVar("y")
+ *     .define(api -> {
+ *         var product = api.mul(api.var("x"), api.var("y"));
+ *         api.assertEqual(product, api.var("z"));
+ *     });
+ *
+ * // Compile to R1CS (for Groth16)
+ * var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+ *
+ * // Compile to PlonK
+ * var plonk = circuit.compilePlonK(CurveId.BLS12_381);
+ *
+ * // Calculate witness
+ * var witness = circuit.calculateWitness(Map.of(
+ *     "x", List.of(BigInteger.valueOf(3)),
+ *     "y", List.of(BigInteger.valueOf(11)),
+ *     "z", List.of(BigInteger.valueOf(33))), CurveId.BLS12_381);
+ * }</pre>
+ */
+public final class CircuitBuilder {
+
+    private final String name;
+    private final List<String> publicVarNames = new ArrayList<>();
+    private final List<String> secretVarNames = new ArrayList<>();
+    private final Set<String> declaredNames = new HashSet<>();
+    private ConstraintGraph graph;
+
+    private CircuitBuilder(String name) {
+        this.name = Objects.requireNonNull(name);
+    }
+
+    /** Create a new circuit builder with the given name. */
+    public static CircuitBuilder create(String name) {
+        return new CircuitBuilder(name);
+    }
+
+    /** Declare a public input variable. */
+    public CircuitBuilder publicVar(String name) {
+        Objects.requireNonNull(name, "Variable name must not be null");
+        if (!declaredNames.add(name))
+            throw new IllegalArgumentException("Duplicate variable name: " + name);
+        publicVarNames.add(name);
+        return this;
+    }
+
+    /** Declare a secret (private) input variable. */
+    public CircuitBuilder secretVar(String name) {
+        Objects.requireNonNull(name, "Variable name must not be null");
+        if (!declaredNames.add(name))
+            throw new IllegalArgumentException("Duplicate variable name: " + name);
+        secretVarNames.add(name);
+        return this;
+    }
+
+    /** Define the circuit constraints using the functional API. This freezes the circuit. */
+    public CircuitBuilder define(CircuitDefinition definition) {
+        var impl = new CircuitAPIImpl(publicVarNames, secretVarNames);
+        definition.define(impl);
+        this.graph = impl.buildGraph(name);
+        return this;
+    }
+
+    /** Define the circuit constraints using the Signal-based (OO) API. This freezes the circuit. */
+    public CircuitBuilder defineSignals(CircuitSpec spec) {
+        var impl = new CircuitAPIImpl(publicVarNames, secretVarNames);
+        spec.define(new SignalBuilder(impl));
+        this.graph = impl.buildGraph(name);
+        return this;
+    }
+
+    /** Get the proof-system-agnostic constraint graph. */
+    public ConstraintGraph constraintGraph() {
+        requireDefined();
+        return graph;
+    }
+
+    /** Compile to R1CS constraint system for Groth16. */
+    public R1CSConstraintSystem compileR1CS(CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return R1CSCompiler.compile(graph, FieldConfig.forCurve(curve));
+    }
+
+    /**
+     * Compile to R1CS and expose deterministic materialisation-pressure diagnostics.
+     *
+     * <p>Use this in deployment/build tooling when a pressure event — which may trigger an
+     * R1CS shape change — should be surfaced explicitly before setup/key generation. The ordinary
+     * {@link #compileR1CS(CurveId)} API remains unchanged.
+     */
+    public R1CSCompiler.CompilationResult compileR1CSWithDiagnostics(CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return R1CSCompiler.compileWithDiagnostics(graph, FieldConfig.forCurve(curve));
+    }
+
+    /** Compile to PlonK constraint system. */
+    public PlonKConstraintSystem compilePlonK(CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return PlonKCompiler.compile(graph, FieldConfig.forCurve(curve));
+    }
+
+    /** Compile to Halo2 PLONKish circuit system. */
+    public Halo2CircuitSystem compileHalo2(CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return Halo2Compiler.compile(graph, FieldConfig.forCurve(curve));
+    }
+
+    /** Calculate witness for given inputs. */
+    public BigInteger[] calculateWitness(Map<String, List<BigInteger>> inputs, CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return WitnessCalculator.calculate(graph, inputs, FieldConfig.forCurve(curve));
+    }
+
+    /**
+     * {@link #calculateWitness} into flat storage (ADR-0034 M7): wire {@code i}'s value is four
+     * canonical little-endian 64-bit limbs at {@code i*4} — 32 B/wire, no boxed field elements.
+     */
+    public long[] calculateWitnessFlat(Map<String, List<BigInteger>> inputs, CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return WitnessCalculator.calculateFlat(graph, inputs, FieldConfig.forCurve(curve));
+    }
+
+    /**
+     * {@link #calculateWitnessFlat} into 4 MB chunks — for memory-tight callers that must not
+     * hold a ~GB contiguous array while the graph is alive; release the graph, then consolidate
+     * (ADR-0034 M7).
+     */
+    public long[][] calculateWitnessFlatChunked(Map<String, List<BigInteger>> inputs, CurveId curve) {
+        requireDefined();
+        checkExpectedField(curve);
+        return WitnessCalculator.calculateFlatChunked(graph, inputs, FieldConfig.forCurve(curve));
+    }
+
+    private void requireDefined() {
+        if (graph == null) throw new IllegalStateException("Circuit not defined yet. Call define() first.");
+    }
+
+    /**
+     * If a gadget called {@link CircuitAPI#requireField} during {@code define()},
+     * assert the compile curve's field matches that expectation. Prevents
+     * silently producing non-canonical outputs when, e.g., Poseidon params for
+     * BLS12-381 are paired with a BN254 compile curve.
+     */
+    private void checkExpectedField(CurveId curve) {
+        graph.requireCompatibleField(FieldConfig.forCurve(curve));
+    }
+}

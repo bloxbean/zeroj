@@ -1,0 +1,14 @@
+[
+  {
+    "name": "org.zeroj.blst.BlstBls12381Provider",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.blst.BlstPairing",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

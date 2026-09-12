@@ -229,7 +229,7 @@ public final class PlonKProver {
 
 ```
 zeroj-crypto/                          (new module — shared crypto primitives)
-  src/main/java/com/bloxbean/cardano/zeroj/crypto/
+  src/main/java/org/zeroj/crypto/
     field/
       MontFp254.java                   — BN254 Fr in Montgomery form (long[4])
       MontFp381.java                   — BLS12-381 Fr in Montgomery form (long[6])
@@ -246,7 +246,7 @@ zeroj-crypto/                          (new module — shared crypto primitives)
       PolyArith.java                  — add, mul, div, evaluate
 
 zeroj-prover-java/                     (new module — pure Java provers)
-  src/main/java/com/bloxbean/cardano/zeroj/prover/java/
+  src/main/java/org/zeroj/prover/java/
     groth16/
       Groth16JavaProver.java           — implements ZkProver SPI
       ProvingKey.java                  — proving key data structure

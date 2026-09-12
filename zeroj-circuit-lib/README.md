@@ -172,10 +172,10 @@ var circuit = CircuitBuilder.create("sealed-bid")
 
 All three styles use the same underlying circuit library gadgets. Symbolic
 annotation-based circuits use adapters from
-`com.bloxbean.cardano.zeroj.circuit.lib.zk`; `CircuitSpec` and inline DSL code
+`org.zeroj.circuit.lib.zk`; `CircuitSpec` and inline DSL code
 usually use the `Signal*` helpers directly. Cardano/BLS12-381 examples should
 also use `PoseidonParamsBLS12_381T3` from
-`com.bloxbean.cardano.zeroj.circuit.lib.poseidon`.
+`org.zeroj.circuit.lib.poseidon`.
 
 Common symbolic adapter calls:
 
@@ -319,7 +319,7 @@ The status table above was checked against the current implementation in
 `ZkPedersen`, `ZkEdDSAJubjub`, the `hash/`, `field/`, and `ed25519/`
 crypto gadgets (`Blake2b`, `Sha512`, `HmacSha512`, `Ed25519Point`,
 `Bip32Ed25519`, `Cip1852Derivation`), and the adapter coverage in
-`src/test/java/com/bloxbean/cardano/zeroj/circuit/lib/zk/ZkGadgetAdaptersTest.java`.
+`src/test/java/org/zeroj/circuit/lib/zk/ZkGadgetAdaptersTest.java`.
 The MPF/JMT rows are checked in their owning structure modules; they are not circuit-lib
 packages.
 
@@ -327,6 +327,6 @@ packages.
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
+    implementation 'org.zeroj:zeroj-circuit-lib'
 }
 ```

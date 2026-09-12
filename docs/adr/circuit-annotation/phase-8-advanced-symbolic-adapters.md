@@ -34,9 +34,9 @@ credential and commitment primitives without dropping to `Variable` plumbing.
 
 ## Verification
 
-- `./gradlew :zeroj-circuit-lib:test --tests com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest`
+- `./gradlew :zeroj-circuit-lib:test --tests org.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest`
   passed.
-- `./gradlew :zeroj-examples:test --tests com.bloxbean.cardano.zeroj.examples.annotation.AnnotatedCircuitExamplesTest`
+- `./gradlew :zeroj-examples:test --tests org.zeroj.examples.annotation.AnnotatedCircuitExamplesTest`
   passed.
 - `./gradlew :zeroj-circuit-annotation-api:test :zeroj-circuit-annotation-processor:test :zeroj-circuit-dsl:test`
   passed.

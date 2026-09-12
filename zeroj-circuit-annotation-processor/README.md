@@ -35,8 +35,8 @@ Consumer usage:
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-circuit-annotation-api'
-    annotationProcessor 'com.bloxbean.cardano:zeroj-circuit-annotation-processor'
+    implementation 'org.zeroj:zeroj-circuit-annotation-api'
+    annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
 }
 ```
 

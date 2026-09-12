@@ -47,6 +47,6 @@ under `META-INF/native-image/`.
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-blst'
+    implementation 'org.zeroj:zeroj-blst'
 }
 ```

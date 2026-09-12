@@ -1,0 +1,6 @@
+[
+  {
+    "name": "org.zeroj.verifier.plonk.PlonkBLS12381Verifier",
+    "methods": [{"name": "<init>", "parameterTypes": []}]
+  }
+]

@@ -52,7 +52,7 @@ checking and `vk_x` computation instead of a mutable `while` accumulator.
 Add a new reusable Julc spending validator:
 
 ```java
-com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier
+org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier
 ```
 
 It will keep the same proof redeemer shape as the current fixed verifier:
@@ -202,7 +202,7 @@ var vkIcData = ListPlutusData.of(
 The script is loaded with five parameters:
 
 ```java
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 
 JulcScriptLoader.load(
     Groth16BLS12381Verifier.class,
@@ -257,7 +257,7 @@ alpha, beta, gamma, delta, and the full `IC` list.
 
 `Groth16BLS12381Lib` is packaged as a JuLC `@OnchainLibrary` and bundled into the
 published JAR under
-`META-INF/plutus-sources/com/bloxbean/cardano/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`.
+`META-INF/plutus-sources/org/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`.
 Downstream custom validators use their own local redeemer record and call
 `Groth16BLS12381Lib.verify(...)`.
 The proof record is intentionally not part of the reusable library surface

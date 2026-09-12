@@ -1,0 +1,53 @@
+package org.zeroj.examples.dsl.voting;
+
+import org.zeroj.circuit.CircuitBuilder;
+import org.zeroj.circuit.CircuitSpec;
+import org.zeroj.circuit.Signal;
+import org.zeroj.circuit.SignalBuilder;
+import org.zeroj.circuit.lib.SignalPoseidon;
+import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
+
+/**
+ * Anonymous voting circuit — proves a vote is valid without revealing the choice.
+ *
+ * <p>The voter commits to their vote:
+ * {@code commitment = PoseidonBLS12_381(vote, nullifier)}.
+ * The nullifier prevents double-voting (revealed on-chain), while the vote remains private.</p>
+ *
+ * <p>Signals:</p>
+ * <ul>
+ *   <li><b>Private:</b> vote (0 or 1), nullifier</li>
+ *   <li><b>Public:</b> commitment (output)</li>
+ * </ul>
+ */
+public class AnonymousVotingCircuit implements CircuitSpec {
+
+    @Override
+    public void define(SignalBuilder c) {
+        // Private inputs
+        Signal vote = c.privateInput("vote");
+        Signal nullifier = c.privateInput("nullifier");
+
+        // Public output
+        Signal commitment = c.publicOutput("commitment");
+
+        // Constraint 1: vote must be boolean (0 or 1)
+        vote.assertBoolean();
+
+        // Constraint 2: commitment == PoseidonBLS12_381(vote, nullifier)
+        c.assertEqual(
+                SignalPoseidon.hash(c, PoseidonParamsBLS12_381T3.INSTANCE, vote, nullifier),
+                commitment);
+    }
+
+    /**
+     * Build a complete circuit with all signals declared.
+     */
+    public static CircuitBuilder build() {
+        return CircuitBuilder.create("anonymous-vote")
+                .publicVar("commitment")
+                .secretVar("vote")
+                .secretVar("nullifier")
+                .defineSignals(new AnonymousVotingCircuit());
+    }
+}

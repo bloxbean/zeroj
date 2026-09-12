@@ -38,17 +38,17 @@ For on-chain Cardano verification, use **BLS12-381** (Plutus V3 has native BLS b
 ### 1. Add Dependencies
 
 ```gradle
-implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
-implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
-implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
-implementation 'com.bloxbean.cardano:zeroj-crypto'
+implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
+implementation 'org.zeroj:zeroj-circuit-dsl'
+implementation 'org.zeroj:zeroj-circuit-lib'
+implementation 'org.zeroj:zeroj-crypto'
 ```
 
 ### 2. Define a Circuit
 
 ```java
-import com.bloxbean.cardano.zeroj.circuit.*;
-import com.bloxbean.cardano.zeroj.circuit.lib.*;
+import org.zeroj.circuit.*;
+import org.zeroj.circuit.lib.*;
 
 public class SecretMultiplierCircuit implements CircuitSpec {
     @Override
@@ -73,11 +73,11 @@ public class SecretMultiplierCircuit implements CircuitSpec {
 ### 3. Prove and Verify (Pure Java)
 
 ```java
-import com.bloxbean.cardano.zeroj.api.CurveId;
-import com.bloxbean.cardano.zeroj.crypto.groth16.*;
-import com.bloxbean.cardano.zeroj.crypto.setup.*;
-import com.bloxbean.cardano.zeroj.bls12381.ec.*;
-import com.bloxbean.cardano.zeroj.bls12381.field.*;
+import org.zeroj.api.CurveId;
+import org.zeroj.crypto.groth16.*;
+import org.zeroj.crypto.setup.*;
+import org.zeroj.bls12381.ec.*;
+import org.zeroj.bls12381.field.*;
 
 // Compile circuit
 var circuit = SecretMultiplierCircuit.build();
@@ -236,8 +236,8 @@ transaction. For value-like workflows, use a custom validator that composes
 `Groth16BLS12381TxOutRefBindingVerifier` pattern described after this snippet.
 
 ```java
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 
 // Compress proof + VK for on-chain BLS format
 var compressedVk = ProverToCardano.compressVk(setup);
@@ -403,21 +403,21 @@ var proof = Groth16ProverBLS381.prove(zkeyData.provingKey(), witness,
 ## Module Dependencies
 
 ```gradle
-implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
+implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
 
 // Circuit definition + standard library
-implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
-implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
+implementation 'org.zeroj:zeroj-circuit-dsl'
+implementation 'org.zeroj:zeroj-circuit-lib'
 
 // Pure Java prover (BLS12-381, Groth16 + PlonK)
-implementation 'com.bloxbean.cardano:zeroj-crypto'
+implementation 'org.zeroj:zeroj-crypto'
 
 // Off-chain verification (pure Java)
-implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
-implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'
+implementation 'org.zeroj:zeroj-verifier-groth16'
+implementation 'org.zeroj:zeroj-verifier-plonk'
 
 // On-chain verification (Cardano Plutus V3)
-implementation 'com.bloxbean.cardano:zeroj-onchain-julc'
+implementation 'org.zeroj:zeroj-onchain-julc'
 
 // Transaction building (for on-chain submission)
 testImplementation 'com.bloxbean.cardano:cardano-client-lib'

@@ -56,7 +56,7 @@ snarkjs is an independent prover oracle: `./gradlew :zeroj-integration-tests:e2e
 
 ## Project Structure
 
-ZeroJ is a Gradle multi-module project. All module names use the `zeroj-` prefix and all packages start with `com.bloxbean.cardano.zeroj`.
+ZeroJ is a Gradle multi-module project. All module names use the `zeroj-` prefix and all packages start with `org.zeroj`.
 
 Projects fall into four groups ([ADR-0044](docs/adr/0044-focused-module-surface-and-optional-provider-isolation.md)):
 

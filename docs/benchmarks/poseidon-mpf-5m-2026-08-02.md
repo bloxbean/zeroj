@@ -278,7 +278,7 @@ test -d "$MPF_ARTIFACT_BUNDLE"
 ./gradlew -PincludeBenchmarks \
   -Dzeroj.poseidonMpf.cardanoArtifacts="$MPF_ARTIFACT_BUNDLE" \
   :zeroj-onchain-julc:test \
-  --tests com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.PoseidonMpfCardanoArtifactTest
+  --tests org.zeroj.onchain.julc.groth16.validator.PoseidonMpfCardanoArtifactTest
 ```
 
 `--setup=load` is important for reuse. It fails if the key manifest does not match the exact

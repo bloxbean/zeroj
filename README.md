@@ -304,24 +304,24 @@ Outside the default build and never published. See
 
 ```gradle
 dependencies {
-    implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
 
     // Circuit definition + standard library
-    implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
-    implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
+    implementation 'org.zeroj:zeroj-circuit-dsl'
+    implementation 'org.zeroj:zeroj-circuit-lib'
 
     // Pure Java prover (Groth16 + PlonK, BLS12-381)
-    implementation 'com.bloxbean.cardano:zeroj-crypto'
+    implementation 'org.zeroj:zeroj-crypto'
 
     // Verification (pure Java, zero native deps)
-    implementation 'com.bloxbean.cardano:zeroj-backend-spi'
-    implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
+    implementation 'org.zeroj:zeroj-backend-spi'
+    implementation 'org.zeroj:zeroj-verifier-groth16'
 
     // Opt-in product artifacts are outside the stable BOM — give them a version
-    implementation 'com.bloxbean.cardano:zeroj-verifier-plonk:0.1.0'
+    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0'
 
     // On-chain verification (Cardano Plutus V3)
-    implementation 'com.bloxbean.cardano:zeroj-onchain-julc'
+    implementation 'org.zeroj:zeroj-onchain-julc'
 
 }
 ```

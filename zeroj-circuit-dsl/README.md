@@ -53,6 +53,6 @@ var witness = circuit.calculateWitness(Map.of(
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
+    implementation 'org.zeroj:zeroj-circuit-dsl'
 }
 ```

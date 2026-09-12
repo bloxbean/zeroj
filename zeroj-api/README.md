@@ -47,6 +47,6 @@ var material = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16,
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-api'
+    implementation 'org.zeroj:zeroj-api'
 }
 ```

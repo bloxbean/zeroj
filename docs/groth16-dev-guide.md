@@ -23,8 +23,8 @@ System.setProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, "tr
 ## Flow 1 — tests and small circuits (everything in memory)
 
 ```java
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16Keys;
-import com.bloxbean.cardano.zeroj.crypto.setup.PowersOfTauBLS381;
+import org.zeroj.crypto.groth16.Groth16Keys;
+import org.zeroj.crypto.setup.PowersOfTauBLS381;
 
 List<R1CSConstraint> constraints = ...;      // your circuit
 BigInteger[] witness = ...;                  // witness[0] must be 1
@@ -104,7 +104,7 @@ codecs. The handle exposes the VK components (`keys.pk().alphaG1()`, `keys.pk().
 see `Groth16KeysTest.pairingVerify` for the four-pairing equation inline.
 
 To hand a proof or a ZeroJ-native key to snarkjs (or any snarkjs-format consumer), use the
-ADR-0047 exporters in `com.bloxbean.cardano.zeroj.crypto.snarkjs`; they write exactly what
+ADR-0047 exporters in `org.zeroj.crypto.snarkjs`; they write exactly what
 snarkjs 0.7.6 writes and fail closed on anything non-canonical:
 
 ```java

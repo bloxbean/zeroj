@@ -106,7 +106,7 @@ jobs:
       - name: Run the bidirectional interop suites
         run: |
           ./gradlew -PrequireSnarkjs \
-            :zeroj-integration-tests:test --tests 'com.bloxbean.cardano.zeroj.it.snarkjs.*' \
+            :zeroj-integration-tests:test --tests 'org.zeroj.it.snarkjs.*' \
             --stacktrace
 
       - name: Upload test reports

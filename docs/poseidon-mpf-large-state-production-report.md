@@ -73,18 +73,18 @@ atomic batches, snapshots/version roots, and pruning.
 ## What already exists in ZeroJ
 
 The reusable public gadget is
-[`ZkMpf.verifyInclusionPoseidon`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/circuit/ZkMpf.java),
+[`ZkMpf.verifyInclusionPoseidon`](../zeroj-mpf-poseidon/src/main/java/org/zeroj/merkle/mpf/poseidon/circuit/ZkMpf.java),
 with the flattened witness shape in
-[`ZkMpfProof`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/circuit/ZkMpfProof.java).
+[`ZkMpfProof`](../zeroj-mpf-poseidon/src/main/java/org/zeroj/merkle/mpf/poseidon/circuit/ZkMpfProof.java).
 The public annotated example is
-[`AnnotatedMpfPrivateRegistryInclusion`](../zeroj-integration-tests/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java).
+[`AnnotatedMpfPrivateRegistryInclusion`](../zeroj-integration-tests/src/test/java/org/zeroj/examples/annotation/AnnotatedMpfPrivateRegistryInclusion.java).
 
 CCL proof conversion and the explicit bound check are in
-[`PoseidonMpfCodec`](../zeroj-mpf-poseidon/src/main/java/com/bloxbean/cardano/zeroj/merkle/mpf/poseidon/ccl/PoseidonMpfCodec.java).
+[`PoseidonMpfCodec`](../zeroj-mpf-poseidon/src/main/java/org/zeroj/merkle/mpf/poseidon/ccl/PoseidonMpfCodec.java).
 The exact circuit used for the high-volume run is
-[`PoseidonMpfInclusionCircuit`](../benchmarks/zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/PoseidonMpfInclusionCircuit.java),
+[`PoseidonMpfInclusionCircuit`](../benchmarks/zeroj-mpf-poseidon-load/src/main/java/org/zeroj/mpf/load/PoseidonMpfInclusionCircuit.java),
 and the benchmark CLI defaults `--max-steps` to 8 in
-[`LoadOptions`](../benchmarks/zeroj-mpf-poseidon-load/src/main/java/com/bloxbean/cardano/zeroj/mpf/load/LoadOptions.java).
+[`LoadOptions`](../benchmarks/zeroj-mpf-poseidon-load/src/main/java/org/zeroj/mpf/load/LoadOptions.java).
 
 Consequently, “the 8-step circuit” is not a hard-coded limit throughout ZeroJ. `maxSteps` is a
 circuit parameter. The benchmark circuit is package-private in a non-published load module;

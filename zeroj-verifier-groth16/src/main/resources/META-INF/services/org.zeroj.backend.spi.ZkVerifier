@@ -1,0 +1,2 @@
+org.zeroj.verifier.groth16.bls12381.Groth16BLS12381Verifier
+org.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier

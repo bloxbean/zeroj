@@ -40,7 +40,7 @@ circom circuit → compile → .wasm + .r1cs
 
 ```
 incubator/zeroj-prover-wasm/
-  src/main/java/com/bloxbean/cardano/zeroj/prover/wasm/
+  src/main/java/org/zeroj/prover/wasm/
     WasmWitnessCalculator.java    — main API
     CircomWasmRuntime.java        — GraalWasm context management
     WitnessExporter.java          — convert witness to .wtns / gnark binary format

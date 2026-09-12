@@ -317,6 +317,6 @@ acceptance:
 - ADR-0012: Pure Java Provers for Groth16 and PlonK
 - ADR-0022: Pure Java PlonK Backend Review Outcomes and Hardening Posture
 - `docs/plonk-support.md`
-- `zeroj-onchain-julc/src/test/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381TranscriptPrototype.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
-- `zeroj-verifier-plonk/src/main/java/com/bloxbean/cardano/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`
+- `zeroj-onchain-julc/src/test/java/org/zeroj/onchain/julc/plonk/validator/PlonkBLS12381TranscriptPrototype.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
+- `zeroj-verifier-plonk/src/main/java/org/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`

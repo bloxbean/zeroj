@@ -60,11 +60,11 @@ Annotated symbolic circuit
 
 Relevant source:
 
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/groth16/validator/Groth16BLS12381Verifier.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381Verifier.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381MultiInputVerifier.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/analysis/OnChainFeasibility.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/groth16/validator/Groth16BLS12381Verifier.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/groth16/lib/Groth16BLS12381Lib.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/plonk/validator/PlonkBLS12381Verifier.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/plonk/validator/PlonkBLS12381MultiInputVerifier.java`
 - `zeroj-verifier-groth16/...`
 - `zeroj-verifier-plonk/...`
 - `incubator/zeroj-verifier-halo2/...`

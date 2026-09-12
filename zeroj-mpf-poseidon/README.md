@@ -6,7 +6,7 @@ BLS12-381 Poseidon and is incompatible with native Blake2b/Aiken MPF roots and w
 
 ```gradle
 dependencies {
-    implementation "com.bloxbean.cardano:zeroj-mpf-poseidon:<zeroj-version>"
+    implementation "org.zeroj:zeroj-mpf-poseidon:<zeroj-version>"
 }
 ```
 

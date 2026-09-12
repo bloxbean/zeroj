@@ -48,7 +48,7 @@ tasks.register('benchmark', Test) {
     if (System.getProperty('zeroj.bench.logs') != null) {
         systemProperty 'zeroj.bench.logs', System.getProperty('zeroj.bench.logs')
     }
-    filter { includeTestsMatching 'com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ScaleBenchmark' }
+    filter { includeTestsMatching 'org.zeroj.crypto.groth16.Groth16ScaleBenchmark' }
     outputs.upToDateWhen { false }
     testLogging { showStandardStreams = true }
 }

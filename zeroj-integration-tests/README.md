@@ -10,7 +10,7 @@ pure-Java prover, verifier, codec, MPF, and the Julc on-chain verifiers — so n
 single module owns the invariant.
 
 The example circuits and proof helpers under
-`src/test/java/com/bloxbean/cardano/zeroj/examples/` are **test fixtures**, not
+`src/test/java/org/zeroj/examples/` are **test fixtures**, not
 product code. They kept their original package names so the move stays reviewable
 as a move.
 
@@ -25,7 +25,7 @@ Tutorials and runnable applications are **not** here. They live in
 
 # Bidirectional Groth16/PlonK interop — require snarkjs 0.7.6 (same gate as assurance CI)
 npm install -g snarkjs@0.7.6
-./gradlew -PrequireSnarkjs :zeroj-integration-tests:test --tests 'com.bloxbean.cardano.zeroj.it.snarkjs.*'
+./gradlew -PrequireSnarkjs :zeroj-integration-tests:test --tests 'org.zeroj.it.snarkjs.*'
 
 # End-to-end tests — require external infrastructure, and skip gracefully without it
 ./gradlew :zeroj-integration-tests:e2eTest

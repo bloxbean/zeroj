@@ -54,6 +54,6 @@ is never part of a published artifact (ADR-0046).
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-crypto'
+    implementation 'org.zeroj:zeroj-crypto'
 }
 ```

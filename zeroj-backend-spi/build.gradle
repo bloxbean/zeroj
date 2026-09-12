@@ -9,7 +9,7 @@ dependencies {
 }
 
 // ADR-0044 Decision 5: zeroj-verifier-core was merged into this artifact. VerifierRegistry and
-// VerifierOrchestrator kept their com.bloxbean.cardano.zeroj.verifier.core package, and their
+// VerifierOrchestrator kept their org.zeroj.verifier.core package, and their
 // native-image directory is carried over verbatim under
 // META-INF/native-image/com.bloxbean.cardano/zeroj-verifier-core/, so the merger is a packaging
 // change only: backend selection, descriptor matching, verification-key resolution, result

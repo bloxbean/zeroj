@@ -261,7 +261,7 @@ test -d "$JMT_ARTIFACT_BUNDLE"
 ./gradlew -PincludeBenchmarks \
   -Dzeroj.poseidonJmt.cardanoArtifacts="$JMT_ARTIFACT_BUNDLE" \
   :zeroj-onchain-julc:test \
-  --tests com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.PoseidonJmtCardanoArtifactTest
+  --tests org.zeroj.onchain.julc.groth16.validator.PoseidonJmtCardanoArtifactTest
 ```
 
 `--setup=load` reuses the exact stored key. `--setup=store` refuses to overwrite an existing

@@ -51,6 +51,6 @@ such as `zeroj-blst`.
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-bls12381'
+    implementation 'org.zeroj:zeroj-bls12381'
 }
 ```
