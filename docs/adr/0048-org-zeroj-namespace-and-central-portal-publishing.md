@@ -273,9 +273,24 @@ mapping.
 7. **On-chain identity.** The Julc-compiled validator hash is byte-identical across the rename
    (Decision 1).
 
-Not exercised locally, and left to the tag run: **signing**. Every local run used
-`-PskipSigning=true`, so the `.asc` attachments in the nmcp bundle and the Portal's validation
-of those signatures are first exercised by `v0.1.0-pre12-dev1`.
+Every local run used `-PskipSigning=true`, so signing was left to the tag.
+
+8. **The tag rehearsal.** `v0.1.0-pre12-dev1` ran the real pipeline
+   ([run 34673413353](https://github.com/bloxbean/zeroj/actions/runs/34673413353), all 9 jobs
+   green): libblst from source on linux/amd64, linux/aarch64 and mac/aarch64; the full suite;
+   the module-surface guard; a signed deployment uploaded as `USER_MANAGED`, which reached
+   **VALIDATED** as `f04ee872-a2f5-4444-8d6c-a647dde1e2f3` and stopped there; and the ceremony
+   CLI native distributions on linux-x86_64, linux-arm64, macos-arm64 and windows-x86_64.
+
+   Passing Central validation is what closes the signing gap: the Portal checks the `.asc`
+   detached signatures, the sources/javadoc requirement per coordinate, and the namespace
+   ownership, so it confirms both that signing works under nmcp and that `org.zeroj` is verified
+   for this account.
+
+   With `github_release = false`, the latest GitHub release is still `v0.1.0-pre11` — nothing was
+   announced — while the four CLI distributions were still built and retained as
+   `ceremony-cli-preview-*` workflow artifacts. That is the rehearsable release this ADR is for:
+   a tag that exercises everything and publishes nothing.
 
 ## Production gates that remain open
 
@@ -290,5 +305,6 @@ production trusted-setup ceremony. ZeroJ remains experimental research software.
   settings. `environment: release` in `publish-central.yml` is only an approval gate if it does;
   without reviewers it is a no-op label and the workflow publishes on dispatch alone. This
   cannot be done from the repository contents.
-- The staged deployment from the `v0.1.0-pre12-dev1` rehearsal must be **dropped** in the
-  Portal, not published.
+- The staged deployment from the `v0.1.0-pre12-dev1` rehearsal —
+  `f04ee872-a2f5-4444-8d6c-a647dde1e2f3` — must be **dropped** in the Portal, not published. It
+  is a dev build and would otherwise occupy `org.zeroj:*:0.1.0-pre12-dev1` on Central forever.
