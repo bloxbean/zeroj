@@ -86,14 +86,12 @@ public final class PowersOfTau {
         // Store tau for Groth16Setup (development-only — production .ptau files don't expose tau)
         BigInteger tauForSetup = tau;
 
-        // Discard toxic waste from local variables — best-effort in Java.
-        // NOTE: BigInteger is immutable. Reassigning tau = ZERO does NOT overwrite the original
-        // object's internal int[] in memory. The original tau value persists until GC collects it.
-        // Intermediate tauPow values also litter the heap as unreachable BigInteger objects.
-        // For a development-only tool this is acceptable. For production MPC ceremonies,
-        // use native memory (MemorySegment) with explicit zeroing.
+        // Clear owned mutable buffers/references as lifetime hygiene only. BigInteger objects,
+        // their derived values, JVM copies and the intentionally returned tauForSetup are not
+        // erased. This dev-only API offers no reliable heap-zeroization or constant-time contract.
+        // A future production secret-processing implementation requires a separate reviewed design;
+        // moving one buffer off-heap alone would not establish that contract.
         Arrays.fill(tauBytes, (byte) 0);
-        tau = BigInteger.ZERO;
         tauPow = BigInteger.ZERO;
 
         return new PtauImporter.SRS(tauG1, tauG2, power, tauForSetup);

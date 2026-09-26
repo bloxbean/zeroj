@@ -57,3 +57,9 @@ dependencies {
     implementation 'org.zeroj:zeroj-crypto'
 }
 ```
+
+Development setup does not securely erase immutable Java secret scalars. Tau and derived
+objects can survive on the heap, and tau is intentionally retained for local phase 2. Run
+these APIs only in isolated development processes without real private witnesses; disposing
+of that process reduces lifetime but is not a guarantee against dumps, swap or host compromise.
+Heap and streaming setup share this limitation. See ADR-0013's issue #49 clarification.

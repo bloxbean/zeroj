@@ -69,7 +69,7 @@ zeroj-crypto/
 // Generate a Powers of Tau SRS (single-party, NOT for production)
 var srs = PowersOfTau.generate(CurveId.BN254, power: 12);
 // Produces tau^i * G1 for i=0..2^12 and tau^i * G2 for i=0..1
-// The toxic waste (tau) is securely discarded after generation
+// Development-only: tau is retained for phase 2; immutable Java secrets are not securely erased
 
 // Groth16 Phase 2: compile R1CS + SRS → proving key
 var pk = Groth16Setup.setup(r1cs, srs);
@@ -99,7 +99,7 @@ var pk = Groth16Setup.setup(r1cs, srs);
 The `PowersOfTau.generate()` method MUST:
 1. Print a clear warning to stderr: `"WARNING: Single-party Powers of Tau — for development/testing only. Use MPC ceremony outputs for production."`
 2. Be annotated with `@DevelopmentOnly` or equivalent documentation
-3. Securely zero the toxic waste (`tau`) after computing the SRS points
+3. State that immutable Java secrets are not securely erased; clear owned mutable buffers only as lifetime hygiene
 4. Use `SecureRandom` for tau generation
 
 ## Implementation Plan
@@ -109,7 +109,7 @@ The `PowersOfTau.generate()` method MUST:
 1. Sample random `tau` from `SecureRandom` (512-bit, reduced mod Fr)
 2. Compute `tau^i * G1` for i=0..2^power using iterated scalar multiplication
 3. Compute `tau^0 * G2` (= G2 generator) and `tau^1 * G2`
-4. Zero `tau` from memory (overwrite with zeros)
+4. Clear owned mutable buffers/references; do not claim erasure of immutable tau or aliases
 5. Return `PtauImporter.SRS` object (compatible with existing import path)
 
 ### Groth16Setup.setup()
@@ -122,7 +122,7 @@ The `PowersOfTau.generate()` method MUST:
    - `[B_i(tau)]_1` and `[B_i(tau)]_2` for each wire i
    - `[H_j(tau)]_1` for the quotient polynomial basis (Lagrange on coset)
    - `[L_k(tau)]_1` for private wires (includes alpha, beta contribution)
-4. Zero all toxic waste
+4. Do not claim toxic-waste erasure; isolate development setup and discard the process afterward
 5. Return `Groth16ProvingKey`
 
 ## Consequences
@@ -165,7 +165,7 @@ scalar multiplication) must be implemented first.**
 | Risk | Severity | Mitigation |
 |------|----------|------------|
 | Developer uses single-party SRS in production | High | Loud warning in generate(), documentation, annotation |
-| Toxic waste not properly zeroed | Medium | Use `Arrays.fill(0)` + volatile write; Java has no guaranteed memory zeroing but best-effort is standard |
+| Toxic waste not properly zeroed | Medium | No reliable heap-erasure claim; explicit dev-only isolation, no production ceremony secrets, imported verified/pinned artifacts |
 | Groth16 Phase 2 computation errors | High | Cross-validate: generate .zkey with snarkjs, import with ZkeyImporter, compare proving key points |
 | Performance of setup for large circuits | Low | Setup is one-time; acceptable to be slow |
 
@@ -175,3 +175,24 @@ scalar multiplication) must be implemented first.**
 - [Hermez Phase 1 ceremony](https://blog.hermez.io/hermez-cryptographic-setup/)
 - [snarkjs Powers of Tau implementation](https://github.com/iden3/snarkjs/blob/master/src/powersoftau_new.js)
 - ADR-0012: Pure Java Provers for Groth16 and PlonK
+
+## Secret-lifetime clarification (issue #49, 2026-09-26)
+
+Risk: R3 documentation of the existing development-only trust boundary, with removal of
+misleading local-reference assignments. Secret values are tau, alpha, beta, gamma, delta,
+inverses and derived QAP/field intermediates. Their arithmetic remains variable-time, and
+immutable BigInteger instances, aliases, GC copies, swap and dumps cannot be reliably erased
+by assigning a local to ZERO or filling an array of references. Tau is intentionally returned
+for development phase 2. The same limitation applies to heap and streaming setup and BN254.
+
+Use an isolated development process without real private witnesses; avoid retaining its dumps
+or swap and terminate it afterward. These measures reduce exposure, not guarantee erasure.
+The existing TrustedSetupPolicy opt-in remains mandatory. Production uses independently
+verified, hash-pinned ceremony outputs appropriate to the curve and exact circuit; the earlier
+Hermez example is BN254-only, not a BLS12-381 source. A Java single-party setup is not an MPC
+ceremony merely because its scalar references were cleared.
+
+Any future production-secret setup/contributor implementation needs its own accepted R3
+design, pinned reference protocol, ownership/wipe and side-channel evidence, and independent
+review. Mutable/off-heap storage alone does not meet those gates. This clarification does not
+change proof bytes, setup equations, randomness, validation, opt-in behavior or maturity.

@@ -33,6 +33,12 @@ import java.util.Map;
  *   <li>Compute proving key points via scalar multiplication on G1/G2 generators</li>
  *   <li>Compute H points as odd-indexed Lagrange basis on double-sized domain / delta</li>
  * </ol>
+ *
+ * <p>Development setup retains immutable secret scalars and derived values on the JVM heap.
+ * Neither heap nor streaming setup guarantees erasure or constant-time processing. Use only
+ * in an isolated development process without real private witnesses, and discard that process
+ * after setup. Process exit is not a guarantee against swap, dumps or host compromise.
+ * Production keys must come from an independently verified, hash-pinned MPC ceremony.</p>
  */
 public final class Groth16Setup {
 
@@ -185,8 +191,7 @@ public final class Groth16Setup {
             pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(hVal).toAffine();
         }
 
-        // Securely discard toxic waste (best-effort — see PowersOfTau.java for caveats)
-        alpha = beta = gamma = delta = BigInteger.ZERO;
+        // Immutable scalar objects and derived aliases are not erased by Java reference rebinding.
 
         return new Groth16ProvingKey(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,

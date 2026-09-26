@@ -20,7 +20,7 @@ import java.util.Arrays;
  *
  * <p>For production, use SRS from established multi-party computation (MPC) ceremonies:</p>
  * <ul>
- *   <li><a href="https://github.com/iden3/snarkjs#7-prepare-phase-2">Hermez Phase 1</a> (54 contributors, 2^28)</li>
+ *   <li>A verified BLS12-381 ceremony lineage; see ADR-0031 for the pending Filecoin conversion gates.</li>
  *   <li><a href="https://github.com/privacy-scaling-explorations/perpetualpowersoftau">Perpetual Powers of Tau</a> (70+ contributors)</li>
  *   <li><a href="https://github.com/ebfull/powersoftau">Zcash Powers of Tau</a> (87 contributors)</li>
  * </ul>
@@ -51,7 +51,7 @@ public final class PowersOfTauBLS381 {
 
         System.err.println("WARNING: Single-party Powers of Tau generation (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "
-                + "Use MPC ceremony outputs (Hermez, Zcash PoT) for production.");
+                + "Use independently verified, hash-pinned BLS12-381 MPC ceremony outputs for production.");
 
         var rng = new SecureRandom();
         int n = 1 << power;
@@ -87,14 +87,12 @@ public final class PowersOfTauBLS381 {
         // Store tau for Groth16SetupBLS381 (development-only — production .ptau files don't expose tau)
         BigInteger tauForSetup = tau;
 
-        // Discard toxic waste from local variables — best-effort in Java.
-        // NOTE: BigInteger is immutable. Reassigning tau = ZERO does NOT overwrite the original
-        // object's internal int[] in memory. The original tau value persists until GC collects it.
-        // Intermediate tauPow values also litter the heap as unreachable BigInteger objects.
-        // For a development-only tool this is acceptable. For production MPC ceremonies,
-        // use native memory (MemorySegment) with explicit zeroing.
+        // Clear owned mutable buffers/references as lifetime hygiene only. BigInteger objects,
+        // their derived values, JVM copies and the intentionally returned tauForSetup are not
+        // erased. This dev-only API offers no reliable heap-zeroization or constant-time contract.
+        // A future production secret-processing implementation requires a separate reviewed design;
+        // moving one buffer off-heap alone would not establish that contract.
         Arrays.fill(tauBytes, (byte) 0);
-        tau = BigInteger.ZERO;
         Arrays.fill(tauPows, BigInteger.ZERO);
 
         return new PtauImporterBLS381.SRS(tauG1, tauG2, power, tauForSetup);

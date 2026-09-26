@@ -66,6 +66,12 @@ import java.util.Map;
  * {@code IC} scalars are checked for zero before any proving-key point is generated or any store
  * file is written ({@link IllegalStateException}, invariant S2). A native setup never writes
  * {@code AffineG1.INFINITY} into {@code IC}.</p>
+ *
+ * <p>Development setup retains immutable secret scalars and derived values on the JVM heap.
+ * Neither heap nor streaming setup guarantees erasure or constant-time processing. Use only
+ * in an isolated development process without real private witnesses, and discard that process
+ * after setup. Process exit is not a guarantee against swap, dumps or host compromise.
+ * Production keys must come from an independently verified, hash-pinned MPC ceremony.</p>
  */
 public final class Groth16SetupBLS381 {
 
@@ -198,7 +204,7 @@ public final class Groth16SetupBLS381 {
                 pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine());
 
         // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
-        // (final aliases: alpha/beta are scrubbed as toxic waste after the PK is built, below)
+        // Final aliases for parallel workers; neither these nor the original BigIntegers are zeroized.
         final BigInteger alphaF = alpha, betaF = beta, deltaInvF = deltaInv;
         int numPrivate = numWires - numPublic - 1;
         long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
@@ -249,8 +255,7 @@ public final class Groth16SetupBLS381 {
             ic[s] = FixedBaseG1BLS381.mulAffine(icScalars[s]);
         }
 
-        // Securely discard toxic waste (best-effort — see PowersOfTauBLS381.java for caveats)
-        alpha = beta = gamma = delta = BigInteger.ZERO;
+        // Immutable scalar objects and derived aliases are not erased by Java reference rebinding.
 
         var pk = new Groth16ProvingKeyBLS381(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,
@@ -511,7 +516,7 @@ public final class Groth16SetupBLS381 {
             var segL = mapG1Out(dir.resolve("pointsL.bin"), numPrivate, sparse, lScalars, arena);
             streamG1(segL.seg, numPrivate, lScalars, segL.offsets);
             segL.seg.force();
-            // QAP arrays done (H needs none of them) — scrub: they are tau-derived secrets
+            // Clear these mutable QAP arrays after use; this does not erase other copies or JVM temporaries.
             Arrays.fill(usM, 0L);
             Arrays.fill(vsM, 0L);
             Arrays.fill(wsM, 0L);
