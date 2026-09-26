@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -90,6 +91,31 @@ class BlstBls12381ProviderTest {
         assertEquals(
                 PURE.pairingProductIsIdentity(new G1Point[]{g1, negG1}, new G2Point[]{g2, g2}),
                 BLST.pairingProductIsIdentity(new G1Point[]{g1, negG1}, new G2Point[]{g2, g2}));
+    }
+
+    @Test
+    void seededPairingProductsMatchIndependentNativeOracle() {
+        // blst-java 0.3.2 is pinned in this module's build; public test scalars only.
+        Random random = new Random(0x47B1A5L);
+        BigInteger r = Bls12381Generators.SCALAR_FIELD_ORDER;
+        for (int trial = 0; trial < 12; trial++) {
+            BigInteger a = new BigInteger(254, random).add(BigInteger.ONE);
+            BigInteger b = new BigInteger(254, random).add(BigInteger.ONE);
+            BigInteger c = new BigInteger(254, random).add(BigInteger.ONE);
+            BigInteger d = new BigInteger(254, random).add(BigInteger.ONE);
+            BigInteger cancel = a.multiply(b).add(c.multiply(d)).negate().mod(r);
+            G1Point[] ps = {BLST.g1ScalarMul(BLST.g1Generator(), a),
+                    BLST.g1ScalarMul(BLST.g1Generator(), c),
+                    BLST.g1ScalarMul(BLST.g1Generator(), cancel)};
+            G2Point[] qs = {BLST.g2ScalarMul(BLST.g2Generator(), b),
+                    BLST.g2ScalarMul(BLST.g2Generator(), d), BLST.g2Generator()};
+            assertTrue(BLST.pairingProductIsIdentity(ps, qs), "native identity trial=" + trial);
+            assertTrue(PURE.pairingProductIsIdentity(ps, qs), "Java identity trial=" + trial);
+            // A one-generator perturbation leaves a nontrivial e(G1,G2) factor.
+            ps[2] = BLST.g1Add(ps[2], BLST.g1Generator());
+            assertFalse(BLST.pairingProductIsIdentity(ps, qs), "native negative trial=" + trial);
+            assertFalse(PURE.pairingProductIsIdentity(ps, qs), "Java negative trial=" + trial);
+        }
     }
 
     @Test

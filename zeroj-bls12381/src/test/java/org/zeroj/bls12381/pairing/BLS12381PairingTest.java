@@ -105,8 +105,8 @@ class BLS12381PairingTest {
 
     // Self-pinned regression vector in ZeroJ's Fp12 tower layout. Bilinearity,
     // non-degeneracy, and e^r checks above provide the independent correctness gates.
-    // Replace or corroborate this with an external coefficient vector when a compatible
-    // blst/zkcrypto Fp12 serialization is available.
+    // ExternalPairingKatTest in zeroj-crypto now corroborates all 12 coefficients against
+    // locked ffjavascript 0.3.1, accounting for its cubed final-exponent convention (ADR-0047).
     private static Fp12 generatorPairingKat() {
         return fp12(
                 "11619b45f61edfe3b47a15fac19442526ff489dcda25e59121d9931438907dfd448299a87dde3a649bdba96e84d54558",
