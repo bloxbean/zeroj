@@ -1,0 +1,76 @@
+name: Documentation site
+
+# Builds the zeroj.dev docsite (www/) on every PR that can change it, and publishes it to the
+# gh-pages branch from main. The site also reads ZeroJ sources at build time (versions, the circuit
+# API catalog, and the API-reference check), so Java source changes can break it too.
+
+on:
+  pull_request:
+    paths:
+      - 'www/**'
+      - 'gradle.properties'
+      - 'build.gradle'
+      - 'zeroj-*/src/main/java/**'
+      - 'zeroj-onchain-julc/build.gradle'
+      - '.github/workflows/docs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'www/**'
+      - 'gradle.properties'
+      - 'build.gradle'
+      - 'zeroj-*/src/main/java/**'
+      - 'zeroj-onchain-julc/build.gradle'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: www
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: www/package-lock.json
+      - run: npm ci
+      - name: Type-check pages and verify Java snippets against ZeroJ sources
+        run: npm run check
+      - name: Build site, AI artifacts and link/checksum verification
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeroj-docs-site
+          path: www/dist
+
+  publish:
+    if: github.repository == 'bloxbean/zeroj' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zeroj-docs-site
+          path: site
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site
+          cname: zeroj.dev
