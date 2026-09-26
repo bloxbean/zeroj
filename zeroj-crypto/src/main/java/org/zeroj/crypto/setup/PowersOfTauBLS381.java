@@ -18,14 +18,9 @@ import java.util.Arrays;
  * <p><b>WARNING: This is a single-party generator. The toxic waste (tau) is known
  * to a single party. DO NOT use this for production deployments.</b></p>
  *
- * <p>For production, use SRS from established multi-party computation (MPC) ceremonies:</p>
- * <ul>
- *   <li>A verified BLS12-381 ceremony lineage; see ADR-0031 for the pending Filecoin conversion gates.</li>
- *   <li><a href="https://github.com/privacy-scaling-explorations/perpetualpowersoftau">Perpetual Powers of Tau</a> (70+ contributors)</li>
- *   <li><a href="https://github.com/ebfull/powersoftau">Zcash Powers of Tau</a> (87 contributors)</li>
- * </ul>
- *
- * <p>These can be imported with {@link PtauImporterBLS381#importPtau(java.io.InputStream)}.</p>
+ * <p>For production, use independently verified, hash-pinned BLS12-381 ceremony outputs.
+ * ADR-0031 records the selected Filecoin source and still-open conversion/review gates.
+ * BN254 Hermez/Perpetual Powers of Tau artifacts cannot be used on BLS12-381.</p>
  */
 public final class PowersOfTauBLS381 {
 
