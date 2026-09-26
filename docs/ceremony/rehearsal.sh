@@ -20,13 +20,13 @@ PICO_JAR=$(find ~/.gradle/caches/modules-2/files-2.1/info.picocli -name 'picocli
 CP="$ROOT/zeroj-tools/build/classes/java/main:$ROOT/zeroj-tools/build/classes/java/test"
 CP="$CP:$ROOT/zeroj-crypto/build/classes/java/main:$ROOT/zeroj-circuit-dsl/build/classes/java/main"
 CP="$CP:$ROOT/zeroj-api/build/classes/java/main:$ROOT/zeroj-bls12381/build/classes/java/main:$BC_JAR:$PICO_JAR"
-CLI="java -cp $CP com.bloxbean.cardano.zeroj.ceremony.CeremonyCli"
+CLI="java -cp $CP org.zeroj.ceremony.CeremonyCli"
 
 echo ">> Rehearsal workdir: $WORK"
 cd "$WORK"
 
 echo ">> [coordinator] export the circuit"
-$CLI export-r1cs --circuit com.bloxbean.cardano.zeroj.ceremony.MulFixtureCircuit --out mul.r1cs
+$CLI export-r1cs --circuit org.zeroj.ceremony.MulFixtureCircuit --out mul.r1cs
 
 echo ">> [coordinator] phase 1 (rehearsal-scale ptau) + key genesis"
 "$SNARKJS" powersoftau new bls12-381 8 pot0.ptau

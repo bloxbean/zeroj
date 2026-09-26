@@ -1,0 +1,13 @@
+[
+  {
+    "name": "org.zeroj.bbs.BbsCiphersuite",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.bbs.verifier.BbsZkVerifier",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  }
+]

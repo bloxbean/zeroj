@@ -10,6 +10,14 @@ transcript, domain separator, public-input order, circuit relation, canonical
 encoding, trusted-setup rule, or validation rule changes. No maturity, audit,
 side-channel, production, or mainnet claim is upgraded.
 
+> **Namespace note.** Every coordinate and package on this page is written in the
+> pre-`org.zeroj` namespace, because that is the namespace the artifacts it describes
+> were actually published under (`0.1.0-pre11` and earlier). ADR-0048 moved the group
+> to `org.zeroj` and the package root to `org.zeroj.*` from `0.1.0-pre12` on; the
+> replacements named below now live at `org.zeroj:<same-artifact>` with
+> `org.zeroj.<same-subpackage>` packages. See
+> [migration 0048](0048-org-zeroj-namespace.md).
+
 ## Removed coordinates
 
 | Old coordinate | Migration |

@@ -45,6 +45,6 @@ VerificationResult result = orchestrator.verify(envelope, material);
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
+    implementation 'org.zeroj:zeroj-verifier-groth16'
 }
 ```

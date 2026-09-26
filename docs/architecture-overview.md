@@ -120,7 +120,7 @@ Java circuit definition and compilation:
 ### Layer 6: Orchestration (`zeroj-backend-spi`)
 `VerifierRegistry` and `VerifierOrchestrator` route verification requests to the
 correct backend based on proof system and curve. They live in
-`zeroj-backend-spi` and keep their `com.bloxbean.cardano.zeroj.verifier.core`
+`zeroj-backend-spi` and keep their `org.zeroj.verifier.core`
 package; ADR-0044 merged the former `zeroj-verifier-core` artifact into the SPI
 artifact without changing selection, key lookup, result, or failure semantics.
 

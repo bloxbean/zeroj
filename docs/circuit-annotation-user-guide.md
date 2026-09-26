@@ -174,7 +174,7 @@ Every annotated circuit should have tests for:
 - backend compilation for the curve and proof system you intend to use
 
 The examples in
-`zeroj-integration-tests/src/test/java/com/bloxbean/cardano/zeroj/examples/annotation`
+`zeroj-integration-tests/src/test/java/org/zeroj/examples/annotation`
 show this pattern without requiring external prover tooling.
 
 ## Proof Flow Integration

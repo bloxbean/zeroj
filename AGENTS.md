@@ -32,8 +32,8 @@ Do not upgrade maturity/security claims based solely on:
 
 - Java 25
 - maintain GraalVM compatibility where the module promises it
-- package namespace should remain under `com.bloxbean.cardano.zeroj`
-- Maven group is `com.bloxbean.cardano`
+- package namespace should remain under `org.zeroj`
+- Maven group is `org.zeroj`
 
 Use the Gradle wrapper.
 

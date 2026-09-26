@@ -16,7 +16,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'com.bloxbean.cardano.zeroj.mpf.load.PoseidonMpfLoadMain'
+    mainClass = 'org.zeroj.mpf.load.PoseidonMpfLoadMain'
 }
 
 tasks.named('processResources') {

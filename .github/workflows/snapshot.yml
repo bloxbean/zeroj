@@ -33,8 +33,11 @@ jobs:
       - name: Assert the default graph has no assurance/benchmark/removed-provider edge
         run: ./gradlew verifyDefaultModuleSurface --stacktrace
 
+      # Snapshots go straight to the Central Portal snapshot repository; unlike a release there is
+      # no staged deployment and nothing to approve. Requires a -SNAPSHOT version in
+      # gradle.properties.
       - name: Publish snapshot
-        run: ./gradlew publish -PskipSigning=true --stacktrace
+        run: ./gradlew publishAggregationToCentralPortalSnapshots -PskipSigning=true --stacktrace
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}

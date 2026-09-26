@@ -13,9 +13,9 @@ without extracting raw `Signal` values and wrapping results manually.
 ## Implemented Changes
 
 - Added `zeroj-circuit-lib` dependency on `zeroj-circuit-annotation-api`.
-- Added `com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMiMC`.
-- Added `com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkPoseidon`.
-- Added `com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMerkle`.
+- Added `org.zeroj.circuit.lib.zk.ZkMiMC`.
+- Added `org.zeroj.circuit.lib.zk.ZkPoseidon`.
+- Added `org.zeroj.circuit.lib.zk.ZkMerkle`.
 - Added `ZkMerkle.HashType` with `MIMC` and `POSEIDON` choices.
 - Added `ZkMerkle.HashFn` for custom symbolic two-to-one hash functions.
 - Added BN254 field guards to existing MiMC gadgets.
@@ -49,10 +49,10 @@ without extracting raw `Signal` values and wrapping results manually.
 
 ## Verification
 
-- `./gradlew :zeroj-circuit-lib:test --tests com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest` passed after blocker fixes.
+- `./gradlew :zeroj-circuit-lib:test --tests org.zeroj.circuit.lib.zk.ZkGadgetAdaptersTest` passed after blocker fixes.
 - `./gradlew :zeroj-circuit-lib:test` passed.
 - `./gradlew :zeroj-circuit-annotation-api:test :zeroj-circuit-annotation-processor:test` passed.
-- `rg -n "[[:blank:]]$" docs/adr/circuit-annotation zeroj-circuit-lib/src/main/java/com/bloxbean/cardano/zeroj/circuit/lib/zk zeroj-circuit-lib/src/test/java/com/bloxbean/cardano/zeroj/circuit/lib/zk zeroj-circuit-lib/build.gradle zeroj-circuit-lib/README.md zeroj-circuit-lib/src/main/java/com/bloxbean/cardano/zeroj/circuit/lib/MiMC.java zeroj-circuit-lib/src/main/java/com/bloxbean/cardano/zeroj/circuit/lib/SignalMiMC.java` passed.
+- `rg -n "[[:blank:]]$" docs/adr/circuit-annotation zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk zeroj-circuit-lib/src/test/java/org/zeroj/circuit/lib/zk zeroj-circuit-lib/build.gradle zeroj-circuit-lib/README.md zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/MiMC.java zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/SignalMiMC.java` passed.
 - `git diff --cached --check` passed.
 
 ## Review Results

@@ -75,7 +75,7 @@ bbs-cfrg-draft10-presentation-cbor-v1
 
 ## On-Chain Verification (Cardano)
 
-`com.bloxbean.cardano.zeroj.bbs.cardano.BbsToCardano` bridges a presentation to a
+`org.zeroj.bbs.cardano.BbsToCardano` bridges a presentation to a
 Cardano on-chain BBS verifier. It is plain off-chain Java (runs in the application
 JVM, no Julc/Plutus dependency) and produces the two things an on-chain validator
 needs:
@@ -112,7 +112,7 @@ policy.
 `zeroj-bbs-wasm` provides an explicit opt-in provider:
 
 ```java
-var provider = com.bloxbean.cardano.zeroj.bbs.wasm.WasmBbsProvider.createDefault();
+var provider = org.zeroj.bbs.wasm.WasmBbsProvider.createDefault();
 var service = new BbsService(provider);
 ```
 
@@ -125,7 +125,7 @@ the Rust/Chicory `zeroj-bls12381-wasm` module.
 without changing the BBS API:
 
 ```java
-var bls = com.bloxbean.cardano.zeroj.blst.BlstBls12381Provider.createDefault();
+var bls = org.zeroj.blst.BlstBls12381Provider.createDefault();
 var service = BbsService.withBlsProvider(BbsCiphersuite.BLS12381_SHA256, bls);
 ```
 

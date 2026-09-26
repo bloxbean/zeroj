@@ -46,9 +46,9 @@ wrapper. See [ADR-0029](adr/0029-blst-accelerated-groth16-prover.md).
 ### Gradle
 
 ```gradle
-implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
-implementation 'com.bloxbean.cardano:zeroj-crypto'
-implementation 'com.bloxbean.cardano:zeroj-crypto-blst'   // opt-in acceleration
+implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
+implementation 'org.zeroj:zeroj-crypto'
+implementation 'org.zeroj:zeroj-crypto-blst'   // opt-in acceleration
 ```
 
 ## snarkjs CLI

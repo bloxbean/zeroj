@@ -230,5 +230,5 @@ On-chain PlonK validator:
 - `docs/adr/0022-0023-plonk-hardening-response.md`
 - `docs/adr/0024-plonk-release-gates-and-multi-public-input-profile.md`
 - ADR-0021: BLS12-381 Implementation Review Outcomes and Hardening Posture
-- `zeroj-crypto/src/main/java/com/bloxbean/cardano/zeroj/crypto/plonk/{PtauImporter,PlonKZkeyImporter,PlonKSetup,PlonKProver}.java`
+- `zeroj-crypto/src/main/java/org/zeroj/crypto/plonk/{PtauImporter,PlonKZkeyImporter,PlonKSetup,PlonKProver}.java`
 - PlonK paper: <https://eprint.iacr.org/2019/953>

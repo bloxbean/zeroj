@@ -41,7 +41,7 @@ ZkField commitment = ZkPoseidonN.hash(
 
 The adapter:
 
-- live in `com.bloxbean.cardano.zeroj.circuit.lib.zk`
+- live in `org.zeroj.circuit.lib.zk`
 - accept `ZkContext`, explicit `PoseidonParams`, and `ZkField... inputs`
 - reject empty input lists
 - reject null inputs

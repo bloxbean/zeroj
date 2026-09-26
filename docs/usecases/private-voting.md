@@ -296,7 +296,7 @@ Two scripts work together:
 ### Minting Policy — Validates ZK Proof
 
 ```java
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
+import org.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 
 @MintingValidator
 public class VoteMintingPolicy {

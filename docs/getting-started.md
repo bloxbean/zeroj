@@ -127,8 +127,8 @@ The complete helper is shown in `PureJavaProverYaciE2ETest`; it computes the Gro
 ZeroJ includes reusable Plutus V3 validators compiled from Java via Julc. The VK is baked into the script at deploy time:
 
 ```java
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.codec.ProverToCardano;
-import com.bloxbean.cardano.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
+import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
+import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 
 // Compress proof + VK for on-chain BLS format
 var compressedVk = ProverToCardano.compressVk(setupResult);

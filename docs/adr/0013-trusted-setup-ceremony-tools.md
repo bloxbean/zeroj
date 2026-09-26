@@ -56,7 +56,7 @@ These ceremony outputs can be imported directly using `PtauImporter.importPtau()
 
 ```
 zeroj-crypto/
-  src/main/java/com/bloxbean/cardano/zeroj/crypto/
+  src/main/java/org/zeroj/crypto/
     setup/
       PowersOfTau.java        — single-party PoT generator (dev/test only)
       Groth16Setup.java        — Phase 2 setup from R1CS + SRS

@@ -145,15 +145,15 @@ the existing package and module location will not be preserved through a forward
 classes move from:
 
 ```text
-com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMpf
-com.bloxbean.cardano.zeroj.circuit.lib.zk.ZkMpfProof
+org.zeroj.circuit.lib.zk.ZkMpf
+org.zeroj.circuit.lib.zk.ZkMpfProof
 ```
 
 to the MPF-owned circuit package:
 
 ```text
-com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit.ZkMpf
-com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit.ZkMpfProof
+org.zeroj.merkle.mpf.poseidon.circuit.ZkMpf
+org.zeroj.merkle.mpf.poseidon.circuit.ZkMpfProof
 ```
 
 The move retains the full feature as a migration/reference circuit; it does not promise Java
@@ -429,13 +429,13 @@ The module responsibilities are:
 The structure packages are:
 
 ```text
-com.bloxbean.cardano.zeroj.merkle.mpf.poseidon
+org.zeroj.merkle.mpf.poseidon
     profile
     ccl
     witness
     circuit
 
-com.bloxbean.cardano.zeroj.merkle.jmt.poseidon
+org.zeroj.merkle.jmt.poseidon
     profile
     ccl
     witness
@@ -534,7 +534,7 @@ R1CS identities, and real CCL differential checks. Current inclusion profiles ar
 constraints at S8, 56,635 at S9, and 74,236 at S12.
 
 1. Move `ZkMpf` and `ZkMpfProof` from `zeroj-circuit-lib` into the MPF module and the
-   `com.bloxbean.cardano.zeroj.merkle.mpf.poseidon.circuit` package.
+   `org.zeroj.merkle.mpf.poseidon.circuit` package.
 2. Move only genuinely structure-neutral Poseidon, binary-Merkle, canonical-field, nibble, and
    padding helpers into appropriate `zeroj-circuit-lib` packages. Keep all MPF node/proof semantics
    in `zeroj-mpf-poseidon`.
@@ -574,7 +574,7 @@ profile manifest, rollback/pruning policy, in-flight crash recovery, and golden 
 The durable store enforces one logical writer and fails closed on foreign or ahead manifests.
 
 1. Add `zeroj-jmt-poseidon` under
-   `com.bloxbean.cardano.zeroj.merkle.jmt.poseidon` with a stable `JmtProfile.custom(...)`, hash
+   `org.zeroj.merkle.jmt.poseidon` with a stable `JmtProfile.custom(...)`, hash
    adapter, commitment scheme, proof codec integration, normalized witnesses, and fail-closed
    format descriptor.
 2. Add in-memory and RocksDB tests for inclusion, both non-inclusion forms, version replay, reopen,

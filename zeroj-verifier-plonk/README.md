@@ -75,6 +75,6 @@ The transcript must match the prover's byte layout exactly. The current implemen
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-verifier-plonk'
+    implementation 'org.zeroj:zeroj-verifier-plonk'
 }
 ```

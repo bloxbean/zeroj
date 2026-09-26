@@ -18,8 +18,8 @@ when you want the fast prover; it transitively brings in `zeroj-crypto` + `zeroj
 ## Use
 
 ```java
-import com.bloxbean.cardano.zeroj.cryptoblst.BlstProverBackend;
-import com.bloxbean.cardano.zeroj.crypto.groth16.Groth16ProverBLS381;
+import org.zeroj.cryptoblst.BlstProverBackend;
+import org.zeroj.crypto.groth16.Groth16ProverBLS381;
 
 var readers = Groth16ProverBLS381.heapReaders(pk);
 var proof = Groth16ProverBLS381.proveWithReaders(

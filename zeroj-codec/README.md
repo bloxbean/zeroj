@@ -45,6 +45,6 @@ byte[] hash = CanonicalHash.hash(envelope);
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-codec'
+    implementation 'org.zeroj:zeroj-codec'
 }
 ```

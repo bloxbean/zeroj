@@ -3,7 +3,8 @@ plugins {
     id 'maven-publish'
     id 'signing'
     id 'org.ajoberstar.grgit' version '5.2.0'
-    id 'io.github.gradle-nexus.publish-plugin' version '2.0.0'
+    id 'com.gradleup.nmcp' version '1.6.2' apply false
+    id 'com.gradleup.nmcp.aggregation' version '1.6.2'
 }
 
 allprojects {
@@ -23,16 +24,33 @@ ext.ossrhUsername = System.getenv('MAVEN_USERNAME')
 ext.ossrhPassword = System.getenv('MAVEN_PASSWORD')
 ext.cclVersion = '0.8.0-pre5'
 
-nexusPublishing {
-    repositories {
-        sonatype {
-            nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
-            snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
-            username = ossrhUsername
-            password = ossrhPassword
-        }
+// Central Portal publishing through the native publisher API (nmcp), replacing the legacy OSSRH
+// staging API. `USER_MANAGED` uploads the deployment and stops at VALIDATED: nothing reaches Maven
+// Central until a human publishes it, from the portal UI or through the approval-gated
+// .github/workflows/publish-central.yml. Publishing a version can never be undone, so it is
+// deliberately not a consequence of pushing a tag.
+// Do not set `publishingTimeout` here — nmcp rejects it under USER_MANAGED.
+nmcpAggregation {
+    centralPortal {
+        username = ossrhUsername
+        password = ossrhPassword
+        publishingType = 'USER_MANAGED'
+        // Names the pending deployment in the portal list. The deployment id itself is assigned
+        // by the server and reported by the upload task.
+        publicationName = "zeroj:${project.version}"
+        // The aggregate carries every module with its sources and javadoc; the 10 minute default
+        // validation wait is tight for it.
+        validationTimeout = java.time.Duration.ofMinutes(30)
     }
 }
+
+// ADR-0044: the assurance (WASM differential providers), benchmark (MPF/JMT load tools), and
+// test-vector/integration-test projects are never published, even when their opt-in settings flag
+// puts them in the build. Declared at root scope because both the per-project publishing block and
+// the Central deployment scope below are derived from it.
+ext.nonPublishable = ['zeroj-test-vectors', 'zeroj-integration-tests',
+                      'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load',
+                      'zeroj-bls12381-wasm', 'zeroj-bbs-wasm']
 
 subprojects {
     def commit_id = getCheckedOutGitCommitHash()
@@ -70,6 +88,10 @@ subprojects {
         options.encoding = 'UTF-8'
         options.addStringOption('-release', '25')
         options.addStringOption('Xdoclint:none', '-quiet')
+        // JDK 21+ embeds ~3.9 MB of DejaVu web fonts in every javadoc output. Across the
+        // published modules that is tens of MB of byte-identical fonts in the Central
+        // deployment, for a page style that falls back to system fonts without them.
+        options.addBooleanOption('-no-fonts', true)
         failOnError = false
     }
 
@@ -97,15 +119,13 @@ subprojects {
         }
     }
 
-    // Publishing for publishable modules. ADR-0044: the assurance (WASM differential providers),
-    // benchmark (MPF/JMT load tools), and integration-test projects are never published, even when
-    // their opt-in settings flag puts them in the build.
-    def nonPublishable = ['zeroj-test-vectors', 'zeroj-integration-tests',
-                          'zeroj-mpf-poseidon-load', 'zeroj-jmt-poseidon-load',
-                          'zeroj-bls12381-wasm', 'zeroj-bbs-wasm']
-    if (!nonPublishable.contains(project.name)) {
+    // Publishing for publishable modules; the never-published set is rootProject.ext.nonPublishable.
+    if (!rootProject.ext.nonPublishable.contains(project.name)) {
         apply plugin: 'maven-publish'
         apply plugin: 'signing'
+        // Exposes this project's publications to the root nmcpAggregation. Which of them actually
+        // reach Central is decided by the aggregation dependencies below, not by this apply.
+        apply plugin: 'com.gradleup.nmcp'
 
         java {
             withSourcesJar()
@@ -114,17 +134,8 @@ subprojects {
 
         afterEvaluate {
             publishing {
-                repositories {
-                    maven {
-                        def releasesRepoUrl = "https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/"
-                        def snapshotsRepoUrl = "https://central.sonatype.com/repository/maven-snapshots/"
-                        url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
-                        credentials {
-                            username rootProject.ext.ossrhUsername
-                            password rootProject.ext.ossrhPassword
-                        }
-                    }
-                }
+                // No `repositories` block: releases and snapshots both leave through the Central
+                // Portal aggregation at the root (nmcpAggregation), not a per-project OSSRH URL.
                 publications {
                     mavenJava(MavenPublication) {
                         from components.java
@@ -161,6 +172,61 @@ subprojects {
             }
         }
     }
+}
+
+// === Maven Central deployment scope =============================================================
+// Derived from the projects the build actually publishes rather than restated by hand, so it cannot
+// drift: everything except `nonPublishable` owns a Maven publication (`zeroj-bom-core` declares its
+// own in zeroj-bom-core/build.gradle, which is why that script applies the nmcp plugin itself — the
+// `subprojects` block returns early for BOM projects).
+//
+// The root project is deliberately not deployed. It has no sources, so its jar would hold nothing
+// but a manifest, and it only ever had `maven-publish` applied because the whole build does; it
+// declares no publication and the Central Portal rejects a component without sources and javadoc.
+def centralDeploymentProjects = subprojects.toList().findAll { candidate ->
+    !(candidate.name in rootProject.ext.nonPublishable)
+}
+
+dependencies {
+    centralDeploymentProjects.each { candidate ->
+        nmcpAggregation(project(candidate.path))
+    }
+}
+
+// A deployment that silently loses a module is worse than one that fails, so the resolved scope is
+// asserted against the publications the build declares.
+tasks.register('verifyMavenReleasePublicationScope') {
+    group = 'verification'
+    description = 'Asserts the Central deployment covers every Maven publication the build declares.'
+    def expected = centralDeploymentProjects.collect { it.path }.toSet()
+    def allProjects = rootProject.subprojects.toList()
+    doLast {
+        def declared = allProjects.findAll { candidate ->
+            candidate.pluginManager.hasPlugin('maven-publish') &&
+                    !candidate.publishing.publications.withType(MavenPublication).isEmpty()
+        }.collect { it.path }.toSet()
+        def missing = declared - expected
+        def extra = expected - declared
+        if (!missing.isEmpty() || !extra.isEmpty()) {
+            throw new GradleException(
+                    'Central deployment scope does not match declared publications. ' +
+                            "Publishing but not deployed: ${missing.sort()}; " +
+                            "deployed but publishes nothing: ${extra.sort()}")
+        }
+        logger.lifecycle("Central deployment scope check passed (${expected.size()} coordinates).")
+    }
+}
+
+// The scope check must gate the work itself, not the lifecycle alias.
+// `publishAggregationToCentralPortal` is an alias whose dependencies are unordered relative to each
+// other, so hanging the check off it would let the upload run first. Attaching it to the zip — which
+// every portal task depends on — puts the check ahead of both the bundle and the network calls.
+tasks.matching {
+    it.name in ['nmcpZipAggregation',
+                'nmcpPublishAggregationToCentralPortal',
+                'nmcpPublishAggregationToCentralPortalSnapshots']
+}.configureEach {
+    dependsOn 'verifyMavenReleasePublicationScope'
 }
 
 // === ADR-0044 structural guard =================================================================

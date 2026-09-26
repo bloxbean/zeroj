@@ -30,7 +30,7 @@ backend found that the happy path is functional and the focused test suites pass
 
 ```
 ./gradlew :zeroj-verifier-plonk:test --tests '*Plonk*' --tests '*Transcript*'
-./gradlew :zeroj-crypto:test --tests 'com.bloxbean.cardano.zeroj.crypto.plonk.*'
+./gradlew :zeroj-crypto:test --tests 'org.zeroj.crypto.plonk.*'
 ```
 
 The review also found that the implementation is not ready to be treated as a
@@ -398,7 +398,7 @@ adapter with its own transcript, serialization, and vector coverage.
 
 ```
 ./gradlew :zeroj-verifier-plonk:test --tests '*Plonk*' --tests '*Transcript*'
-./gradlew :zeroj-crypto:test --tests 'com.bloxbean.cardano.zeroj.crypto.plonk.*'
+./gradlew :zeroj-crypto:test --tests 'org.zeroj.crypto.plonk.*'
 ```
 
 ## Implementation Plan

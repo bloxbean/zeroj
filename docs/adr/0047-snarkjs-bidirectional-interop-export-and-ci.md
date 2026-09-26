@@ -140,7 +140,7 @@ cube fails visibly.
 
 ## Decision
 
-1. **Exporters live in `zeroj-crypto`, package `com.bloxbean.cardano.zeroj.crypto.snarkjs`:**
+1. **Exporters live in `zeroj-crypto`, package `org.zeroj.crypto.snarkjs`:**
    `SnarkjsGroth16Json` (`proofJson`, `verificationKeyJson` from `Groth16Keys`, from
    `SetupResult`, or from the five components, `publicJson`) and `SnarkjsPlonkJson` (`proofJson`,
    `verificationKeyJson` from `PlonKProvingKeyBLS381` or from components, `publicJson`), sharing a
@@ -242,8 +242,8 @@ Independent evidence, per AGENTS.md "Testing":
   on-curve-but-off-subgroup G1 (the order-3 point `(0, 2)`); scalars `r`, `r+1`, `−1`, `null`;
   non-canonical PlonK `w`; non-power-of-two PlonK domain; negative `nPublic`.
 - **Cross-provider:** pure Java and blst Groth16 verifiers on the same live snarkjs proof.
-- **Local run:** `./gradlew :zeroj-crypto:test --tests 'com.bloxbean.cardano.zeroj.crypto.snarkjs.*'`
-  (no snarkjs needed) and `./gradlew :zeroj-integration-tests:test --tests 'com.bloxbean.cardano.zeroj.it.snarkjs.*'`
+- **Local run:** `./gradlew :zeroj-crypto:test --tests 'org.zeroj.crypto.snarkjs.*'`
+  (no snarkjs needed) and `./gradlew :zeroj-integration-tests:test --tests 'org.zeroj.it.snarkjs.*'`
   (skips without snarkjs; add `-PrequireSnarkjs` to make absence fail).
 
 ## Known gaps

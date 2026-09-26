@@ -11,19 +11,19 @@ declare those with an explicit version (see below).
 
 ```gradle
 dependencies {
-    implementation platform('com.bloxbean.cardano:zeroj-bom-core:0.1.0')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
 
     // Constrained by the BOM — no version needed
-    implementation 'com.bloxbean.cardano:zeroj-circuit-dsl'
-    implementation 'com.bloxbean.cardano:zeroj-circuit-lib'
-    implementation 'com.bloxbean.cardano:zeroj-crypto'
-    implementation 'com.bloxbean.cardano:zeroj-backend-spi'
-    implementation 'com.bloxbean.cardano:zeroj-verifier-groth16'
-    implementation 'com.bloxbean.cardano:zeroj-onchain-julc'
+    implementation 'org.zeroj:zeroj-circuit-dsl'
+    implementation 'org.zeroj:zeroj-circuit-lib'
+    implementation 'org.zeroj:zeroj-crypto'
+    implementation 'org.zeroj:zeroj-backend-spi'
+    implementation 'org.zeroj:zeroj-verifier-groth16'
+    implementation 'org.zeroj:zeroj-onchain-julc'
 
     // Opt-in product modules are OUTSIDE this BOM — give them an explicit version
-    implementation 'com.bloxbean.cardano:zeroj-verifier-plonk:0.1.0'
-    implementation 'com.bloxbean.cardano:zeroj-mpf-poseidon:0.1.0'
+    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0'
+    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0'
 }
 ```
 

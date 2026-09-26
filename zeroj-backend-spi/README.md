@@ -30,12 +30,12 @@ public class MyVerifier implements ZkVerifier {
 }
 ```
 
-Backends are discovered automatically via `ServiceLoader` when registered in `META-INF/services/com.bloxbean.cardano.zeroj.backend.spi.ZkVerifier`.
+Backends are discovered automatically via `ServiceLoader` when registered in `META-INF/services/org.zeroj.backend.spi.ZkVerifier`.
 
 ## Gradle
 
 ```gradle
 dependencies {
-    implementation 'com.bloxbean.cardano:zeroj-backend-spi'
+    implementation 'org.zeroj:zeroj-backend-spi'
 }
 ```

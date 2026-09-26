@@ -164,7 +164,7 @@ fixture":**
    through which a test can fix `(r, s)` is the package-private `BlinderSource` argument of
    `proveBlinded`, which ADR-0045 already introduced for the forced-infinity tests.
 2. A new source set `zeroj-crypto/src/testFixtures` (Gradle `java-test-fixtures`) holds
-   `com.bloxbean.cardano.zeroj.crypto.groth16.Groth16UnblindedTestProver`, a final utility
+   `org.zeroj.crypto.groth16.Groth16UnblindedTestProver`, a final utility
    class whose single method `proveUnblinded(...)` runs the public `computeH`, packs the
    scalars, and calls `proveBlinded` with a blinder source that returns `(0, 0)` exactly once
    and throws on a second draw — which `proveBlinded` requests only when a proof point was the

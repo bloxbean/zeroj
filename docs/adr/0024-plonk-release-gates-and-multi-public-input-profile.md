@@ -349,6 +349,6 @@ release in either case.
 - ADR-0022: Pure Java PlonK Backend Review Outcomes and Hardening Posture
 - ADR-0023: On-Chain PlonK Verifier Hardening Posture
 - `docs/adr/0022-0023-plonk-production-readiness-addendum.md`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381Verifier.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/codec/PlonKProverToCardano.java`
-- `zeroj-verifier-plonk/src/main/java/com/bloxbean/cardano/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/plonk/validator/PlonkBLS12381Verifier.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/plonk/codec/PlonKProverToCardano.java`
+- `zeroj-verifier-plonk/src/main/java/org/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`

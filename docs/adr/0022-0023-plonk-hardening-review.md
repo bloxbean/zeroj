@@ -126,11 +126,11 @@ All six findings confirmed:
 
 - ADR-0022: Pure Java PlonK Backend Review Outcomes and Hardening Posture
 - ADR-0023: On-Chain PlonK Verifier Hardening Posture
-- `zeroj-verifier-plonk/src/main/java/com/bloxbean/cardano/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`
-- `zeroj-crypto/src/main/java/com/bloxbean/cardano/zeroj/crypto/transcript/FiatShamirTranscript.java`
-- `zeroj-codec/src/main/java/com/bloxbean/cardano/zeroj/codec/SnarkjsPlonkCodec.java`
-- `zeroj-verifier-core/src/main/java/com/bloxbean/cardano/zeroj/verifier/core/VerifierOrchestrator.java`
-- `zeroj-crypto/src/main/java/com/bloxbean/cardano/zeroj/crypto/plonk/{PtauImporter,PlonKZkeyImporter,PlonKSetup,PlonKProver}.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/plonk/validator/PlonkBLS12381FullVerifier.java`
-- `zeroj-onchain-julc/src/main/java/com/bloxbean/cardano/zeroj/onchain/julc/analysis/{OnChainFeasibility,ScriptBudgetEstimator}.java`
+- `zeroj-verifier-plonk/src/main/java/org/zeroj/verifier/plonk/PlonkBLS12381Verifier.java`
+- `zeroj-crypto/src/main/java/org/zeroj/crypto/transcript/FiatShamirTranscript.java`
+- `zeroj-codec/src/main/java/org/zeroj/codec/SnarkjsPlonkCodec.java`
+- `zeroj-verifier-core/src/main/java/org/zeroj/verifier/core/VerifierOrchestrator.java`
+- `zeroj-crypto/src/main/java/org/zeroj/crypto/plonk/{PtauImporter,PlonKZkeyImporter,PlonKSetup,PlonKProver}.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/plonk/validator/PlonkBLS12381FullVerifier.java`
+- `zeroj-onchain-julc/src/main/java/org/zeroj/onchain/julc/analysis/{OnChainFeasibility,ScriptBudgetEstimator}.java`
 - `docs/plonk-support.md`

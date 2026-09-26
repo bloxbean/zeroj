@@ -1,0 +1,14 @@
+[
+  {
+    "name": "org.zeroj.codec.SnarkjsProof",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.codec.SnarkjsVerificationKey",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

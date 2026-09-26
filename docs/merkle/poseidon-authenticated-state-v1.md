@@ -35,7 +35,7 @@ cell zero by `x^5`. Finally replace each output cell `i` by
 `sum(M[3*i+j] * state[j], j=0..2)` modulo the field. The next round receives
 that complete MDS output. The authoritative literal `C` and row-major `M`
 arrays are in
-[`PoseidonParamsBLS12_381T3.java`](../../zeroj-circuit-lib/src/main/java/com/bloxbean/cardano/zeroj/circuit/lib/poseidon/PoseidonParamsBLS12_381T3.java);
+[`PoseidonParamsBLS12_381T3.java`](../../zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/poseidon/PoseidonParamsBLS12_381T3.java);
 that file is generated from the Poseidon reference Grain LFSR at hadeshash
 commit `208b5a164c6a252b137997694d90931b2bb851c5`. The fingerprint binds those
 exact arrays and all generation parameters.

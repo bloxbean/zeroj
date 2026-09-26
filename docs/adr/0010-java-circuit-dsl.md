@@ -191,7 +191,7 @@ For Java-defined circuits, witness calculation is native Java — no WASM needed
 
 ```
 zeroj-circuit-dsl/
-  src/main/java/com/bloxbean/cardano/zeroj/circuit/
+  src/main/java/org/zeroj/circuit/
     CircuitBuilder.java          — fluent API entry point
     CircuitAPI.java              — interface (the DSL surface)
     CircuitDefinition.java       — functional interface for circuit body

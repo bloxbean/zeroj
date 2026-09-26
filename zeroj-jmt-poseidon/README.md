@@ -6,7 +6,7 @@ classic Blake2b JMT and `zeroj-poseidon-mpf-v1`.
 
 ```gradle
 dependencies {
-    implementation "com.bloxbean.cardano:zeroj-jmt-poseidon:<zeroj-version>"
+    implementation "org.zeroj:zeroj-jmt-poseidon:<zeroj-version>"
 }
 ```
 
