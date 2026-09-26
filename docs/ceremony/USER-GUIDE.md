@@ -89,7 +89,7 @@ Then key genesis with snarkjs: `snarkjs groth16 setup ownership.r1cs <prepared.p
 ### `finalize` — turn the completed ceremony key into a ZeroJ proving-key store
 
 ```bash
-zeroj-ceremony finalize --zkey key_final.zkey --pk-store ./ownership-pk
+zeroj-ceremony finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 
 | option | required | meaning |
@@ -116,7 +116,7 @@ zeroj-ceremony contribute --in key_0002.zkey --out key_0003.zkey --name "carol"
 # coordinator: pre-announced public beacon, independent verification, finalize
 snarkjs zkey beacon key_0003.zkey key_final.zkey <beaconHashHex> 10 -n="final beacon"
 snarkjs zkey verify my.r1cs prepared.ptau key_final.zkey        # anyone can re-run this
-zeroj-ceremony finalize --zkey key_final.zkey --pk-store ./pk
+zeroj-ceremony finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./pk
 ```
 
 A runnable rehearsal of exactly this flow: [`rehearsal.sh`](rehearsal.sh). Full coordinator
@@ -161,3 +161,11 @@ I confirm the entropy was generated fresh and destroyed after use.
 - **What must I keep secret?** Nothing after you finish — your randomness is used and discarded.
   What you must *do* is not let anyone observe the machine during the contribution, and publish
   your attestation.
+
+Finalization requires `--sha256` from an independently verified ceremony manifest, or an
+explicit `--allow-unpinned` for local experiments. These options are mutually exclusive.
+The output directory must not exist. Retain the printed manifest SHA-256 through a trusted
+channel and pass it to `Groth16PkStore.load(dir, expectedManifestSha256)` when reopening.
+The expected hash authenticates bytes only relative to its trusted source; independent
+`snarkjs zkey verify` and circuit/ceremony provenance remain mandatory. Protect the local
+store from mutation for the entire mmap lifetime.

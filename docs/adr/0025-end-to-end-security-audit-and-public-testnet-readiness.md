@@ -366,3 +366,39 @@ rationale.
 - `docs/beta-release-readiness.md`
 - CIP-0381 (Plutus BLS12-381 builtins): <https://cips.cardano.org/cip/CIP-0381>
 - RFC 9380 hash-to-curve: <https://www.rfc-editor.org/rfc/rfc9380>
+
+## Implementation contract — streaming Groth16 import (issues #48/#47, 2026-09-26)
+
+This bounded milestone applies accepted Decisions 5–6 to the later streaming importer;
+it does not introduce a new proof-system profile. Risk: R2 validation with R3 confidentiality
+impact if untrusted query points reach a private-witness MSM. The input file is untrusted;
+no private witness or ceremony contribution secret is processed during import.
+
+Invariants: canonical Montgomery residues before reduction; on-curve and prime-order checks
+on every imported G1/G2 point; infinity permitted only in query arrays, never header/IC;
+bounded, exact section reads and dimensions; no returned/published store after a failed check.
+Use the existing Jacobian multiply-by-r predicate already used by SetupCacheIO, not a new
+endomorphism implementation. The format reference is snarkjs **v0.7.6** `src/zkey_utils.js`
+(writeHeader, writeZKey, readHeaderGroth16), plus ADR-0045's stricter infinity profile.
+
+A pinned import checks an externally trusted SHA-256. An explicitly named unpinned import
+exists for fixtures/local experiments and still performs all mathematical validation. Stage
+a private copy while hashing and parse that same copy, so source-file replacement cannot
+switch the bytes after the hash check. Build a fresh sibling directory and publish only after
+validation; never overwrite an existing destination. This costs temporary disk space, not
+key-sized Java heap. Correctness takes precedence over import throughput.
+
+The manifest records the source identity and hashes of all store payload files. A caller can
+pin the returned manifest digest when subsequently loading the bundle. Self-contained hashes
+without an externally trusted pin detect corruption, not malicious replacement. The caller
+must control the directory and exclude concurrent file mutation throughout an mmap handle's
+lifetime; this API does not defend against a hostile same-user process rewriting mapped files.
+Legacy locally generated stores remain a trusted-local-directory API. No hash or subgroup
+check substitutes for independently verifying the MPC transcript and its exact circuit.
+
+Verification: checked-in snarkjs fixture import/prove; in-memory/streaming point differentials;
+wrong-subgroup G1/G2, noncanonical residues, infinity policy, malformed/truncated sections,
+hash mismatch and late-failure/no-publication tests; persisted-file mutation rejection.
+Production Filecoin conversion, circuit freeze, contributor ceremony, public artifact manifest,
+independent review and live deployment evidence remain open under #48. This milestone must
+not close that issue or change maturity claims.

@@ -56,7 +56,7 @@ class ZkeyPkStoreImporterTest {
 
         // 1. streaming import → PkStore
         Path store = dir.resolve("pk-store");
-        var dims = ZkeyPkStoreImporter.importToPkStore(dir.resolve("key1.zkey"), store);
+        var dims = ZkeyPkStoreImporter.importUnpinnedToPkStore(dir.resolve("key1.zkey"), store);
         assertEquals(numWires, dims.numWires());
         assertEquals(numPublic, dims.numPublic());
 

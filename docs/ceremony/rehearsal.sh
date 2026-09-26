@@ -50,7 +50,7 @@ echo ">> [coordinator] beacon (pre-announced public randomness) + independent ve
 
 echo ">> [coordinator] finalize into a ZeroJ proving-key store + export VK"
 "$SNARKJS" zkey export verificationkey key_final.zkey verification_key.json
-$CLI finalize --zkey key_final.zkey --pk-store ./pk-store
+$CLI finalize --allow-unpinned --zkey key_final.zkey --pk-store ./pk-store
 
 echo ""
 echo ">> REHEARSAL COMPLETE. Artifacts in $WORK (transcript.txt = the publishable record)."

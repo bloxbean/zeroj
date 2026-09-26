@@ -20,6 +20,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -78,7 +80,14 @@ class CeremonyCliTest {
 
         // 3. finalize via CLI
         Path store = dir.resolve("pk-store");
-        assertEquals(0, CeremonyCli.run(new String[]{"finalize",
+        String sourceHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(Files.readAllBytes(dir.resolve("key1.zkey"))));
+        assertEquals(2, CeremonyCli.run(new String[]{"finalize", "--zkey", dir.resolve("key1.zkey").toString(),
+                "--pk-store", store.toString()}));
+        assertEquals(2, CeremonyCli.run(new String[]{"finalize", "--allow-unpinned", "--sha256", sourceHash,
+                "--zkey", dir.resolve("key1.zkey").toString(), "--pk-store", store.toString()}));
+        assertFalse(Files.exists(store));
+        assertEquals(0, CeremonyCli.run(new String[]{"finalize", "--sha256", sourceHash,
                 "--zkey", dir.resolve("key1.zkey").toString(), "--pk-store", store.toString()}));
 
         // 4. prove from the store; verify against the snarkjs VK

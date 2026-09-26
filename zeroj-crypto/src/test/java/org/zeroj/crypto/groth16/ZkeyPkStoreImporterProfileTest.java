@@ -28,7 +28,7 @@ class ZkeyPkStoreImporterProfileTest {
     @Test
     void unmodifiedCeremonyZkey_importsAndHasFiniteIc(@TempDir Path tmp) throws IOException {
         Path zkey = copyZkey(tmp);
-        var dims = ZkeyPkStoreImporter.importToPkStore(zkey, tmp.resolve("store"));
+        var dims = ZkeyPkStoreImporter.importUnpinnedToPkStore(zkey, tmp.resolve("store"));
         assertTrue(dims.numPublic() >= 1);
         try (var loaded = Groth16PkStore.load(tmp.resolve("store"))) {
             for (var ic : loaded.ic()) assertFalse(ic.isInfinity());
@@ -42,7 +42,7 @@ class ZkeyPkStoreImporterProfileTest {
             long icSection = sectionOffset(zkey, 3);
             zero(zkey, icSection + entry * 96L, 96);
             Path store = tmp.resolve("store-" + entry);
-            var ex = assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importToPkStore(zkey, store));
+            var ex = assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importUnpinnedToPkStore(zkey, store));
             assertTrue(ex.getMessage().contains("IC[" + entry + "]"), ex.getMessage());
             assertTrue(ex.getMessage().contains("infinity"), ex.getMessage());
         }
@@ -53,7 +53,7 @@ class ZkeyPkStoreImporterProfileTest {
         Path zkey = copyZkey(tmp);
         long header = sectionOffset(zkey, 2);
         zero(zkey, header + 100, 96); // alphaG1 sits right after the two field primes and dims
-        var ex = assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importToPkStore(zkey, tmp.resolve("s")));
+        var ex = assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importUnpinnedToPkStore(zkey, tmp.resolve("s")));
         assertTrue(ex.getMessage().contains("alphaG1"), ex.getMessage());
         assertTrue(ex.getMessage().contains("infinity"), ex.getMessage());
     }

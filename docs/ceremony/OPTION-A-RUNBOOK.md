@@ -80,7 +80,7 @@ snarkjs zkey export verificationkey key_final.zkey verification_key.json
 
 # Into ZeroJ (streaming; handles multi-GB keys):
 java -cp zeroj-ceremony.jar org.zeroj.ceremony.CeremonyCli \
-     finalize --zkey key_final.zkey --pk-store ./ownership-pk
+     finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 
 Proving afterwards: `Groth16PkStore.load(dir)` + `ZkeyPkStoreImporter.snarkjsConstraints(compiled, numPublic)`
@@ -105,3 +105,11 @@ from source to confirm the key binds to the claimed circuit.
 - [ ] beacon source pre-announced, applied, published
 - [ ] `zkey verify` green; final key + VK hashes published
 - [ ] `finalize` run; a test proof generated and verified off-chain and on-chain
+
+Finalization requires `--sha256` from an independently verified ceremony manifest, or an
+explicit `--allow-unpinned` for local experiments. These options are mutually exclusive.
+The output directory must not exist. Retain the printed manifest SHA-256 through a trusted
+channel and pass it to `Groth16PkStore.load(dir, expectedManifestSha256)` when reopening.
+The expected hash authenticates bytes only relative to its trusted source; independent
+`snarkjs zkey verify` and circuit/ceremony provenance remain mandatory. Protect the local
+store from mutation for the entire mmap lifetime.

@@ -82,7 +82,7 @@ Run the multi-party ceremony externally (snarkjs), then import the `.zkey` once 
 store layout; from there it's Flow 2's load-and-prove:
 
 ```java
-ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir);   // one-time; writes the dense store
+var imported = ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, expectedSourceSha256);   // one-time; writes the dense store
 
 try (var keys = Groth16Keys.load(keysDir)) {
     // a snarkjs setup appends numPublic+1 public-input binding rows after the circuit rows —
@@ -208,3 +208,10 @@ to reproduce the blinders.
 
 Memory numbers, formats, and the full optimization history: ADR-0033 (prove memory),
 ADR-0034 (frontend + prove speed), ADR-0035 (setup memory/time + sparse store).
+
+The expected source SHA-256 must come from independently verified ceremony provenance, not
+from an untrusted download itself. Retain `imported.manifestSha256()` via a trusted channel
+and reopen with `Groth16Keys.load(keysDir, expectedManifestSha256)`. Imports require a new
+destination directory and stage a temporary source copy (extra disk space, bounded heap).
+Keep the entire directory protected from concurrent modification while mapped. Legacy local
+stores and the explicitly named `importUnpinnedToPkStore` API do not authenticate provenance.

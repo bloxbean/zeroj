@@ -91,6 +91,7 @@ class Groth16ProverApiSurfaceTest {
             "setupInMemory(List,int,int,BigInteger)",
             "setupToStore(R1CSFlat,int,int,BigInteger,Path,boolean)",
             "load(Path)",
+            "load(Path,String)",
             "of(Loaded)",
             "of(SetupResult)",
             "prove(BigInteger[],List)",

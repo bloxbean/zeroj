@@ -134,8 +134,22 @@ public final class Groth16PkStore {
         }
     }
 
-    /** Load a saved key from {@code dir}, memory-mapping the G1 arrays into a fresh shared arena. */
+    /**
+     * Load a trusted local store, memory-mapping its G1 arrays. Self-contained hashes detect
+     * corruption but do not authenticate a store; use the pinned overload for imported keys.
+     * The directory must remain protected from concurrent mutation for the handle's lifetime.
+     */
     public static Loaded load(Path dir) throws IOException {
+        return load(dir, null);
+    }
+
+    /**
+     * Load an imported store against the manifest hash returned by the validated importer.
+     * The pin must come from a trusted channel. Exclude concurrent mutations for the handle's
+     * entire lifetime; mmap does not isolate reads from a hostile local writer.
+     */
+    public static Loaded load(Path dir, String expectedManifestSha256) throws IOException {
+        Groth16StoreIntegrity.verify(dir, expectedManifestSha256);
         var m = new Properties();
         try (var in = Files.newInputStream(dir.resolve(MANIFEST))) { m.load(in); }
         String circuitFingerprint = m.getProperty("circuitFingerprint");

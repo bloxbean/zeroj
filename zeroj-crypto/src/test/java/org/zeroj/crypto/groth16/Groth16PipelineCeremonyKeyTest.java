@@ -71,7 +71,7 @@ class Groth16PipelineCeremonyKeyTest {
         Path zkeyFile = tmp.resolve("key.zkey");
         Files.write(zkeyFile, zkeyBytes);
         Path store = tmp.resolve("store");
-        ZkeyPkStoreImporter.importToPkStore(zkeyFile, store);
+        ZkeyPkStoreImporter.importUnpinnedToPkStore(zkeyFile, store);
 
         // Compiled must accept the original relation as-is (no S1 here).
         var cc = new Groth16Pipeline.Compiled(flatOf(original), circuitRows, numWires, numPublic);
