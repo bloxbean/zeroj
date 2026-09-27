@@ -50,8 +50,8 @@ public final class PlonKProver {
         AffineG1[] srs = pk.srsG1();
 
         var rng = new SecureRandom();
-        MontFr254[] b = new MontFr254[9];
-        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        MontFr254[] b = new MontFr254[11];
+        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);
     }
 
@@ -59,8 +59,8 @@ public final class PlonKProver {
     static PlonKProof proveUnblinded(PlonKProvingKey pk, MontFr254[] wireA, MontFr254[] wireB,
                                       MontFr254[] wireC, BigInteger[] pubInputs) {
         LegacyCurvePolicy.requireLegacyBn254Enabled();
-        MontFr254[] b = new MontFr254[9];
-        for (int i = 0; i < 9; i++) b[i] = MontFr254.ZERO;
+        MontFr254[] b = new MontFr254[11];
+        for (int i = 0; i < 11; i++) b[i] = MontFr254.ZERO;
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);
     }
 
@@ -239,8 +239,8 @@ public final class PlonKProver {
         // IFFT coset to get t(X) coefficients
         var tCoeffs = cosetIFFT(tCoset, shift, n4, logN4);
 
-        // Split t into 3 parts: T1 (deg<n), T2 (deg<n), T3 (remaining — may be > n with blinding)
-        var t1 = new MontFr254[n]; var t2 = new MontFr254[n];
+        // Split t into three parts; T1/T2 reserve degree n for quotient-split blinders.
+        var t1 = new MontFr254[n + 1]; var t2 = new MontFr254[n + 1];
         // T3 gets all remaining coefficients (degree 2n onwards) — may exceed n due to blinding
         int t3Len = Math.max(n, tCoeffs.length - 2 * n);
         var t3 = new MontFr254[t3Len];
@@ -251,6 +251,13 @@ public final class PlonKProver {
         for (int i = 0; i < t3Len; i++) {
             t3[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr254.ZERO;
         }
+
+        // PLONK 8.4 / snarkjs v0.7.6: randomize the split without changing T(X).
+        // T1 + X^n T2 + X^(2n) T3 remains exactly the original quotient.
+        t1[n] = b[9];
+        t2[0] = t2[0].sub(b[9]);
+        t2[n] = b[10];
+        t3[0] = t3[0].sub(b[10]);
 
         var commitT1 = KZGCommitment.commit(srs, t1).toAffine();
         var commitT2 = KZGCommitment.commit(srs, t2).toAffine();

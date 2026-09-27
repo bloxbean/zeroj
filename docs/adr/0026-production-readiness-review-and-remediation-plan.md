@@ -310,3 +310,20 @@ Full task-level detail: `docs/production-readiness-review-2026-07-02.md`
 - ADR-0021 — BLS12-381 review and hardening
 - ADR-0022/0023/0024 — PlonK hardening and release gates
 - ADR-0025 — end-to-end security audit and public-testnet readiness gates
+
+## Implementation note — quotient-split blinders (issue #30, 2026-09-26)
+
+This implements accepted Decision 7 for both BLS12-381 profiles and gated legacy BN254.
+Risk R3: b1…b11 and wire values are secret; existing isolated-prover timing assumptions
+remain, with no new constant-time claim. Reference: snarkjs **v0.7.6**
+`src/plonk_prove.js` lines 583–610 and the PLONK paper (2019/953, section 8.4).
+After splitting T, set T1'=T1+b10·X^n, T2'=T2−b10+b11·X^n, T3'=T3−b11.
+The exact invariant is T1'+X^n·T2'+X^(2n)·T3'=T. Commit and open these blinded
+parts in the existing transcript order; leave keys, public-input order, encodings and
+verifier equations unchanged. Draw two additional uniform Fr elements from the same
+SecureRandom. No deterministic/unblinded production API is added.
+
+Tests must isolate b10 and b11 (holding b1…b9 fixed), check their exact commitment deltas,
+exercise all three BLS transcript profiles, verify with independent snarkjs, reject tampering,
+and retain JuLC profile tests. Successful verification is evidence of compatibility, not a
+proof of zero knowledge. External review and all existing production gates remain open.

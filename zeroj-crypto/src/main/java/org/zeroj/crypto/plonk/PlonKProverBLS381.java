@@ -69,8 +69,8 @@ public final class PlonKProverBLS381 {
         if (rng == null) {
             throw new IllegalArgumentException("SecureRandom must not be null");
         }
-        MontFr381[] b = new MontFr381[9];
-        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        MontFr381[] b = new MontFr381[11];
+        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.UNCOMPRESSED_AFFINE);
     }
 
@@ -97,8 +97,8 @@ public final class PlonKProverBLS381 {
             throw new IllegalArgumentException("SecureRandom must not be null");
         }
         requireCardanoV1PublicInputs(pubInputs);
-        MontFr381[] b = new MontFr381[9];
-        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        MontFr381[] b = new MontFr381[11];
+        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.COMPRESSED_G1);
     }
 
@@ -124,16 +124,16 @@ public final class PlonKProverBLS381 {
             throw new IllegalArgumentException("SecureRandom must not be null");
         }
         requireCardanoMpiPublicInputs(pubInputs);
-        MontFr381[] b = new MontFr381[9];
-        for (int i = 0; i < 9; i++) b[i] = randomFr(rng);
+        MontFr381[] b = new MontFr381[11];
+        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.COMPRESSED_G1_MPI);
     }
 
     /** Prove without blinding (for debugging). */
     static PlonKProofBLS381 proveUnblinded(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
                                       MontFr381[] wireC, BigInteger[] pubInputs) {
-        MontFr381[] b = new MontFr381[9];
-        for (int i = 0; i < 9; i++) b[i] = MontFr381.ZERO;
+        MontFr381[] b = new MontFr381[11];
+        for (int i = 0; i < 11; i++) b[i] = MontFr381.ZERO;
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.UNCOMPRESSED_AFFINE);
     }
 
@@ -308,8 +308,8 @@ public final class PlonKProverBLS381 {
         // IFFT coset to get t(X) coefficients
         var tCoeffs = cosetIFFT(tCoset, shift, n4, logN4);
 
-        // Split t into 3 parts: T1 (deg<n), T2 (deg<n), T3 (remaining — may be > n with blinding)
-        var t1 = new MontFr381[n]; var t2 = new MontFr381[n];
+        // Split t into three parts; T1/T2 reserve degree n for quotient-split blinders.
+        var t1 = new MontFr381[n + 1]; var t2 = new MontFr381[n + 1];
         // T3 gets all remaining coefficients (degree 2n onwards) — may exceed n due to blinding
         int t3Len = Math.max(n, tCoeffs.length - 2 * n);
         var t3 = new MontFr381[t3Len];
@@ -320,6 +320,13 @@ public final class PlonKProverBLS381 {
         for (int i = 0; i < t3Len; i++) {
             t3[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr381.ZERO;
         }
+
+        // PLONK 8.4 / snarkjs v0.7.6: randomize the split without changing T(X).
+        // T1 + X^n T2 + X^(2n) T3 remains exactly the original quotient.
+        t1[n] = b[9];
+        t2[0] = t2[0].sub(b[9]);
+        t2[n] = b[10];
+        t3[0] = t3[0].sub(b[10]);
 
         var commitT1 = KZGCommitmentBLS381.commit(srs, t1).toAffine();
         var commitT2 = KZGCommitmentBLS381.commit(srs, t2).toAffine();
@@ -631,8 +638,8 @@ public final class PlonKProverBLS381 {
             requireScalar(pubInputs[i], "pubInputs[" + i + "]");
         }
 
-        if (blinders == null || blinders.length != 9) {
-            throw new IllegalArgumentException("PlonK BLS12-381 prover requires exactly 9 blinding scalars");
+        if (blinders == null || blinders.length != 11) {
+            throw new IllegalArgumentException("PlonK BLS12-381 prover requires exactly 11 blinding scalars");
         }
         for (int i = 0; i < blinders.length; i++) {
             if (blinders[i] == null) {

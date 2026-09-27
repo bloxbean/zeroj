@@ -8,12 +8,16 @@ import org.zeroj.crypto.setup.PowersOfTauBLS381;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.field.Fp;
+
 import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PlonKBLS381InvariantTest {
 
@@ -124,6 +128,55 @@ class PlonKBLS381InvariantTest {
 
         assertThrows(IllegalArgumentException.class, () -> PlonKProverBLS381.proveCardanoMpi(
                 fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), pubInputs));
+    }
+
+    @Test
+    void quotientBlindersHaveReferenceCommitmentDeltasInEveryProfile() {
+        for (int profile = 0; profile < 3; profile++) {
+            var baseRng = new SplitBlinderRandom(0, 0);
+            var base = proof(profile, baseRng);
+            assertEquals(11, baseRng.draws, "every public profile must sample all eleven blinders");
+            var ten = proof(profile, new SplitBlinderRandom(7, 0));
+            var eleven = proof(profile, new SplitBlinderRandom(0, 13));
+            assertEquals(base.commitA(), ten.commitA());
+            assertEquals(base.commitB(), ten.commitB());
+            assertEquals(base.commitC(), eleven.commitC());
+            assertEquals(base.commitZ(), eleven.commitZ());
+            G1Point gn = point(fixture.provingKey().srsG1()[fixture.provingKey().domainSize()]);
+            G1Point g0 = point(fixture.provingKey().srsG1()[0]);
+            assertEquals(point(base.commitT1()).add(gn.scalarMul(BigInteger.valueOf(7))), point(ten.commitT1()));
+            assertEquals(point(base.commitT2()).add(g0.scalarMul(BigInteger.valueOf(-7))), point(ten.commitT2()));
+            assertEquals(base.commitT3(), ten.commitT3());
+            assertEquals(base.commitT1(), eleven.commitT1());
+            assertEquals(point(base.commitT2()).add(gn.scalarMul(BigInteger.valueOf(13))), point(eleven.commitT2()));
+            assertEquals(point(base.commitT3()).add(g0.scalarMul(BigInteger.valueOf(-13))), point(eleven.commitT3()));
+        }
+    }
+
+    private static G1Point point(JacobianG1BLS381.AffineG1 p) {
+        return p.isInfinity() ? G1Point.INFINITY : new G1Point(Fp.of(p.xBigInt()), Fp.of(p.yBigInt()));
+    }
+
+    private static PlonKProofBLS381 proof(int profile, SecureRandom rng) {
+        return switch (profile) {
+            case 0 -> PlonKProverBLS381.prove(fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), fixture.pubInputs(), rng);
+            case 1 -> PlonKProverBLS381.proveCardano(fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), fixture.pubInputs(), rng);
+            default -> PlonKProverBLS381.proveCardanoMpi(fixture.provingKey(), fixture.wireA(), fixture.wireB(), fixture.wireC(), fixture.pubInputs(), rng);
+        };
+    }
+
+    // Test-only deterministic CSPRNG seam: first nine draws fixed; vary only quotient blinders.
+    private static final class SplitBlinderRandom extends SecureRandom {
+        private final int b10, b11;
+        private int draws;
+        SplitBlinderRandom(int b10, int b11) { this.b10 = b10; this.b11 = b11; }
+        @Override public void nextBytes(byte[] bytes) {
+            Arrays.fill(bytes, (byte) 0);
+            draws++;
+            int value = draws == 10 ? b10 : draws == 11 ? b11 : draws;
+            bytes[bytes.length - 1] = (byte) value;
+            if (draws > 11) throw new AssertionError("unexpected randomness draw");
+        }
     }
 
     private static PlonKProvingKeyBLS381 setupWith(
