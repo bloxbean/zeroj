@@ -28,7 +28,7 @@ files from the repository (see below), so run it from a full checkout.
 
 | Path | What it is |
 | --- | --- |
-| `src/pages/index.astro`, `src/styles/landing.css` | The landing page (standalone, dark). |
+| `src/pages/index.astro`, `src/styles/landing.css` | The landing page (standalone, light "Paper" palette; code windows stay dark). |
 | `src/content/docs/` | Documentation pages, organized by sidebar section: `start/`, `learn/`, `tutorials/`, `guides/{circuits,proving,verifying,credentials}/`, `use-cases/`, `reference/`, `ai/`. |
 | `src/components/SiteTitle.astro`, `DocTitle.astro` | Starlight overrides: brand header, and **View Markdown / Copy page for AI** under each page title. |
 | `src/styles/docs.css` | Starlight theme (ink `#080b12`, teal `#2dd4bf`, violet `#8b5cf6`). |
