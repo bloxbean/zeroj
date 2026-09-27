@@ -376,13 +376,14 @@ no private witness or ceremony contribution secret is processed during import.
 
 Invariants: canonical Montgomery residues before reduction; on-curve and prime-order checks
 on every imported G1/G2 point; infinity permitted only in query arrays, never header/IC;
-bounded, exact section reads and dimensions; no returned/published store after a failed check.
+bounded, exact section reads and dimensions (only snarkjs section types 1–10); no
+returned/published store after a failed check.
 Use the existing Jacobian multiply-by-r predicate already used by SetupCacheIO, not a new
 endomorphism implementation. The format reference is snarkjs **v0.7.6** `src/zkey_utils.js`
 (writeHeader, writeZKey, readHeaderGroth16), plus ADR-0045's stricter infinity profile.
 
 A pinned import checks an externally trusted SHA-256. An explicitly named unpinned import
-exists for fixtures/local experiments and still performs all mathematical validation. Stage
+exists for fixtures/local experiments and still performs all structural and point validation. Stage
 a private copy while hashing and parse that same copy, so source-file replacement cannot
 switch the bytes after the hash check. Build a fresh sibling directory and publish only after
 validation; never overwrite an existing destination. This costs temporary disk space, not
@@ -402,3 +403,40 @@ hash mismatch and late-failure/no-publication tests; persisted-file mutation rej
 Production Filecoin conversion, circuit freeze, contributor ceremony, public artifact manifest,
 independent review and live deployment evidence remain open under #48. This milestone must
 not close that issue or change maturity claims.
+
+### PR #61 review amendment — seal circuit metadata before returning the pin
+
+The importer accepts an optional, externally trusted exact circuit fingerprint (ADR-0042)
+and checks its dimensions against the imported key before sealing the manifest. The returned
+manifest SHA-256 covers this fingerprint along with source and payload hashes. Supplying the
+fingerprint is a caller assertion about the verified circuit, not a key/R1CS consistency check.
+Imports without it remain unbound. `bindCircuitFingerprint` is only for unsealed local stores;
+it must reject sealed imports without changing any bytes, even if the fingerprint is identical.
+To add or change metadata, re-import into a new directory and explicitly retain the new pin.
+This preserves pinned loads and cache hits without silently invalidating an existing pin.
+Tests cover pinned import/binding/load/prove/cache-hit, rejected late binding, and incompatible
+circuit dimensions. Legacy unsealed development-store binding remains supported.
+
+**Residual witness-confidentiality risk:** valid subgroup points alone do not make a proving
+key safe. A malicious author can shift a private wire's L query by a known multiple of G;
+the pairing residual of a resulting proof then permits guesses of that witness value (including
+individual secret bits). This matters for account-ownership root-key witnesses. Before using
+private witnesses, independently verify the key against the exact R1CS and trusted `.ptau`
+with `snarkjs zkey verify`, or pin a key hash supplied by someone trusted who performed that
+verification. Hashing an arbitrary downloaded key, binding a circuit fingerprint, or merely
+checking its points does not establish this property. See snarkjs **v0.7.6**
+[`zkey_verify_fromr1cs.js`](https://github.com/iden3/snarkjs/blob/v0.7.6/src/zkey_verify_fromr1cs.js)
+and [`zkey_verify_frominit.js`](https://github.com/iden3/snarkjs/blob/v0.7.6/src/zkey_verify_frominit.js).
+An internal key-consistency verifier is tracked in [#67](https://github.com/bloxbean/zeroj/issues/67).
+It requires a separate reviewed design and independent positive/negative reference vectors;
+it is outside this import-hardening milestone.
+
+Subgroup validation keeps the existing multiply-by-r predicate. Future throughput work must
+preserve that predicate (for example flat-limb arithmetic or a qualified blst implementation)
+and add differential tests; this milestone does not introduce an endomorphism-based check.
+
+Local measurements and reproduction commands are recorded in
+[the PR #61 timing report](../benchmarks/streaming-zkey-import-2026-09-27.md): median single-thread
+CPU cost was 0.5113 ms/G1 and 1.4840 ms/G2 point. The 19M-constraint ownership artifact was not
+available, so full-scale finalize timing remains pending under #48. The report labels its
+point-count extrapolation explicitly; it is not a measured 19M result.

@@ -95,11 +95,18 @@ zeroj-ceremony finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey -
 | option | required | meaning |
 |---|---|---|
 | `--zkey <file>` | yes | the final (post-beacon, verified) ceremony `.zkey` — streaming import, multi-GB safe |
-| `--pk-store <dir>` | yes | output directory (loadable with `Groth16PkStore.load(dir)`) |
+| `--pk-store <dir>` | yes | new output directory (must not already exist) |
+| `--sha256 <hex>` | yes, except explicit local/test mode | trusted SHA-256 of the independently verified final key |
+| `--allow-unpinned` | local/test only | alternative to `--sha256`; does not authenticate the source |
+| `--circuit-fingerprint <exact>` | for circuit-aware cache hits | trusted exact R1CS fingerprint included before sealing |
 
-Applications then prove with `Groth16PkStore.load(dir)` + 
+Applications then prove with `Groth16PkStore.load(dir, expectedManifestSha256)` +
 `ZkeyPkStoreImporter.snarkjsConstraints(compiledConstraints, numPublic)` (snarkjs setup appends one
-binding row per public input — the helper synthesizes them).
+binding row per public input — the helper synthesizes them). Retain the manifest SHA-256
+printed by `finalize` outside the store through a trusted channel and use it for subsequent
+loads. Set the optional fingerprint to the verified R1CS's `Groth16Pipeline.Compiled.fingerprint()`;
+this records the caller's circuit association, not a key-consistency verification. Sealed
+imports reject later `bindCircuitFingerprint` calls; re-import to add metadata.
 
 ## 4. A complete ceremony at a glance
 
@@ -115,11 +122,14 @@ zeroj-ceremony contribute --in key_0002.zkey --out key_0003.zkey --name "carol"
 
 # coordinator: pre-announced public beacon, independent verification, finalize
 snarkjs zkey beacon key_0003.zkey key_final.zkey <beaconHashHex> 10 -n="final beacon"
-snarkjs zkey verify my.r1cs prepared.ptau key_final.zkey        # anyone can re-run this
+snarkjs zkey verify my.r1cs prepared.ptau key_final.zkey || exit 1  # anyone can re-run this
+# Hash only after verification succeeds; keep these artifacts in a controlled directory.
+VERIFIED_ZKEY_SHA256=$(shasum -a 256 key_final.zkey | awk '{print $1}')
 zeroj-ceremony finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./pk
 ```
 
-A runnable rehearsal of exactly this flow: [`rehearsal.sh`](rehearsal.sh). Full coordinator
+A small development rehearsal of these steps (its fixed entropy/beacon are not production-safe):
+[`rehearsal.sh`](rehearsal.sh). Full coordinator
 procedure (attestations, transcript publication, checklist): [OPTION-A-RUNBOOK.md](OPTION-A-RUNBOOK.md).
 
 ## 5. Contributor attestation (publish after contributing)

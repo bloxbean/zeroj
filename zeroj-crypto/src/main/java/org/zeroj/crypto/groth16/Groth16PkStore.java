@@ -59,7 +59,10 @@ public final class Groth16PkStore {
         return Files.isRegularFile(dir.resolve(MANIFEST));
     }
 
-    /** Bind an already-created local or imported key bundle to one exact circuit relation. */
+    /**
+     * Bind an unsealed local key bundle to one exact circuit relation.
+     * Sealed imports must receive their fingerprint during import, before computing the pin.
+     */
     public static void bindCircuitFingerprint(Path dir, String fingerprint) throws IOException {
         if (!Groth16Pipeline.isExactFingerprint(fingerprint)) {
             throw new IllegalArgumentException("exact circuit fingerprint is required");
@@ -67,6 +70,8 @@ public final class Groth16PkStore {
         Path manifest = dir.resolve(MANIFEST);
         var properties = new Properties();
         try (var in = Files.newInputStream(manifest)) { properties.load(in); }
+        if (properties.containsKey("integrityProfile"))
+            throw new IOException("Cannot bind a sealed store; supply the circuit fingerprint during import");
         validateManifestDimensions(properties, fingerprint);
         String existing = properties.getProperty("circuitFingerprint");
         if (existing != null && !existing.equals(fingerprint)) {

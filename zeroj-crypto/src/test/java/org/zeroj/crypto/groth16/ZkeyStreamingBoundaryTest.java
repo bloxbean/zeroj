@@ -6,6 +6,7 @@ import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
 import org.zeroj.bls12381.field.Fp;
 import org.zeroj.bls12381.field.Fp2;
+import org.zeroj.bls12381.field.MontFr381;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -15,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.security.MessageDigest;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,11 +49,17 @@ class ZkeyStreamingBoundaryTest {
         for (int i = 0; i < values.length; i++)
             put(bytes, offset + i * 48, values[i].shiftLeft(384).mod(Fp.P));
     }
-    void rejected(byte[] bytes) throws IOException {
+    void rejected(byte[] bytes, String reason) throws IOException {
         Path input = Files.createTempFile(tmp, "mutated", ".zkey");
         Files.write(input, bytes);
         Path out = tmp.resolve(input.getFileName() + "-store");
-        assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importUnpinnedToPkStore(input, out));
+        var failure = assertThrows(IOException.class,
+                () -> ZkeyPkStoreImporter.importUnpinnedToPkStore(input, out));
+        StringBuilder messages = new StringBuilder();
+        for (Throwable cause = failure; cause != null; cause = cause.getCause())
+            messages.append(cause.getMessage()).append('\n');
+        assertTrue(messages.toString().toLowerCase(Locale.ROOT).contains(reason.toLowerCase(Locale.ROOT)),
+                "expected " + reason + " rejection, got: " + messages);
         assertFalse(Files.exists(out), "failed import must not publish any store");
     }
     @Test void rejectsG1TorsionInEveryPointSection() throws IOException {
@@ -65,7 +73,7 @@ class ZkeyStreamingBoundaryTest {
         for (int offset : offsets) {
             byte[] b = original.clone();
             point(b, offset, BigInteger.ZERO, BigInteger.TWO);
-            rejected(b);
+            rejected(b, "subgroup");
         }
     }
     @Test void rejectsG2TorsionInEveryPointSection() throws IOException {
@@ -79,26 +87,47 @@ class ZkeyStreamingBoundaryTest {
         for (int offset : new int[]{h + 292, h + 484, h + 772, section(original, 7)}) {
             byte[] b = original.clone();
             point(b, offset, x.c0().value(), x.c1().value(), y.c0().value(), y.c1().value());
-            rejected(b);
+            rejected(b, "subgroup");
         }
     }
-    @Test void rejectsNoncanonicalResiduesAndMalformedStructure() throws IOException {
+    @Test void rejectsNoncanonicalResiduesOfOtherwiseValidPoints() throws IOException {
         byte[] original = fixture();
-        for (int sec : new int[]{2, 3, 5, 6, 7, 8, 9}) {
+        int h = section(original, 2);
+        // Include header G1/G2, IC and all query paths. The old reducing decoder would see
+        // exactly the same valid point; raw p alone would instead create an off-curve point.
+        for (int offset : new int[]{h + 100, h + 292, h + 484, h + 772, section(original, 3),
+                section(original, 5), section(original, 6), section(original, 7),
+                section(original, 8), section(original, 9)}) {
             byte[] b = original.clone();
-            put(b, section(b, sec) + (sec == 2 ? 100 : 0), Fp.P);
-            rejected(b);
+            byte[] be = new byte[48];
+            for (int i = 0; i < 48; i++) be[47 - i] = b[offset + i];
+            BigInteger canonical = new BigInteger(1, be);
+            assertTrue(canonical.compareTo(Fp.P) < 0);
+            BigInteger alias = canonical.add(Fp.P);
+            assertTrue(alias.bitLength() <= 384);
+            assertEquals(canonical, alias.mod(Fp.P));
+            put(b, offset, alias);
+            rejected(b, "canonical");
         }
-        for (int length : new int[]{0, 4, 11, 15, original.length - 1})
-            rejected(Arrays.copyOf(original, length));
+    }
+
+    @Test void rejectsMalformedStructure() throws IOException {
+        byte[] original = fixture();
+        for (int length : new int[]{0, 4, 11, 15})
+            rejected(Arrays.copyOf(original, length), "Truncated .zkey");
+        rejected(Arrays.copyOf(original, original.length - 1), "Invalid .zkey section");
         byte[] b = original.clone();
         ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 0);
-        rejected(b);
-        b = Arrays.copyOf(original, original.length + 1);
-        rejected(b);
+        rejected(b, "version");
+        rejected(Arrays.copyOf(original, original.length + 1), "Trailing bytes");
         b = original.clone();
         ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putLong(16, Long.MAX_VALUE);
-        rejected(b);
+        rejected(b, "Invalid .zkey section");
+        for (int type : new int[]{0, 11, Integer.MAX_VALUE}) {
+            b = original.clone();
+            ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putInt(section(b, 2) - 12, type);
+            rejected(b, "Unknown .zkey section");
+        }
     }
 
     @Test void pinsSourceAndStoreAndRejectsTampering() throws Exception {
@@ -113,6 +142,12 @@ class ZkeyStreamingBoundaryTest {
         assertEquals(expected, imported.sourceSha256());
         var repeat = ZkeyPkStoreImporter.importToPkStore(input, tmp.resolve("repeat"), expected);
         assertEquals(imported.manifestSha256(), repeat.manifestSha256(), "deterministic manifest");
+        byte[] sealed = Files.readAllBytes(store.resolve("manifest.properties"));
+        String fingerprint = "c1-w" + imported.numWires() + "-p" + imported.numPublic() + "-r" + "ab".repeat(32);
+        var sealedFailure = assertThrows(IOException.class,
+                () -> Groth16PkStore.bindCircuitFingerprint(store, fingerprint));
+        assertTrue(sealedFailure.getMessage().contains("sealed"));
+        assertArrayEquals(sealed, Files.readAllBytes(store.resolve("manifest.properties")));
         try (var keys = Groth16Keys.load(store, imported.manifestSha256())) {
             assertEquals(imported.numWires(), keys.numWires());
         }
@@ -137,15 +172,23 @@ class ZkeyStreamingBoundaryTest {
         byte[] original = fixture();
         byte[] b = original.clone();
         ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putInt(section(b, 2) - 12, 1);
-        rejected(b);
+        rejected(b, "Duplicate .zkey section");
         b = original.clone();
         ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putInt(section(b, 4) + 4, 3);
-        rejected(b);
+        rejected(b, "Invalid coefficient index");
         b = original.clone();
         ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putInt(section(b, 4) + 8, Integer.MAX_VALUE);
-        rejected(b);
+        rejected(b, "Invalid coefficient index");
         b = original.clone();
         ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).putInt(section(b, 4) + 12, Integer.MAX_VALUE);
-        rejected(b);
+        rejected(b, "Invalid coefficient index");
+        for (BigInteger value : new BigInteger[]{MontFr381.modulus(), MontFr381.modulus().add(BigInteger.ONE)}) {
+            b = original.clone();
+            int offset = section(b, 4) + 16; // count + first coefficient's three indices
+            byte[] be = value.toByteArray();
+            Arrays.fill(b, offset, offset + 32, (byte) 0);
+            for (int i = 0; i < Math.min(32, be.length); i++) b[offset + i] = be[be.length - 1 - i];
+            rejected(b, "Noncanonical coefficient");
+        }
     }
 }

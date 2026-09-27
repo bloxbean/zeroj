@@ -82,14 +82,24 @@ Run the multi-party ceremony externally (snarkjs), then import the `.zkey` once 
 store layout; from there it's Flow 2's load-and-prove:
 
 ```java
-var imported = ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, expectedSourceSha256);   // one-time; writes the dense store
+var imported = ZkeyPkStoreImporter.importToPkStore(
+    zkeyPath, keysDir, expectedSourceSha256, expectedCircuitFingerprint);
 
-try (var keys = Groth16Keys.load(keysDir)) {
+try (var keys = Groth16Keys.load(keysDir, imported.manifestSha256())) {
     // a snarkjs setup appends numPublic+1 public-input binding rows after the circuit rows —
     // tell the H computation about them (0 for locally-generated bundles):
     Groth16ProofBLS381 proof = keys.prove(ProverBackend.PURE_JAVA, w, flat, numPublic + 1);
 }
 ```
+
+Supply the exact fingerprint of the independently verified R1CS (for example,
+`Groth16Pipeline.Compiled.fingerprint()`). It is included before sealing, so pinned loads and
+circuit-aware cache hits work together. Binding a sealed store later is rejected; re-import
+into a new directory to add metadata. The three-argument import remains available for an
+unbound store. A supplied fingerprint asserts circuit identity; it does not verify that the
+key is consistent with that relation. Independently verify the key against the R1CS and trusted
+`.ptau`, or use a trusted hash from someone who did. Retain the returned manifest hash outside
+the store through a trusted channel and supply it on every later load.
 
 The importer always writes the dense format, and dense stays readable forever — ceremony
 bundles are never affected by the sparse default.

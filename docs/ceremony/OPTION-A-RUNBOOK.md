@@ -74,7 +74,9 @@ entropy was destroyed.
 snarkjs zkey beacon key_<last>.zkey key_final.zkey <beaconHashHex> 10 -n="final beacon"
 
 # The independent check anyone can re-run:
-snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey
+snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey || exit 1
+# Hash only the independently verified artifact, kept in a controlled directory:
+VERIFIED_ZKEY_SHA256=$(shasum -a 256 key_final.zkey | awk '{print $1}')
 
 snarkjs zkey export verificationkey key_final.zkey verification_key.json
 
@@ -83,10 +85,14 @@ java -cp zeroj-ceremony.jar org.zeroj.ceremony.CeremonyCli \
      finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 
-Proving afterwards: `Groth16PkStore.load(dir)` + `ZkeyPkStoreImporter.snarkjsConstraints(compiled, numPublic)`
+Proving afterwards: `Groth16PkStore.load(dir, expectedManifestSha256)` + `ZkeyPkStoreImporter.snarkjsConstraints(compiled, numPublic)`
 (snarkjs appends one public-input binding row per public signal — the helper synthesizes them; it is
 asserted against real zkeys in `ZkeyPkStoreImporterTest`). The VK for the on-chain validator comes
-from the same store (`loaded.gammaG2()`, `loaded.ic()`).
+from the same store (`loaded.gammaG2()`, `loaded.ic()`). Retain the manifest SHA-256 printed by
+`finalize` through a trusted channel, outside the store. For circuit-aware cache hits, pass
+`--circuit-fingerprint "$VERIFIED_CIRCUIT_FINGERPRINT"` at finalize time; sealed stores cannot
+be bound afterwards. This fingerprint must come from the verified exact R1CS and is metadata,
+not a substitute for `zkey verify`.
 
 ## Transcript publication (what makes it trustworthy)
 

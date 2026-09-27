@@ -39,7 +39,8 @@ import java.util.stream.IntStream;
  * in the same parallel pass. VK parts (alpha/beta/gamma/delta, IC) land in the store's
  * {@code aux.bin}/manifest via the shared {@link Groth16PkStore} writer.</p>
  *
- * <p>After import: {@code Groth16PkStore.load(dir)} + prove exactly as with a ZeroJ-generated key.
+ * <p>After import: {@code Groth16PkStore.load(dir, imported.manifestSha256())}, then prove
+ * as with a ZeroJ-generated key.
  * Note snarkjs setup appends public-input binding rows to the constraint list — use
  * {@link #snarkjsConstraints(java.util.List, int)} when proving under a ceremony key.</p>
  */
@@ -65,27 +66,56 @@ public final class ZkeyPkStoreImporter {
     /**
      * @deprecated Select a trusted expected SHA-256 or explicitly use the unpinned test API.
      */
-    @Deprecated
+    @Deprecated(forRemoval = true)
     public static Imported importToPkStore(Path zkeyFile, Path dir) throws IOException {
         throw new IOException("Expected .zkey SHA-256 required; use the pinned overload or "
                 + "importUnpinnedToPkStore for explicitly unpinned local/test artifacts");
     }
 
-    /** Import a mathematically validated key whose bytes match a trusted external hash. */
+    /**
+     * Import structurally and point-validated bytes matching a trusted external hash.
+     * The sealed store is unbound; use the fingerprint overload for circuit-aware cache hits.
+     * This does not verify key consistency with the R1CS or ceremony transcript.
+     */
     public static Imported importToPkStore(Path zkeyFile, Path dir, String expectedSha256) throws IOException {
         Groth16StoreIntegrity.requireDigest(expectedSha256);
-        return stageImport(zkeyFile, dir, expectedSha256);
+        return stageImport(zkeyFile, dir, expectedSha256, null);
     }
 
     /**
-     * Explicit local/test opt-in: validates the key but cannot authenticate its ceremony origin.
+     * Import with an exact circuit fingerprint included before the manifest is sealed.
+     * The caller must independently establish the key/circuit association; this checks only
+     * fingerprint syntax and dimensions, not the relation or ceremony transcript.
+     */
+    public static Imported importToPkStore(Path zkeyFile, Path dir, String expectedSha256,
+                                           String expectedCircuitFingerprint) throws IOException {
+        Groth16StoreIntegrity.requireDigest(expectedSha256);
+        requireFingerprint(expectedCircuitFingerprint);
+        return stageImport(zkeyFile, dir, expectedSha256, expectedCircuitFingerprint);
+    }
+
+    /**
+     * Explicit local/test opt-in: validates structure and points but cannot authenticate ceremony origin.
      * This never bypasses curve, subgroup, canonicality or structural checks.
      */
     public static Imported importUnpinnedToPkStore(Path zkeyFile, Path dir) throws IOException {
-        return stageImport(zkeyFile, dir, null);
+        return stageImport(zkeyFile, dir, null, null);
     }
 
-    private static Imported stageImport(Path source, Path destination, String expectedHash) throws IOException {
+    /** Explicit local/test import with caller-asserted circuit metadata sealed into the manifest. */
+    public static Imported importUnpinnedToPkStore(Path zkeyFile, Path dir,
+                                                   String expectedCircuitFingerprint) throws IOException {
+        requireFingerprint(expectedCircuitFingerprint);
+        return stageImport(zkeyFile, dir, null, expectedCircuitFingerprint);
+    }
+
+    private static void requireFingerprint(String fingerprint) {
+        if (!Groth16Pipeline.isExactFingerprint(fingerprint))
+            throw new IllegalArgumentException("exact circuit fingerprint is required");
+    }
+
+    private static Imported stageImport(Path source, Path destination, String expectedHash,
+                                        String circuitFingerprint) throws IOException {
         Path target = destination.toAbsolutePath();
         if (Files.exists(target)) throw new IOException("Output directory already exists: " + target);
         Files.createDirectories(target.getParent());
@@ -116,6 +146,8 @@ public final class ZkeyPkStoreImporter {
                 throw new IOException("Malformed .zkey", malformed);
             }
             Files.delete(snapshot);
+            if (circuitFingerprint != null)
+                Groth16PkStore.bindCircuitFingerprint(staging, circuitFingerprint);
             String manifestHash = Groth16StoreIntegrity.seal(staging, sourceHash);
             // No REPLACE_EXISTING: an existing store is never partially overwritten.
             Files.move(staging, target);
@@ -149,6 +181,7 @@ public final class ZkeyPkStoreImporter {
             for (int i = 0; i < nSections; i++) {
                 if (fileSize - pos < 12) throw new IOException("Truncated .zkey section header");
                 int type = z.get(U32, pos);
+                if (type < 1 || type > 10) throw new IOException("Unknown .zkey section " + type);
                 long size = z.get(U64, pos + 4);
                 pos += 12;
                 if (size < 0 || size > fileSize - pos) throw new IOException("Invalid .zkey section " + type);

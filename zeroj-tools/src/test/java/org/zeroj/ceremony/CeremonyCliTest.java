@@ -10,6 +10,7 @@ import org.zeroj.bls12381.field.Fp2;
 import org.zeroj.bls12381.pairing.BLS12381Pairing;
 import org.zeroj.codec.SnarkjsJsonCodec;
 import org.zeroj.crypto.groth16.Groth16PkStore;
+import org.zeroj.crypto.groth16.Groth16Pipeline;
 import org.zeroj.crypto.groth16.Groth16ProverBLS381;
 import org.zeroj.crypto.groth16.ProverBackend;
 import org.zeroj.crypto.groth16.R1CSImporter;
@@ -19,12 +20,16 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -60,6 +65,31 @@ class CeremonyCliTest {
     }
 
     @Test
+    void finalizeInvalidPolicyArguments_failBeforeImport(@TempDir Path dir) throws Exception {
+        Path input = dir.resolve("readable.zkey");
+        Files.write(input, new byte[]{0}); // must not reach the parser
+        Path store = dir.resolve("store");
+        for (List<String> options : List.of(
+                List.<String>of(),
+                List.of("--sha256", "00".repeat(32), "--allow-unpinned"),
+                List.of("--sha256", ""),
+                List.of("--sha256", "0".repeat(63)),
+                List.of("--sha256", "0".repeat(65)),
+                List.of("--sha256", "gg".repeat(32)),
+                List.of("--allow-unpinned", "--circuit-fingerprint", "c1-w4-p1"))) {
+            var args = new ArrayList<>(List.of("finalize", "--zkey", input.toString(), "--pk-store", store.toString()));
+            args.addAll(options);
+            var result = capture(args.toArray(String[]::new));
+            assertEquals(2, result.exitCode(), result.stderr());
+            assertEquals("", result.stdout(), "argument errors must precede Importing output");
+            assertFalse(result.stderr().contains("Exception"), result.stderr());
+            assertTrue(result.stderr().contains(options.contains("--circuit-fingerprint")
+                    ? "exact R1CS" : options.size() == 2 ? "64 hexadecimal" : "Choose exactly one"), result.stderr());
+            assertFalse(Files.exists(store));
+        }
+    }
+
+    @Test
     void fullOptionA_ceremonyViaCli_provesAndVerifies(@TempDir Path dir) throws Exception {
         String snarkjs = findSnarkjs();
         assumeTrue(snarkjs != null, "snarkjs not found");
@@ -87,18 +117,27 @@ class CeremonyCliTest {
         assertEquals(2, CeremonyCli.run(new String[]{"finalize", "--allow-unpinned", "--sha256", sourceHash,
                 "--zkey", dir.resolve("key1.zkey").toString(), "--pk-store", store.toString()}));
         assertFalse(Files.exists(store));
-        assertEquals(0, CeremonyCli.run(new String[]{"finalize", "--sha256", sourceHash,
-                "--zkey", dir.resolve("key1.zkey").toString(), "--pk-store", store.toString()}));
-
-        // 4. prove from the store; verify against the snarkjs VK
         var builder = MulFixtureCircuit.build();
         var compiled = builder.compileR1CS(CurveId.BLS12_381);
+        String fingerprint = new Groth16Pipeline.Compiled(compiled.flat(), compiled.numConstraints(),
+                compiled.numWires(), compiled.numPublicInputs()).fingerprint();
+        var result = capture("finalize", "--sha256", sourceHash.toUpperCase(),
+                "--circuit-fingerprint", fingerprint,
+                "--zkey", dir.resolve("key1.zkey").toString(), "--pk-store", store.toString());
+        assertEquals(0, result.exitCode(), result.stderr());
+        String manifestPin = result.stdout().lines()
+                .filter(line -> line.startsWith("Manifest SHA-256 (retain via a trusted channel): "))
+                .map(line -> line.substring(line.lastIndexOf(' ') + 1)).findFirst().orElseThrow();
+        assertTrue(manifestPin.matches("[0-9a-f]{64}"));
+
+        // 4. prove from the store loaded with the exact pin returned by the CLI; verify snarkjs VK
         BigInteger[] witness = builder.calculateWitness(Map.of(
                 "out", List.of(BigInteger.valueOf(33)),
                 "a", List.of(BigInteger.valueOf(3)),
                 "b", List.of(BigInteger.valueOf(11))), CurveId.BLS12_381);
 
-        try (var loaded = Groth16PkStore.load(store)) {
+        try (var loaded = Groth16PkStore.load(store, manifestPin)) {
+            assertEquals(fingerprint, loaded.circuitFingerprint());
             var cons = ZkeyPkStoreImporter.snarkjsConstraints(compiled.constraints(), compiled.numPublicInputs());
             var proof = Groth16ProverBLS381.proveWithReaders(loaded.pk(), loaded.readers(),
                     ProverBackend.PURE_JAVA, witness, cons, compiled.numWires(), loaded.domain());
@@ -114,6 +153,25 @@ class CeremonyCliTest {
     }
 
     // ---- helpers ----
+
+    private record CliResult(int exitCode, String stdout, String stderr) {}
+
+    private static CliResult capture(String... args) {
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        PrintStream previousOut = System.out;
+        PrintStream previousErr = System.err;
+        try (var out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
+             var err = new PrintStream(stderr, true, StandardCharsets.UTF_8)) {
+            System.setOut(out);
+            System.setErr(err);
+            int exitCode = CeremonyCli.run(args);
+            return new CliResult(exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+        } finally {
+            System.setOut(previousOut);
+            System.setErr(previousErr);
+        }
+    }
 
     private static String findSnarkjs() {
         String prop = System.getProperty("zeroj.snarkjs");

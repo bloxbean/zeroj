@@ -4,6 +4,7 @@ import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import org.zeroj.crypto.groth16.R1csExporter;
+import org.zeroj.crypto.groth16.Groth16Pipeline;
 import org.zeroj.crypto.groth16.ZkeyPkStoreImporter;
 import org.zeroj.tools.zkey.ZkeyContributor;
 import picocli.CommandLine;
@@ -157,18 +158,34 @@ public final class CeremonyCli {
         @Option(names = "--sha256", description = "Expected SHA-256 from a trusted ceremony manifest") String sha256;
         @Option(names = "--allow-unpinned", description = "Explicit local/test import without source authentication") boolean allowUnpinned;
 
+        @Option(names = "--circuit-fingerprint", description = "Trusted exact R1CS fingerprint to bind before sealing (optional)")
+        String circuitFingerprint;
+
         @Override
         public Integer call() throws Exception {
-            if (!Files.isReadable(zkey)) { System.err.println("Cannot read .zkey: " + zkey); return 2; }
-            System.out.printf("Importing %s (%,d bytes) -> %s ...%n", zkey, Files.size(zkey), pkStore);
-            long t0 = System.nanoTime();
-            if ((sha256 == null) == !allowUnpinned) {
+            if ((sha256 != null) == allowUnpinned) {
                 System.err.println("Choose exactly one of --sha256 or --allow-unpinned");
                 return 2;
             }
-            var dims = allowUnpinned
-                    ? ZkeyPkStoreImporter.importUnpinnedToPkStore(zkey, pkStore)
-                    : ZkeyPkStoreImporter.importToPkStore(zkey, pkStore, sha256);
+            if (sha256 != null && !sha256.matches("[0-9a-fA-F]{64}")) {
+                System.err.println("--sha256 must be exactly 64 hexadecimal characters");
+                return 2;
+            }
+            if (circuitFingerprint != null && !Groth16Pipeline.isExactFingerprint(circuitFingerprint)) {
+                System.err.println("--circuit-fingerprint must be an exact R1CS fingerprint");
+                return 2;
+            }
+            if (!Files.isReadable(zkey)) { System.err.println("Cannot read .zkey: " + zkey); return 2; }
+            System.out.printf("Importing %s (%,d bytes) -> %s ...%n", zkey, Files.size(zkey), pkStore);
+            long t0 = System.nanoTime();
+            ZkeyPkStoreImporter.Imported dims;
+            if (circuitFingerprint == null) {
+                dims = allowUnpinned ? ZkeyPkStoreImporter.importUnpinnedToPkStore(zkey, pkStore)
+                        : ZkeyPkStoreImporter.importToPkStore(zkey, pkStore, sha256);
+            } else {
+                dims = allowUnpinned ? ZkeyPkStoreImporter.importUnpinnedToPkStore(zkey, pkStore, circuitFingerprint)
+                        : ZkeyPkStoreImporter.importToPkStore(zkey, pkStore, sha256, circuitFingerprint);
+            }
             System.out.println("Source SHA-256: " + dims.sourceSha256());
             System.out.println("Manifest SHA-256 (retain via a trusted channel): " + dims.manifestSha256());
             System.out.printf("Done in %.1fs: %,d wires | %d public | domain %,d%n",
