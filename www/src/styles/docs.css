@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Sora:wght@500;600;700&display=swap');
+
+/* ZeroJ palette: ink #080b12, teal #2dd4bf, violet #8b5cf6 (from the brand mark). */
+:root {
+  --zj-font-display: 'Sora', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --zj-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --zj-violet: #a78bfa;
+
+  --sl-font: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: var(--zj-font-mono);
+  --sl-content-width: 48rem;
+
+  --sl-color-accent-low: #0a302b;
+  --sl-color-accent: #2dd4bf;
+  --sl-color-accent-high: #99f6e4;
+  --sl-color-white: #f3f7fa;
+  --sl-color-gray-1: #e1e8ee;
+  --sl-color-gray-2: #bcc7d2;
+  --sl-color-gray-3: #8a97a6;
+  --sl-color-gray-4: #566273;
+  --sl-color-gray-5: #283140;
+  --sl-color-gray-6: #121823;
+  --sl-color-black: #080b12;
+}
+
+:root[data-theme='light'] {
+  --zj-violet: #6d28d9;
+  --sl-color-accent-low: #ccfbf1;
+  --sl-color-accent: #0f766e;
+  --sl-color-accent-high: #0b4f4a;
+  --sl-color-white: #080b12;
+  --sl-color-gray-1: #1b2330;
+  --sl-color-gray-2: #333d4c;
+  --sl-color-gray-3: #556070;
+  --sl-color-gray-4: #8793a2;
+  --sl-color-gray-5: #c9d1da;
+  --sl-color-gray-6: #eef2f5;
+  --sl-color-gray-7: #f7f9fa;
+  --sl-color-black: #ffffff;
+}
+
+h1,
+h2,
+h3,
+h4,
+.sl-markdown-content :is(h1, h2, h3, h4) {
+  font-family: var(--zj-font-display);
+  letter-spacing: -0.025em;
+}
+
+h1#_top {
+  font-size: clamp(2rem, 4vw, 2.6rem);
+  font-weight: 700;
+}
+
+.sl-markdown-content h2 {
+  font-size: clamp(1.45rem, 2.6vw, 1.8rem);
+  font-weight: 600;
+}
+
+.sl-markdown-content h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.sl-markdown-content h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+header.header {
+  backdrop-filter: blur(16px);
+}
+
+:root:not([data-theme='light']) header.header {
+  background-color: rgb(8 11 18 / 0.86);
+}
+
+/* A faint teal/violet glow behind the page heading in dark mode. */
+:root:not([data-theme='light']) .main-pane {
+  background:
+    radial-gradient(60rem 18rem at 20% -6rem, rgb(45 212 191 / 0.07), transparent 70%),
+    radial-gradient(40rem 14rem at 85% -4rem, rgb(139 92 246 / 0.07), transparent 70%);
+}
+
+.sl-markdown-content a {
+  text-underline-offset: 3px;
+}
+
+.sl-markdown-content table {
+  font-size: 0.875rem;
+}
+
+.sl-markdown-content :not(pre) > code {
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+
+.sl-markdown-content strong {
+  color: var(--sl-color-white);
+}
+
+/* Sidebar group labels in the display face. */
+nav.sidebar .group-label .large {
+  font-family: var(--zj-font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Cards and link cards pick up the brand accent on hover. */
+.sl-markdown-content .card,
+.sl-link-card {
+  border-radius: 12px;
+}
+
+.sl-link-card:hover {
+  border-color: var(--sl-color-accent);
+}
+
+/* Starlight's Steps: teal counters. */
+.sl-markdown-content .sl-steps > li::before {
+  font-family: var(--zj-font-mono);
+}
+
+::selection {
+  background: var(--sl-color-accent);
+  color: var(--sl-color-black);
+}

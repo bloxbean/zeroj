@@ -1,0 +1,11 @@
+# build output
+dist/
+# generated types
+.astro/
+# dependencies
+node_modules/
+# local output of `npm run generate` (the build writes AI artifacts straight into dist/)
+.ai-preview/
+
+npm-debug.log*
+.DS_Store
