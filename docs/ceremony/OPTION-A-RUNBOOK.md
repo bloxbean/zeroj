@@ -74,19 +74,25 @@ entropy was destroyed.
 snarkjs zkey beacon key_<last>.zkey key_final.zkey <beaconHashHex> 10 -n="final beacon"
 
 # The independent check anyone can re-run:
-snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey
+snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey || exit 1
+# Hash only the independently verified artifact, kept in a controlled directory:
+VERIFIED_ZKEY_SHA256=$(shasum -a 256 key_final.zkey | awk '{print $1}')
 
 snarkjs zkey export verificationkey key_final.zkey verification_key.json
 
 # Into ZeroJ (streaming; handles multi-GB keys):
 java -cp zeroj-ceremony.jar org.zeroj.ceremony.CeremonyCli \
-     finalize --zkey key_final.zkey --pk-store ./ownership-pk
+     finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 
-Proving afterwards: `Groth16PkStore.load(dir)` + `ZkeyPkStoreImporter.snarkjsConstraints(compiled, numPublic)`
+Proving afterwards: `Groth16PkStore.load(dir, expectedManifestSha256)` + `ZkeyPkStoreImporter.snarkjsConstraints(compiled, numPublic)`
 (snarkjs appends one public-input binding row per public signal — the helper synthesizes them; it is
 asserted against real zkeys in `ZkeyPkStoreImporterTest`). The VK for the on-chain validator comes
-from the same store (`loaded.gammaG2()`, `loaded.ic()`).
+from the same store (`loaded.gammaG2()`, `loaded.ic()`). Retain the manifest SHA-256 printed by
+`finalize` through a trusted channel, outside the store. For circuit-aware cache hits, pass
+`--circuit-fingerprint "$VERIFIED_CIRCUIT_FINGERPRINT"` at finalize time; sealed stores cannot
+be bound afterwards. This fingerprint must come from the verified exact R1CS and is metadata,
+not a substitute for `zkey verify`.
 
 ## Transcript publication (what makes it trustworthy)
 
@@ -105,3 +111,11 @@ from source to confirm the key binds to the claimed circuit.
 - [ ] beacon source pre-announced, applied, published
 - [ ] `zkey verify` green; final key + VK hashes published
 - [ ] `finalize` run; a test proof generated and verified off-chain and on-chain
+
+Finalization requires `--sha256` from an independently verified ceremony manifest, or an
+explicit `--allow-unpinned` for local experiments. These options are mutually exclusive.
+The output directory must not exist. Retain the printed manifest SHA-256 through a trusted
+channel and pass it to `Groth16PkStore.load(dir, expectedManifestSha256)` when reopening.
+The expected hash authenticates bytes only relative to its trusted source; independent
+`snarkjs zkey verify` and circuit/ceremony provenance remain mandatory. Protect the local
+store from mutation for the entire mmap lifetime.

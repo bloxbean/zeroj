@@ -61,7 +61,7 @@ class ZkeyContributorInteropTest {
         // (c) the final key proves (via the in-memory importer for brevity) — full-circle sanity
         run(dir, snarkjs, "zkey", "export", "verificationkey", "key3.zkey", "vk.json");
         Path store = dir.resolve("pk");
-        assertEquals(0, CeremonyCli.run(new String[]{"finalize",
+        assertEquals(0, CeremonyCli.run(new String[]{"finalize", "--allow-unpinned",
                 "--zkey", dir.resolve("key3.zkey").toString(), "--pk-store", store.toString()}));
         var builder = MulFixtureCircuit.build();
         var compiled = builder.compileR1CS(CurveId.BLS12_381);

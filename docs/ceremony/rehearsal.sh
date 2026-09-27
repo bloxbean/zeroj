@@ -47,10 +47,13 @@ $CLI contribute --in key_0002.zkey --out key_0003.zkey --name "carol (zeroj)" | 
 echo ">> [coordinator] beacon (pre-announced public randomness) + independent verification"
 "$SNARKJS" zkey beacon key_0003.zkey key_final.zkey 0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 10 -n="rehearsal beacon"
 "$SNARKJS" zkey verify mul.r1cs pot.ptau key_final.zkey | tee -a transcript.txt
+# pipefail above ensures a failed verification stops before hashing/finalize.
+VERIFIED_ZKEY_SHA256=$(shasum -a 256 key_final.zkey | awk '{print $1}')
+printf '%s  key_final.zkey\n' "$VERIFIED_ZKEY_SHA256" | tee -a transcript.txt
 
 echo ">> [coordinator] finalize into a ZeroJ proving-key store + export VK"
 "$SNARKJS" zkey export verificationkey key_final.zkey verification_key.json
-$CLI finalize --zkey key_final.zkey --pk-store ./pk-store
+$CLI finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./pk-store | tee -a transcript.txt
 
 echo ""
 echo ">> REHEARSAL COMPLETE. Artifacts in $WORK (transcript.txt = the publishable record)."
