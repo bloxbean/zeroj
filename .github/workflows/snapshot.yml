@@ -1,5 +1,8 @@
 name: Publish Snapshot
 
+# From the release-ops standard (templates/workflows/snapshot_manual.yml, 2026-09-14), adapted for ZeroJ:
+# GraalVM 25 (as in CI and release.yml) and the ADR-0044 module-surface check.
+#
 # ADR-0044: snapshots publish the default product surface only — pure Java, no Go/Rust/WASM
 # toolchain. Assurance and benchmark modules are outside the default build and are never published.
 
@@ -12,21 +15,39 @@ permissions:
 jobs:
   publish-snapshot:
     name: Publish Snapshot to Maven Central
+    # The job runs the selected branch's Gradle build with the Central Portal token, so only release branches
+    # may publish snapshots; a run started on any other branch is skipped.
+    if: >-
+      github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    # The Central Portal token is a secret of this environment.
+    environment: release-staging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Java 25 (GraalVM)
-        uses: graalvm/setup-graalvm@v1
+        uses: graalvm/setup-graalvm@0426e2e191540e8514dff98dc52a5f5146a2a276 # v1.6.6
         with:
           java-version: '25'
           distribution: 'graalvm'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      # Only -SNAPSHOT versions belong in the snapshot repository; release versions go through tag-release.yml.
+      - name: Require a SNAPSHOT version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -nE 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*//p' gradle.properties \
+            | head -1 | tr -d '[:space:]')
+          if [[ "$VERSION" != *-SNAPSHOT ]]; then
+            echo "::error::Snapshot publishing requires a -SNAPSHOT version. Got: $VERSION" >&2
+            exit 1
+          fi
 
+      # No Gradle cache here: a cache restored from another run could change what runs next to the
+      # Central token.
       - name: Build and test
         run: ./gradlew clean build -PskipSigning=true --stacktrace
 
@@ -34,10 +55,9 @@ jobs:
         run: ./gradlew verifyDefaultModuleSurface --stacktrace
 
       # Snapshots go straight to the Central Portal snapshot repository; unlike a release there is
-      # no staged deployment and nothing to approve. Requires a -SNAPSHOT version in
-      # gradle.properties.
+      # no staged deployment and nothing to approve.
       - name: Publish snapshot
-        run: ./gradlew publishAggregationToCentralPortalSnapshots -PskipSigning=true --stacktrace
+        run: ./gradlew publishAggregationToCentralPortalSnapshots -PskipSigning=true --warn --stacktrace
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
