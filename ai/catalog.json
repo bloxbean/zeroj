@@ -1,0 +1,1174 @@
+{
+  "schemaVersion": 1,
+  "zerojVersion": "0.1.0-pre12",
+  "note": "Extracted from the ZeroJ Java sources at documentation build time. Public members only; the annotation processor also generates a <Name>Circuit companion per @ZKCircuit class.",
+  "groups": [
+    {
+      "key": "annotations",
+      "title": "Annotations",
+      "module": "org.zeroj:zeroj-circuit-annotation-api",
+      "package": "org.zeroj.circuit.annotation",
+      "types": [
+        {
+          "name": "ZKCircuit",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZKCircuit",
+          "doc": "Marks a Java class as a ZeroJ circuit source for annotation processing.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZKCircuit.java",
+          "members": [
+            {
+              "name": "name",
+              "signature": "String name() default \"\"",
+              "doc": ""
+            },
+            {
+              "name": "nameTemplate",
+              "signature": "String nameTemplate() default \"\"",
+              "doc": ""
+            },
+            {
+              "name": "version",
+              "signature": "int version() default 1",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "Prove",
+          "qualifiedName": "org.zeroj.circuit.annotation.Prove",
+          "doc": "Marks the method that defines circuit constraints.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/Prove.java",
+          "members": []
+        },
+        {
+          "name": "Public",
+          "qualifiedName": "org.zeroj.circuit.annotation.Public",
+          "doc": "Marks a symbolic value as a public circuit input.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/Public.java",
+          "members": [
+            {
+              "name": "name",
+              "signature": "String name() default \"\"",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "Secret",
+          "qualifiedName": "org.zeroj.circuit.annotation.Secret",
+          "doc": "Marks a symbolic value as a secret circuit input.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/Secret.java",
+          "members": [
+            {
+              "name": "name",
+              "signature": "String name() default \"\"",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "UInt",
+          "qualifiedName": "org.zeroj.circuit.annotation.UInt",
+          "doc": "Declares the bit width for an unsigned symbolic integer.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/UInt.java",
+          "members": [
+            {
+              "name": "bits",
+              "signature": "int bits()",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "FixedSize",
+          "qualifiedName": "org.zeroj.circuit.annotation.FixedSize",
+          "doc": "Declares a fixed size for symbolic arrays and byte-like values.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/FixedSize.java",
+          "members": [
+            {
+              "name": "value",
+              "signature": "int value() default -1",
+              "doc": ""
+            },
+            {
+              "name": "param",
+              "signature": "String param() default \"\"",
+              "doc": ""
+            },
+            {
+              "name": "inner",
+              "signature": "int inner() default -1",
+              "doc": ""
+            },
+            {
+              "name": "innerParam",
+              "signature": "String innerParam() default \"\"",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "CircuitParam",
+          "qualifiedName": "org.zeroj.circuit.annotation.CircuitParam",
+          "doc": "Marks a build-time value that changes circuit shape.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/CircuitParam.java",
+          "members": [
+            {
+              "name": "value",
+              "signature": "String value() default \"\"",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "FieldElement",
+          "qualifiedName": "org.zeroj.circuit.annotation.FieldElement",
+          "doc": "Explicit marker for a raw field-element symbolic value.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/FieldElement.java",
+          "members": []
+        },
+        {
+          "name": "Order",
+          "qualifiedName": "org.zeroj.circuit.annotation.Order",
+          "doc": "Explicit field ordering override for field-style annotated circuits.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/Order.java",
+          "members": [
+            {
+              "name": "value",
+              "signature": "int value()",
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "types",
+      "title": "Symbolic types",
+      "module": "org.zeroj:zeroj-circuit-annotation-api",
+      "package": "org.zeroj.circuit.annotation",
+      "types": [
+        {
+          "name": "ZkContext",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkContext",
+          "doc": "Minimal context wrapper around SignalBuilder for symbolic values and future gadget adapters.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkContext.java",
+          "members": [
+            {
+              "name": "builder",
+              "static": false,
+              "signature": "SignalBuilder builder()",
+              "doc": ""
+            },
+            {
+              "name": "requireSignal",
+              "static": false,
+              "signature": "void requireSignal(Signal signal)",
+              "doc": ""
+            },
+            {
+              "name": "constant",
+              "static": false,
+              "signature": "ZkField constant(long value)",
+              "doc": ""
+            },
+            {
+              "name": "constant",
+              "static": false,
+              "signature": "ZkField constant(BigInteger value)",
+              "doc": ""
+            },
+            {
+              "name": "field",
+              "static": false,
+              "signature": "ZkField field(Signal signal)",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkField",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkField",
+          "doc": "Symbolic raw field element backed by one Signal.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkField.java",
+          "members": [
+            {
+              "name": "publicInput",
+              "static": true,
+              "signature": "static ZkField publicInput(SignalBuilder builder, String name)",
+              "doc": ""
+            },
+            {
+              "name": "secret",
+              "static": true,
+              "signature": "static ZkField secret(SignalBuilder builder, String name)",
+              "doc": ""
+            },
+            {
+              "name": "wrap",
+              "static": true,
+              "signature": "static ZkField wrap(ZkContext context, Signal signal)",
+              "doc": ""
+            },
+            {
+              "name": "wrap",
+              "static": true,
+              "signature": "static ZkField wrap(SignalBuilder builder, Signal signal)",
+              "doc": ""
+            },
+            {
+              "name": "add",
+              "static": false,
+              "signature": "ZkField add(ZkField other)",
+              "doc": ""
+            },
+            {
+              "name": "sub",
+              "static": false,
+              "signature": "ZkField sub(ZkField other)",
+              "doc": ""
+            },
+            {
+              "name": "mul",
+              "static": false,
+              "signature": "ZkField mul(ZkField other)",
+              "doc": ""
+            },
+            {
+              "name": "div",
+              "static": false,
+              "signature": "ZkField div(ZkField other)",
+              "doc": ""
+            },
+            {
+              "name": "isEqual",
+              "static": false,
+              "signature": "ZkBool isEqual(ZkField other)",
+              "doc": ""
+            },
+            {
+              "name": "assertEqual",
+              "static": false,
+              "signature": "void assertEqual(ZkField other)",
+              "doc": ""
+            },
+            {
+              "name": "signal",
+              "static": false,
+              "signature": "Signal signal()",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkBool",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkBool",
+          "doc": "Symbolic boolean backed by one constrained bit signal.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkBool.java",
+          "members": [
+            {
+              "name": "publicInput",
+              "static": true,
+              "signature": "static ZkBool publicInput(SignalBuilder builder, String name)",
+              "doc": ""
+            },
+            {
+              "name": "secret",
+              "static": true,
+              "signature": "static ZkBool secret(SignalBuilder builder, String name)",
+              "doc": ""
+            },
+            {
+              "name": "wrap",
+              "static": true,
+              "signature": "static ZkBool wrap(ZkContext context, Signal signal)",
+              "doc": ""
+            },
+            {
+              "name": "wrap",
+              "static": true,
+              "signature": "static ZkBool wrap(SignalBuilder builder, Signal signal)",
+              "doc": ""
+            },
+            {
+              "name": "and",
+              "static": false,
+              "signature": "ZkBool and(ZkBool other)",
+              "doc": ""
+            },
+            {
+              "name": "or",
+              "static": false,
+              "signature": "ZkBool or(ZkBool other)",
+              "doc": ""
+            },
+            {
+              "name": "xor",
+              "static": false,
+              "signature": "ZkBool xor(ZkBool other)",
+              "doc": ""
+            },
+            {
+              "name": "not",
+              "static": false,
+              "signature": "ZkBool not()",
+              "doc": ""
+            },
+            {
+              "name": "select",
+              "static": false,
+              "signature": "ZkField select(ZkField ifTrue, ZkField ifFalse)",
+              "doc": ""
+            },
+            {
+              "name": "select",
+              "static": false,
+              "signature": "ZkBool select(ZkBool ifTrue, ZkBool ifFalse)",
+              "doc": ""
+            },
+            {
+              "name": "select",
+              "static": false,
+              "signature": "ZkUInt select(ZkUInt ifTrue, ZkUInt ifFalse)",
+              "doc": ""
+            },
+            {
+              "name": "isEqual",
+              "static": false,
+              "signature": "ZkBool isEqual(ZkBool other)",
+              "doc": ""
+            },
+            {
+              "name": "assertTrue",
+              "static": false,
+              "signature": "void assertTrue()",
+              "doc": ""
+            },
+            {
+              "name": "assertFalse",
+              "static": false,
+              "signature": "void assertFalse()",
+              "doc": ""
+            },
+            {
+              "name": "assertEqual",
+              "static": false,
+              "signature": "void assertEqual(ZkBool other)",
+              "doc": ""
+            },
+            {
+              "name": "asField",
+              "static": false,
+              "signature": "ZkField asField()",
+              "doc": ""
+            },
+            {
+              "name": "signal",
+              "static": false,
+              "signature": "Signal signal()",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkUInt",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkUInt",
+          "doc": "Symbolic unsigned integer backed by one field element and an explicit bit width.",
+          "note": "Declare inputs with @UInt(bits = N); construction adds range constraints.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkUInt.java",
+          "members": [
+            {
+              "name": "publicInput",
+              "static": true,
+              "signature": "static ZkUInt publicInput(SignalBuilder builder, String name, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "secret",
+              "static": true,
+              "signature": "static ZkUInt secret(SignalBuilder builder, String name, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "wrap",
+              "static": true,
+              "signature": "static ZkUInt wrap(ZkContext context, Signal signal, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "wrap",
+              "static": true,
+              "signature": "static ZkUInt wrap(SignalBuilder builder, Signal signal, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "bits",
+              "static": false,
+              "signature": "int bits()",
+              "doc": ""
+            },
+            {
+              "name": "add",
+              "static": false,
+              "signature": "ZkUInt add(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "sub",
+              "static": false,
+              "signature": "ZkUInt sub(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "mul",
+              "static": false,
+              "signature": "ZkUInt mul(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "lt",
+              "static": false,
+              "signature": "ZkBool lt(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "lte",
+              "static": false,
+              "signature": "ZkBool lte(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "gt",
+              "static": false,
+              "signature": "ZkBool gt(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "gte",
+              "static": false,
+              "signature": "ZkBool gte(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "isEqual",
+              "static": false,
+              "signature": "ZkBool isEqual(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "inRange",
+              "static": false,
+              "signature": "ZkBool inRange(ZkUInt lo, ZkUInt hi)",
+              "doc": ""
+            },
+            {
+              "name": "assertInRange",
+              "static": false,
+              "signature": "void assertInRange()",
+              "doc": ""
+            },
+            {
+              "name": "assertEqual",
+              "static": false,
+              "signature": "void assertEqual(ZkUInt other)",
+              "doc": ""
+            },
+            {
+              "name": "asField",
+              "static": false,
+              "signature": "ZkField asField()",
+              "doc": ""
+            },
+            {
+              "name": "signal",
+              "static": false,
+              "signature": "Signal signal()",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": ""
+            },
+            {
+              "name": "decomposition",
+              "static": false,
+              "signature": "BitDecomposition decomposition()",
+              "doc": "This value's binary decomposition at its declared width, proving value Minted on first use and cached, so the range constraints are emitted once no matter how many gadgets ask."
+            }
+          ]
+        },
+        {
+          "name": "ZkArray",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkArray",
+          "doc": "Fixed-size symbolic array.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkArray.java",
+          "members": [
+            {
+              "name": "publicFields",
+              "static": true,
+              "signature": "static ZkArray<ZkField> publicFields(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "secretFields",
+              "static": true,
+              "signature": "static ZkArray<ZkField> secretFields(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "publicBools",
+              "static": true,
+              "signature": "static ZkArray<ZkBool> publicBools(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "secretBools",
+              "static": true,
+              "signature": "static ZkArray<ZkBool> secretBools(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "publicUInts",
+              "static": true,
+              "signature": "static ZkArray<ZkUInt> publicUInts(SignalBuilder builder, String baseName, int size, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "secretUInts",
+              "static": true,
+              "signature": "static ZkArray<ZkUInt> secretUInts(SignalBuilder builder, String baseName, int size, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "publicFieldMatrix",
+              "static": true,
+              "signature": "static ZkArray<ZkArray<ZkField>> publicFieldMatrix(SignalBuilder builder, String baseName, int outerSize, int innerSize)",
+              "doc": ""
+            },
+            {
+              "name": "secretFieldMatrix",
+              "static": true,
+              "signature": "static ZkArray<ZkArray<ZkField>> secretFieldMatrix(SignalBuilder builder, String baseName, int outerSize, int innerSize)",
+              "doc": ""
+            },
+            {
+              "name": "publicBoolMatrix",
+              "static": true,
+              "signature": "static ZkArray<ZkArray<ZkBool>> publicBoolMatrix(SignalBuilder builder, String baseName, int outerSize, int innerSize)",
+              "doc": ""
+            },
+            {
+              "name": "secretBoolMatrix",
+              "static": true,
+              "signature": "static ZkArray<ZkArray<ZkBool>> secretBoolMatrix(SignalBuilder builder, String baseName, int outerSize, int innerSize)",
+              "doc": ""
+            },
+            {
+              "name": "publicUIntMatrix",
+              "static": true,
+              "signature": "static ZkArray<ZkArray<ZkUInt>> publicUIntMatrix(SignalBuilder builder, String baseName, int outerSize, int innerSize, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "secretUIntMatrix",
+              "static": true,
+              "signature": "static ZkArray<ZkArray<ZkUInt>> secretUIntMatrix(SignalBuilder builder, String baseName, int outerSize, int innerSize, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "bind",
+              "static": true,
+              "signature": "static <T extends ZkValue> ZkArray<T> bind(SignalBuilder builder, String baseName, int size, ElementFactory<T> factory)",
+              "doc": "Bind a custom fixed-size array."
+            },
+            {
+              "name": "size",
+              "static": false,
+              "signature": "int size()",
+              "doc": ""
+            },
+            {
+              "name": "get",
+              "static": false,
+              "signature": "T get(int index)",
+              "doc": ""
+            },
+            {
+              "name": "values",
+              "static": false,
+              "signature": "List<T> values()",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkBits",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkBits",
+          "doc": "Fixed-size symbolic bit vector backed by constrained ZkBool values.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkBits.java",
+          "members": [
+            {
+              "name": "publicInput",
+              "static": true,
+              "signature": "static ZkBits publicInput(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "secret",
+              "static": true,
+              "signature": "static ZkBits secret(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "size",
+              "static": false,
+              "signature": "int size()",
+              "doc": ""
+            },
+            {
+              "name": "get",
+              "static": false,
+              "signature": "ZkBool get(int index)",
+              "doc": ""
+            },
+            {
+              "name": "values",
+              "static": false,
+              "signature": "List<ZkBool> values()",
+              "doc": ""
+            },
+            {
+              "name": "isEqual",
+              "static": false,
+              "signature": "ZkBool isEqual(ZkBits other)",
+              "doc": ""
+            },
+            {
+              "name": "assertEqual",
+              "static": false,
+              "signature": "void assertEqual(ZkBits other)",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkBytes",
+          "qualifiedName": "org.zeroj.circuit.annotation.ZkBytes",
+          "doc": "Fixed-size symbolic byte vector backed by 8-bit ZkUInt values.",
+          "source": "zeroj-circuit-annotation-api/src/main/java/org/zeroj/circuit/annotation/ZkBytes.java",
+          "members": [
+            {
+              "name": "publicInput",
+              "static": true,
+              "signature": "static ZkBytes publicInput(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "secret",
+              "static": true,
+              "signature": "static ZkBytes secret(SignalBuilder builder, String baseName, int size)",
+              "doc": ""
+            },
+            {
+              "name": "size",
+              "static": false,
+              "signature": "int size()",
+              "doc": ""
+            },
+            {
+              "name": "get",
+              "static": false,
+              "signature": "ZkUInt get(int index)",
+              "doc": ""
+            },
+            {
+              "name": "values",
+              "static": false,
+              "signature": "List<ZkUInt> values()",
+              "doc": ""
+            },
+            {
+              "name": "isEqual",
+              "static": false,
+              "signature": "ZkBool isEqual(ZkBytes other)",
+              "doc": ""
+            },
+            {
+              "name": "assertEqual",
+              "static": false,
+              "signature": "void assertEqual(ZkBytes other)",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "gadgets",
+      "title": "Gadget adapters",
+      "module": "org.zeroj:zeroj-circuit-lib",
+      "package": "org.zeroj.circuit.lib.zk",
+      "types": [
+        {
+          "name": "ZkPoseidon",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkPoseidon",
+          "doc": "Symbolic Poseidon adapter for annotation-based circuits.",
+          "note": "For Cardano pass PoseidonParamsBLS12_381T3.INSTANCE explicitly.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkPoseidon.java",
+          "members": [
+            {
+              "name": "hash",
+              "static": true,
+              "signature": "static ZkField hash(ZkContext zk, PoseidonParams params, ZkField left, ZkField right)",
+              "doc": ""
+            },
+            {
+              "name": "hash",
+              "static": true,
+              "signature": "static ZkField hash(ZkContext zk, ZkField left, ZkField right)",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkPoseidonN",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkPoseidonN",
+          "doc": "Symbolic variable-arity Poseidon adapter for annotation-based circuits.",
+          "note": "For Cardano pass PoseidonParamsBLS12_381T3.INSTANCE explicitly.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkPoseidonN.java",
+          "members": [
+            {
+              "name": "hash",
+              "static": true,
+              "signature": "static ZkField hash(ZkContext zk, PoseidonParams params, ZkField... inputs)",
+              "doc": "Hash one or more symbolic field elements using folded two-input Poseidon under the supplied parameters."
+            }
+          ]
+        },
+        {
+          "name": "ZkMerkle",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkMerkle",
+          "doc": "Symbolic fixed-depth Merkle helpers for annotation-based circuits.",
+          "note": "For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC and no-params POSEIDON are BN254/off-chain paths.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkMerkle.java",
+          "members": [
+            {
+              "name": "computeRoot",
+              "static": true,
+              "signature": "static ZkField computeRoot(ZkContext zk, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashType hashType)",
+              "doc": ""
+            },
+            {
+              "name": "computeRoot",
+              "static": true,
+              "signature": "static ZkField computeRoot(ZkContext zk, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashFn hashFn)",
+              "doc": ""
+            },
+            {
+              "name": "computeRootPoseidon",
+              "static": true,
+              "signature": "static ZkField computeRootPoseidon(ZkContext zk, PoseidonParams params, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits)",
+              "doc": ""
+            },
+            {
+              "name": "verify",
+              "static": true,
+              "signature": "static void verify(ZkContext zk, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashType hashType)",
+              "doc": ""
+            },
+            {
+              "name": "verifyProof",
+              "static": true,
+              "signature": "static void verifyProof(ZkContext zk, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashType hashType)",
+              "doc": ""
+            },
+            {
+              "name": "verifyPoseidon",
+              "static": true,
+              "signature": "static void verifyPoseidon(ZkContext zk, PoseidonParams params, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits)",
+              "doc": ""
+            },
+            {
+              "name": "verifyProofPoseidon",
+              "static": true,
+              "signature": "static void verifyProofPoseidon(ZkContext zk, PoseidonParams params, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits)",
+              "doc": ""
+            },
+            {
+              "name": "verify",
+              "static": true,
+              "signature": "static void verify(ZkContext zk, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashFn hashFn)",
+              "doc": ""
+            },
+            {
+              "name": "verifyProof",
+              "static": true,
+              "signature": "static void verifyProof(ZkContext zk, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashFn hashFn)",
+              "doc": ""
+            },
+            {
+              "name": "isMember",
+              "static": true,
+              "signature": "static ZkBool isMember(ZkContext zk, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashType hashType)",
+              "doc": ""
+            },
+            {
+              "name": "isMemberPoseidon",
+              "static": true,
+              "signature": "static ZkBool isMemberPoseidon(ZkContext zk, PoseidonParams params, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits)",
+              "doc": ""
+            },
+            {
+              "name": "isMember",
+              "static": true,
+              "signature": "static ZkBool isMember(ZkContext zk, ZkField leaf, ZkField root, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashFn hashFn)",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkSha512",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkSha512",
+          "doc": "Symbolic SHA-512 adapter for annotation-based (@ZKCircuit) circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkSha512.java",
+          "members": [
+            {
+              "name": "hash",
+              "static": true,
+              "signature": "static ZkBytes hash(ZkContext zk, ZkBytes message)",
+              "doc": "SHA-512 of message → 64-byte digest."
+            }
+          ]
+        },
+        {
+          "name": "ZkHmacSha512",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkHmacSha512",
+          "doc": "Symbolic HMAC-SHA512 adapter for annotation-based (@ZKCircuit) circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkHmacSha512.java",
+          "members": [
+            {
+              "name": "hmac",
+              "static": true,
+              "signature": "static ZkBytes hmac(ZkContext zk, ZkBytes key, ZkBytes message)",
+              "doc": "HMAC-SHA512 of message under key → 64-byte MAC."
+            }
+          ]
+        },
+        {
+          "name": "ZkBlake2b",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkBlake2b",
+          "doc": "Symbolic BLAKE2b adapter for annotation-based (@ZKCircuit) circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkBlake2b.java",
+          "members": [
+            {
+              "name": "hash224",
+              "static": true,
+              "signature": "static ZkBytes hash224(ZkContext zk, ZkBytes message)",
+              "doc": "blake2b-224 of message → 28-byte digest (Cardano key hash)."
+            },
+            {
+              "name": "hash256",
+              "static": true,
+              "signature": "static ZkBytes hash256(ZkContext zk, ZkBytes message)",
+              "doc": "blake2b-256 of message → 32-byte digest."
+            },
+            {
+              "name": "hash",
+              "static": true,
+              "signature": "static ZkBytes hash(ZkContext zk, ZkBytes message, int outLenBytes)",
+              "doc": "blake2b with an explicit output length in [1,64] bytes."
+            }
+          ]
+        },
+        {
+          "name": "ZkCip1852",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkCip1852",
+          "doc": "Symbolic CIP-1852 / BIP32-Ed25519 derivation adapter for annotation-based (@ZKCircuit) circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkCip1852.java",
+          "members": [
+            {
+              "name": "paymentKeyHash",
+              "static": true,
+              "signature": "static ZkBytes paymentKeyHash(ZkContext zk, ZkBytes rootKL, ZkBytes rootKR, ZkBytes rootChainCode, long account, long role, long index)",
+              "doc": "Payment key hash of m/1852'/1815'/account'/role/index derived from the root extended key."
+            },
+            {
+              "name": "paymentKeyHash",
+              "static": true,
+              "signature": "static ZkBytes paymentKeyHash(ZkContext zk, ZkBytes rootKL, ZkBytes rootKR, ZkBytes rootChainCode, long account, ZkBytes role, ZkBytes index)",
+              "doc": "#paymentKeyHash(ZkContext, ZkBytes, ZkBytes, ZkBytes, long, long, long) with the two soft path components as circuit inputs: role and index are 4-byte little-endian ZkBytes (typically @Secret — the public pkh already binds the statement, so"
+            },
+            {
+              "name": "paymentKeyHash",
+              "static": true,
+              "signature": "static ZkBytes paymentKeyHash(ZkContext zk, ZkBytes rootKL, ZkBytes rootKR, ZkBytes rootChainCode, ZkBytes account, ZkBytes role, ZkBytes index)",
+              "doc": "Fully path-parameterised variant: account, role and index are all circuit inputs (4-byte little-endian ZkBytes, values < 2^31; the account is the plain number — hardening is applied in-circuit)."
+            },
+            {
+              "name": "leafKeyHash",
+              "static": true,
+              "signature": "static ZkBytes leafKeyHash(ZkContext zk, ZkBytes leafKL)",
+              "doc": "Payment key hash of a leaf key: blake2b224(encode(kL·B))."
+            }
+          ]
+        },
+        {
+          "name": "ZkPedersen",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkPedersen",
+          "doc": "Symbolic Pedersen commitment adapter for annotation-based circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkPedersen.java",
+          "members": [
+            {
+              "name": "commit",
+              "static": true,
+              "signature": "static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding)",
+              "doc": ""
+            },
+            {
+              "name": "commit",
+              "static": true,
+              "signature": "static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding, int scalarBits)",
+              "doc": "Commits to value with blinding."
+            },
+            {
+              "name": "commitBits",
+              "static": true,
+              "signature": "static ZkJubjubPoint commitBits(ZkContext zk, ZkBits valueBits, ZkBits blindingBits)",
+              "doc": "Commits using LSB-first scalar bit vectors."
+            },
+            {
+              "name": "verifyOpening",
+              "static": true,
+              "signature": "static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding, int scalarBits)",
+              "doc": ""
+            },
+            {
+              "name": "verifyOpening",
+              "static": true,
+              "signature": "static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding)",
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "ZkJubjubPoint",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkJubjubPoint",
+          "doc": "Symbolic Jubjub point backed by extended-coordinate field values.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkJubjubPoint.java",
+          "members": [
+            {
+              "name": "witnessAffine",
+              "static": true,
+              "signature": "static ZkJubjubPoint witnessAffine(ZkContext zk, ZkField u, ZkField v)",
+              "doc": "Binds a prover-supplied point given by its affine coordinates, emitting every constraint needed to make it a usable curve point: the affine curve equation v² − u² == 1 + d·u²·v², z = 1 (so z != 0 holds by construction and the representation"
+            },
+            {
+              "name": "fromTrustedAffine",
+              "static": true,
+              "signature": "static ZkJubjubPoint fromTrustedAffine(ZkContext zk, ZkField u, ZkField v)",
+              "doc": "thing as an affine point a circuit may trust, because the caller never sees the prover's witness."
+            },
+            {
+              "name": "constant",
+              "static": true,
+              "signature": "static ZkJubjubPoint constant(ZkContext zk, JubjubPoint point)",
+              "doc": "Wraps a compile-time point as circuit constants."
+            },
+            {
+              "name": "u",
+              "static": false,
+              "signature": "ZkField u()",
+              "doc": ""
+            },
+            {
+              "name": "v",
+              "static": false,
+              "signature": "ZkField v()",
+              "doc": ""
+            },
+            {
+              "name": "z",
+              "static": false,
+              "signature": "ZkField z()",
+              "doc": ""
+            },
+            {
+              "name": "t",
+              "static": false,
+              "signature": "ZkField t()",
+              "doc": ""
+            },
+            {
+              "name": "add",
+              "static": false,
+              "signature": "ZkJubjubPoint add(ZkContext zk, ZkJubjubPoint other)",
+              "doc": ""
+            },
+            {
+              "name": "doubled",
+              "static": false,
+              "signature": "ZkJubjubPoint doubled(ZkContext zk)",
+              "doc": ""
+            },
+            {
+              "name": "select",
+              "static": true,
+              "signature": "static ZkJubjubPoint select(ZkContext zk, ZkBool condition, ZkJubjubPoint ifTrue, ZkJubjubPoint ifFalse)",
+              "doc": ""
+            },
+            {
+              "name": "assertEqual",
+              "static": false,
+              "signature": "void assertEqual(ZkContext zk, ZkJubjubPoint other)",
+              "doc": ""
+            },
+            {
+              "name": "isEqual",
+              "static": false,
+              "signature": "ZkBool isEqual(ZkContext zk, ZkJubjubPoint other)",
+              "doc": ""
+            },
+            {
+              "name": "isIdentity",
+              "static": false,
+              "signature": "ZkBool isIdentity(ZkContext zk)",
+              "doc": ""
+            },
+            {
+              "name": "assertNotIdentity",
+              "static": false,
+              "signature": "void assertNotIdentity(ZkContext zk)",
+              "doc": ""
+            },
+            {
+              "name": "assertAffineEquals",
+              "static": false,
+              "signature": "void assertAffineEquals(ZkContext zk, ZkField affineU, ZkField affineV)",
+              "doc": ""
+            },
+            {
+              "name": "signals",
+              "static": false,
+              "signature": "List<Signal> signals()",
+              "doc": ""
+            },
+            {
+              "name": "assertWellFormed",
+              "static": false,
+              "signature": "void assertWellFormed()",
+              "doc": "Asserts that this point is a well-formed projective curve point: V² − U² == Z² + d·T², T·Z == U·V, and Z != 0."
+            }
+          ]
+        },
+        {
+          "name": "ZkEdDSAJubjub",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkEdDSAJubjub",
+          "doc": "Symbolic EdDSA-Jubjub verification adapter for annotation-based circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkEdDSAJubjub.java",
+          "members": [
+            {
+              "name": "verifyStrict",
+              "static": true,
+              "signature": "static void verifyStrict(ZkContext zk, ZkField publicKeyU, ZkField publicKeyV, ZkField message, ZkField rU, ZkField rV, ZkUInt s, ZkUInt kModL, ZkUInt kQuotient)",
+              "doc": "Verifies with an in-circuit prime-order subgroup check on pk."
+            },
+            {
+              "name": "verifyWithRegisteredKey",
+              "static": true,
+              "signature": "static void verifyWithRegisteredKey(ZkContext zk, ZkField publicKeyU, ZkField publicKeyV, ZkField message, ZkField rU, ZkField rV, ZkUInt s, ZkUInt kModL, ZkUInt kQuotient)",
+              "doc": "Verifies where pk is a public input or circuit constant."
+            },
+            {
+              "name": "witnessComputeKReduction",
+              "static": true,
+              "signature": "static KReduction witnessComputeKReduction(JubjubPoint rPoint, JubjubPoint publicKey, BigInteger message)",
+              "doc": "Computes the (kModL, kQuotient) witnesses the verification relation requires."
+            }
+          ]
+        },
+        {
+          "name": "ZkMiMC",
+          "qualifiedName": "org.zeroj.circuit.lib.zk.ZkMiMC",
+          "doc": "Symbolic MiMC adapter for annotation-based circuits.",
+          "note": "BN254-only. Do not use for Cardano (BLS12-381) circuits.",
+          "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkMiMC.java",
+          "members": [
+            {
+              "name": "hash",
+              "static": true,
+              "signature": "static ZkField hash(ZkContext zk, ZkField left, ZkField right)",
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

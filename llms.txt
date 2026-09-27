@@ -1,0 +1,104 @@
+# ZeroJ
+
+> ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano. Define circuits in Java, prove them with a pure-Java Groth16 prover on BLS12-381, verify proofs in any JVM, and verify them on-chain in Cardano Plutus V3 validators built with JuLC. Also includes BBS selective-disclosure credentials and snarkjs/circom interoperability.
+
+zerojVersion: 0.1.0-pre12
+julcVersion: 0.1.0-pre16
+cclVersion: 0.8.0-pre5
+
+Key facts an AI agent must know before generating ZeroJ code:
+
+- ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano: define circuits in Java, prove with a pure-Java prover, verify in Java (off-chain) or on Cardano (Plutus V3 via JuLC).
+- Status: experimental research software, not externally audited, not for production or value-bearing/mainnet use. "Beta" components are feature-complete and correctness-tested but not audited.
+- **Groth16 on BLS12-381 is the supported path for the current release.** PlonK (prover, verifier and on-chain validators) is experimental: make no correctness claims about it and do not choose it by default. BN254 is legacy and disabled by default.
+- Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre12. Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre12`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
+- Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` carries the blst-java JNI jar for its native verifier, and `VerifierRegistry.withServiceLoader()` lists that verifier first: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path.
+- Write application circuits with annotations: `@ZKCircuit`, `@Prove`, `@Public`/`@Secret`, symbolic types `ZkField`, `ZkBool`, `ZkUInt` (always with `@UInt(bits = N)`), `ZkArray`/`ZkBits`/`ZkBytes` (with `@FixedSize`). The annotation processor generates a `<Name>Circuit` companion. Never use Java `if`, `&&`, `||` on secret values — use `ZkBool.and/or/not/select`.
+- For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). MiMC and the no-params Poseidon overload are BN254-oriented; do not use them for Cardano.
+- Single-party trusted setup (`PowersOfTauBLS381.generate`, `Groth16Keys.setupInMemory`) is for development and tests only and requires `-Dzeroj.allowInsecureTrustedSetup=true`. Production keys come from a multi-party ceremony (snarkjs `.zkey`, imported into ZeroJ).
+- Every proof is freshly blinded; there is no public deterministic/unblinded prove API.
+- A valid proof is not authorization. On-chain, the reusable `Groth16BLS12381Verifier` only checks the math; real validators compose `Groth16BLS12381Lib`, bind the proof to the spend and recipient using values computed from ScriptContext, prevent replay with nullifiers or state, and enforce business policy. Do not lock funds with `Groth16BLS12381TxOutRefBindingVerifier`: it reads its spend binding from the guarded UTxO's own datum, which no real UTxO can satisfy.
+- An honest witness passing does not make a circuit sound: test invalid witnesses for every constraint.
+
+## Start here for AI agents
+
+- [AI Starter Pack](https://zeroj.dev/ai/starter-pack.md): the single best file to ingest — rules, idioms, anti-patterns, a symbolic circuit API catalog and canonical code. Drop it into CLAUDE.md, AGENTS.md or a Cursor rule.
+- [llms-full.txt](https://zeroj.dev/llms-full.txt): every documentation page in one Markdown file.
+- [Circuit API catalog (JSON)](https://zeroj.dev/ai/catalog.json): symbolic circuit types, annotations and gadget adapters extracted from the Java sources.
+- [Manifest](https://zeroj.dev/ai/manifest.json): versions, source revision and checksums of every exported file.
+- [Build with AI](https://zeroj.dev/ai/): setup for Claude Code, Cursor, Codex, Continue and chat assistants.
+
+## Start here
+
+- [What is ZeroJ?](https://zeroj.dev/ai/pages/start/overview.md): ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano. Learn what it does, how the pieces fit, and where to start.
+- [Installation](https://zeroj.dev/ai/pages/start/installation.md): Add ZeroJ to a Gradle or Maven project with the BOM, wire up the annotation processor, and enable the dev-only trusted setup for local runs.
+- [Quickstart: your first proof](https://zeroj.dev/ai/pages/start/quickstart.md): In about ten minutes, prove you know a secret factor without revealing it, then verify the proof in pure Java. Circuit, witness, setup, prove, verify.
+- [Status & maturity](https://zeroj.dev/ai/pages/start/status.md): What ZeroJ's Beta, Experimental, Disabled and Assurance-only labels mean, the full support matrix, and what "not for production" means in practice.
+
+## Learn zero-knowledge (concepts)
+
+- [Zero-knowledge in plain English](https://zeroj.dev/ai/pages/learn/zero-knowledge-basics.md): What a zero-knowledge proof is, what it convinces you of, what it can't do, and a mental model that maps it onto ordinary Java code.
+- [Circuits, constraints & witnesses](https://zeroj.dev/ai/pages/learn/circuits-and-witnesses.md): How ZK circuits really work (equations over a finite field, R1CS, witnesses), why Java control flow doesn't apply, and how under-constrained circuits break.
+- [Groth16, PlonK & BBS](https://zeroj.dev/ai/pages/learn/proof-systems.md): The three proof systems in ZeroJ, how their setup, proof size and verification cost differ, and why Cardano uses the BLS12-381 curve.
+- [Trusted setup, explained](https://zeroj.dev/ai/pages/learn/trusted-setup.md): What a trusted setup is, why its "toxic waste" can forge proofs, how multi-party ceremonies remove the risk, and what ZeroJ provides for dev and production.
+- [ZK on Cardano](https://zeroj.dev/ai/pages/learn/zk-on-cardano.md): How Cardano verifies ZK proofs with Plutus V3 BLS12-381 builtins, how proofs map onto eUTxO, what it costs, and why a valid proof is not authorization.
+- [Glossary](https://zeroj.dev/ai/pages/learn/glossary.md): Short, plain-English definitions of the zero-knowledge, cryptography and Cardano terms used throughout the ZeroJ docs.
+
+## Tutorials
+
+- [Prove you're over 18](https://zeroj.dev/ai/pages/tutorials/age-check.md): Build a range proof with ZkUInt, see why bit widths matter, test an invalid witness, and verify with nothing but a key, a proof and public inputs.
+- [Private allowlist with a Merkle tree](https://zeroj.dev/ai/pages/tutorials/private-allowlist.md): Prove you're on a list without saying who you are, using a Poseidon Merkle tree, then add a nullifier so each member can act only once per event.
+- [Verify your proof on Cardano](https://zeroj.dev/ai/pages/tutorials/verify-on-cardano.md): Lock test ADA behind a Groth16 verifier on a local Yaci DevKit devnet, unlock it with a proof, and learn why a bare verifier must never guard real value.
+- [Bring circom & snarkjs circuits](https://zeroj.dev/ai/pages/tutorials/snarkjs-interop.md): Prove a circom circuit with ZeroJ's pure-Java prover using snarkjs keys, and hand ZeroJ proofs to snarkjs. Groth16 on BLS12-381, both directions.
+
+## Guides: circuits
+
+- [Write circuits with annotations](https://zeroj.dev/ai/pages/guides/circuits/annotations.md): Author ZeroJ circuits as annotated Java classes, and use the generated companion to build, fill inputs, compute witnesses, and wire proofs.
+- [CircuitSpec & the Signal DSL](https://zeroj.dev/ai/pages/guides/circuits/circuit-dsl.md): Write circuits directly with CircuitSpec, Signal and the inline CircuitAPI DSL, compile them, compute witnesses, and use hints without breaking soundness.
+- [Gadget library](https://zeroj.dev/ai/pages/guides/circuits/gadgets.md): The circuit building blocks in zeroj-circuit-lib (hashes, Merkle proofs, ranges, Jubjub, and Cardano key derivation), with status and cost.
+- [Test your circuits for soundness](https://zeroj.dev/ai/pages/guides/circuits/testing-circuits.md): Why honest-witness tests aren't enough, a soundness checklist, invalid-witness and proof-tampering JUnit tests, and differential testing.
+
+## Guides: proving
+
+- [Prove with Groth16](https://zeroj.dev/ai/pages/guides/proving/groth16.md): Set up keys, generate Groth16 proofs on BLS12-381, scale to millions of constraints, and export proofs and keys for verifiers.
+- [Run a trusted setup ceremony](https://zeroj.dev/ai/pages/guides/proving/trusted-setup-ceremony.md): Run a multi-party Groth16 ceremony with snarkjs and the zeroj-ceremony tool, import the result into ZeroJ, and know what to check before trusting one.
+- [Performance & large circuits](https://zeroj.dev/ai/pages/guides/proving/performance.md): How ZeroJ's pure-Java Groth16 prover handles millions of constraints, how to size memory, when the optional blst backend helps, and JVM and GraalVM notes.
+- [Prove with PlonK](https://zeroj.dev/ai/pages/guides/proving/plonk.md): What ZeroJ's experimental PlonK support contains today, how to try it off-chain, and its known gaps. Groth16 is the supported path.
+
+## Guides: verifying
+
+- [Verify proofs in Java](https://zeroj.dev/ai/pages/guides/verifying/off-chain.md): Verify Groth16 proofs off-chain with ZeroJ's proof model, verifier backends and registries, and build a service that only trusts keys you pinned.
+- [Verify proofs on Cardano](https://zeroj.dev/ai/pages/guides/verifying/on-chain.md): Run Groth16 verification inside a Plutus V3 validator with zeroj-onchain-julc, bind proofs to the spend, and plan budgets and reference scripts.
+- [Secure your ZK application](https://zeroj.dev/ai/pages/guides/verifying/application-security.md): A practical threat-model checklist for ZeroJ builders — authorization, replay, nullifiers, trusted inputs, setup, circuit soundness and secrets.
+
+## Guides: credentials & state
+
+- [Selective disclosure with BBS](https://zeroj.dev/ai/pages/guides/credentials/bbs.md): Issue BBS credentials, derive presentations that reveal only chosen attributes, verify them in Java or on Cardano, and bind them against replay.
+- [Large authenticated state (Poseidon MPF/JMT)](https://zeroj.dev/ai/pages/guides/credentials/authenticated-state.md): Keep millions of entries off-chain, publish one Poseidon root, and prove single-key reads and updates with small Groth16 circuits. Experimental.
+
+## Use cases
+
+- [Use cases](https://zeroj.dev/ai/pages/use-cases/overview.md): What zero-knowledge proofs unlock on Cardano — nine worked use cases, the building block behind each, and runnable demos.
+- [Private voting](https://zeroj.dev/ai/pages/use-cases/private-voting.md): Let each eligible member vote exactly once without revealing which member cast which ballot, using Merkle membership, nullifiers and Groth16 on Cardano.
+- [Proof of reserves](https://zeroj.dev/ai/pages/use-cases/proof-of-reserves.md): A custodian proves its reserves cover every customer balance without publishing any balance, and each customer can check they were counted.
+- [Age & KYC eligibility](https://zeroj.dev/ai/pages/use-cases/age-and-kyc.md): Prove you're old enough and live in an approved country, using an issuer-signed credential, while the validator learns only "eligible".
+- [Private NFT ownership](https://zeroj.dev/ai/pages/use-cases/nft-ownership.md): Prove you hold an NFT from a collection for one-time token-gated access without connecting your wallet, plus the nullifier trade-off that decides privacy.
+- [One claim per person](https://zeroj.dev/ai/pages/use-cases/sybil-resistant-airdrop.md): A Sybil-resistant airdrop where each personhood credential claims once per epoch, anonymously, with the payout bound to a chosen recipient.
+- [Selective disclosure & reusable KYC](https://zeroj.dev/ai/pages/use-cases/selective-disclosure.md): Do KYC once, then show each service only what it asks for, as Groth16 predicates over hidden fields or BBS presentations verified on Cardano.
+- [Digital product passport](https://zeroj.dev/ai/pages/use-cases/digital-product-passport.md): Prove a product meets carbon, recycled-content and origin thresholds without exposing the supplier data behind them, anchored on Cardano.
+- [Prove you own a Cardano account](https://zeroj.dev/ai/pages/use-cases/account-recovery.md): Prove you know the wallet root key behind a Cardano address, without revealing the seed or signing anything, so a refund can reach the real owner.
+- [Private token transfers](https://zeroj.dev/ai/pages/use-cases/private-payments.md): A design walkthrough of a shielded pool on Cardano. Deposit, then withdraw to a fresh address that nobody can link to the deposit. Design only, no demo.
+
+## Reference
+
+- [Modules](https://zeroj.dev/ai/pages/reference/modules.md): Every published ZeroJ artifact with its coordinates, purpose, BOM membership, maturity and main entry-point classes, plus the unpublished support projects.
+- [API cheat sheet](https://zeroj.dev/ai/pages/reference/api-cheatsheet.md): One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification and BBS.
+- [Configuration](https://zeroj.dev/ai/pages/reference/configuration.md): Every ZeroJ system property, environment variable, native-library requirement, external tool and contributor Gradle flag, and which ones are dev-only.
+- [FAQ & troubleshooting](https://zeroj.dev/ai/pages/reference/faq.md): Straight answers about ZeroJ's maturity, proof systems, tooling and performance, plus fixes for the errors you are most likely to hit.
+- [Migration notes](https://zeroj.dev/ai/pages/reference/migration.md): Move from com.bloxbean.cardano to the org.zeroj namespace, and from the pre-cleanup module set to today's focused module surface.
+
+## Source code and examples
+
+- ZeroJ repository: https://github.com/bloxbean/zeroj
+- Runnable end-to-end demo apps: https://github.com/bloxbean/zeroj-usecases
+- Every page is also available as HTML at the canonical URL shown inside its Markdown twin.
