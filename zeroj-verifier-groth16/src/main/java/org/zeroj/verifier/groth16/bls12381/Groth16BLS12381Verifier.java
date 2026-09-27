@@ -131,7 +131,15 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
      * Decode and validate a snarkjs G1 point [x, y, z] (projective, decimal strings).
      */
     private P1_Affine decodeG1(String label, List<BigInteger> coords) {
-        var point = new P1_Affine(decodeG1Bytes(label, coords));
+        byte[] encoded = decodeG1Bytes(label, coords);
+        P1_Affine point;
+        try {
+            point = new P1_Affine(encoded);
+        } catch (RuntimeException invalidEncoding) {
+            // blst-java 0.3.2 reports native deserialization failures as RuntimeException.
+            // This boundary consumes only the validated-length public point encoding.
+            throw new IllegalArgumentException(label + " is not a valid blst point", invalidEncoding);
+        }
         requireValidNonInfinity(label, point);
         return point;
     }
@@ -173,7 +181,15 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
      * Decode a snarkjs G2 point [[x_c0,x_c1],[y_c0,y_c1],[z_c0,z_c1]] to blst uncompressed bytes.
      */
     private P2_Affine decodeG2(String label, List<List<BigInteger>> coords) {
-        var point = new P2_Affine(decodeG2Bytes(label, coords));
+        byte[] encoded = decodeG2Bytes(label, coords);
+        P2_Affine point;
+        try {
+            point = new P2_Affine(encoded);
+        } catch (RuntimeException invalidEncoding) {
+            // blst-java 0.3.2 reports native deserialization failures as RuntimeException.
+            // This boundary consumes only the validated-length public point encoding.
+            throw new IllegalArgumentException(label + " is not a valid blst point", invalidEncoding);
+        }
         requireValidNonInfinity(label, point);
         return point;
     }

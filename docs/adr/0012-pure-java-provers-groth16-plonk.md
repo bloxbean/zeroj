@@ -270,7 +270,11 @@ The pure Java prover can obtain proving keys in two ways:
 | snarkjs | `.zkey` file (iden3 binary) | `ZkeyImporter.importZkey(path)` |
 | Powers of Tau ceremony | `.ptau` file | `PtauImporter.importPtau(path)` |
 
-Production deployments MUST use SRS from established multi-party computation ceremonies (Hermez, Zcash PoT, Perpetual PoT). See ADR-0013 for details.
+Production deployments require independently verified, hash-pinned MPC artifacts for the
+selected curve and exact circuit. Hermez and Perpetual Powers of Tau are BN254 sources;
+BLS12-381 uses the source/conversion plan and remaining gates in ADR-0031. Curves and raw
+ceremony formats are not interchangeable. Phase 1 alone does not complete Groth16's
+circuit-specific phase 2; follow ADR-0013's complete artifact flow before importing a `.zkey`.
 
 ## Implementation Plan
 
@@ -362,15 +366,17 @@ The pure Java cryptographic primitives are **NOT constant-time**. Variable-time 
 include field inversion (BigInteger GCD), scalar multiplication (double-and-add), and
 conditional subtraction after Montgomery reduction.
 
-This is acceptable for a **ZK prover** (runs locally, secret witness is not exposed via
-timing). It would be a vulnerability if these primitives were used for:
-- Digital signature generation (private key leaks via timing)
-- Verifier-with-secret protocols
-- Key generation ceremonies
+The earlier claim that local prover execution makes witness-dependent timing leakage
+acceptable is withdrawn under #49, along with ADR-0013's per-operation assessment table.
+Neither this ADR nor ADR-0013 establishes an accepted threat model that makes such leakage
+safe. Local execution alone does not prevent observation of timing or memory access.
 
-**TODO:** Implement constant-time alternatives (Fermat inversion via addition chain,
-Montgomery ladder for scalar multiplication) if the cryptographic primitives are ever
-used beyond the ZK prover context. See ADR-0013 for the full constant-time assessment table.
+An explicit prover side-channel threat model and implementation/platform-specific evidence
+remain required before making secret-processing security claims. This applies to witnesses
+and prover randomness as well as signing keys and ceremony secrets. A fixed operation
+schedule or a Montgomery ladder alone does not prove JVM constant-time behavior.
+ADR-0021 documents provider limitations; ADR-0026's general release gates do not constitute
+a timing assessment or approve witness-dependent leakage.
 
 ## Risks
 
@@ -379,7 +385,7 @@ used beyond the ZK prover context. See ADR-0013 for the full constant-time asses
 | Montgomery field implementation bugs | High | Differential testing: `MontFp254.mul(a,b)` == `BigInteger a*b mod p` for millions of random inputs |
 | Pippenger MSM correctness | High | Compare against naive MSM for random inputs; test with gnark's test vectors |
 | Proving key import parsing errors | Medium | Validate imported keys by re-verifying a known proof before using for proving |
-| Non-constant-time crypto primitives | Medium | Acceptable for prover (local execution); document limitation; implement CT alternatives if scope expands |
+| Non-constant-time crypto primitives | Medium | No acceptance of witness-dependent timing leakage is established; require an explicit threat model and implementation/platform-specific evidence |
 | Performance worse than estimated | Medium | Benchmark at each phase; if Montgomery gives < 3x improvement, reassess |
 | Panama Vector API removed from JDK | Low | Montgomery field works without SIMD (just slower); SIMD is an optimization, not a requirement |
 | snarkjs/gnark format breaking changes | Low | Pin to specific versions; proving key format is stable (hasn't changed in years) |

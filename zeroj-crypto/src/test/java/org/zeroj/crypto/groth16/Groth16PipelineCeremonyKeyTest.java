@@ -20,11 +20,14 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -71,24 +74,40 @@ class Groth16PipelineCeremonyKeyTest {
         Path zkeyFile = tmp.resolve("key.zkey");
         Files.write(zkeyFile, zkeyBytes);
         Path store = tmp.resolve("store");
-        ZkeyPkStoreImporter.importToPkStore(zkeyFile, store);
 
         // Compiled must accept the original relation as-is (no S1 here).
         var cc = new Groth16Pipeline.Compiled(flatOf(original), circuitRows, numWires, numPublic);
+        String sourceHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zkeyBytes));
+        var imported = ZkeyPkStoreImporter.importToPkStore(zkeyFile, store, sourceHash, cc.fingerprint());
+        var repeated = ZkeyPkStoreImporter.importToPkStore(zkeyFile, tmp.resolve("repeat"), sourceHash, cc.fingerprint());
+        assertEquals(imported.manifestSha256(), repeated.manifestSha256());
+        byte[] sealed = Files.readAllBytes(store.resolve("manifest.properties"));
+        var failure = assertThrows(IOException.class, () -> Groth16PkStore.bindCircuitFingerprint(store, cc.fingerprint()));
+        assertTrue(failure.getMessage().contains("sealed"));
+        assertArrayEquals(sealed, Files.readAllBytes(store.resolve("manifest.properties")));
+        String incompatible = cc.fingerprint().replace("-w" + numWires + "-", "-w" + (numWires + 1) + "-");
+        Path badStore = tmp.resolve("incompatible");
+        var mismatch = assertThrows(IOException.class,
+                () -> ZkeyPkStoreImporter.importToPkStore(zkeyFile, badStore, sourceHash, incompatible));
+        assertTrue(mismatch.getMessage().contains("dimensions"), mismatch.getMessage());
+        assertFalse(Files.exists(badStore));
+        assertThrows(IllegalArgumentException.class,
+                () -> ZkeyPkStoreImporter.importToPkStore(zkeyFile, badStore, sourceHash, "not-exact"));
+        assertFalse(Files.exists(badStore));
         BigInteger[] witness = ZkeyImporterBLS381.importWtns(new ByteArrayInputStream(resource(WTNS)));
         assertEquals(numWires, witness.length);
         FlatScalars w = FlatScalars.pack(witness, witness.length);
         BigInteger[] pub = Arrays.copyOfRange(witness, 1, 1 + numPublic);
 
-        // (a) cache disabled, unbound key
-        try (var keys = Groth16Keys.load(store)) {
+        // (a) cache disabled, pinned and circuit-bound key
+        try (var keys = Groth16Keys.load(store, imported.manifestSha256())) {
             var proof = Groth16Pipeline.prove(keys, null, null, () -> cc, () -> w, bindingRows, ProverBackend.PURE_JAVA);
             assertTrue(pairingVerify(keys, proof, pub), "cache disabled");
         }
 
         // (b) cache miss: the pipeline compiles, writes r1cs.bin, and proves
         Path cache = tmp.resolve(Groth16Pipeline.R1CS_CACHE);
-        try (var keys = Groth16Keys.load(store)) {
+        try (var keys = Groth16Keys.load(store, imported.manifestSha256())) {
             var proof = Groth16Pipeline.prove(keys, cache, null, () -> cc, () -> w, bindingRows, ProverBackend.PURE_JAVA);
             assertTrue(pairingVerify(keys, proof, pub), "cache miss");
         }
@@ -96,8 +115,7 @@ class Groth16PipelineCeremonyKeyTest {
         assertTrue(Groth16Pipeline.cacheMatches(cache, cc.fingerprint()));
 
         // (c) cache hit on a bundle bound to the exact fingerprint: no recompilation
-        Groth16PkStore.bindCircuitFingerprint(store, cc.fingerprint());
-        try (var keys = Groth16Keys.load(store)) {
+        try (var keys = Groth16Keys.load(store, imported.manifestSha256())) {
             assertEquals(cc.fingerprint(), keys.circuitFingerprint());
             var proof = Groth16Pipeline.prove(keys, cache, cc.fingerprint(),
                     () -> { throw new AssertionError("a cache hit must not recompile"); },

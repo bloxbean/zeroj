@@ -117,7 +117,12 @@ public final class Groth16Keys implements AutoCloseable {
      * manifest. The key files are memory-mapped; close the handle to unmap.
      */
     public static Groth16Keys load(Path dir) throws IOException {
-        var loaded = Groth16PkStore.load(dir);
+        return load(dir, null);
+    }
+
+    /** Load a validated import using its externally trusted manifest identity. */
+    public static Groth16Keys load(Path dir, String expectedManifestSha256) throws IOException {
+        var loaded = Groth16PkStore.load(dir, expectedManifestSha256);
         return new Groth16Keys(loaded.pk(), loaded.readers(), loaded.gammaG2(), loaded.ic(),
                 loaded.domain(), loaded.readers().b2().count(), loaded.circuitFingerprint(), loaded.arena());
     }
