@@ -18,6 +18,10 @@ import java.util.Arrays;
  * <p><b>WARNING: This is a single-party generator. The toxic waste (tau) is known
  * to a single party. DO NOT use this for production deployments.</b></p>
  *
+ * <p>Any insecure-dev SRS file that persists tau contains toxic waste and outlives this
+ * process. Delete it and any copies after testing; owner-only permissions and file deletion
+ * do not guarantee erasure from storage, snapshots or backups.</p>
+ *
  * <p>For production, use independently verified, hash-pinned BLS12-381 ceremony outputs.
  * ADR-0031 records the selected Filecoin source and still-open conversion/review gates.
  * BN254 Hermez/Perpetual Powers of Tau artifacts cannot be used on BLS12-381.</p>
@@ -79,18 +83,16 @@ public final class PowersOfTauBLS381 {
         tauG2[0] = g2.toAffine();
         tauG2[1] = g2.scalarMul(tau).toAffine();
 
-        // Store tau for Groth16SetupBLS381 (development-only — production .ptau files don't expose tau)
-        BigInteger tauForSetup = tau;
-
         // Clear owned mutable buffers/references as lifetime hygiene only. BigInteger objects,
-        // their derived values, JVM copies and the intentionally returned tauForSetup are not
+        // their derived values, JVM copies and the intentionally returned tau are not
         // erased. This dev-only API offers no reliable heap-zeroization or constant-time contract.
         // A future production secret-processing implementation requires a separate reviewed design;
         // moving one buffer off-heap alone would not establish that contract.
         Arrays.fill(tauBytes, (byte) 0);
         Arrays.fill(tauPows, BigInteger.ZERO);
 
-        return new PtauImporterBLS381.SRS(tauG1, tauG2, power, tauForSetup);
+        // Retain tau for Groth16SetupBLS381 (development-only — production .ptau files do not expose tau).
+        return new PtauImporterBLS381.SRS(tauG1, tauG2, power, tau);
     }
 
     /**

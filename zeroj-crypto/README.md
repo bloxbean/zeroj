@@ -58,6 +58,11 @@ dependencies {
 }
 ```
 
+Any file written by `Groth16SetupCache.saveBls12381InsecureDevSrsWithTau` or
+`PlonkSetupCache.saveBls12381InsecureDevSrsWithTau` contains toxic waste and survives process
+exit. Delete that file and any copies after testing. Owner-only permissions restrict access;
+neither permissions nor deletion guarantee erasure from storage, snapshots or backups.
+
 Development setup does not securely erase immutable Java secret scalars. Tau and derived
 objects can survive on the heap, and tau is intentionally retained for local phase 2. Run
 these APIs only in isolated development processes without real private witnesses; disposing

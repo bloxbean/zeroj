@@ -19,14 +19,19 @@ import java.util.Arrays;
  * <p><b>WARNING: This is a single-party generator. The toxic waste (tau) is known
  * to a single party. DO NOT use this for production deployments.</b></p>
  *
+ * <p>Any insecure-dev SRS file that persists tau contains toxic waste and outlives this
+ * process. Delete it and any copies after testing; owner-only permissions and file deletion
+ * do not guarantee erasure from storage, snapshots or backups.</p>
+ *
  * <p>For production, use SRS from established multi-party computation (MPC) ceremonies:</p>
  * <ul>
  *   <li><a href="https://github.com/iden3/snarkjs#7-prepare-phase-2">Hermez Phase 1</a> (54 contributors, 2^28)</li>
  *   <li><a href="https://github.com/privacy-scaling-explorations/perpetualpowersoftau">Perpetual Powers of Tau</a> (70+ contributors)</li>
- *   <li><a href="https://github.com/ebfull/powersoftau">Zcash Powers of Tau</a> (87 contributors)</li>
  * </ul>
  *
- * <p>These can be imported with {@link PtauImporter#importPtau(java.io.InputStream)}.</p>
+ * <p>Verified BN254 snarkjs-format .ptau artifacts can be imported with
+ * {@link PtauImporter#importPtau(java.io.InputStream)}. Other curves and raw ceremony
+ * formats are not interchangeable.</p>
  */
 public final class PowersOfTau {
 
@@ -53,7 +58,7 @@ public final class PowersOfTau {
 
         System.err.println("WARNING: Single-party Powers of Tau generation — "
                 + "for DEVELOPMENT and TESTING only. "
-                + "Use MPC ceremony outputs (Hermez, Zcash PoT) for production.");
+                + "Use verified BN254 MPC ceremony outputs (Hermez, Perpetual Powers of Tau) for production.");
 
         var rng = new SecureRandom();
         int n = 1 << power;
@@ -83,18 +88,15 @@ public final class PowersOfTau {
         tauG2[0] = g2.toAffine();
         tauG2[1] = g2.scalarMul(tau).toAffine();
 
-        // Store tau for Groth16Setup (development-only — production .ptau files don't expose tau)
-        BigInteger tauForSetup = tau;
-
         // Clear owned mutable buffers/references as lifetime hygiene only. BigInteger objects,
-        // their derived values, JVM copies and the intentionally returned tauForSetup are not
+        // their derived values, JVM copies and the intentionally returned tau are not
         // erased. This dev-only API offers no reliable heap-zeroization or constant-time contract.
         // A future production secret-processing implementation requires a separate reviewed design;
         // moving one buffer off-heap alone would not establish that contract.
         Arrays.fill(tauBytes, (byte) 0);
-        tauPow = BigInteger.ZERO;
 
-        return new PtauImporter.SRS(tauG1, tauG2, power, tauForSetup);
+        // Retain tau for Groth16Setup (development-only — production .ptau files do not expose tau).
+        return new PtauImporter.SRS(tauG1, tauG2, power, tau);
     }
 
     /**

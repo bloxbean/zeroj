@@ -35,9 +35,12 @@ import java.util.Map;
  * </ol>
  *
  * <p>Development setup retains immutable secret scalars and derived values on the JVM heap.
- * Neither heap nor streaming setup guarantees erasure or constant-time processing. Use only
+ * This BN254 setup guarantees neither erasure nor constant-time processing. Use only
  * in an isolated development process without real private witnesses, and discard that process
  * after setup. Process exit is not a guarantee against swap, dumps or host compromise.
+ * Any insecure-dev SRS file containing tau is persisted toxic waste: delete it and its copies
+ * after testing. Process exit and owner-only permissions do not remove the file, and deletion
+ * does not guarantee erasure from storage, snapshots or backups.
  * Production keys must come from an independently verified, hash-pinned MPC ceremony.</p>
  */
 public final class Groth16Setup {

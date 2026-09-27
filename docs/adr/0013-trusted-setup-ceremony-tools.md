@@ -33,8 +33,9 @@ Provide `PowersOfTau.generate()` that creates a `.ptau`-compatible SRS (Structur
 Reference String) in pure Java. This is for **development and testing only** — not for
 production multi-party ceremonies.
 
-Also provide `Groth16Setup.setup()` that takes an R1CS constraint system + SRS and
-produces a Groth16 proving key (Phase 2), completing the pure Java pipeline.
+Also provide development-only `Groth16Setup.setup()` that takes an R1CS constraint
+system and the known tau scalar, and produces a Groth16 proving key (Phase 2).
+Imported ceremony SRS files do not expose tau and cannot drive this single-party API.
 
 ### For production: use established MPC ceremony outputs
 
@@ -42,15 +43,17 @@ produces a Groth16 proving key (Phase 2), completing the pure Java pipeline.
 ceremonies.** A single-party generator (like ours) provides no trust guarantee — the
 generator knows the toxic waste (tau) and could forge proofs.
 
-Recommended production ceremony sources:
+Ceremony sources must match both the curve and the importer format:
 
-| Source | Contributors | Max Size | Format | URL |
-|--------|-------------|----------|--------|-----|
-| Hermez Phase 1 (Polygon) | 54 | 2^28 (268M) | .ptau | [hermez-ceremony](https://github.com/iden3/snarkjs#7-prepare-phase-2) |
-| Zcash Powers of Tau | 87 | 2^21 | raw | [powersoftau](https://github.com/ebfull/powersoftau) |
-| Perpetual Powers of Tau | 70+ | 2^28 | .ptau | [ppot](https://github.com/privacy-scaling-explorations/perpetualpowersoftau) |
+| Source | Curve / import boundary |
+|--------|-------------------------|
+| [Hermez Phase 1](https://github.com/iden3/snarkjs/tree/v0.7.6#7-prepare-phase-2) | BN254 snarkjs `.ptau` artifacts; use `PtauImporter` after independent verification and hash pinning |
+| [Perpetual Powers of Tau](https://github.com/privacy-scaling-explorations/perpetualpowersoftau) | BN254; select and verify a snarkjs-format `.ptau` artifact before using `PtauImporter` |
+| Filecoin source selected in [ADR-0031](0031-groth16-mpc-trusted-setup-ceremony.md) | BLS12-381; conversion, provenance and external-review gates remain open |
 
-These ceremony outputs can be imported directly using `PtauImporter.importPtau()`.
+Raw ceremony formats and curves are not interchangeable. In particular, Zcash's
+BLS12-381 Powers of Tau is not an input for the BN254 `PtauImporter`. Phase 1 alone
+does not supply Groth16's circuit-specific MPC phase 2.
 
 ### Module structure
 
@@ -59,10 +62,13 @@ zeroj-crypto/
   src/main/java/org/zeroj/crypto/
     setup/
       PowersOfTau.java        — single-party PoT generator (dev/test only)
-      Groth16Setup.java        — Phase 2 setup from R1CS + SRS
+      Groth16Setup.java        — dev-only Phase 2 setup from R1CS + known tau
 ```
 
-### API design
+### Historical development API sketch
+
+The following is the original proposal sketch, not a current compilable API example.
+See the module README for current development APIs and required opt-ins.
 
 ```java
 // === Development / Testing ===
@@ -86,20 +92,29 @@ var pk = Groth16Setup.setup(r1cs, srs);
 var witness = circuit.calculateWitness(inputs, CurveId.BN254);
 var proof = Groth16Prover.prove(pk, witness, constraints, numWires);
 // → proof verifies with pure Java Groth16BN254Verifier
-
-// === Production ===
-// Import SRS from a real MPC ceremony
-var srs = PtauImporter.importPtau(new FileInputStream("hermez_2^20.ptau"));
-var pk = Groth16Setup.setup(r1cs, srs);
-// Security guarantee: 54+ independent contributors, toxic waste destroyed
 ```
+
+### Production Groth16 artifact flow (supersedes the original example)
+
+```text
+verified, hash-pinned phase-1 .ptau for the selected curve
+  → circuit-specific MPC phase 2 using the exact R1CS (ADR-0031)
+  → independently verify the final .zkey transcript against that R1CS and .ptau
+  → import the final .zkey with the matching ZeroJ importer and a trusted hash pin
+```
+
+Do not call the local `Groth16Setup.setup(..., tau)` as the production phase-2 step.
+An imported `.ptau` contains public group elements, not tau, and a local single-party
+phase 2 still exposes its alpha/beta/gamma/delta to that party. Contributor counts,
+process exit and Java reference assignments do not prove secret destruction. The
+ceremony trust assumptions and remaining production gates in ADR-0031 still apply.
 
 ### Security warnings
 
 The `PowersOfTau.generate()` method MUST:
 1. Print a clear warning to stderr: `"WARNING: Single-party Powers of Tau — for development/testing only. Use MPC ceremony outputs for production."`
 2. Be annotated with `@DevelopmentOnly` or equivalent documentation
-3. State that immutable Java secrets are not securely erased; clear owned mutable buffers only as lifetime hygiene
+3. State that immutable Java secrets are not securely erased. Clearing owned mutable buffers is lifetime hygiene only; implementations may do so without promising exhaustive cleanup or erasure
 4. Use `SecureRandom` for tau generation
 
 ## Implementation Plan
@@ -109,7 +124,7 @@ The `PowersOfTau.generate()` method MUST:
 1. Sample random `tau` from `SecureRandom` (512-bit, reduced mod Fr)
 2. Compute `tau^i * G1` for i=0..2^power using iterated scalar multiplication
 3. Compute `tau^0 * G2` (= G2 generator) and `tau^1 * G2`
-4. Clear owned mutable buffers/references; do not claim erasure of immutable tau or aliases
+4. Owned mutable buffers may be cleared as lifetime hygiene only; do not claim exhaustive cleanup or erasure of immutable tau, derived values or aliases
 5. Return `PtauImporter.SRS` object (compatible with existing import path)
 
 ### Groth16Setup.setup()
@@ -122,7 +137,7 @@ The `PowersOfTau.generate()` method MUST:
    - `[B_i(tau)]_1` and `[B_i(tau)]_2` for each wire i
    - `[H_j(tau)]_1` for the quotient polynomial basis (Lagrange on coset)
    - `[L_k(tau)]_1` for private wires (includes alpha, beta contribution)
-4. Do not claim toxic-waste erasure; isolate development setup and discard the process afterward
+4. Do not claim toxic-waste erasure; isolate development setup and discard the process afterward. Delete any insecure-dev SRS files containing tau and their copies; process exit does not remove persisted toxic waste
 5. Return `Groth16ProvingKey`
 
 ## Consequences
@@ -142,23 +157,16 @@ The `PowersOfTau.generate()` method MUST:
 
 ### Constant-time operations
 
-The pure Java cryptographic primitives (Montgomery multiplication, EC scalar multiplication,
-field inversion) are **NOT constant-time**. This is standard and acceptable for a ZK prover
-(which runs locally with secret witness data), but would be a vulnerability in contexts where
-timing side-channels are observable:
+These development setup paths have no JVM constant-time guarantee. Secret tau,
+phase-2 scalars and derived values reach variable-time `BigInteger` arithmetic and
+scalar multiplication. A local prover or isolated process does not by itself make
+observable timing or memory-access leakage acceptable.
 
-| Operation | Constant-time? | Acceptable for prover? |
-|-----------|---------------|----------------------|
-| `montMul` (CIOS) | Yes | Yes |
-| `add`, `sub` | Yes | Yes |
-| `subtractModIfNeeded` | No (branches on comparison) | Yes — standard practice |
-| `inverse()` | No (BigInteger GCD) | Yes for prover; NOT for signing |
-| `pow()` | No (square-and-multiply) | Yes if exponent is public |
-| `scalarMul` | No (double-and-add) | Yes for prover |
-
-**If these primitives are ever used in a signing, key generation, or verifier-with-secret
-context, constant-time alternatives (addition chains for inversion, Montgomery ladder for
-scalar multiplication) must be implemented first.**
+The original per-operation table and blanket claims of acceptability for provers
+are superseded by this contract and ADR-0026's security gates. Any production
+secret-processing path requires an accepted design and evidence for its actual
+implementation and platform; neither a fixed operation schedule nor native-image
+compilation alone establishes constant-time behavior.
 
 ## Risks
 
@@ -186,10 +194,15 @@ by assigning a local to ZERO or filling an array of references. Tau is intention
 for development phase 2. The same limitation applies to heap and streaming setup and BN254.
 
 Use an isolated development process without real private witnesses; avoid retaining its dumps
-or swap and terminate it afterward. These measures reduce exposure, not guarantee erasure.
+or swap and terminate it afterward. Any insecure-dev SRS file written by
+`Groth16SetupCache.saveBls12381InsecureDevSrsWithTau` or
+`PlonkSetupCache.saveBls12381InsecureDevSrsWithTau` contains toxic waste and outlives
+the process: delete it and any copies after testing. Owner-only permissions restrict
+access; neither permissions nor file deletion guarantee erasure from storage,
+snapshots or backups. These measures reduce exposure, not guarantee erasure.
 The existing TrustedSetupPolicy opt-in remains mandatory. Production uses independently
-verified, hash-pinned ceremony outputs appropriate to the curve and exact circuit; the earlier
-Hermez example is BN254-only, not a BLS12-381 source. A Java single-party setup is not an MPC
+verified, hash-pinned ceremony outputs appropriate to the curve and exact circuit; Hermez
+artifacts are BN254-only, not a BLS12-381 source. A Java single-party setup is not an MPC
 ceremony merely because its scalar references were cleared.
 
 Any future production-secret setup/contributor implementation needs its own accepted R3

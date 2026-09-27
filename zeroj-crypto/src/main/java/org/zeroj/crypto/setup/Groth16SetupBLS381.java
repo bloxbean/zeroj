@@ -71,6 +71,9 @@ import java.util.Map;
  * Neither heap nor streaming setup guarantees erasure or constant-time processing. Use only
  * in an isolated development process without real private witnesses, and discard that process
  * after setup. Process exit is not a guarantee against swap, dumps or host compromise.
+ * Any insecure-dev SRS file containing tau is persisted toxic waste: delete it and its copies
+ * after testing. Process exit and owner-only permissions do not remove the file, and deletion
+ * does not guarantee erasure from storage, snapshots or backups.
  * Production keys must come from an independently verified, hash-pinned MPC ceremony.</p>
  */
 public final class Groth16SetupBLS381 {
@@ -204,14 +207,12 @@ public final class Groth16SetupBLS381 {
                 pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine());
 
         // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
-        // Final aliases for parallel workers; neither these nor the original BigIntegers are zeroized.
-        final BigInteger alphaF = alpha, betaF = beta, deltaInvF = deltaInv;
         int numPrivate = numWires - numPublic - 1;
         long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
         java.util.stream.IntStream.range(0, numPrivate).parallel().forEach(j -> {
             int s = numPublic + 1 + j;
-            BigInteger lVal = betaF.multiply(us[s]).add(alphaF.multiply(vs[s])).add(ws[s])
-                    .multiply(deltaInvF).mod(FR);
+            BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
+                    .multiply(deltaInv).mod(FR);
             Groth16ProvingKeyBLS381.writeG1(pointsL, j,
                     lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal));
         });
@@ -393,7 +394,7 @@ public final class Groth16SetupBLS381 {
         var aM = flat.a();
         var bM = flat.b();
         var cM = flat.c();
-        long[] lag = lagMont; // QAP loop reads via `lag`; lagMont is nulled after (−1 GB at point gen)
+        long[] lag = lagMont; // QAP-loop alias of the same mutable Lagrange array
         long[] term = new long[4];
         int rows = Math.min(nConstraints, domain);
         for (int c = 0; c < rows; c++) {
@@ -414,7 +415,7 @@ public final class Groth16SetupBLS381 {
                 FrArith381.add(wsM, w * 4, wsM, w * 4, term, 0);
             }
         }
-        lagMont = null; // main-domain Lagrange values are done — free ~1 GB before point generation
+        lagMont = null; // Drop one reference after use; the lag alias remains, and this does not erase data.
 
         // ---- single points + VK bits (tiny)
         var g2 = JacobianG2BLS381.GENERATOR;
