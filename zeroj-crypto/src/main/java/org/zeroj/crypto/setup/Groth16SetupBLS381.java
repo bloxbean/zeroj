@@ -32,11 +32,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groth16 Phase 2 setup for BLS12-381 — generates a proving key from R1CS constraints + Powers of Tau SRS.
+ * Groth16 Phase 2 setup for BLS12-381 — generates a development proving key from R1CS constraints + known tau.
  *
  * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b> This is a single-party setup — the toxic
- * waste (alpha, beta, gamma, delta, tau) is known to one party. For production, use
- * snarkjs multi-party ceremony: {@code snarkjs groth16 setup circuit.r1cs pot.ptau circuit.zkey}.</p>
+ * waste (alpha, beta, gamma, delta, tau) is known to one party.</p>
+ *
+ * <p>Production requires the complete MPC artifact flow in ADR-0013 / ADR-0031: a verified
+ * phase-1 artifact for the correct curve, {@code snarkjs groth16 setup}, at least one
+ * {@code snarkjs zkey contribute}, the ceremony's {@code snarkjs zkey beacon}, then
+ * {@code snarkjs zkey verify} against the exact R1CS and phase-1 artifact, followed by import
+ * with a trusted hash pin. The initial setup output has no phase-2 contributions and is unsafe
+ * for production. The ceremony still depends on honest secret contribution handling; completing
+ * the commands alone does not establish that trust assumption.</p>
  *
  * <p>Algorithm (from Groth16 paper, Section 3.2):</p>
  * <ol>
@@ -66,6 +73,15 @@ import java.util.Map;
  * {@code IC} scalars are checked for zero before any proving-key point is generated or any store
  * file is written ({@link IllegalStateException}, invariant S2). A native setup never writes
  * {@code AffineG1.INFINITY} into {@code IC}.</p>
+ *
+ * <p>Development setup retains immutable secret scalars and derived values on the JVM heap.
+ * Neither heap nor streaming setup guarantees erasure or constant-time processing. Use only
+ * in an isolated development process without real private witnesses, and discard that process
+ * after setup. Process exit is not a guarantee against swap, dumps or host compromise.
+ * Any insecure-dev SRS file containing tau is persisted toxic waste: delete it and its copies
+ * after testing. Process exit and owner-only permissions do not remove the file, and deletion
+ * does not guarantee erasure from storage, snapshots or backups.
+ * Production keys must come from an independently verified, hash-pinned MPC ceremony.</p>
  */
 public final class Groth16SetupBLS381 {
 
@@ -198,14 +214,12 @@ public final class Groth16SetupBLS381 {
                 pointsB2[s] = vs[s].signum() == 0 ? AffineG2.INFINITY : g2.scalarMul(vs[s]).toAffine());
 
         // pointsL[j] = (beta*u_s + alpha*v_s + w_s) / delta * G1  for private wire s = numPublic+1+j
-        // (final aliases: alpha/beta are scrubbed as toxic waste after the PK is built, below)
-        final BigInteger alphaF = alpha, betaF = beta, deltaInvF = deltaInv;
         int numPrivate = numWires - numPublic - 1;
         long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
         java.util.stream.IntStream.range(0, numPrivate).parallel().forEach(j -> {
             int s = numPublic + 1 + j;
-            BigInteger lVal = betaF.multiply(us[s]).add(alphaF.multiply(vs[s])).add(ws[s])
-                    .multiply(deltaInvF).mod(FR);
+            BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
+                    .multiply(deltaInv).mod(FR);
             Groth16ProvingKeyBLS381.writeG1(pointsL, j,
                     lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal));
         });
@@ -249,8 +263,7 @@ public final class Groth16SetupBLS381 {
             ic[s] = FixedBaseG1BLS381.mulAffine(icScalars[s]);
         }
 
-        // Securely discard toxic waste (best-effort — see PowersOfTauBLS381.java for caveats)
-        alpha = beta = gamma = delta = BigInteger.ZERO;
+        // Immutable scalar objects and derived aliases are not erased by Java reference rebinding.
 
         var pk = new Groth16ProvingKeyBLS381(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,
@@ -388,7 +401,7 @@ public final class Groth16SetupBLS381 {
         var aM = flat.a();
         var bM = flat.b();
         var cM = flat.c();
-        long[] lag = lagMont; // QAP loop reads via `lag`; lagMont is nulled after (−1 GB at point gen)
+        long[] lag = lagMont; // QAP-loop alias of the same mutable Lagrange array
         long[] term = new long[4];
         int rows = Math.min(nConstraints, domain);
         for (int c = 0; c < rows; c++) {
@@ -409,7 +422,7 @@ public final class Groth16SetupBLS381 {
                 FrArith381.add(wsM, w * 4, wsM, w * 4, term, 0);
             }
         }
-        lagMont = null; // main-domain Lagrange values are done — free ~1 GB before point generation
+        lagMont = null; // Drop one reference after use; the lag alias remains, and this does not erase data.
 
         // ---- single points + VK bits (tiny)
         var g2 = JacobianG2BLS381.GENERATOR;
@@ -511,7 +524,7 @@ public final class Groth16SetupBLS381 {
             var segL = mapG1Out(dir.resolve("pointsL.bin"), numPrivate, sparse, lScalars, arena);
             streamG1(segL.seg, numPrivate, lScalars, segL.offsets);
             segL.seg.force();
-            // QAP arrays done (H needs none of them) — scrub: they are tau-derived secrets
+            // Clear these mutable QAP arrays after use; this does not erase other copies or JVM temporaries.
             Arrays.fill(usM, 0L);
             Arrays.fill(vsM, 0L);
             Arrays.fill(wsM, 0L);
