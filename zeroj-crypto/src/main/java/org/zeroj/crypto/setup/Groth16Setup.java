@@ -19,11 +19,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groth16 Phase 2 setup — generates a proving key from R1CS constraints + Powers of Tau SRS.
+ * Groth16 Phase 2 setup — generates a development proving key from R1CS constraints + known tau.
  *
  * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b> This is a single-party setup — the toxic
- * waste (alpha, beta, gamma, delta, tau) is known to one party. For production, use
- * snarkjs multi-party ceremony: {@code snarkjs groth16 setup circuit.r1cs pot.ptau circuit.zkey}.</p>
+ * waste (alpha, beta, gamma, delta, tau) is known to one party.</p>
+ *
+ * <p>Production requires the complete MPC artifact flow in ADR-0013 / ADR-0031: a verified
+ * phase-1 artifact for the correct curve, {@code snarkjs groth16 setup}, at least one
+ * {@code snarkjs zkey contribute}, the ceremony's {@code snarkjs zkey beacon}, then
+ * {@code snarkjs zkey verify} against the exact R1CS and phase-1 artifact, followed by import
+ * with a trusted hash pin. The initial setup output has no phase-2 contributions and is unsafe
+ * for production. The ceremony still depends on honest secret contribution handling; completing
+ * the commands alone does not establish that trust assumption.</p>
  *
  * <p>Algorithm (from Groth16 paper, Section 3.2):</p>
  * <ol>
@@ -33,6 +40,15 @@ import java.util.Map;
  *   <li>Compute proving key points via scalar multiplication on G1/G2 generators</li>
  *   <li>Compute H points as odd-indexed Lagrange basis on double-sized domain / delta</li>
  * </ol>
+ *
+ * <p>Development setup retains immutable secret scalars and derived values on the JVM heap.
+ * This BN254 setup guarantees neither erasure nor constant-time processing. Use only
+ * in an isolated development process without real private witnesses, and discard that process
+ * after setup. Process exit is not a guarantee against swap, dumps or host compromise.
+ * Any insecure-dev SRS file containing tau is persisted toxic waste: delete it and its copies
+ * after testing. Process exit and owner-only permissions do not remove the file, and deletion
+ * does not guarantee erasure from storage, snapshots or backups.
+ * Production keys must come from an independently verified, hash-pinned MPC ceremony.</p>
  */
 public final class Groth16Setup {
 
@@ -185,8 +201,7 @@ public final class Groth16Setup {
             pointsH[i] = hVal.signum() == 0 ? AffineG1.INFINITY : g1.scalarMul(hVal).toAffine();
         }
 
-        // Securely discard toxic waste (best-effort — see PowersOfTau.java for caveats)
-        alpha = beta = gamma = delta = BigInteger.ZERO;
+        // Immutable scalar objects and derived aliases are not erased by Java reference rebinding.
 
         return new Groth16ProvingKey(
                 alphaG1, betaG1, betaG2, deltaG1, deltaG2,

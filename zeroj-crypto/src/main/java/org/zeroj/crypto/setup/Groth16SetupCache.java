@@ -34,6 +34,10 @@ public final class Groth16SetupCache {
     /**
      * Save a development-only SRS cache that includes the toxic tau scalar.
      *
+     * <p>The file itself contains toxic waste and survives process exit. Delete it and any
+     * copies after testing. Owner-only permissions limit access; neither those permissions
+     * nor deletion guarantee erasure from storage, snapshots or backups.</p>
+     *
      * <p>This method is only for local single-party setup workflows and requires
      * {@code -Dzeroj.allowInsecureTrustedSetup=true}. Do not use this for production
      * ceremony artifacts.</p>

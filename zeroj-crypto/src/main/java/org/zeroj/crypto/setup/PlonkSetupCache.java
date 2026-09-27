@@ -33,6 +33,10 @@ public final class PlonkSetupCache {
 
     /**
      * Save a development-only SRS cache that includes the toxic tau scalar.
+     *
+     * <p>The file itself contains toxic waste and survives process exit. Delete it and any
+     * copies after testing. Owner-only permissions limit access; neither those permissions
+     * nor deletion guarantee erasure from storage, snapshots or backups.</p>
      */
     public static void saveBls12381InsecureDevSrsWithTau(PtauImporterBLS381.SRS srs, Path path) throws IOException {
         SrsCache.saveBls12381InsecureDevSrsWithTau(srs, path);

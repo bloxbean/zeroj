@@ -18,7 +18,9 @@ import java.util.Set;
  * <p>This stores the public G1/G2 powers used as the universal setup input for
  * Groth16 phase 2 and PlonK circuit setup. Public cache files never store the
  * development-only {@code tauScalar}; callers that intentionally need that value
- * for local single-party setup must use the explicit insecure-dev method.</p>
+ * for local single-party setup must use the explicit insecure-dev method. The resulting file
+ * contains toxic waste and survives process exit: callers must delete it and any copies after
+ * testing. Owner-only permissions and deletion do not guarantee storage erasure.</p>
  */
 final class SrsCache {
     private SrsCache() {
