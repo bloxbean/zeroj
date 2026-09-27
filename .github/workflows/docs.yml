@@ -1,27 +1,16 @@
 name: Documentation site
 
-# Builds the zeroj.dev docsite (www/) on every PR that can change it, and publishes it to the
-# gh-pages branch from main. The site also reads ZeroJ sources at build time (versions, the circuit
-# API catalog, and the API-reference check), so Java source changes can break it too.
+# Builds the zeroj.dev docsite (www/) on pull requests that touch it, and publishes it to the
+# gh-pages branch from main. Only www/ and gradle.properties (the version the pages render) trigger
+# it. The build also reads ZeroJ Java sources (circuit API catalog, API-reference check) and other
+# Gradle files (JuLC/CCL versions); after changing those, run this workflow manually on main.
 
 on:
   pull_request:
-    paths:
-      - 'www/**'
-      - 'gradle.properties'
-      - 'build.gradle'
-      - 'zeroj-*/src/main/java/**'
-      - 'zeroj-onchain-julc/build.gradle'
-      - '.github/workflows/docs.yml'
+    paths: ['www/**', 'gradle.properties']
   push:
     branches: [main]
-    paths:
-      - 'www/**'
-      - 'gradle.properties'
-      - 'build.gradle'
-      - 'zeroj-*/src/main/java/**'
-      - 'zeroj-onchain-julc/build.gradle'
-      - '.github/workflows/docs.yml'
+    paths: ['www/**', 'gradle.properties']
   workflow_dispatch:
 
 permissions:
@@ -55,11 +44,16 @@ jobs:
         with:
           name: zeroj-docs-site
           path: www/dist
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     if: github.repository == 'bloxbean/zeroj' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    # Deploys only from refs the release-staging environment allows (main, v*, release/**). The job
+    # uses no secrets from that environment, only GITHUB_TOKEN.
+    environment: release-staging
     permissions:
       contents: write
     steps:
