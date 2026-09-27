@@ -98,7 +98,9 @@ var proof = Groth16Prover.prove(pk, witness, constraints, numWires);
 
 ```text
 verified, hash-pinned phase-1 .ptau for the selected curve
-  → circuit-specific MPC phase 2 using the exact R1CS (ADR-0031)
+  → snarkjs groth16 setup using the exact R1CS (initial key only)
+  → at least one snarkjs zkey contribute under the MPC trust assumptions (ADR-0031)
+  → snarkjs zkey beacon using the ceremony's agreed public randomness
   → independently verify the final .zkey transcript against that R1CS and .ptau
   → import the final .zkey with the matching ZeroJ importer and a trusted hash pin
 ```
@@ -108,6 +110,8 @@ An imported `.ptau` contains public group elements, not tau, and a local single-
 phase 2 still exposes its alpha/beta/gamma/delta to that party. Contributor counts,
 process exit and Java reference assignments do not prove secret destruction. The
 ceremony trust assumptions and remaining production gates in ADR-0031 still apply.
+The [pinned snarkjs v0.7.6 guide](https://github.com/iden3/snarkjs/blob/v0.7.6/README.md#groth16)
+explicitly distinguishes the initial key from the contributed, finalized and verified key.
 
 ### Security warnings
 
@@ -162,11 +166,13 @@ phase-2 scalars and derived values reach variable-time `BigInteger` arithmetic a
 scalar multiplication. A local prover or isolated process does not by itself make
 observable timing or memory-access leakage acceptable.
 
-The original per-operation table and blanket claims of acceptability for provers
-are superseded by this contract and ADR-0026's security gates. Any production
-secret-processing path requires an accepted design and evidence for its actual
-implementation and platform; neither a fixed operation schedule nor native-image
-compilation alone establishes constant-time behavior.
+The original per-operation table and blanket claim that prover timing leakage is
+acceptable are withdrawn under #49; ADR-0012 records the same correction. This
+setup contract does not establish a safe threat model for witness-dependent prover
+leakage. ADR-0026 contains general release gates, not a timing assessment. Any
+production secret-processing path requires an accepted design and evidence for its
+actual implementation and platform; neither a fixed operation schedule nor
+native-image compilation alone establishes constant-time behavior.
 
 ## Risks
 

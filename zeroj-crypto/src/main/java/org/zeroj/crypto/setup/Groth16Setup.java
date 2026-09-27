@@ -19,11 +19,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groth16 Phase 2 setup — generates a proving key from R1CS constraints + Powers of Tau SRS.
+ * Groth16 Phase 2 setup — generates a development proving key from R1CS constraints + known tau.
  *
  * <p><b>FOR DEVELOPMENT AND TESTING ONLY.</b> This is a single-party setup — the toxic
- * waste (alpha, beta, gamma, delta, tau) is known to one party. For production, use
- * snarkjs multi-party ceremony: {@code snarkjs groth16 setup circuit.r1cs pot.ptau circuit.zkey}.</p>
+ * waste (alpha, beta, gamma, delta, tau) is known to one party.</p>
+ *
+ * <p>Production requires the complete MPC artifact flow in ADR-0013 / ADR-0031: a verified
+ * phase-1 artifact for the correct curve, {@code snarkjs groth16 setup}, at least one
+ * {@code snarkjs zkey contribute}, the ceremony's {@code snarkjs zkey beacon}, then
+ * {@code snarkjs zkey verify} against the exact R1CS and phase-1 artifact, followed by import
+ * with a trusted hash pin. The initial setup output has no phase-2 contributions and is unsafe
+ * for production. The ceremony still depends on honest secret contribution handling; completing
+ * the commands alone does not establish that trust assumption.</p>
  *
  * <p>Algorithm (from Groth16 paper, Section 3.2):</p>
  * <ol>
