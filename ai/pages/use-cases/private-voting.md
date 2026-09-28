@@ -10,6 +10,8 @@ pay you"), social pressure from peers and employers, and whales watching the cou
 decide. What you want is a vote where eligibility and one-person-one-vote can be checked by
 anyone, but the link between a person and their ballot cannot.
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The voter proves "I'm on the eligible-voter list, this is my one nullifier for this election,

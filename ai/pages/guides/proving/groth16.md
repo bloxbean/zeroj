@@ -32,7 +32,7 @@ circuit ──compileR1CS(BLS12_381)──▶ R1CS ──setup / import──▶
 | Heap | `Groth16Keys.setupInMemory(...)` | Tests and small circuits | Whole key on the heap |
 | Key store, sparse | `Groth16Keys.setupToStore(..., true)` | Large local circuits (recommended store format) | Streamed setup; the key is memory-mapped, so it uses page cache, not heap |
 | Key store, dense | `Groth16Keys.setupToStore(..., false)` | Interchange with older tools | Same profile, larger files |
-| Imported ceremony key | `ZkeyPkStoreImporter.importToPkStore(...)`, then `Groth16Keys.load(dir)` | Anything beyond local testing | Memory-mapped at prove time |
+| Imported ceremony key | `ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)`, then `Groth16Keys.load(dir, manifestSha256)` | Anything beyond local testing | Memory-mapped at prove time |
 
 `Groth16Keys` is `AutoCloseable`. Use try-with-resources so store-backed keys are unmapped.
 
@@ -43,6 +43,8 @@ circuit ──compileR1CS(BLS12_381)──▶ R1CS ──setup / import──▶
 > `-Dzeroj.allowInsecureTrustedSetup=true` (or `ZEROJ_ALLOW_INSECURE_TRUSTED_SETUP=true`); without
 > it they throw `IllegalStateException`. Keys that protect anything real come from a multi-party
 > ceremony. See [Run a trusted setup ceremony](https://zeroj.dev/guides/proving/trusted-setup-ceremony/).
+
+_The web version of this page has an interactive illustration here._
 
 ## Flow 1: small circuits, keys in memory
 
@@ -92,11 +94,22 @@ smaller for large circuits.
 ## Flow 3: keys from a ceremony
 
 For real deployments, the proving key comes from a snarkjs multi-party ceremony `.zkey`. Import it
-once into the same store layout:
+once into the same store layout, pinned to the SHA-256 of the final key that passed
+`snarkjs zkey verify` (the ceremony transcript publishes it):
 
 ```java
-ZkeyPkStoreImporter.importToPkStore(Path.of("circuit_final.zkey"), keysDir);   // streaming, multi-GB safe
+// Streaming, multi-GB safe. The target directory must not exist yet.
+var imported = ZkeyPkStoreImporter.importToPkStore(
+        Path.of("circuit_final.zkey"), keysDir, verifiedZkeySha256);
+String manifestSha256 = imported.manifestSha256();   // keep it with your deployment config
 ```
+
+The import checks the file against that hash, validates every point (curve, subgroup and
+canonical encoding), and seals the store. It does not check that the key matches your circuit or
+re-verify the ceremony; that's what `snarkjs zkey verify` is for. The two-argument
+`importToPkStore(zkey, dir)` always throws, so the hash can't be skipped by accident.
+`importUnpinnedToPkStore` exists for local tests only. Later loads are pinned to the store's
+manifest hash.
 
 snarkjs appends one public-input binding row per public signal (plus one for the constant wire)
 after your circuit's rows, so you must tell the prover about them:
@@ -104,7 +117,7 @@ after your circuit's rows, so you must tell the prover about them:
 ```java
 int numPublic = r1cs.numPublicInputs();
 
-try (var keys = Groth16Keys.load(keysDir)) {
+try (var keys = Groth16Keys.load(keysDir, manifestSha256)) {
     // List form: append snarkjs's binding rows to your compiled constraints
     var proof = keys.prove(witness,
             ZkeyPkStoreImporter.snarkjsConstraints(r1cs.constraints(), numPublic));
@@ -176,9 +189,10 @@ try (var keys = Groth16Keys.load(keysDir)) {
 
 The fingerprint has the form `c<constraints>-w<wires>-p<public>-r<sha256>`: the dimensions plus
 a hash of the exact relation. A mismatch throws `IllegalStateException` before any proving work.
-For an imported ceremony key, bind the fingerprint to the store once with
-`Groth16PkStore.bindCircuitFingerprint(keysDir, fingerprint)`, and pass `numPublic + 1` binding
-rows. `Groth16Pipeline.estimateProvePhaseHeapBytes(numWires, domain)` gives a lower bound on
+For an imported ceremony key, pass the fingerprint at import time, with the four-argument
+`importToPkStore(zkey, dir, sha256, fingerprint)` or `zeroj-ceremony finalize --circuit-fingerprint`,
+and pass `numPublic + 1` binding rows. Imported stores are sealed, so
+`Groth16PkStore.bindCircuitFingerprint` works only on local, unsealed stores. `Groth16Pipeline.estimateProvePhaseHeapBytes(numWires, domain)` gives a lower bound on
 prove-phase heap for preflight checks; witness generation can need more, so measure your own
 circuit. An optional `Groth16Pipeline.Progress` listener reports stages for CLIs.
 

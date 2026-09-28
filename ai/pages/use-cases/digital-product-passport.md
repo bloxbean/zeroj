@@ -11,6 +11,8 @@ those claims. But the exact numbers behind them are commercially sensitive. A pr
 reveals manufacturing efficiency, origin data reveals suppliers, and inspection records reveal defect
 rates. The tension is real: *prove it, but don't publish it.*
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The manufacturer proves "an auditor committed to this product's measurement, and it meets the

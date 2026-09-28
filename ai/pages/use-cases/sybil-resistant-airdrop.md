@@ -9,6 +9,8 @@ claims a thousand times. Checking identity at claim time stops that, but then ev
 over personal data and every claim is linked to a person. What you want is **one claim per real
 human per period**, where the distributor learns only that *some* eligible person claimed.
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The claimant proves "a personhood issuer signed my credential, and this nullifier is the one my

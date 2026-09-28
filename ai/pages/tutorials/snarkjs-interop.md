@@ -8,6 +8,8 @@ Maybe you already have circuits written in [circom](https://docs.circom.io/), or
 snarkjs trusted-setup ceremony. You don't have to rewrite anything to use ZeroJ. Groth16 on
 BLS12-381 speaks the same formats in both directions:
 
+_The web version of this page has an interactive illustration here._
+
 ```text
   circom + snarkjs                                   ZeroJ (pure Java)
   ----------------                                   -----------------
@@ -282,8 +284,9 @@ use exactly this order.
   `ZkeyImporterBLS381.importZkeyFull(bytes, expectedSha256)` overload so the import fails
   unless the file matches the hash published with the ceremony transcript.
 - **Large circuits.** `importZkeyFull` loads the whole key into the heap. For big keys,
-  `ZkeyPkStoreImporter.importToPkStore(zkeyFile, dir)` converts the `.zkey` once into a
-  memory-mapped key store that you open with `Groth16Keys.load(dir)`. The
+  `ZkeyPkStoreImporter.importToPkStore(zkeyFile, dir, expectedSha256)` converts the `.zkey` once
+  into a memory-mapped key store, pinned to the same hash, and returns the store's manifest hash
+  that you open it with: `Groth16Keys.load(dir, manifestSha256)`. The
   [Groth16 guide](https://zeroj.dev/guides/proving/groth16/) shows that flow, including the extra argument that
   snarkjs-made keys need at prove time.
 - **The witness must match the key.** A `.zkey` is made for one exact constraint system, so

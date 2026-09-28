@@ -21,6 +21,8 @@ over BLS12-381, so the same tree the service stores can be opened inside a Groth
 
 ## How it works
 
+_The web version of this page has an interactive illustration here._
+
 ```text
 OFF-CHAIN (your service)
   RocksDB MPF/JMT, millions of entries
@@ -138,8 +140,8 @@ The JMT flow has the same shape: `PoseidonJmtTree`, `PoseidonJmtInclusionWitness
 - A root-only inclusion proof says "the prover knows *some* entry under this root", and nothing
   public about which one. It doesn't bind a particular key to a user. Add the key, owner,
   nullifier, version or transaction fields your application needs in your own circuit.
-- JMT version numbers are storage coordinates, not authenticated state. Bind `{chain point,
-  version, root}` in your application, with one logical writer.
+- JMT version numbers are storage coordinates, not authenticated state.
+  Bind `{chain point, version, root}` in your application, with one logical writer.
 - A JMT tombstone is still an included value. Never present it as non-inclusion.
 
 ## The state-transition validator

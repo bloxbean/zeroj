@@ -197,7 +197,8 @@ thousand constraints. Beyond that:</p>
 <ul>
 <li>set up with <code dir="auto">Groth16Keys.setupToStore(r1cs.flat(), numWires, numPublic, tau, keysDir, true)</code> and
 reopen with <code dir="auto">Groth16Keys.load(keysDir)</code>, which memory-maps the key;</li>
-<li>import ceremony keys with <code dir="auto">ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir)</code>;</li>
+<li>import ceremony keys with <code dir="auto">ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, verifiedZkeySha256)</code>
+and load them with <code dir="auto">Groth16Keys.load(keysDir, manifestSha256)</code>, pinned to the hashes;</li>
 <li>for multi-million-constraint circuits, use <code dir="auto">Groth16Pipeline</code>, which orders compile, witness and
 MSM work to keep the peak low;</li>
 <li>give the JVM enough <code dir="auto">-Xmx</code> and run the prover as its own process, not inside a request thread.</li>

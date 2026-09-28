@@ -31,6 +31,10 @@ Java 25 and Gradle (see [Installation](https://zeroj.dev/start/installation/)). 
 Each member holds two random secrets, a `nullifierKey` and a `trapdoor`. They give the
 organizer only a hash of them, the **leaf**. The organizer puts all leaves into a Merkle tree
 and publishes the **root**.
+Try it below: pick a member to light up their path, claim an entry, then try someone who isn't on
+the list.
+
+_The web version of this page has an interactive illustration here._
 
 ```text
                     root  (public)

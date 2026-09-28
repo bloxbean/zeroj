@@ -1,0 +1,1 @@
+import{n as e}from"./engine.BCHbG0-g.js";document.querySelectorAll(`.zad`).forEach(t=>{e(t);let n=t.querySelector(`[data-swap]`),r=e=>{t.dataset.swap=e?`1`:`0`,n&&(n.checked=e)};n?.addEventListener(`change`,()=>r(n.checked)),t.addEventListener(`zw:step`,e=>{e.detail!==3&&r(!1)})});

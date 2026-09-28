@@ -64,6 +64,8 @@ gates and wiring permutations instead of R1CS, and a polynomial commitment schem
 BBS works differently from the other two. It isn't a circuit proof system; it's a **signature
 scheme** with a built-in zero-knowledge proof. The workflow has three parties:
 
+_The web version of this page has an interactive illustration here._
+
 ```text
  Issuer                     Holder                              Verifier
    │  signs attributes        │                                    │
@@ -139,6 +141,10 @@ by default** and needs `-Dzeroj.allowLegacyBn254=true`. Use it only for off-chai
 > [Bring circom & snarkjs circuits](https://zeroj.dev/tutorials/snarkjs-interop/).
 
 ## Which should I use?
+
+Answer three questions to see which system fits, or read the summary below.
+
+_The web version of this page has an interactive illustration here._
 
 - **Proving a statement about private data?** Groth16 on BLS12-381. Plan for a proper ceremony
   before anything real depends on it.

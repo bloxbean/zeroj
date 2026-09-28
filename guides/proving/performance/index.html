@@ -193,7 +193,7 @@ pointers and inflate every object.</p>
 <ol>
 <li><strong>Compile once to the packed form</strong>: <code dir="auto">compileR1CS(CurveId.BLS12_381)</code> and use <code dir="auto">r1cs.flat()</code>.</li>
 <li><strong>Put the key in a store</strong>: <code dir="auto">Groth16Keys.setupToStore(..., true)</code> for development keys, or
-<code dir="auto">ZkeyPkStoreImporter.importToPkStore(...)</code> for a ceremony key. Never <code dir="auto">setupInMemory</code> at this size.</li>
+<code dir="auto">ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)</code> for a ceremony key. Never <code dir="auto">setupInMemory</code> at this size.</li>
 <li><strong>Prove through <code dir="auto">Groth16Pipeline</code></strong>, so the <code dir="auto">r1cs.bin</code> constraint cache skips recompiling on
 later runs and the memory peaks stay ordered. See
 <a href="/guides/proving/groth16/#groth16pipeline-for-very-large-circuits">Groth16Pipeline</a>.</li>

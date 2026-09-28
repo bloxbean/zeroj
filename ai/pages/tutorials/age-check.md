@@ -307,6 +307,8 @@ That's why an honest run proves nothing about soundness. A circuit that forgets 
 still works perfectly for honest users. Always test inputs that must fail, like this page
 does. [Testing circuits](https://zeroj.dev/guides/circuits/testing-circuits/) goes deeper.
 
+_The web version of this page has an interactive illustration here._
+
 ## Public inputs: order and ownership
 
 Groth16 public inputs are a plain list of numbers, and order matters. The generated schema

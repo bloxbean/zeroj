@@ -59,6 +59,8 @@ on top. ZeroJ brings the whole workflow to the JVM:
 Every ZeroJ application follows the same pipeline. Only the circuit is yours to design; the
 rest is library calls.
 
+_The web version of this page has an interactive illustration here._
+
 ```text
  1. Circuit    A Java class annotated with @ZKCircuit
                └─ compile ─►  R1CS constraints (the rules a valid answer must satisfy)

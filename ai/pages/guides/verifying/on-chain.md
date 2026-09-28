@@ -51,6 +51,8 @@ carry data:
 | Public inputs | **Datum**: a list of integers in VK order | Fixed when the UTxO is locked. |
 | Proof (`piA`, `piB`, `piC`) | **Redeemer**: `Constr 0 [piA, piB, piC]` of compressed points | Supplied by whoever spends. |
 
+_The web version of this page has an interactive illustration here._
+
 `vkIc` holds one compressed G1 point per public input plus one (`IC[0]`). The validator checks the
 datum length matches.
 

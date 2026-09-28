@@ -5,14 +5,14 @@
 zerojVersion: 0.1.0-pre12
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: 1734f1731b1ebda07c70fd537b395f5845871cf6
+Source revision: ad68fc5b50c21be27f055b54a048c97a49022fe5
 
 ## Key facts
 
 - ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano: define circuits in Java, prove with a pure-Java prover, verify in Java (off-chain) or on Cardano (Plutus V3 via JuLC).
 - Status: experimental research software, not externally audited, not for production or value-bearing/mainnet use. "Beta" components are feature-complete and correctness-tested but not audited.
 - **Groth16 on BLS12-381 is the supported path for the current release.** PlonK (prover, verifier and on-chain validators) is experimental: make no correctness claims about it and do not choose it by default. BN254 is legacy and disabled by default.
-- Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre12. Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre12`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
+- Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre12 (not on Maven Central yet; build from source meanwhile). Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre12`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
 - Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` carries the blst-java JNI jar for its native verifier, and `VerifierRegistry.withServiceLoader()` lists that verifier first: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path.
 - Write application circuits with annotations: `@ZKCircuit`, `@Prove`, `@Public`/`@Secret`, symbolic types `ZkField`, `ZkBool`, `ZkUInt` (always with `@UInt(bits = N)`), `ZkArray`/`ZkBits`/`ZkBytes` (with `@FixedSize`). The annotation processor generates a `<Name>Circuit` companion. Never use Java `if`, `&&`, `||` on secret values — use `ZkBool.and/or/not/select`.
 - For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). MiMC and the no-params Poseidon overload are BN254-oriented; do not use them for Cardano.
@@ -131,6 +131,8 @@ on top. ZeroJ brings the whole workflow to the JVM:
 Every ZeroJ application follows the same pipeline. Only the circuit is yours to design; the
 rest is library calls.
 
+_The web version of this page has an interactive illustration here._
+
 ```text
  1. Circuit    A Java class annotated with @ZKCircuit
                └─ compile ─►  R1CS constraints (the rules a valid answer must satisfy)
@@ -234,6 +236,8 @@ Source: https://zeroj.dev/start/installation/
 ZeroJ is a set of Maven artifacts under the group `org.zeroj`. A single BOM,
 `org.zeroj:zeroj-bom-core`, keeps the core module versions in sync. This page gets a Gradle or
 Maven project ready for the [Quickstart](https://zeroj.dev/start/quickstart/).
+
+> **Caution:** ZeroJ 0.1.0-pre12 isn't on Maven Central yet, so these snippets won't resolve until it's published. Build from source with `./gradlew publishToMavenLocal` meanwhile (local versions are `0.1.0-pre12-<commit>-SNAPSHOT`).
 
 ### Prerequisites
 
@@ -756,6 +760,8 @@ BLS12-381 curve, verifies the proof, and shows that a tampered claim is rejected
 Java 25 and a Gradle version that runs on it (we tested Gradle 9.2), or Maven. See
 [Installation](https://zeroj.dev/start/installation/) if you need to set these up. No zero-knowledge background
 is needed; unfamiliar terms are defined in the [Glossary](https://zeroj.dev/learn/glossary/).
+
+> **Caution:** ZeroJ 0.1.0-pre12 isn't on Maven Central yet, so these snippets won't resolve until it's published. Build from source with `./gradlew publishToMavenLocal` meanwhile (local versions are `0.1.0-pre12-<commit>-SNAPSHOT`).
 
 ### Build it
 
@@ -1289,6 +1295,8 @@ Every zero-knowledge system has two roles:
 - The **prover** knows a secret and wants to convince someone of a fact about it.
 - The **verifier** wants to be convinced, but should learn nothing about the secret.
 
+_The web version of this page has an interactive illustration here._
+
 ```text
       Prover                                    Verifier
   ┌──────────────┐                          ┌──────────────┐
@@ -1313,6 +1321,10 @@ and one is green. How do you convince your friend without telling them which is 
 If the balls really are different colours, you answer correctly every time. If they're secretly
 the same colour, you can only guess, and you'll be right half the time. After 20 rounds, the
 chance of a lucky cheater getting every answer right is about one in a million.
+
+Try it: play the prover, honestly or as a cheater.
+
+_The web version of this page has an interactive illustration here._
 
 Look at what your friend learned: that the balls differ. They never learned which one is red.
 
@@ -1471,6 +1483,8 @@ v2  = v1 · x          constraint 2
 out = v2 + x + 5      constraint 3
 ```
 
+_The web version of this page has an interactive illustration here._
+
 With `x = 3`, the wires are `v1 = 9`, `v2 = 27`, `out = 35`, and all three equations hold. The
 verifier never sees `x`, `v1`, or `v2`. It only learns that some assignment satisfies every
 constraint with `out = 35`.
@@ -1538,6 +1552,9 @@ index 1..n     the n public inputs, in the circuit's declared order
 index n+1..    secret inputs and intermediate wires
 ```
 
+The explainer near the top of this page shows that layout for `x³ + x + 5`: the constant, then the
+public `out`, then the secret wires.
+
 The witness contains your secrets, so it **never leaves the prover**. The prover turns it into a
 proof, and only the proof and the public inputs travel.
 
@@ -1603,6 +1620,8 @@ diff      = r − 2          ("−2" in the field)
 
 threshold + diff = 18 + (r − 2) = r + 16 ≡ 16 = age   ✓  the equation holds
 ```
+
+_The web version of this page has an interactive illustration here._
 
 ZeroJ's own witness calculator accepts these inputs, and the resulting proof verifies. The
 circuit said "equal", and the values *are* equal in the field. It never said "`diff` is a small,
@@ -1759,6 +1778,8 @@ gates and wiring permutations instead of R1CS, and a polynomial commitment schem
 BBS works differently from the other two. It isn't a circuit proof system; it's a **signature
 scheme** with a built-in zero-knowledge proof. The workflow has three parties:
 
+_The web version of this page has an interactive illustration here._
+
 ```text
  Issuer                     Holder                              Verifier
    │  signs attributes        │                                    │
@@ -1835,6 +1856,10 @@ by default** and needs `-Dzeroj.allowLegacyBn254=true`. Use it only for off-chai
 
 ### Which should I use?
 
+Answer three questions to see which system fits, or read the summary below.
+
+_The web version of this page has an interactive illustration here._
+
 - **Proving a statement about private data?** Groth16 on BLS12-381. Plan for a proper ceremony
   before anything real depends on it.
 - **Issuing credentials that holders reveal piece by piece?** BBS.
@@ -1910,6 +1935,8 @@ powers supports circuits up to roughly that many constraints.
 
 Groth16 setup happens in two phases:
 
+_The web version of this page has an interactive illustration here._
+
 ```text
 Phase 1  (universal)          Powers of tau for BLS12-381, up to size 2ⁿ
          once per curve + size ─ reusable by every circuit that fits
@@ -1932,6 +1959,8 @@ Phase 2  (circuit-specific)   Powers of tau + your compiled circuit (R1CS)
 
 If one party generates τ, everyone has to trust that party. A **multi-party computation (MPC)
 ceremony** removes that single point of trust:
+
+_The web version of this page has an interactive illustration here._
 
 ```text
 key_0 ──► Alice mixes in her randomness ──► key_1
@@ -1992,7 +2021,7 @@ For anything beyond local testing, the flow is:
 2. Start phase 2 from a trusted .ptau:   snarkjs groth16 setup      → key_0000.zkey
 3. Contributors mix in randomness:       zeroj-ceremony contribute  (or snarkjs zkey contribute)
 4. Close with a pre-announced beacon, and let anyone re-check:  snarkjs zkey verify
-5. Import the final key into ZeroJ:      zeroj-ceremony finalize    → proving-key store
+5. Import the verified key into ZeroJ:   zeroj-ceremony finalize --sha256 <verified hash>  → proving-key store
 6. Pin the verification key (and, on Cardano, the resulting script hash).
 ```
 
@@ -2077,7 +2106,9 @@ ZK verification maps onto that model naturally:
 | Redeemer | The **proof**: A, B, and C as compressed BLS12-381 points, 192 bytes in total. |
 | ScriptContext | The transaction being validated. This is where **your application rules** live. |
 
-The typical flow:
+The typical flow, step by step:
+
+_The web version of this page has an interactive illustration here._
 
 ```text
  Lock    Alice pays ADA to the verifier script address, with the public inputs as datum.
@@ -2746,6 +2777,8 @@ That's why an honest run proves nothing about soundness. A circuit that forgets 
 still works perfectly for honest users. Always test inputs that must fail, like this page
 does. [Testing circuits](https://zeroj.dev/guides/circuits/testing-circuits/) goes deeper.
 
+_The web version of this page has an interactive illustration here._
+
 ### Public inputs: order and ownership
 
 Groth16 public inputs are a plain list of numbers, and order matters. The generated schema
@@ -2867,6 +2900,10 @@ Java 25 and Gradle (see [Installation](https://zeroj.dev/start/installation/)). 
 Each member holds two random secrets, a `nullifierKey` and a `trapdoor`. They give the
 organizer only a hash of them, the **leaf**. The organizer puts all leaves into a Merkle tree
 and publishes the **root**.
+Try it below: pick a member to light up their path, claim an entry, then try someone who isn't on
+the list.
+
+_The web version of this page has an interactive illustration here._
 
 ```text
                     root  (public)
@@ -3396,6 +3433,8 @@ the spending transaction. The Groth16 flow fits this model neatly:
 | Public inputs | The locked UTxO's **datum** | Fixed when the ADA is locked: this is the statement that must be proven |
 | Proof | The spending transaction's **redeemer** | Supplied by whoever wants to spend |
 | Verification | Plutus V3's built-in BLS12-381 operations | The pairing check runs inside the validator |
+
+_The web version of this page has an interactive illustration here._
 
 ZeroJ ships the validator: `Groth16BLS12381Verifier`, a Plutus V3 spending script written in
 Java with [JuLC](https://github.com/bloxbean/julc) and precompiled into `zeroj-onchain-julc`.
@@ -4135,6 +4174,8 @@ Maybe you already have circuits written in [circom](https://docs.circom.io/), or
 snarkjs trusted-setup ceremony. You don't have to rewrite anything to use ZeroJ. Groth16 on
 BLS12-381 speaks the same formats in both directions:
 
+_The web version of this page has an interactive illustration here._
+
 ```text
   circom + snarkjs                                   ZeroJ (pure Java)
   ----------------                                   -----------------
@@ -4409,8 +4450,9 @@ use exactly this order.
   `ZkeyImporterBLS381.importZkeyFull(bytes, expectedSha256)` overload so the import fails
   unless the file matches the hash published with the ceremony transcript.
 - **Large circuits.** `importZkeyFull` loads the whole key into the heap. For big keys,
-  `ZkeyPkStoreImporter.importToPkStore(zkeyFile, dir)` converts the `.zkey` once into a
-  memory-mapped key store that you open with `Groth16Keys.load(dir)`. The
+  `ZkeyPkStoreImporter.importToPkStore(zkeyFile, dir, expectedSha256)` converts the `.zkey` once
+  into a memory-mapped key store, pinned to the same hash, and returns the store's manifest hash
+  that you open it with: `Groth16Keys.load(dir, manifestSha256)`. The
   [Groth16 guide](https://zeroj.dev/guides/proving/groth16/) shows that flow, including the extra argument that
   snarkjs-made keys need at prove time.
 - **The witness must match the key.** A `.zkey` is made for one exact constraint system, so
@@ -5416,6 +5458,11 @@ and so does `a = p − 1, b = p − 33` (that is, `−1 · −33`), because fiel
 circuit needs `a` and `b` range-checked and different from 1. Only a test that *tries* those
 witnesses finds the bug.
 
+The same trap in the age check from
+[Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-witnesses/#the-under-constrained-circuit-bug), as your two tests would see it:
+
+_The web version of this page has an interactive illustration here._
+
 ### The checklist
 
 For every circuit, test:
@@ -5693,7 +5740,7 @@ circuit ──compileR1CS(BLS12_381)──▶ R1CS ──setup / import──▶
 | Heap | `Groth16Keys.setupInMemory(...)` | Tests and small circuits | Whole key on the heap |
 | Key store, sparse | `Groth16Keys.setupToStore(..., true)` | Large local circuits (recommended store format) | Streamed setup; the key is memory-mapped, so it uses page cache, not heap |
 | Key store, dense | `Groth16Keys.setupToStore(..., false)` | Interchange with older tools | Same profile, larger files |
-| Imported ceremony key | `ZkeyPkStoreImporter.importToPkStore(...)`, then `Groth16Keys.load(dir)` | Anything beyond local testing | Memory-mapped at prove time |
+| Imported ceremony key | `ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)`, then `Groth16Keys.load(dir, manifestSha256)` | Anything beyond local testing | Memory-mapped at prove time |
 
 `Groth16Keys` is `AutoCloseable`. Use try-with-resources so store-backed keys are unmapped.
 
@@ -5704,6 +5751,8 @@ circuit ──compileR1CS(BLS12_381)──▶ R1CS ──setup / import──▶
 > `-Dzeroj.allowInsecureTrustedSetup=true` (or `ZEROJ_ALLOW_INSECURE_TRUSTED_SETUP=true`); without
 > it they throw `IllegalStateException`. Keys that protect anything real come from a multi-party
 > ceremony. See [Run a trusted setup ceremony](https://zeroj.dev/guides/proving/trusted-setup-ceremony/).
+
+_The web version of this page has an interactive illustration here._
 
 ### Flow 1: small circuits, keys in memory
 
@@ -5753,11 +5802,22 @@ smaller for large circuits.
 ### Flow 3: keys from a ceremony
 
 For real deployments, the proving key comes from a snarkjs multi-party ceremony `.zkey`. Import it
-once into the same store layout:
+once into the same store layout, pinned to the SHA-256 of the final key that passed
+`snarkjs zkey verify` (the ceremony transcript publishes it):
 
 ```java
-ZkeyPkStoreImporter.importToPkStore(Path.of("circuit_final.zkey"), keysDir);   // streaming, multi-GB safe
+// Streaming, multi-GB safe. The target directory must not exist yet.
+var imported = ZkeyPkStoreImporter.importToPkStore(
+        Path.of("circuit_final.zkey"), keysDir, verifiedZkeySha256);
+String manifestSha256 = imported.manifestSha256();   // keep it with your deployment config
 ```
+
+The import checks the file against that hash, validates every point (curve, subgroup and
+canonical encoding), and seals the store. It does not check that the key matches your circuit or
+re-verify the ceremony; that's what `snarkjs zkey verify` is for. The two-argument
+`importToPkStore(zkey, dir)` always throws, so the hash can't be skipped by accident.
+`importUnpinnedToPkStore` exists for local tests only. Later loads are pinned to the store's
+manifest hash.
 
 snarkjs appends one public-input binding row per public signal (plus one for the constant wire)
 after your circuit's rows, so you must tell the prover about them:
@@ -5765,7 +5825,7 @@ after your circuit's rows, so you must tell the prover about them:
 ```java
 int numPublic = r1cs.numPublicInputs();
 
-try (var keys = Groth16Keys.load(keysDir)) {
+try (var keys = Groth16Keys.load(keysDir, manifestSha256)) {
     // List form: append snarkjs's binding rows to your compiled constraints
     var proof = keys.prove(witness,
             ZkeyPkStoreImporter.snarkjsConstraints(r1cs.constraints(), numPublic));
@@ -5837,9 +5897,10 @@ try (var keys = Groth16Keys.load(keysDir)) {
 
 The fingerprint has the form `c<constraints>-w<wires>-p<public>-r<sha256>`: the dimensions plus
 a hash of the exact relation. A mismatch throws `IllegalStateException` before any proving work.
-For an imported ceremony key, bind the fingerprint to the store once with
-`Groth16PkStore.bindCircuitFingerprint(keysDir, fingerprint)`, and pass `numPublic + 1` binding
-rows. `Groth16Pipeline.estimateProvePhaseHeapBytes(numWires, domain)` gives a lower bound on
+For an imported ceremony key, pass the fingerprint at import time, with the four-argument
+`importToPkStore(zkey, dir, sha256, fingerprint)` or `zeroj-ceremony finalize --circuit-fingerprint`,
+and pass `numPublic + 1` binding rows. Imported stores are sealed, so
+`Groth16PkStore.bindCircuitFingerprint` works only on local, unsealed stores. `Groth16Pipeline.estimateProvePhaseHeapBytes(numWires, domain)` gives a lower bound on
 prove-phase heap for preflight checks; witness generation can need more, so measure your own
 circuit. An optional `Groth16Pipeline.Progress` listener reports stages for CLIs.
 
@@ -5969,6 +6030,8 @@ development, tests, and throwaway demos. ZeroJ's in-process setup (`Groth16Keys.
 > ceremony whose transcript you've verified.
 
 ### How the pieces fit
+
+_The web version of this page has an interactive illustration here._
 
 ```text
 Phase 1 (universal, reusable)   powers of tau (.ptau) for BLS12-381, up to 2^N constraints
@@ -6108,19 +6171,28 @@ library call: `ZkeyContributor.contribute(in, out, name)` returns the contributi
 #    e.g. "the hash of Bitcoin block N" or "drand round R" for a future N or R
 snarkjs zkey beacon key_0012.zkey key_final.zkey <beaconHashHex> 10 -n="final beacon"
 
-# 2. The independent check anyone can re-run
-snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey
+# 2. The independent check anyone can re-run. Stop if it fails.
+snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey || exit 1
 
-# 3. The verification key for your verifiers and validators
+# 3. Hash the key only after verification succeeds
+VERIFIED_ZKEY_SHA256=$(shasum -a 256 key_final.zkey | awk '{print $1}')
+
+# 4. The verification key for your verifiers and validators
 snarkjs zkey export verificationkey key_final.zkey verification_key.json
 
-# 4. Convert to a ZeroJ proving-key store (streaming, multi-GB safe)
-zeroj-ceremony finalize --zkey key_final.zkey --pk-store ./ownership-pk
+# 5. Convert to a ZeroJ proving-key store (streaming, multi-GB safe; ./ownership-pk must not exist)
+zeroj-ceremony finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 
-`finalize` is `ZkeyPkStoreImporter.importToPkStore(...)` behind a CLI, and you can call that
-method directly instead. The importer validates the key's curve, field, and dimensions, and that
-every verification-key point is on the curve and not the point at infinity.
+`finalize` is `ZkeyPkStoreImporter.importToPkStore(zkey, dir, expectedSha256)` behind a CLI, and
+you can call that method directly instead. It refuses a file whose SHA-256 doesn't match, checks
+the key's structure and every point (curve, subgroup and canonical encoding), writes a new store
+and seals it. It prints the store's manifest SHA-256: keep it outside the store, with your
+deployment config, and use it for every later load. `--allow-unpinned` replaces `--sha256` for
+local tests only; it doesn't authenticate the source. Add `--circuit-fingerprint <exact>` if you
+want circuit-aware checks; it has to be set here, because a sealed store can't be bound later.
+`finalize` doesn't re-check the transcript or that the key matches your circuit: that's
+`snarkjs zkey verify`'s job.
 
 ### Prove with the ceremony key
 
@@ -6129,7 +6201,7 @@ per public input (plus one for the constant wire), so pass them to the prover:
 
 ```java
 int numPublic = r1cs.numPublicInputs();
-try (var keys = Groth16Keys.load(Path.of("ownership-pk"))) {
+try (var keys = Groth16Keys.load(Path.of("ownership-pk"), manifestSha256)) {   // printed by finalize
     var proof = keys.prove(witness,
             ZkeyPkStoreImporter.snarkjsConstraints(r1cs.constraints(), numPublic));
 }
@@ -6148,8 +6220,9 @@ Treat the ceremony outputs as pinned artifacts, and check their hashes where you
 - The in-memory importers accept an expected hash and refuse a mismatch before parsing:
   `ZkeyImporterBLS381.importZkeyFull(bytes, expectedSha256)` (keys up to 128 MB) and
   `PtauImporterBLS381.importPtau(input, maxPoints, expectedSha256)`.
-- `ZkeyPkStoreImporter.importToPkStore` has no hash parameter, so check the file's SHA-256
-  yourself before importing it.
+- `ZkeyPkStoreImporter.importToPkStore(zkey, dir, expectedSha256)` and `zeroj-ceremony finalize
+  --sha256` refuse a mismatched file too, and print the store's manifest SHA-256. Load the store
+  with `Groth16Keys.load(dir, manifestSha256)` so a changed store is refused.
 - Pin the verification key your on-chain validator is built with, and treat any change as a new
   deployment.
 
@@ -6293,7 +6366,7 @@ pointers and inflate every object.
 
 1. **Compile once to the packed form**: `compileR1CS(CurveId.BLS12_381)` and use `r1cs.flat()`.
 2. **Put the key in a store**: `Groth16Keys.setupToStore(..., true)` for development keys, or
-   `ZkeyPkStoreImporter.importToPkStore(...)` for a ceremony key. Never `setupInMemory` at this size.
+   `ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)` for a ceremony key. Never `setupInMemory` at this size.
 3. **Prove through `Groth16Pipeline`**, so the `r1cs.bin` constraint cache skips recompiling on
    later runs and the memory peaks stay ordered. See
    [Groth16Pipeline](https://zeroj.dev/guides/proving/groth16/#groth16pipeline-for-very-large-circuits).
@@ -6979,6 +7052,8 @@ carry data:
 | Public inputs | **Datum**: a list of integers in VK order | Fixed when the UTxO is locked. |
 | Proof (`piA`, `piB`, `piC`) | **Redeemer**: `Constr 0 [piA, piB, piC]` of compressed points | Supplied by whoever spends. |
 
+_The web version of this page has an interactive illustration here._
+
 `vkIc` holds one compressed G1 point per public input plus one (`IC[0]`). The validator checks the
 datum length matches.
 
@@ -7322,11 +7397,15 @@ Cardano, the reusable `Groth16BLS12381Verifier` validator doesn't even look at t
 Keep the two decisions visibly separate in code. Off-chain, a verifier backend returns
 `VerificationResult.cryptoValid()`, with `accepted() == false`. Only your policy layer should
 produce `VerificationResult.ok()`. See [Verify proofs in Java](https://zeroj.dev/guides/verifying/off-chain/#build-a-verification-service).
+The explainer under [Replay and front-running](#replay-and-front-running) shows what goes wrong when
+only the proof is checked.
 
 ### Replay and front-running
 
 A proof is a public, copyable object. Anyone who sees it (in a log, an API response, or the Cardano
 mempool) can submit it again unless the statement ties it to one specific use.
+
+_The web version of this page has an interactive illustration here._
 
 - **Bind to the spend.** On Cardano, make a public input depend on the UTxO being spent, for
   example `spendRef = blake2b_256(spentTxId || outputIndex) mod r` as public input 0. Your validator
@@ -7605,6 +7684,10 @@ dependencies {
 
 ### Issue, present, verify
 
+Step through the three roles first. The walkthrough uses the `reusable-kyc` demo's values; tick attributes to change what the verifier sees.
+
+_The web version of this page has an interactive illustration here._
+
 This complete program plays all three roles. Each role would normally be a different party.
 
 ```java title="BbsQuickstart.java"
@@ -7819,6 +7902,8 @@ over BLS12-381, so the same tree the service stores can be opened inside a Groth
 
 ### How it works
 
+_The web version of this page has an interactive illustration here._
+
 ```text
 OFF-CHAIN (your service)
   RocksDB MPF/JMT, millions of entries
@@ -7936,8 +8021,8 @@ The JMT flow has the same shape: `PoseidonJmtTree`, `PoseidonJmtInclusionWitness
 - A root-only inclusion proof says "the prover knows *some* entry under this root", and nothing
   public about which one. It doesn't bind a particular key to a user. Add the key, owner,
   nullifier, version or transaction fields your application needs in your own circuit.
-- JMT version numbers are storage coordinates, not authenticated state. Bind `{chain point,
-  version, root}` in your application, with one logical writer.
+- JMT version numbers are storage coordinates, not authenticated state.
+  Bind `{chain point, version, root}` in your application, with one logical writer.
 - A JMT tombstone is still an included value. Never present it as non-inclusion.
 
 ### The state-transition validator
@@ -8149,6 +8234,8 @@ pay you"), social pressure from peers and employers, and whales watching the cou
 decide. What you want is a vote where eligibility and one-person-one-vote can be checked by
 anyone, but the link between a person and their ballot cannot.
 
+_The web version of this page has an interactive illustration here._
+
 ### The zero-knowledge idea
 
 **The voter proves "I'm on the eligible-voter list, this is my one nullifier for this election,
@@ -8335,6 +8422,8 @@ usual remedies are weak. An auditor's report asks you to trust the auditor. Publ
 account balance destroys customer privacy. A plain Merkle proof lets you see your neighbours'
 balances. Stablecoin issuers, bridges, lending protocols and DAO treasuries face the same question:
 *can you prove you're solvent without opening your books?*
+
+_The web version of this page has an interactive illustration here._
 
 ### The zero-knowledge idea
 
@@ -8526,6 +8615,8 @@ can leak it. Credentials fix half of that problem. A KYC provider checks you onc
 attributes. Zero knowledge fixes the other half: you prove the signed attributes satisfy the rule,
 and the app never sees them.
 
+_The web version of this page has an interactive illustration here._
+
 ### The zero-knowledge idea
 
 **The holder proves "a registered issuer signed my age and country, my age meets the minimum, and my
@@ -8708,6 +8799,8 @@ your address, your balance, every other token you hold and your transaction hist
 steep price for a concert ticket, a holders-only chat or a DAO forum. Zero knowledge lets you prove
 "I'm a holder" and nothing more.
 
+_The web version of this page has an interactive illustration here._
+
 ### The zero-knowledge idea
 
 **The holder proves "I'm in the collection's current ownership snapshot, holding a token from it,
@@ -8876,6 +8969,8 @@ Airdrops, faucets and community rewards get farmed. One person spins up a thousa
 claims a thousand times. Checking identity at claim time stops that, but then every claimant hands
 over personal data and every claim is linked to a person. What you want is **one claim per real
 human per period**, where the distributor learns only that *some* eligible person claimed.
+
+_The web version of this page has an interactive illustration here._
 
 ### The zero-knowledge idea
 
@@ -9048,6 +9143,8 @@ asks "over 21 and a resident?", a healthcare portal asks "a doctor over 30?", a 
 "KYC-verified and from an allowed country?", and each one learns *only* its answer.
 
 ZeroJ supports two complementary ways to do this, and each has a runnable demo.
+
+_The web version of this page has an interactive illustration here._
 
 ### The zero-knowledge idea
 
@@ -9279,6 +9376,8 @@ those claims. But the exact numbers behind them are commercially sensitive. A pr
 reveals manufacturing efficiency, origin data reveals suppliers, and inspection records reveal defect
 rates. The tension is real: *prove it, but don't publish it.*
 
+_The web version of this page has an interactive illustration here._
+
 ### The zero-knowledge idea
 
 **The manufacturer proves "an auditor committed to this product's measurement, and it meets the
@@ -9459,6 +9558,8 @@ would be a disaster. And a refund submitted on-chain can be copied from the memp
 
 This page explains why zero knowledge is the tool that resolves this, and what ZeroJ's largest
 circuit proves.
+
+_The web version of this page has an interactive illustration here._
 
 ### Why a signature isn't enough
 
@@ -9655,6 +9756,8 @@ revealing which deposit was theirs.
 > [zeroj-usecases](https://github.com/bloxbean/zeroj-usecases). This page describes a design built
 > from ZeroJ's building blocks. The circuit below is a design sketch, not a tested application.
 > Privacy pools also carry legal and compliance questions that are outside the scope of these docs.
+
+_The web version of this page has an interactive illustration here._
 
 ### The zero-knowledge idea
 
@@ -9997,8 +10100,8 @@ throws `IllegalArgumentException("Missing public input: …")` or `("Missing sec
 | `BigInteger tau = PowersOfTauBLS381.generate(power).tauScalar()` (dev) | `PowersOfTauBLS381` (`org.zeroj.crypto.setup`) |
 | `try (var keys = Groth16Keys.setupInMemory(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), tau)) { … }` (dev, small circuits) | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
 | `Groth16Keys.setupToStore(r1cs.flat(), numWires, numPublic, tau, keysDir, true)` (dev, large circuits, mmap'd store) | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
-| `ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir)` (production: import a ceremony `.zkey` once) | `ZkeyPkStoreImporter` (`org.zeroj.crypto.groth16`) |
-| `try (var keys = Groth16Keys.load(keysDir)) { … }` | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
+| `var imported = ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, verifiedZkeySha256)` (production: import a ceremony `.zkey` once, pinned to its hash; the two-argument form always throws) | `ZkeyPkStoreImporter` (`org.zeroj.crypto.groth16`) |
+| `try (var keys = Groth16Keys.load(keysDir, imported.manifestSha256())) { … }` (imported store, pinned) · `Groth16Keys.load(keysDir)` (your own `setupToStore` store) | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
 | `var zkey = ZkeyImporterBLS381.importZkeyFull(zkeyBytes)` · `ZkeyImporterBLS381.importWtns(inputStream)` | `ZkeyImporterBLS381` (`org.zeroj.crypto.groth16`) |
 | `TrustedSetupPolicy.insecureTrustedSetupEnabled()` | `TrustedSetupPolicy` (`org.zeroj.api`) |
 
@@ -10421,7 +10524,8 @@ thousand constraints. Beyond that:
 
 - set up with `Groth16Keys.setupToStore(r1cs.flat(), numWires, numPublic, tau, keysDir, true)` and
   reopen with `Groth16Keys.load(keysDir)`, which memory-maps the key;
-- import ceremony keys with `ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir)`;
+- import ceremony keys with `ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, verifiedZkeySha256)`
+  and load them with `Groth16Keys.load(keysDir, manifestSha256)`, pinned to the hashes;
 - for multi-million-constraint circuits, use `Groth16Pipeline`, which orders compile, witness and
   MSM work to keep the peak low;
 - give the JVM enough `-Xmx` and run the prover as its own process, not inside a request thread.
@@ -10683,6 +10787,21 @@ and `zeroj-jmt-poseidon`. See [Modules](https://zeroj.dev/reference/modules/).
 
 The default build of the repository is pure Java. It needs no Go, Rust, Node.js, WASM toolchain or
 RocksDB.
+
+### Pinned ceremony-key imports
+
+Importing a ceremony `.zkey` into a key store now requires the key's SHA-256, so a wrong or
+tampered file can't slip through:
+
+| Before | Now |
+|---|---|
+| `ZkeyPkStoreImporter.importToPkStore(zkey, dir)` | `importToPkStore(zkey, dir, verifiedZkeySha256)`. The two-argument form always throws. `importUnpinnedToPkStore` is for local tests only. |
+| `Groth16Keys.load(dir)` on an imported store | `Groth16Keys.load(dir, imported.manifestSha256())`, pinned to the manifest hash the import returns (and `zeroj-ceremony finalize` prints) |
+| `Groth16PkStore.bindCircuitFingerprint(dir, fp)` after import | Pass the fingerprint at import: `importToPkStore(zkey, dir, sha256, fp)` or `finalize --circuit-fingerprint`. Imported stores are sealed. |
+| `zeroj-ceremony finalize --zkey … --pk-store …` | Add `--sha256 <hash of the verified key>` (or `--allow-unpinned` for local tests). The output directory must not exist. |
+
+Stores you create yourself with `Groth16Keys.setupToStore` are unchanged and still load with
+`Groth16Keys.load(dir)`. See [Prove with Groth16](https://zeroj.dev/guides/proving/groth16/#flow-3-keys-from-a-ceremony).
 
 ### Further reading
 
@@ -11055,7 +11174,7 @@ For every circuit, generate JUnit tests for: (1) a valid witness that proves and
 | --- | --- |
 | Tests, small circuits | `Groth16Keys.setupInMemory(constraints, numWires, numPublic, tau)` (dev-only) |
 | Large circuits (100k+ constraints) | `Groth16Keys.setupToStore(flat, numWires, numPublic, tau, dir, true)` then `Groth16Keys.load(dir)`; `Groth16Pipeline` for compile caching |
-| Production keys | Run a multi-party snarkjs ceremony; import once with `ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir)`; prove from `Groth16Keys.load(keysDir)` with `keys.prove(witness, ZkeyPkStoreImporter.snarkjsConstraints(r1cs.constraints(), numPublic))` (snarkjs appends `numPublic + 1` binding rows), or pass `numPublic + 1` binding rows to the packed `prove` / `Groth16Pipeline` |
+| Production keys | Run a multi-party snarkjs ceremony; import once with `var imported = ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, verifiedZkeySha256)` (the SHA-256 of the key that passed `snarkjs zkey verify`; the two-argument form always throws, and the target directory must not exist); prove from `Groth16Keys.load(keysDir, imported.manifestSha256())` with `keys.prove(witness, ZkeyPkStoreImporter.snarkjsConstraints(r1cs.constraints(), numPublic))` (snarkjs appends `numPublic + 1` binding rows), or pass `numPublic + 1` binding rows to the packed `prove` / `Groth16Pipeline` |
 | Optional native speed-up | `zeroj-crypto-blst` + `ProverBackend` selection; bit-identical proofs |
 
 Setup validates the relation and fails closed: every public wire (and the constant wire 0) must be referenced by some constraint, otherwise `IllegalArgumentException: R1CS public wire N … is not referenced by any constraint`. Fix the circuit; do not catch and retry. Details: [Prove with Groth16](https://zeroj.dev/guides/proving/groth16/), [Performance](https://zeroj.dev/guides/proving/performance/), [Trusted setup ceremony](https://zeroj.dev/guides/proving/trusted-setup-ceremony/).

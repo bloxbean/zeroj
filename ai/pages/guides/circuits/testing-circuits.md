@@ -35,6 +35,11 @@ and so does `a = p − 1, b = p − 33` (that is, `−1 · −33`), because fiel
 circuit needs `a` and `b` range-checked and different from 1. Only a test that *tries* those
 witnesses finds the bug.
 
+The same trap in the age check from
+[Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-witnesses/#the-under-constrained-circuit-bug), as your two tests would see it:
+
+_The web version of this page has an interactive illustration here._
+
 ## The checklist
 
 For every circuit, test:

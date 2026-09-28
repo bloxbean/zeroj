@@ -10,6 +10,8 @@ account balance destroys customer privacy. A plain Merkle proof lets you see you
 balances. Stablecoin issuers, bridges, lending protocols and DAO treasuries face the same question:
 *can you prove you're solvent without opening your books?*
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The custodian proves "the balances committed in this published liabilities root are all

@@ -38,11 +38,15 @@ Cardano, the reusable `Groth16BLS12381Verifier` validator doesn't even look at t
 Keep the two decisions visibly separate in code. Off-chain, a verifier backend returns
 `VerificationResult.cryptoValid()`, with `accepted() == false`. Only your policy layer should
 produce `VerificationResult.ok()`. See [Verify proofs in Java](https://zeroj.dev/guides/verifying/off-chain/#build-a-verification-service).
+The explainer under [Replay and front-running](#replay-and-front-running) shows what goes wrong when
+only the proof is checked.
 
 ## Replay and front-running
 
 A proof is a public, copyable object. Anyone who sees it (in a log, an API response, or the Cardano
 mempool) can submit it again unless the statement ties it to one specific use.
+
+_The web version of this page has an interactive illustration here._
 
 - **Bind to the spend.** On Cardano, make a public input depend on the UTxO being spent, for
   example `spendRef = blake2b_256(spentTxId || outputIndex) mod r` as public input 0. Your validator

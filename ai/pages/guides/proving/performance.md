@@ -82,7 +82,7 @@ pointers and inflate every object.
 
 1. **Compile once to the packed form**: `compileR1CS(CurveId.BLS12_381)` and use `r1cs.flat()`.
 2. **Put the key in a store**: `Groth16Keys.setupToStore(..., true)` for development keys, or
-   `ZkeyPkStoreImporter.importToPkStore(...)` for a ceremony key. Never `setupInMemory` at this size.
+   `ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)` for a ceremony key. Never `setupInMemory` at this size.
 3. **Prove through `Groth16Pipeline`**, so the `r1cs.bin` constraint cache skips recompiling on
    later runs and the memory peaks stay ordered. See
    [Groth16Pipeline](https://zeroj.dev/guides/proving/groth16/#groth16pipeline-for-very-large-circuits).

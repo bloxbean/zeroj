@@ -149,6 +149,21 @@ and `zeroj-jmt-poseidon`. See [Modules](https://zeroj.dev/reference/modules/).
 The default build of the repository is pure Java. It needs no Go, Rust, Node.js, WASM toolchain or
 RocksDB.
 
+## Pinned ceremony-key imports
+
+Importing a ceremony `.zkey` into a key store now requires the key's SHA-256, so a wrong or
+tampered file can't slip through:
+
+| Before | Now |
+|---|---|
+| `ZkeyPkStoreImporter.importToPkStore(zkey, dir)` | `importToPkStore(zkey, dir, verifiedZkeySha256)`. The two-argument form always throws. `importUnpinnedToPkStore` is for local tests only. |
+| `Groth16Keys.load(dir)` on an imported store | `Groth16Keys.load(dir, imported.manifestSha256())`, pinned to the manifest hash the import returns (and `zeroj-ceremony finalize` prints) |
+| `Groth16PkStore.bindCircuitFingerprint(dir, fp)` after import | Pass the fingerprint at import: `importToPkStore(zkey, dir, sha256, fp)` or `finalize --circuit-fingerprint`. Imported stores are sealed. |
+| `zeroj-ceremony finalize --zkey … --pk-store …` | Add `--sha256 <hash of the verified key>` (or `--allow-unpinned` for local tests). The output directory must not exist. |
+
+Stores you create yourself with `Groth16Keys.setupToStore` are unchanged and still load with
+`Groth16Keys.load(dir)`. See [Prove with Groth16](https://zeroj.dev/guides/proving/groth16/#flow-3-keys-from-a-ceremony).
+
 ## Further reading
 
 Design notes: [ADR-0048](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0048-org-zeroj-namespace-and-central-portal-publishing.md)

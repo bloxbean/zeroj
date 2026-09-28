@@ -56,6 +56,8 @@ powers supports circuits up to roughly that many constraints.
 
 Groth16 setup happens in two phases:
 
+_The web version of this page has an interactive illustration here._
+
 ```text
 Phase 1  (universal)          Powers of tau for BLS12-381, up to size 2ⁿ
          once per curve + size ─ reusable by every circuit that fits
@@ -78,6 +80,8 @@ Phase 2  (circuit-specific)   Powers of tau + your compiled circuit (R1CS)
 
 If one party generates τ, everyone has to trust that party. A **multi-party computation (MPC)
 ceremony** removes that single point of trust:
+
+_The web version of this page has an interactive illustration here._
 
 ```text
 key_0 ──► Alice mixes in her randomness ──► key_1
@@ -138,7 +142,7 @@ For anything beyond local testing, the flow is:
 2. Start phase 2 from a trusted .ptau:   snarkjs groth16 setup      → key_0000.zkey
 3. Contributors mix in randomness:       zeroj-ceremony contribute  (or snarkjs zkey contribute)
 4. Close with a pre-announced beacon, and let anyone re-check:  snarkjs zkey verify
-5. Import the final key into ZeroJ:      zeroj-ceremony finalize    → proving-key store
+5. Import the verified key into ZeroJ:   zeroj-ceremony finalize --sha256 <verified hash>  → proving-key store
 6. Pin the verification key (and, on Cardano, the resulting script hash).
 ```
 

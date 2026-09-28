@@ -13,6 +13,8 @@ would be a disaster. And a refund submitted on-chain can be copied from the memp
 This page explains why zero knowledge is the tool that resolves this, and what ZeroJ's largest
 circuit proves.
 
+_The web version of this page has an interactive illustration here._
+
 ## Why a signature isn't enough
 
 Cardano wallets derive keys along the CIP-1852 path `m / 1852' / 1815' / account' / role / index`.

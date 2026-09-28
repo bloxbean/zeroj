@@ -1,0 +1,1 @@
+import{n as e}from"./engine.BCHbG0-g.js";document.querySelectorAll(`.znf`).forEach(t=>{e(t),t.querySelectorAll(`[data-nf-btn]`).forEach((e,n,r)=>e.addEventListener(`click`,()=>{t.dataset.nf=e.dataset.nfBtn,r.forEach(t=>t.setAttribute(`aria-pressed`,String(t===e)))}))});

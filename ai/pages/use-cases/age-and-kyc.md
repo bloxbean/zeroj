@@ -10,6 +10,8 @@ can leak it. Credentials fix half of that problem. A KYC provider checks you onc
 attributes. Zero knowledge fixes the other half: you prove the signed attributes satisfy the rule,
 and the app never sees them.
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The holder proves "a registered issuer signed my age and country, my age meets the minimum, and my

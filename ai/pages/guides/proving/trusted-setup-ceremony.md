@@ -27,6 +27,8 @@ development, tests, and throwaway demos. ZeroJ's in-process setup (`Groth16Keys.
 
 ## How the pieces fit
 
+_The web version of this page has an interactive illustration here._
+
 ```text
 Phase 1 (universal, reusable)   powers of tau (.ptau) for BLS12-381, up to 2^N constraints
                                   │  verify, then "prepare phase2"
@@ -165,19 +167,28 @@ library call: `ZkeyContributor.contribute(in, out, name)` returns the contributi
 #    e.g. "the hash of Bitcoin block N" or "drand round R" for a future N or R
 snarkjs zkey beacon key_0012.zkey key_final.zkey <beaconHashHex> 10 -n="final beacon"
 
-# 2. The independent check anyone can re-run
-snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey
+# 2. The independent check anyone can re-run. Stop if it fails.
+snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey || exit 1
 
-# 3. The verification key for your verifiers and validators
+# 3. Hash the key only after verification succeeds
+VERIFIED_ZKEY_SHA256=$(shasum -a 256 key_final.zkey | awk '{print $1}')
+
+# 4. The verification key for your verifiers and validators
 snarkjs zkey export verificationkey key_final.zkey verification_key.json
 
-# 4. Convert to a ZeroJ proving-key store (streaming, multi-GB safe)
-zeroj-ceremony finalize --zkey key_final.zkey --pk-store ./ownership-pk
+# 5. Convert to a ZeroJ proving-key store (streaming, multi-GB safe; ./ownership-pk must not exist)
+zeroj-ceremony finalize --sha256 "$VERIFIED_ZKEY_SHA256" --zkey key_final.zkey --pk-store ./ownership-pk
 ```
 
-`finalize` is `ZkeyPkStoreImporter.importToPkStore(...)` behind a CLI, and you can call that
-method directly instead. The importer validates the key's curve, field, and dimensions, and that
-every verification-key point is on the curve and not the point at infinity.
+`finalize` is `ZkeyPkStoreImporter.importToPkStore(zkey, dir, expectedSha256)` behind a CLI, and
+you can call that method directly instead. It refuses a file whose SHA-256 doesn't match, checks
+the key's structure and every point (curve, subgroup and canonical encoding), writes a new store
+and seals it. It prints the store's manifest SHA-256: keep it outside the store, with your
+deployment config, and use it for every later load. `--allow-unpinned` replaces `--sha256` for
+local tests only; it doesn't authenticate the source. Add `--circuit-fingerprint <exact>` if you
+want circuit-aware checks; it has to be set here, because a sealed store can't be bound later.
+`finalize` doesn't re-check the transcript or that the key matches your circuit: that's
+`snarkjs zkey verify`'s job.
 
 ## Prove with the ceremony key
 
@@ -186,7 +197,7 @@ per public input (plus one for the constant wire), so pass them to the prover:
 
 ```java
 int numPublic = r1cs.numPublicInputs();
-try (var keys = Groth16Keys.load(Path.of("ownership-pk"))) {
+try (var keys = Groth16Keys.load(Path.of("ownership-pk"), manifestSha256)) {   // printed by finalize
     var proof = keys.prove(witness,
             ZkeyPkStoreImporter.snarkjsConstraints(r1cs.constraints(), numPublic));
 }
@@ -205,8 +216,9 @@ Treat the ceremony outputs as pinned artifacts, and check their hashes where you
 - The in-memory importers accept an expected hash and refuse a mismatch before parsing:
   `ZkeyImporterBLS381.importZkeyFull(bytes, expectedSha256)` (keys up to 128 MB) and
   `PtauImporterBLS381.importPtau(input, maxPoints, expectedSha256)`.
-- `ZkeyPkStoreImporter.importToPkStore` has no hash parameter, so check the file's SHA-256
-  yourself before importing it.
+- `ZkeyPkStoreImporter.importToPkStore(zkey, dir, expectedSha256)` and `zeroj-ceremony finalize
+  --sha256` refuse a mismatched file too, and print the store's manifest SHA-256. Load the store
+  with `Groth16Keys.load(dir, manifestSha256)` so a changed store is refused.
 - Pin the verification key your on-chain validator is built with, and treat any change as a new
   deployment.
 

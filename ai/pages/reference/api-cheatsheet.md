@@ -53,8 +53,8 @@ throws `IllegalArgumentException("Missing public input: …")` or `("Missing sec
 | `BigInteger tau = PowersOfTauBLS381.generate(power).tauScalar()` (dev) | `PowersOfTauBLS381` (`org.zeroj.crypto.setup`) |
 | `try (var keys = Groth16Keys.setupInMemory(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), tau)) { … }` (dev, small circuits) | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
 | `Groth16Keys.setupToStore(r1cs.flat(), numWires, numPublic, tau, keysDir, true)` (dev, large circuits, mmap'd store) | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
-| `ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir)` (production: import a ceremony `.zkey` once) | `ZkeyPkStoreImporter` (`org.zeroj.crypto.groth16`) |
-| `try (var keys = Groth16Keys.load(keysDir)) { … }` | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
+| `var imported = ZkeyPkStoreImporter.importToPkStore(zkeyPath, keysDir, verifiedZkeySha256)` (production: import a ceremony `.zkey` once, pinned to its hash; the two-argument form always throws) | `ZkeyPkStoreImporter` (`org.zeroj.crypto.groth16`) |
+| `try (var keys = Groth16Keys.load(keysDir, imported.manifestSha256())) { … }` (imported store, pinned) · `Groth16Keys.load(keysDir)` (your own `setupToStore` store) | `Groth16Keys` (`org.zeroj.crypto.groth16`) |
 | `var zkey = ZkeyImporterBLS381.importZkeyFull(zkeyBytes)` · `ZkeyImporterBLS381.importWtns(inputStream)` | `ZkeyImporterBLS381` (`org.zeroj.crypto.groth16`) |
 | `TrustedSetupPolicy.insecureTrustedSetupEnabled()` | `TrustedSetupPolicy` (`org.zeroj.api`) |
 

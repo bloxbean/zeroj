@@ -10,6 +10,8 @@ your address, your balance, every other token you hold and your transaction hist
 steep price for a concert ticket, a holders-only chat or a DAO forum. Zero knowledge lets you prove
 "I'm a holder" and nothing more.
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The holder proves "I'm in the collection's current ownership snapshot, holding a token from it,

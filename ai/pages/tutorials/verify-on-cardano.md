@@ -50,6 +50,8 @@ the spending transaction. The Groth16 flow fits this model neatly:
 | Proof | The spending transaction's **redeemer** | Supplied by whoever wants to spend |
 | Verification | Plutus V3's built-in BLS12-381 operations | The pairing check runs inside the validator |
 
+_The web version of this page has an interactive illustration here._
+
 ZeroJ ships the validator: `Groth16BLS12381Verifier`, a Plutus V3 spending script written in
 Java with [JuLC](https://github.com/bloxbean/julc) and precompiled into `zeroj-onchain-julc`.
 (It lives in `org.zeroj.onchain.julc.groth16.validator`. Don't confuse it with the off-chain

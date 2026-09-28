@@ -43,7 +43,9 @@ ZK verification maps onto that model naturally:
 | Redeemer | The **proof**: A, B, and C as compressed BLS12-381 points, 192 bytes in total. |
 | ScriptContext | The transaction being validated. This is where **your application rules** live. |
 
-The typical flow:
+The typical flow, step by step:
+
+_The web version of this page has an interactive illustration here._
 
 ```text
  Lock    Alice pays ADA to the verifier script address, with the public inputs as datum.

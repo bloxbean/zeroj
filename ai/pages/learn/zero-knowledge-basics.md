@@ -15,6 +15,8 @@ Every zero-knowledge system has two roles:
 - The **prover** knows a secret and wants to convince someone of a fact about it.
 - The **verifier** wants to be convinced, but should learn nothing about the secret.
 
+_The web version of this page has an interactive illustration here._
+
 ```text
       Prover                                    Verifier
   ┌──────────────┐                          ┌──────────────┐
@@ -39,6 +41,10 @@ and one is green. How do you convince your friend without telling them which is 
 If the balls really are different colours, you answer correctly every time. If they're secretly
 the same colour, you can only guess, and you'll be right half the time. After 20 rounds, the
 chance of a lucky cheater getting every answer right is about one in a million.
+
+Try it: play the prover, honestly or as a cheater.
+
+_The web version of this page has an interactive illustration here._
 
 Look at what your friend learned: that the balls differ. They never learned which one is red.
 

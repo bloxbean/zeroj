@@ -23,6 +23,8 @@ v2  = v1 · x          constraint 2
 out = v2 + x + 5      constraint 3
 ```
 
+_The web version of this page has an interactive illustration here._
+
 With `x = 3`, the wires are `v1 = 9`, `v2 = 27`, `out = 35`, and all three equations hold. The
 verifier never sees `x`, `v1`, or `v2`. It only learns that some assignment satisfies every
 constraint with `out = 35`.
@@ -90,6 +92,9 @@ index 1..n     the n public inputs, in the circuit's declared order
 index n+1..    secret inputs and intermediate wires
 ```
 
+The explainer near the top of this page shows that layout for `x³ + x + 5`: the constant, then the
+public `out`, then the secret wires.
+
 The witness contains your secrets, so it **never leaves the prover**. The prover turns it into a
 proof, and only the proof and the public inputs travel.
 
@@ -155,6 +160,8 @@ diff      = r − 2          ("−2" in the field)
 
 threshold + diff = 18 + (r − 2) = r + 16 ≡ 16 = age   ✓  the equation holds
 ```
+
+_The web version of this page has an interactive illustration here._
 
 ZeroJ's own witness calculator accepts these inputs, and the resulting proof verifies. The
 circuit said "equal", and the values *are* equal in the field. It never said "`diff` is a small,

@@ -60,6 +60,10 @@ dependencies {
 
 ## Issue, present, verify
 
+Step through the three roles first. The walkthrough uses the `reusable-kyc` demo's values; tick attributes to change what the verifier sees.
+
+_The web version of this page has an interactive illustration here._
+
 This complete program plays all three roles. Each role would normally be a different party.
 
 ```java title="BbsQuickstart.java"

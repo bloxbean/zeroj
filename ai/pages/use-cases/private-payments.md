@@ -18,6 +18,8 @@ revealing which deposit was theirs.
 > from ZeroJ's building blocks. The circuit below is a design sketch, not a tested application.
 > Privacy pools also carry legal and compliance questions that are outside the scope of these docs.
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **The withdrawer proves "I know the secret behind *one of* the deposits in this pool, and this is

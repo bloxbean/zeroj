@@ -12,6 +12,8 @@ asks "over 21 and a resident?", a healthcare portal asks "a doctor over 30?", a 
 
 ZeroJ supports two complementary ways to do this, and each has a runnable demo.
 
+_The web version of this page has an interactive illustration here._
+
 ## The zero-knowledge idea
 
 **One issuer-signed credential; each verifier learns only the answer to its own question.**
