@@ -1,0 +1,278 @@
+---
+// Running a Groth16 ceremony, step by step (guides/proving/trusted-setup-ceremony). Follows the
+// current tools: zeroj-ceremony (export-r1cs, contribute, finalize) and snarkjs, as described in
+// docs/ceremony/USER-GUIDE.md and OPTION-A-RUNBOOK.md. finalize requires --sha256 of the verified
+// key (or --allow-unpinned for local tests only), writes a new directory and prints a manifest hash.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const h = (s: string) => fakeHash(`ceremony:${s}`);
+const contributors = [
+  { name: 'Alice', from: 'key_0000', to: 'key_0001' },
+  { name: 'Bob', from: 'key_0001', to: 'key_0002' },
+  { name: 'Carol', from: 'key_0002', to: 'key_0003' },
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Running a trusted setup ceremony, step by step">
+  <div class="zw zts zts-cer" data-total="8">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Ceremony · step <b data-counter>1 / 8</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- coordinator -->
+      <section class="zw-actor" data-hl="1,2,3,5,7,8" aria-label="Coordinator">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Coordinator</span>
+          <span class="zw-actor-sub">runs the ceremony</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Artifacts</span>
+          <div class="zw-row" data-kind="public" data-hl="1">
+            <span class="k">ownership.r1cs</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{h('r1cs')}</span>
+          </div>
+          <div class="zw-row" data-kind="public" data-show="2-8" data-hl="2">
+            <span class="k">prepared .ptau</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">verified</span>
+          </div>
+          <div class="zw-row" data-kind="public" data-show="3-8" data-hl="3">
+            <span class="k">key_0000.zkey</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{h('key_0000')}</span>
+          </div>
+          <div class="zw-row" data-kind="public" data-show="5-8" data-hl="5">
+            <span class="k">key_final.zkey</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{h('key_final')}</span>
+          </div>
+          <div class="zw-row" data-show="7-8" data-hl="7">
+            <span class="k">manifest SHA-256</span><em class="zw-tag zts-keep">KEEP</em>
+            <span class="v">{h('manifest')}</span>
+          </div>
+          <div class="zw-row" data-kind="public" data-show="8" data-hl="8">
+            <span class="k">verification key</span><em class="zw-tag">PINNED</em>
+            <span class="v">{h('vk')}</span>
+          </div>
+        </div>
+        <code class="zts-cmd" data-show="1">zeroj-ceremony export-r1cs</code>
+        <code class="zts-cmd" data-show="2">snarkjs powersoftau verify / prepare phase2</code>
+        <code class="zts-cmd" data-show="3">snarkjs groth16 setup</code>
+        <code class="zts-cmd" data-show="5">snarkjs zkey beacon</code>
+        <code class="zts-cmd" data-show="7">zeroj-ceremony finalize --sha256 &lt;verified hash&gt;</code>
+        <code class="zts-cmd" data-show="8">snarkjs zkey export verificationkey</code>
+        <div class="zw-box" data-show="7">
+          <span class="zw-check">file matches the verified hash, or it stops</span>
+          <span class="zw-check">every point checked: on the curve and in the subgroup</span>
+          <span class="zw-check">writes a new store; the folder must not exist yet</span>
+          <span class="zw-check warn"><code>--allow-unpinned</code> instead of <code>--sha256</code>: local tests only</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="3,4" aria-hidden="true">
+        <span class="arrow" data-show="3-4">→</span>
+        <span class="arrow" data-show="5">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3">key_0000</span>
+        <span class="zw-msg" data-show="4">zkey chain</span>
+        <span class="zw-msg" data-show="5">key_0003</span>
+      </div>
+
+      <!-- contributors -->
+      <section class="zw-actor" data-hl="4" aria-label="Contributors">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Contributors</span>
+          <span class="zw-actor-sub">independent people</span>
+        </div>
+        <p class="zw-note" data-show="1-2">Waiting for the first key.</p>
+        <ol class="zts-chainlist" data-show="3-8">
+          {contributors.map((c) => (
+            <li data-show="4-8">
+              <span class="who">{c.name}</span>
+              <code>{c.from} → {c.to}</code>
+            </li>
+          ))}
+          <li class="zts-waiting" data-show="3">Alice, Bob and Carol will each add one step</li>
+        </ol>
+        <div class="zw-row" data-kind="secret" data-show="4" data-hl="4">
+          <span class="k">each person's randomness</span><em class="zw-tag">SECRET</em>
+          <span class="v wrap">used once, never written, gone</span>
+        </div>
+        <div class="zw-box zts-attest" data-show="4">
+          <span class="zw-box-title">Carol's public attestation</span>
+          <span class="zts-att">received <code>key_0002</code> {h('key_0002')}</span>
+          <span class="zts-att">produced <code>key_0003</code> {h('key_0003')}</span>
+          <span class="zts-att">contribution hash {h('contrib-carol')}</span>
+          <span class="zts-att">"the entropy was destroyed"</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="2,3,4,5,6,8" aria-hidden="true">
+        <span class="arrow" data-show="2-5">→</span>
+        <span class="arrow" data-show="6,8">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2-3">hashes</span>
+        <span class="zw-msg" data-show="4">attestations</span>
+        <span class="zw-msg" data-show="5">beacon value</span>
+        <span class="zw-msg" data-show="6">verify ✓</span>
+        <span class="zw-msg" data-show="8">VK check</span>
+      </div>
+
+      <!-- anyone -->
+      <section class="zw-actor" data-hl="6,8" aria-label="Anyone">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Anyone</span>
+          <span class="zw-actor-sub">users, auditors</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Public transcript</span>
+          <span class="zw-check">circuit source commit + <code>.r1cs</code> hash</span>
+          <span class="zw-check" data-show="2-8">.ptau source and verify output</span>
+          <span class="zw-check" data-show="3-8"><code>key_0000</code> hash, before anyone contributes</span>
+          <span class="zw-check" data-show="4-8">every attestation, hashes chained</span>
+          <span class="zw-check" data-show="5-8">beacon: announced first, then its value</span>
+          <span class="zw-check" data-show="6-8"><code>zkey verify</code> output</span>
+          <span class="zw-check" data-show="8">final key and verification-key hashes</span>
+        </div>
+        <p class="zw-note" data-show="1">You can rebuild the <code>.r1cs</code> from the tagged source and compare hashes.</p>
+        <div class="zw-box" data-show="6">
+          <code class="zts-cmd">snarkjs zkey verify ownership.r1cs pot25_final.ptau key_final.zkey</code>
+          <span class="zw-check">every contribution re-checked, ZeroJ's included</span>
+          <span class="zw-note">The checking tool is never the one ZeroJ wrote.</span>
+        </div>
+        <span class="zw-check" data-show="8">deployed verification key matches the verified one</span>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Freeze the circuit</p>
+        <p>A ceremony binds to one exact circuit. Review it, add the public inputs your validator needs to stop replays (you can't add them later), tag the commit and export the R1CS. Any later change needs a new ceremony.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Phase 1: powers of tau</p>
+        <p>Take a BLS12-381 powers-of-tau file from an attested public ceremony, or run your own. Verify it, prepare it for phase 2 and publish the verify output. One file serves every circuit up to its size.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Create the first key</p>
+        <p><code>snarkjs groth16 setup</code> combines the circuit and the powers of tau into <code>key_0000.zkey</code>. Publish its hash and the R1CS hash before anyone contributes, so everyone can see what the chain starts from.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Contributions</p>
+        <p>Each person checks the hash of the key they received, mixes in fresh secret randomness with <code>zeroj-ceremony contribute</code> or snarkjs, and sends the new key on. Their randomness is used once and never written down. Each publishes an attestation, so the hashes chain from one key to the next.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Public beacon</p>
+        <p>The coordinator announces a beacon source in advance, such as a future block hash, then applies it to get <code>key_final.zkey</code>. Because nobody could predict it, the last contributor can't steer the result.</p>
+      </div>
+      <div data-show="6">
+        <p class="zw-narr-title">6. Anyone verifies</p>
+        <p><code>snarkjs zkey verify</code> re-checks every contribution against the circuit and the powers of tau, including ones made with ZeroJ's tool. Anyone can run it, so nobody has to trust the coordinator. Only the key that passes gets hashed for the next step.</p>
+      </div>
+      <div data-show="7">
+        <p class="zw-narr-title">7. Finalize into ZeroJ</p>
+        <p><code>zeroj-ceremony finalize --sha256</code> imports only a file matching the verified hash, checks every point, and writes a new proving-key store. It prints a manifest hash: keep it somewhere trusted and pass it when you load the store. It doesn't re-check the ceremony itself; step 6 did.</p>
+      </div>
+      <div data-show="8">
+        <p class="zw-narr-title">8. Pin and deploy</p>
+        <p>Export the verification key, record its hash and test a proof off-chain and on-chain. On Cardano the key is a script parameter, so the script's hash pins it. Anyone can check that the deployed key matches the verified one.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Freeze</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Phase 1</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>First key</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Contribute</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Beacon</button></li>
+        <li><button type="button" data-goto="6"><span>6</span>Verify</button></li>
+        <li><button type="button" data-goto="7"><span>7</span>Finalize</button></li>
+        <li><button type="button" data-goto="8"><span>8</span>Pin</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag public">PUBLIC</em> published in the transcript</span>
+      <span><em class="zw-tag secret">SECRET</em> never leaves one machine</span>
+      <span><em class="zw-tag zts-keep">KEEP</em> not secret, but store it somewhere trusted</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zts-cer').forEach((root) => initWalkthrough(root));
+</script>
+
+<style>
+  .zts-cmd {
+    display: block;
+    padding: 0.4em 0.55em;
+    font: 600 0.72em var(--zw-mono);
+    color: var(--zw-text-2);
+    background: var(--zw-bg);
+    border: 1px dashed var(--zw-line);
+    border-radius: 7px;
+  }
+
+  .zts-chainlist {
+    display: grid;
+    gap: 0.3em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zts-chainlist li {
+    display: grid;
+    gap: 0.1em;
+    padding: 0.35em 0.5em;
+    font-size: 0.8em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 7px;
+  }
+
+  .zts-chainlist .who {
+    font-weight: 600;
+  }
+
+  .zts-chainlist code {
+    font: 500 0.95em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zts-chainlist .zts-waiting {
+    color: var(--zw-muted);
+    border-style: dashed;
+  }
+
+  .zts-att {
+    font: 500 0.74em var(--zw-mono);
+    color: var(--zw-text-2);
+    overflow-wrap: anywhere;
+  }
+
+  .zts-att code {
+    color: var(--zw-text);
+  }
+
+  .zts-keep {
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border: 1px solid color-mix(in srgb, var(--sl-color-orange) 45%, transparent);
+  }
+
+  .zw[data-step='4'] .zts-attest {
+    border-color: var(--zw-public);
+  }
+</style>

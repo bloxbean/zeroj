@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+import CardanoProofWalkthrough from '../../../components/walkthrough/CardanoProofWalkthrough.astro';
 
 In the [Quickstart](/start/quickstart/) a Java method checked your proof. Here, every Cardano
 node checks it. You'll take the same `3 × b = 33` proof, lock some test ADA at a Plutus V3
@@ -54,6 +55,8 @@ the spending transaction. The Groth16 flow fits this model neatly:
 | Public inputs | The locked UTxO's **datum** | Fixed when the ADA is locked: this is the statement that must be proven |
 | Proof | The spending transaction's **redeemer** | Supplied by whoever wants to spend |
 | Verification | Plutus V3's built-in BLS12-381 operations | The pairing check runs inside the validator |
+
+<CardanoProofWalkthrough />
 
 ZeroJ ships the validator: `Groth16BLS12381Verifier`, a Plutus V3 spending script written in
 Java with [JuLC](https://github.com/bloxbean/julc) and precompiled into `zeroj-onchain-julc`.

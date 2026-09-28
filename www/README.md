@@ -30,6 +30,7 @@ files from the repository (see below), so run it from a full checkout.
 | --- | --- |
 | `src/pages/index.astro`, `src/styles/landing.css` | The landing page (standalone, light "Paper" palette; code windows stay dark). |
 | `src/content/docs/` | Documentation pages, organized by sidebar section: `start/`, `learn/`, `tutorials/`, `guides/{circuits,proving,verifying,credentials}/`, `use-cases/`, `reference/`, `ai/`. |
+| `src/components/walkthrough/` | Interactive use-case walkthroughs (`VotingWalkthrough`, `DisclosureWalkthrough`): actors, messages, who-sees-what views, step narration and a fullscreen **Present** mode. `engine.ts` drives steps from `data-show` / `data-hl` / `data-bad` attributes; `walkthrough.css` holds the shared look. Components are named `*Walkthrough` (stepped flows), `*Explainer` (one-screen interactive ideas) or `*Diagram` (clickable pictures). A page embeds one as `<Name />` (the page must be `.mdx`); the Markdown export replaces it with a one-line note. When an illustration replaces an ASCII diagram, wrap the diagram in `<TextOnly>` (`src/components/TextOnly.astro`): hidden on the web page, kept in the Markdown exports for AI readers. |
 | `src/components/SiteTitle.astro`, `DocTitle.astro` | Starlight overrides: brand header, and **View Markdown / Copy page for AI** under each page title. |
 | `src/styles/docs.css` | Starlight theme (ink `#080b12`, teal `#2dd4bf`, violet `#8b5cf6`). |
 | `site.config.mjs` | Site URL and versions. Versions are read from the ZeroJ build, never typed by hand. |

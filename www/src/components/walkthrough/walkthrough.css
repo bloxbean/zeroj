@@ -1,0 +1,785 @@
+/* Use-case walkthroughs: shared frame, actors, message wires, step list and controls.
+   Colours come from Starlight's theme variables (so light and dark both work) plus --zj-violet from
+   docs.css. SECRET is violet and PUBLIC is teal, as on the landing page. Sizes are in em so the
+   fullscreen "Present" mode can scale everything by changing one font-size. */
+
+.zw-frame {
+  --zw-secret: var(--zj-violet);
+  --zw-public: var(--sl-color-accent);
+  --zw-public-ink: var(--sl-color-accent-high);
+  --zw-bad: var(--sl-color-red);
+  --zw-bad-ink: var(--sl-color-red-high);
+  --zw-bad-bg: var(--sl-color-red-low);
+  --zw-warn-ink: var(--sl-color-orange-high);
+  --zw-warn-bg: var(--sl-color-orange-low);
+  --zw-bg: var(--sl-color-bg);
+  --zw-panel: var(--sl-color-gray-6);
+  --zw-line: var(--sl-color-gray-5);
+  --zw-text: var(--sl-color-white);
+  --zw-text-2: var(--sl-color-gray-2);
+  --zw-muted: var(--sl-color-gray-3);
+  --zw-mono: var(--sl-font-mono);
+  --zw-display: var(--zj-font-display, var(--sl-font));
+  container-type: inline-size;
+  margin: 1.75rem 0 2.25rem;
+  color: var(--zw-text);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  background: var(--zw-bg);
+  border: 1px solid var(--zw-line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.zw-frame:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
+  padding: 2vh max(2vw, calc((100vw - 90rem) / 2));
+  font-size: clamp(15px, 1.25vw, 21px);
+  border: 0;
+  border-radius: 0;
+  overflow: auto;
+}
+
+.zw-frame button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.zw-frame :focus-visible {
+  outline: 2px solid var(--zw-public);
+  outline-offset: 2px;
+}
+
+.zw-frame [hidden],
+.zw [data-off],
+.zw[data-view='public'] [data-when='insider'],
+.zw:not([data-view='public']) [data-when='public'] {
+  display: none !important;
+}
+
+/* ---- mode tabs (a frame holding more than one walkthrough) */
+
+.zw-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em;
+  padding: 0.6em 0.75em 0;
+  background: var(--zw-panel);
+  border-bottom: 1px solid var(--zw-line);
+}
+
+.zw-modes button {
+  padding: 0.55em 1em 0.6em;
+  font-weight: 600;
+  color: var(--zw-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  margin-bottom: -1px;
+}
+
+.zw-modes button[aria-selected='true'] {
+  color: var(--zw-text);
+  background: var(--zw-bg);
+  border-color: var(--zw-line);
+}
+
+.zw-modes small {
+  margin-left: 0.4em;
+  font: 500 0.78em var(--zw-mono);
+  color: var(--zw-muted);
+}
+
+/* ---- head */
+
+.zw-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em 1em;
+  padding: 0.8em 1em;
+  border-bottom: 1px solid var(--zw-line);
+}
+
+.zw-eyebrow {
+  font: 600 0.72em var(--zw-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--zw-muted);
+}
+
+.zw-eyebrow b {
+  color: var(--zw-public);
+  font-weight: 600;
+}
+
+.zw-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.zw-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--zw-panel);
+  border: 1px solid var(--zw-line);
+  border-radius: 9px;
+}
+
+.zw-seg button {
+  padding: 0.3em 0.75em;
+  font-size: 0.86em;
+  font-weight: 600;
+  color: var(--zw-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.zw-seg button[aria-pressed='true'] {
+  color: var(--zw-text);
+  background: var(--zw-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+.zw-btn {
+  padding: 0.35em 0.8em;
+  font-size: 0.86em;
+  font-weight: 600;
+  background: var(--zw-bg);
+  border: 1px solid var(--zw-line);
+  border-radius: 8px;
+}
+
+.zw-btn:hover:not(:disabled) {
+  border-color: var(--zw-public);
+}
+
+.zw-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---- stage: actor, wire, actor, wire, actor */
+
+.zw-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.6em minmax(0, 1.15fr) 3.6em minmax(0, 1.1fr);
+  align-items: stretch;
+  padding: 1.1em 1em 0.9em;
+  background:
+    radial-gradient(40em 14em at 50% -6em, color-mix(in srgb, var(--zw-public) 7%, transparent), transparent 70%),
+    var(--zw-bg);
+}
+
+.zw-actor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+  min-width: 0;
+  padding: 0.8em;
+  background: var(--zw-panel);
+  border: 1px solid var(--zw-line);
+  border-radius: 12px;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.zw-actor[data-hl-on] {
+  border-color: var(--zw-public);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-public) 16%, transparent);
+}
+
+.zw-actor[data-bad-on] {
+  border-color: var(--zw-bad);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-bad) 18%, transparent);
+  animation: zw-shake 0.45s ease-in-out 1;
+}
+
+.zw-actor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5em;
+}
+
+.zw-actor-name {
+  font: 600 0.72em var(--zw-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--zw-text-2);
+}
+
+.zw-actor-sub {
+  font-size: 0.78em;
+  color: var(--zw-muted);
+  text-align: right;
+}
+
+.zw-box {
+  display: grid;
+  min-width: 0;
+  gap: 0.4em;
+  padding: 0.55em 0.6em;
+  background: var(--zw-bg);
+  border: 1px solid var(--zw-line);
+  border-radius: 9px;
+}
+
+.zw-box-title {
+  font: 600 0.72em var(--zw-mono);
+  color: var(--zw-muted);
+  overflow-wrap: anywhere;
+}
+
+.zw-box-title code {
+  font: inherit;
+  color: var(--zw-text-2);
+}
+
+/* Something outside the component gives code overflow-wrap: break-word, which doesn't let a long
+   identifier (e.g. ReserveAttestationValidator) shrink its box, so inside the narrow lanes code may
+   break anywhere. */
+.zw-actor code {
+  overflow-wrap: anywhere;
+}
+
+/* a labelled value: key + tag on the first line, value below. Flex-wrap rather than a grid so a
+   key never breaks mid-word: when key and tag don't fit side by side, the tag drops a line. */
+.zw-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.4em;
+  row-gap: 0.1em;
+  padding: 0.35em 0.5em;
+  background: var(--zw-bg);
+  border: 1px solid var(--zw-line);
+  border-radius: 8px;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.zw-row .k {
+  flex: 1 1 0;
+  min-width: min-content;
+  font: 500 0.75em var(--zw-mono);
+  color: var(--zw-muted);
+  overflow-wrap: break-word;
+}
+
+.zw-row > .zw-tag {
+  margin-left: auto;
+}
+
+.zw-row .v {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow: hidden;
+  font: 600 0.84em var(--zw-mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.zw-row .v.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.zw-row[data-hl-on] {
+  border-color: var(--zw-public);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-public) 18%, transparent);
+  animation: zw-in 0.4s ease-out;
+}
+
+.zw-row[data-kind='secret'][data-hl-on] {
+  border-color: var(--zw-secret);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-secret) 20%, transparent);
+}
+
+.zw-row[data-bad-on] {
+  border-color: var(--zw-bad);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-bad) 20%, transparent);
+}
+
+.zw-tag {
+  padding: 0.1em 0.45em;
+  font: 600 0.62em var(--zw-mono);
+  font-style: normal;
+  letter-spacing: 0.1em;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.zw-tag.secret,
+[data-kind='secret'] > .zw-tag {
+  color: var(--zw-secret);
+  background: color-mix(in srgb, var(--zw-secret) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--zw-secret) 40%, transparent);
+}
+
+.zw-tag.public,
+[data-kind='public'] > .zw-tag {
+  color: var(--zw-public);
+  background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+}
+
+.zw-tag .hid,
+.zw-row .mask {
+  display: none;
+}
+
+/* The public / verifier view: secrets are masked and tagged HIDDEN. */
+.zw[data-view='public'] [data-kind='secret'] .real,
+.zw[data-view='public'] [data-kind='secret'] > .zw-tag .vis {
+  display: none;
+}
+
+.zw[data-view='public'] [data-kind='secret'] .mask,
+.zw[data-view='public'] [data-kind='secret'] > .zw-tag .hid {
+  display: inline;
+}
+
+.zw[data-view='public'] [data-kind='secret'] .mask {
+  letter-spacing: -1px;
+  color: var(--zw-secret);
+  opacity: 0.6;
+}
+
+.zw[data-view='public'] [data-kind='secret'] > .zw-tag {
+  color: var(--zw-muted);
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--zw-line);
+}
+
+.zw-note {
+  margin: 0;
+  font-size: 0.78em;
+  color: var(--zw-muted);
+}
+
+/* block layout (icon positioned absolutely) so text and inline <code> wrap as one paragraph */
+.zw-check {
+  position: relative;
+  display: block;
+  min-height: 1.35em;
+  padding-left: 1.8em;
+  font-size: 0.82em;
+}
+
+.zw-check::before {
+  content: '✓';
+  position: absolute;
+  top: 0.08em;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.35em;
+  height: 1.35em;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--zw-bg);
+  background: var(--zw-public);
+  border-radius: 50%;
+}
+
+.zw-check.no::before {
+  content: '✕';
+  background: var(--zw-bad);
+}
+
+.zw-check.no {
+  color: var(--zw-bad-ink);
+}
+
+.zw-check.warn::before {
+  content: '!';
+  background: var(--sl-color-orange);
+}
+
+.zw-check.warn {
+  color: var(--zw-warn-ink);
+}
+
+.zw-check code {
+  font-size: 0.95em;
+}
+
+/* the proof token */
+.zw-proof {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.45em 0.6em;
+  font: 600 0.8em var(--zw-mono);
+  background: var(--zw-bg);
+  border: 1px solid color-mix(in srgb, var(--zw-public) 45%, var(--zw-line));
+  border-radius: 9px;
+  animation: zw-in 0.45s ease-out;
+}
+
+.zw-proof .pi {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.7em;
+  height: 1.7em;
+  font-family: var(--zw-display);
+  color: #fff;
+  background: linear-gradient(135deg, var(--zw-public), var(--zw-secret));
+  border-radius: 6px;
+}
+
+.zw-proof > span:not(.pi) {
+  white-space: nowrap;
+}
+
+.zw-proof small {
+  margin-left: auto;
+  text-align: right;
+  font-size: 0.85em;
+  color: var(--zw-muted);
+}
+
+/* the prover rings from the landing page, small */
+.zw-rings {
+  width: 2.6em;
+  height: 2.6em;
+  flex: 0 0 auto;
+}
+
+.zw-rings path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 9;
+  transform-origin: 64px 64px;
+}
+
+.zw-rings .r1 {
+  stroke: var(--zw-public);
+  animation: zw-spin 3.5s linear infinite;
+}
+
+.zw-rings .r2 {
+  stroke: var(--zw-text);
+  animation: zw-spin 2.4s linear infinite reverse;
+}
+
+.zw-rings .r3 {
+  stroke: var(--zw-secret);
+  animation: zw-spin 1.3s linear infinite;
+}
+
+/* ---- wires between actors */
+
+.zw-wire {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  min-width: 0;
+}
+
+.zw-wire-line {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, var(--zw-line) 0 5px, transparent 5px 9px);
+}
+
+.zw-wire[data-hl-on] .zw-wire-line {
+  background: color-mix(in srgb, var(--zw-public) 35%, transparent);
+}
+
+.zw-wire[data-bad-on] .zw-wire-line {
+  background: color-mix(in srgb, var(--zw-bad) 45%, transparent);
+}
+
+.zw-wire[data-hl-on] .zw-wire-line::after,
+.zw-wire[data-bad-on] .zw-wire-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -45%;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--zw-public), transparent);
+  animation: zw-travel 1.6s ease-in-out infinite;
+}
+
+.zw-wire[data-bad-on] .zw-wire-line::after {
+  background: linear-gradient(90deg, transparent, var(--zw-bad), transparent);
+}
+
+.zw-wire[data-dir='left'] .zw-wire-line::after {
+  animation-name: zw-travel-left;
+}
+
+.zw-wire .arrow {
+  font-size: 1.05em;
+  line-height: 1;
+  color: var(--zw-muted);
+}
+
+.zw-wire[data-hl-on] .arrow {
+  color: var(--zw-public);
+}
+
+.zw-wire[data-bad-on] .arrow {
+  color: var(--zw-bad);
+}
+
+/* centred on the wire and drawn above the lanes, so a label a little wider than the wire straddles it
+   evenly; it wraps only at spaces */
+.zw-msg {
+  position: relative;
+  z-index: 1;
+  max-width: 9em;
+  padding: 0.2em 0.4em;
+  font: 600 0.62em var(--zw-mono);
+  text-align: center;
+  color: var(--zw-public-ink);
+  background: var(--zw-bg);
+  border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+  border-radius: 6px;
+  animation: zw-in 0.4s ease-out;
+}
+
+.zw-wire[data-bad-on] .zw-msg {
+  color: var(--zw-bad-ink);
+  border-color: color-mix(in srgb, var(--zw-bad) 50%, transparent);
+}
+
+/* ---- narration, step list and controls */
+
+.zw-narr {
+  min-height: 5.6em;
+  padding: 0.9em 1.1em 0.2em;
+  border-top: 1px solid var(--zw-line);
+}
+
+.zw-narr p {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--zw-text-2);
+}
+
+.zw-narr .zw-narr-title {
+  margin-bottom: 0.3em;
+  font-family: var(--zw-display);
+  font-size: 1.12em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--zw-text);
+}
+
+.zw-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7em 1em;
+  padding: 0.8em 1em 1em;
+}
+
+.zw-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zw-steps button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.3em 0.7em 0.3em 0.35em;
+  font-size: 0.84em;
+  font-weight: 600;
+  color: var(--zw-muted);
+  background: transparent;
+  border: 1px solid var(--zw-line);
+  border-radius: 999px;
+}
+
+.zw-steps button span {
+  display: grid;
+  place-items: center;
+  width: 1.55em;
+  height: 1.55em;
+  font: 600 0.85em var(--zw-mono);
+  border-radius: 50%;
+  background: var(--zw-panel);
+}
+
+.zw-steps button[aria-current='step'] {
+  color: var(--zw-text);
+  border-color: var(--zw-public);
+}
+
+.zw-steps button[aria-current='step'] span {
+  color: var(--zw-bg);
+  background: var(--zw-public);
+}
+
+.zw-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.zw-counter {
+  min-width: 3.2em;
+  font: 500 0.8em var(--zw-mono);
+  text-align: center;
+  color: var(--zw-muted);
+}
+
+.zw-btn[data-play][aria-pressed='true'] {
+  color: var(--zw-public);
+  border-color: var(--zw-public);
+}
+
+.zw-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em 1em;
+  padding: 0 1.1em 0.9em;
+  font-size: 0.78em;
+  color: var(--zw-muted);
+}
+
+.zw-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.zw-choice {
+  display: inline-flex;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid var(--zw-line);
+  border-radius: 7px;
+}
+
+.zw-choice button {
+  padding: 0.15em 0.6em;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--zw-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+
+.zw-choice button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--zw-secret);
+}
+
+/* ---- narrow: stack actors, turn the wires vertical */
+
+@container (max-width: 560px) {
+  .zw-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zw-wire {
+    flex-direction: row;
+    min-height: 2.4em;
+  }
+
+  .zw-wire-line {
+    width: 2px;
+    height: 2.4em;
+    background: repeating-linear-gradient(180deg, var(--zw-line) 0 5px, transparent 5px 9px);
+  }
+
+  .zw-wire .arrow {
+    transform: rotate(90deg);
+  }
+
+  .zw-wire[data-dir='left'] .arrow {
+    transform: rotate(90deg);
+  }
+
+  .zw-wire[data-hl-on] .zw-wire-line::after,
+  .zw-wire[data-bad-on] .zw-wire-line::after {
+    display: none;
+  }
+}
+
+/* ---- motion */
+
+@keyframes zw-travel {
+  0% {
+    left: -45%;
+  }
+  70%,
+  100% {
+    left: 110%;
+  }
+}
+
+@keyframes zw-travel-left {
+  0% {
+    left: 110%;
+  }
+  70%,
+  100% {
+    left: -45%;
+  }
+}
+
+@keyframes zw-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes zw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zw-shake {
+  25% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zw-frame *,
+  .zw-frame *::before,
+  .zw-frame *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

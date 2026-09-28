@@ -1,0 +1,498 @@
+---
+// Large authenticated state, step by step: store -> read one path -> prove -> move the state -> what
+// the chain learned. Operations are the root-changing ones the state-transition validator accepts
+// (Groth16AuthenticatedStateTransitionScriptFactory: two public inputs, oldRoot and newRoot), minus
+// DELETE, which the page lists as deferred. Hash values are illustrative stand-ins (fakeHash).
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+const rootV7 = fakeHash('zas-root-v7-mpf');
+const newRoot = fakeHash('zas-new-mpf-update');
+---
+
+<figure class="zw-frame not-content" aria-label="Large authenticated state, step by step">
+  <div class="zw zas" data-total="5" data-view="insider" data-op="update" data-tree="mpf" data-stale="0">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Authenticated state · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Operator's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- your service -->
+      <section class="zw-actor" data-hl="1-2" aria-label="Your service">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Your service</span>
+          <span class="zw-actor-sub">off-chain database</span>
+        </div>
+        <div class="zas-tree-pick">
+          <span class="zas-label">Tree</span>
+          <span class="zw-choice" role="group" aria-label="Tree type">
+            <button type="button" data-tree-btn="mpf" aria-pressed="true">MPF</button>
+            <button type="button" data-tree-btn="jmt" aria-pressed="false">JMT</button>
+          </span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title" data-f="treeName">RocksDB · Poseidon MPF</span>
+          <svg class="zas-tree" viewBox="0 0 160 118" role="img"
+            aria-label="A tree of entries. One path leads from the root down to the entry being changed.">
+            <line x1="80" y1="12" x2="28" y2="42"></line>
+            <line x1="80" y1="12" x2="80" y2="42" class="path-edge"></line>
+            <line x1="80" y1="12" x2="132" y2="42"></line>
+            <line x1="28" y1="42" x2="14" y2="72" class="faint"></line>
+            <line x1="28" y1="42" x2="42" y2="72" class="faint"></line>
+            <line x1="132" y1="42" x2="118" y2="72" class="faint"></line>
+            <line x1="132" y1="42" x2="146" y2="72" class="faint"></line>
+            <line x1="80" y1="42" x2="58" y2="72" class="path-edge"></line>
+            <line x1="80" y1="42" x2="102" y2="72"></line>
+            <g class="only-beside">
+              <line x1="58" y1="72" x2="44" y2="102" class="path-edge"></line>
+              <line x1="58" y1="72" x2="72" y2="102" class="path-edge"></line>
+            </g>
+            <circle cx="14" cy="72" r="5" class="n faint"></circle>
+            <circle cx="42" cy="72" r="5" class="n faint"></circle>
+            <circle cx="118" cy="72" r="5" class="n faint"></circle>
+            <circle cx="146" cy="72" r="5" class="n faint"></circle>
+            <circle cx="28" cy="42" r="7" class="n sib"></circle>
+            <circle cx="132" cy="42" r="7" class="n sib"></circle>
+            <circle cx="102" cy="72" r="7" class="n sib"></circle>
+            <circle cx="80" cy="42" r="7" class="n on-path"></circle>
+            <circle cx="80" cy="12" r="9" class="n root"></circle>
+            <!-- the spot being changed, per operation -->
+            <circle cx="58" cy="72" r="8" class="n target only-update"></circle>
+            <circle cx="58" cy="72" r="8" class="n empty only-empty"></circle>
+            <text x="58" y="76" class="plus only-empty">+</text>
+            <g class="only-beside">
+              <circle cx="58" cy="72" r="6" class="n on-path"></circle>
+              <circle cx="44" cy="102" r="7" class="n other"></circle>
+              <circle cx="72" cy="102" r="7" class="n target"></circle>
+            </g>
+          </svg>
+          <span class="zw-note">5,000,000 entries in the measured runs. One path runs from the root to your entry.</span>
+        </div>
+        <div class="zas-ops" role="group" aria-label="Change to make">
+          <button type="button" data-op-btn="update" aria-pressed="true">Update a value</button>
+          <button type="button" data-op-btn="empty" aria-pressed="false">Insert at an empty spot</button>
+          <button type="button" data-op-btn="beside" aria-pressed="false">Insert beside another leaf</button>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">key</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="key">alice</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">value</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v wrap"><span class="real" data-f="value">40 → 55</span><span class="mask">████████</span></span>
+        </div>
+        <p class="zw-note" data-f="opNote">The key is already in the tree; only its value changes.</p>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">root: a fingerprint of every entry</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-f="root">{rootV7}</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="2" aria-hidden="true">
+        <span class="arrow" data-show="2">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">one path</span>
+      </div>
+
+      <!-- prover -->
+      <section class="zw-actor" data-hl="2-3" aria-label="Prover">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Prover</span>
+          <span class="zw-actor-sub">your server</span>
+        </div>
+        <p class="zw-note" data-show="1">Waiting for a change to prove.</p>
+        <div class="zw-box" data-show="2-5">
+          <span class="zw-box-title">Check the path first</span>
+          <span class="zw-check">proof path checked against the root</span>
+          <span class="zw-check" data-f="bound">fits the S9 bound: at most 9 branch steps</span>
+          <span class="zw-check" data-f="pad">padded to exactly 9 steps</span>
+          <span class="zw-note">A malformed or deeper path is rejected before any proving work.</span>
+        </div>
+        <div class="zas-proving" data-show="3" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Proving with the <b data-f="circuit">value-update</b> circuit</span>
+        </div>
+        <div class="zw-box" data-show="3-5">
+          <span class="zw-box-title">Circuit: <span data-f="circuitTitle">value update</span></span>
+          <span class="zw-note">Sees one path, never the database. Each operation has its own circuit and keys.</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="3-5" data-hl="3">
+          <span class="k">oldRoot</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap" data-f="oldRoot">{rootV7}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="3-5" data-hl="3">
+          <span class="k">newRoot</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-f="newRoot">{newRoot}</span>
+        </div>
+        <label class="zas-stale" data-show="3-4">
+          <input type="checkbox" data-stale-toggle />
+          <span>Proof built on an older root</span>
+        </label>
+        <div class="zw-proof" data-show="3-4">
+          <span class="pi">π</span><span>Groth16 proof</span><small>192 bytes</small>
+        </div>
+      </section>
+
+      <div class="zw-wire zas-w2" aria-hidden="true">
+        <span class="arrow" data-show="4">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4">π + new root</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor zas-chain" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">state UTxO</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title" data-f="datumTitle">State UTxO datum</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">root</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-f="datumRoot">{rootV7}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">version</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-f="datumVersion">7</span>
+          </div>
+          <span class="zw-note" data-show="1-3">Cardano stores only the fingerprint, never the entries.</span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title"><code>Groth16AuthenticatedStateTransitionValidator</code></span>
+          <span class="zw-note">One applied script per operation: this one is for <b data-f="appliedFor">value update</b>.</span>
+          <span class="zw-check">signed by the authorized operator</span>
+          <span class="zw-check">one continuing state UTxO: new root, version + 1</span>
+          <span class="zw-check">same value and state token, nothing minted</span>
+          <span class="zw-check" data-fresh-only>proof verifies over (old root, new root)</span>
+          <span class="zw-check no" data-stale-only>proof is for an older root: rejected</span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">What Cardano learned</span>
+          <span class="zw-check" data-fresh-only>the fingerprint moved by one valid <span data-f="learnedOp">value update</span></span>
+          <span class="zw-note" data-fresh-only>Not revealed: which entry changed, or its value. The public inputs are only the two roots.</span>
+          <span class="zw-check no" data-stale-only>nothing: the state is still at version 7</span>
+        </div>
+        <p class="zw-note zas-caution" data-show="4-5">
+          The state token's minting policy is outside Groth16: it must mint exactly one token, once.
+        </p>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Keep the big table off-chain</p>
+        <p>Your service keeps millions of entries in a Poseidon MPF or JMT tree, for example in RocksDB. The tree's root is a fingerprint of the whole database: change any entry and the fingerprint changes. Cardano stores only that fingerprint, with a version number.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Read one path</p>
+        <p>To change one entry, the service reads its proof path: the few nodes between that entry and the root. The prover checks the path strictly and pads it to a fixed maximum length. A malformed or too-deep path is rejected before any proving work.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Prove the change</p>
+        <p>A narrow circuit for this one operation proves that applying the change to the old root gives the new root. It sees one path, never the database, so the cost depends on the path bound, not on how many entries there are. Only the two roots are public.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Move the state on Cardano</p>
+        <p>The operator spends the state UTxO and creates one continuing state UTxO with the new root and version + 1. The validator checks the signer, the value and the state token, then verifies the proof against the old root from the spent datum. Tick <b>Proof built on an older root</b> to see a stale proof fail.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. What the chain learned</p>
+        <p>Only that the fingerprint moved by one valid change of this kind. The proof doesn't name the entry or tie the change to a user; add those fields in your own circuit if you need them. Both modules are experimental, and the production gates listed below are still open.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Store</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Read a path</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Prove</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Update</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Learned</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays in your service</span>
+      <span><em class="zw-tag public">PUBLIC</em> on Cardano</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+
+  // Root-changing operations the state-transition validator accepts (two public inputs).
+  const OPS = {
+    update: {
+      title: 'value update',
+      circuit: 'value-update',
+      key: 'alice',
+      value: '40 → 55',
+      note: 'The key is already in the tree; only its value changes.',
+    },
+    empty: {
+      title: 'insert at an empty spot',
+      circuit: 'insert-empty',
+      key: 'zoe',
+      value: 'new entry: 10',
+      note: "The new key's path ends at an empty spot.",
+    },
+    beside: {
+      title: 'insert beside another leaf',
+      circuit: 'insert-different-leaf',
+      key: 'zara',
+      value: 'new entry: 25',
+      note: "The new key's path ends at another key's leaf, so both end up under a new branch.",
+    },
+  } as const;
+  const TREES = {
+    mpf: { name: 'RocksDB · Poseidon MPF', bound: 'fits the S9 bound: at most 9 branch steps', pad: 'padded to exactly 9 steps' },
+    jmt: { name: 'RocksDB · Poseidon JMT', bound: 'fits the S12 bound: at most 12 levels', pad: 'padded to exactly 12 levels' },
+  } as const;
+  type Op = keyof typeof OPS;
+  type Tree = keyof typeof TREES;
+
+  document.querySelectorAll<HTMLElement>('.zas').forEach((root) => {
+    initWalkthrough(root);
+    const state: { op: Op; tree: Tree; stale: boolean; step: number } = { op: 'update', tree: 'mpf', stale: false, step: 1 };
+    const set = (name: string, text: string) =>
+      root.querySelectorAll<HTMLElement>(`[data-f="${name}"]`).forEach((el) => (el.textContent = text));
+    const wire = root.querySelector<HTMLElement>('.zas-w2');
+    const chain = root.querySelector<HTMLElement>('.zas-chain');
+
+    const render = () => {
+      const op = OPS[state.op];
+      const tree = TREES[state.tree];
+      const v6 = fakeHash(`zas-root-v6-${state.tree}`);
+      const v7 = fakeHash(`zas-root-v7-${state.tree}`);
+      const next = fakeHash(`zas-new-${state.tree}-${state.op}`);
+      root.dataset.op = state.op;
+      root.dataset.tree = state.tree;
+      root.dataset.stale = state.stale ? '1' : '0';
+      set('treeName', tree.name);
+      set('bound', tree.bound);
+      set('pad', tree.pad);
+      set('key', op.key);
+      set('value', op.value);
+      set('opNote', op.note);
+      set('circuit', op.circuit);
+      set('circuitTitle', op.title);
+      set('appliedFor', op.title);
+      set('learnedOp', op.title);
+      set('root', v7);
+      set('oldRoot', state.stale ? `${v6} (older)` : v7);
+      set('newRoot', next);
+
+      // The datum: current state before the update; the continuing UTxO after a successful one.
+      const moved = state.step >= 4 && !state.stale;
+      set('datumTitle', moved ? 'Continuing state UTxO datum' : 'State UTxO datum');
+      set('datumRoot', moved ? next : v7);
+      set('datumVersion', moved ? '8' : state.step >= 4 ? '7 (unchanged)' : '7');
+
+      // Step 4 passes or fails depending on the stale switch, so these two are driven here.
+      const fail = state.step === 4 && state.stale;
+      wire?.toggleAttribute('data-hl-on', state.step === 4 && !state.stale);
+      wire?.toggleAttribute('data-bad-on', fail);
+      chain?.toggleAttribute('data-hl-on', state.step === 1 || state.step === 5 || (state.step === 4 && !state.stale));
+      chain?.toggleAttribute('data-bad-on', fail);
+
+      root.querySelectorAll<HTMLElement>('[data-op-btn]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.opBtn === state.op)),
+      );
+      root.querySelectorAll<HTMLElement>('[data-tree-btn]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.treeBtn === state.tree)),
+      );
+    };
+
+    root.addEventListener('zw:step', (e) => {
+      state.step = (e as CustomEvent<number>).detail;
+      render();
+    });
+    root.querySelectorAll<HTMLButtonElement>('[data-op-btn]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.op = (b.dataset.opBtn as Op) ?? 'update';
+        render();
+      }),
+    );
+    root.querySelectorAll<HTMLButtonElement>('[data-tree-btn]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.tree = (b.dataset.treeBtn as Tree) ?? 'mpf';
+        render();
+      }),
+    );
+    root.querySelector<HTMLInputElement>('[data-stale-toggle]')?.addEventListener('change', (e) => {
+      state.stale = (e.target as HTMLInputElement).checked;
+      render();
+    });
+    render();
+  });
+</script>
+
+<style>
+  .zas-tree-pick {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+  }
+
+  .zas-label {
+    font: 600 0.72em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zas-tree {
+    width: 100%;
+    height: auto;
+    max-height: 8.5em;
+  }
+
+  .zas-tree line {
+    stroke: var(--zw-line);
+    stroke-width: 2;
+  }
+
+  .zas-tree line.faint,
+  .zas-tree .n.faint {
+    opacity: 0.45;
+  }
+
+  .zas-tree .n {
+    fill: var(--zw-bg);
+    stroke: var(--zw-muted);
+    stroke-width: 2;
+  }
+
+  .zas-tree .n.root {
+    fill: var(--zw-public);
+    stroke: var(--zw-public);
+  }
+
+  .zas-tree .n.empty {
+    stroke-dasharray: 3 3;
+  }
+
+  .zas-tree .plus {
+    font: 700 11px var(--zw-mono);
+    text-anchor: middle;
+    fill: var(--zw-muted);
+  }
+
+  .zas-tree .n.other {
+    fill: var(--zw-panel);
+  }
+
+  /* only the drawing for the chosen operation */
+  .zas:not([data-op='update']) .only-update,
+  .zas:not([data-op='empty']) .only-empty,
+  .zas:not([data-op='beside']) .only-beside {
+    display: none;
+  }
+
+  /* operator's view: the entry being changed, and (steps 2-3) the path to it and its siblings */
+  .zw:not([data-view='public']) .zas-tree .n.target {
+    fill: var(--zw-secret);
+    stroke: var(--zw-secret);
+  }
+
+  .zw:not([data-view='public'])[data-step='2'] .zas-tree .path-edge,
+  .zw:not([data-view='public'])[data-step='3'] .zas-tree .path-edge {
+    stroke: var(--zw-secret);
+    stroke-width: 3.5;
+  }
+
+  .zw:not([data-view='public'])[data-step='2'] .zas-tree .n.on-path,
+  .zw:not([data-view='public'])[data-step='3'] .zas-tree .n.on-path {
+    stroke: var(--zw-secret);
+  }
+
+  .zw:not([data-view='public'])[data-step='2'] .zas-tree .n.sib {
+    fill: color-mix(in srgb, var(--zw-secret) 22%, var(--zw-bg));
+    stroke: var(--zw-secret);
+    stroke-dasharray: 3 2;
+  }
+
+  .zas-ops {
+    display: grid;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--zw-line);
+    border-radius: 8px;
+  }
+
+  .zas-ops button {
+    padding: 0.3em 0.5em;
+    font-size: 0.78em;
+    font-weight: 600;
+    text-align: left;
+    color: var(--zw-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+  }
+
+  .zas-ops button[aria-pressed='true'] {
+    color: var(--zw-text);
+    background: color-mix(in srgb, var(--zw-public) 16%, transparent);
+  }
+
+  .zas-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zas-stale {
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    padding: 0.35em 0.5em;
+    font-size: 0.78em;
+    color: var(--zw-text-2);
+    border: 1px dashed var(--zw-line);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .zas-stale input {
+    accent-color: var(--zw-bad);
+  }
+
+  .zas[data-stale='1'] .zas-stale {
+    color: var(--zw-bad-ink);
+    border-color: var(--zw-bad);
+  }
+
+  .zas[data-stale='1'] [data-fresh-only],
+  .zas:not([data-stale='1']) [data-stale-only] {
+    display: none;
+  }
+
+  .zas-caution {
+    padding: 0.4em 0.55em;
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border-radius: 8px;
+  }
+</style>

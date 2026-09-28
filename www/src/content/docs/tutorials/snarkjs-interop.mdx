@@ -6,10 +6,16 @@ sidebar:
 ---
 
 import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+import InteropDiagram from '../../../components/walkthrough/InteropDiagram.astro';
+import TextOnly from '../../../components/TextOnly.astro';
 
 Maybe you already have circuits written in [circom](https://docs.circom.io/), or keys from a
 snarkjs trusted-setup ceremony. You don't have to rewrite anything to use ZeroJ. Groth16 on
 BLS12-381 speaks the same formats in both directions:
+
+<InteropDiagram />
+
+<TextOnly>
 
 ```text
   circom + snarkjs                                   ZeroJ (pure Java)
@@ -19,6 +25,8 @@ BLS12-381 speaks the same formats in both directions:
   verification_key.json    ◄─── same JSON ───►   verify snarkjs or ZeroJ proofs
   proof.json, public.json  ◄─── same JSON ───►   export for `snarkjs groth16 verify`
 ```
+
+</TextOnly>
 
 **What you'll build:** a tiny circom circuit set up with snarkjs, proved by ZeroJ's pure-Java
 prover; and a ZeroJ circuit whose proof snarkjs verifies.

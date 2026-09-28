@@ -1,0 +1,513 @@
+---
+// The under-constrained circuit bug, from "Circuits, constraints & witnesses": BuggyAgeCheck proves
+// age >= threshold as age = threshold + diff with no range check, so a 16-year-old can pick
+// diff = r - 2 and the equation holds in the field. FixedAgeCheck range-checks every value with
+// @UInt(bits = 8), and no valid witness exists for the cheat. Honest inputs (25, 18, 7) pass both.
+//
+// variant="learn"     the page that introduces the bug (default)
+// variant="tutorial"  age-check tutorial: what @UInt(bits = 8) buys you
+// variant="testing"   testing guide: an honest test passes both circuits, only a malicious one tells them apart
+import './walkthrough.css';
+
+interface Props {
+  variant?: 'learn' | 'tutorial' | 'testing';
+}
+const { variant = 'learn' } = Astro.props;
+const check = variant === 'tutorial' ? 'on' : 'off';
+
+// A clock with r hours: small numbers spread out clockwise from 0 at the top, and r - 2 sits just
+// before 0. (Angles are exaggerated so the labels are readable.)
+const C = 100;
+const RAD = 70;
+const at = (deg: number, r = RAD) => {
+  const a = (deg * Math.PI) / 180;
+  return [C + r * Math.sin(a), C - r * Math.cos(a)].map((n) => n.toFixed(1)).join(' ');
+};
+const arc = (from: number, to: number) =>
+  `M ${at(from)} A ${RAD} ${RAD} 0 ${to - from > 180 ? 1 : 0} 1 ${at(to)}`;
+const DEG = { zero: 0, sixteen: 80, eighteen: 90, twentyFive: 125, rMinus2: 350 };
+const ticks = [DEG.zero, DEG.sixteen, DEG.eighteen, DEG.twentyFive, DEG.rMinus2];
+const R_MINUS_2 = '52435875175126190479447740508185965837690552500527637822603658699938581184511';
+const captions = {
+  learn:
+    'a toy circuit that proves age ≥ threshold by writing age = threshold + diff. Pick who is proving, then add or remove the range check on diff.',
+  tutorial:
+    "what @UInt(bits = 8) buys you. This toy circuit proves age ≥ threshold as age = threshold + diff (the tutorial's gte does the range checks for you). Turn the range check off and watch a 16-year-old get through.",
+  testing:
+    'two tests against the same toy circuit, age = threshold + diff (from Circuits & witnesses). Flip the range check: the honest test passes both times, and only the malicious-witness test tells the circuits apart.',
+};
+---
+
+<figure class="zw-frame not-content" aria-label="The under-constrained circuit bug">
+  <div class="zw zuc-u" data-total="1" data-view="insider" data-who="cheat" data-check={check} data-variant={variant}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Under-constrained circuit · <b>age = threshold + diff</b></span>
+      <div class="zw-tools">
+        {variant !== 'testing' && (
+          <div class="zw-seg" role="group" aria-label="Whose view">
+            <button type="button" data-view-btn="insider" aria-pressed="true">Prover's view</button>
+            <button type="button" data-view-btn="public" aria-pressed="false">Verifier's view</button>
+          </div>
+        )}
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zuc-caption"><b>What you're seeing:</b> {captions[variant]}</p>
+
+    <div class="zuc-controls">
+      {variant !== 'testing' && (
+        <div class="zuc-who" data-when="insider">
+          <span class="zuc-label">Who's proving</span>
+          <div class="zw-seg" role="group" aria-label="Who's proving">
+            <button type="button" data-who-btn="honest" aria-pressed="false">Honest adult · 25</button>
+            <button type="button" data-who-btn="cheat" aria-pressed="true">Cheater · 16</button>
+          </div>
+        </div>
+      )}
+      <label class="zuc-range" data-when="insider">
+        <input type="checkbox" id="zuc-u-check" data-check-toggle checked={check === 'on'} />
+        <span class="zuc-switch" aria-hidden="true"></span>
+        <span>Range check: <code>@UInt(bits = 8)</code></span>
+      </label>
+    </div>
+
+    <div class="zuc-grid">
+      <section class="zw-actor" aria-label="The circuit">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Circuit</span>
+          <span class="zw-actor-sub">
+            <span class="if-off">{variant === 'learn' ? 'BuggyAgeCheck' : 'no range check'}</span>
+            <span class="if-on">{variant === 'learn' ? 'FixedAgeCheck' : 'with the range check'}</span>
+          </span>
+        </div>
+        <div class="zuc-code">
+          <code>age == threshold + diff</code>
+          <code class="if-on zuc-rule">age, diff, threshold each in 0 … 255</code>
+          <span class="if-off zuc-missing">nothing says diff is small or non-negative</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">age</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real"><span class="if-honest">25</span><span class="if-cheat">16</span></span><span class="mask">████</span></span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">threshold</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">18</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">diff</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real"><span class="if-honest">7</span><span class="if-cheat" title={R_MINUS_2}>r − 2</span></span><span class="mask">████</span></span>
+        </div>
+        {variant === 'learn' && (
+          <p class="zw-note">
+            <span class="if-off">5 constraints.</span>
+            <span class="if-on">56 constraints: the extra ones are exactly the missing rule.</span>
+          </p>
+        )}
+      </section>
+
+      <section class="zw-actor" aria-label="What the numbers do">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">In the field</span>
+          <span class="zw-actor-sub">a clock with r hours</span>
+        </div>
+        <svg class="zuc-clock" viewBox="0 0 200 200" role="img"
+          aria-label="Numbers wrap around like a clock with r hours. Adding r − 2 goes almost all the way round and lands 2 before where it started.">
+          <circle cx={C} cy={C} r={RAD} class="face" />
+          {ticks.map((d) => (
+            <line x1={at(d, RAD - 6).split(' ')[0]} y1={at(d, RAD - 6).split(' ')[1]}
+              x2={at(d, RAD + 6).split(' ')[0]} y2={at(d, RAD + 6).split(' ')[1]} class="tick" />
+          ))}
+          <text x="100" y="18" class="lbl" text-anchor="middle">0</text>
+          <text x="84" y="16" class="lbl" text-anchor="end">r − 2</text>
+          <text x={at(DEG.sixteen, 56).split(' ')[0]} y={at(DEG.sixteen, 56).split(' ')[1]} class="lbl if-cheat" text-anchor="middle" dy="4">16</text>
+          <text x={at(DEG.eighteen, 86).split(' ')[0]} y={at(DEG.eighteen, 86).split(' ')[1]} class="lbl" text-anchor="start" dy="4">18</text>
+          <text x={at(DEG.twentyFive, 86).split(' ')[0]} y={at(DEG.twentyFive, 86).split(' ')[1]} class="lbl if-honest" text-anchor="start" dy="4">25</text>
+          <path d={arc(DEG.eighteen, DEG.twentyFive)} class="trip ok if-honest" />
+          <path d={arc(DEG.eighteen, DEG.sixteen + 360)} class="trip bad if-cheat" />
+          <circle cx={at(DEG.eighteen).split(' ')[0]} cy={at(DEG.eighteen).split(' ')[1]} r="4.5" class="start" />
+          <circle cx={at(DEG.twentyFive).split(' ')[0]} cy={at(DEG.twentyFive).split(' ')[1]} r="4.5" class="end ok if-honest" />
+          <circle cx={at(DEG.sixteen).split(' ')[0]} cy={at(DEG.sixteen).split(' ')[1]} r="4.5" class="end bad if-cheat" />
+          <text x="100" y="96" class="mid if-honest" text-anchor="middle">18 + 7</text>
+          <text x="100" y="114" class="mid if-honest" text-anchor="middle">= 25</text>
+          <text x="100" y="96" class="mid if-cheat" text-anchor="middle">18 + (r − 2)</text>
+          <text x="100" y="114" class="mid if-cheat" text-anchor="middle">= 16</text>
+        </svg>
+        <p class="zuc-clock-note">
+          <span class="if-honest">Seven steps round the clock: 18 + 7 lands on 25.</span>
+          <span class="if-cheat">There are no negative numbers: −2 is written r − 2. Adding it goes almost a full turn and lands on 16.</span>
+        </p>
+        <div class="zuc-math" data-when="insider">
+          <span class="zw-check">
+            <span class="if-honest">18 + 7 = 25 = age</span>
+            <span class="if-cheat">18 + (r − 2) = r + 16, which wraps to 16 = age</span>
+          </span>
+          <span class="if-on">
+            <span class="zw-check if-honest">7 fits in 8 bits</span>
+            <span class="zw-check no if-cheat">r − 2 is a 255-bit number, not 8 bits</span>
+          </span>
+        </div>
+      </section>
+    </div>
+
+    {variant === 'testing' && (
+      <div class="zuc-tests" role="table" aria-label="Test results">
+        <div role="row" class="head">
+          <span role="columnheader">Test</span>
+          <span role="columnheader" class="col-off">No range check</span>
+          <span role="columnheader" class="col-on">With range check</span>
+        </div>
+        <div role="row">
+          <span role="rowheader">Honest witness<small>age 25, diff 7 · expects: accepted</small></span>
+          <span role="cell" class="col-off"><span class="zw-check">accepted · test passes</span></span>
+          <span role="cell" class="col-on"><span class="zw-check">accepted · test passes</span></span>
+        </div>
+        <div role="row">
+          <span role="rowheader">Malicious witness<small>age 16, diff r − 2 · expects: rejected</small></span>
+          <span role="cell" class="col-off"><span class="zw-check no">accepted · test fails: bug found</span></span>
+          <span role="cell" class="col-on"><span class="zw-check">ArithmeticException · test passes</span></span>
+        </div>
+      </div>
+    )}
+
+    <div class="zuc-result" aria-live="polite">
+      <span class="if-honest" data-when="insider">
+        <span class="zuc-ok">Every constraint holds, so the proof verifies.</span>
+        Honest inputs pass whether or not the range check is there, which is why honest tests can't find this bug.
+      </span>
+      <span class="if-cheat if-off zuc-bug" data-when="insider">
+        The bug: every constraint holds, so the proof verifies. A 16-year-old just proved age ≥ 18. The
+        circuit said "equal", and in the field the values <em>are</em> equal. It never said diff is a small,
+        non-negative number.
+      </span>
+      <span class="if-cheat if-on" data-when="insider">
+        <span class="zuc-ok">The cheat fails.</span> r − 2 doesn't fit in 8 bits, so no valid witness exists and no
+        proof can be made.
+        {variant === 'tutorial' && (
+          <> In ZeroJ, <code>calculateWitness</code> throws <code>ArithmeticException: Constraint violation</code>, and a
+          hand-made witness still breaks the range constraints, so no proof from it verifies.</>
+        )}
+      </span>
+      {variant !== 'testing' && (
+        <>
+          <span class="if-honest" data-when="public">
+            The verifier sees threshold 18 and a valid proof, and accepts.
+          </span>
+          <span class="if-cheat if-off zuc-bug" data-when="public">
+            The verifier sees threshold 18 and a valid proof, and accepts. From here, a cheat looks exactly like an
+            honest proof: only the circuit could have stopped it.
+          </span>
+          <span class="if-cheat if-on" data-when="public">
+            No valid proof exists, so there's nothing for the verifier to accept.
+          </span>
+        </>
+      )}
+    </div>
+
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays with the prover</span>
+      <span><em class="zw-tag public">PUBLIC</em> the verifier sees it</span>
+      <span><code>r</code> is BLS12-381's 255-bit prime.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zuc-u').forEach((root) => {
+    initWalkthrough(root);
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-who-btn]')];
+    buttons.forEach((b) =>
+      b.addEventListener('click', () => {
+        root.dataset.who = b.dataset.whoBtn;
+        buttons.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      }),
+    );
+    const toggle = root.querySelector<HTMLInputElement>('[data-check-toggle]');
+    toggle?.addEventListener('change', () => (root.dataset.check = toggle.checked ? 'on' : 'off'));
+  });
+</script>
+
+<style>
+  /* state switches: data-who (honest | cheat) and data-check (on | off) on the root */
+  .zuc-u[data-who='honest'] .if-cheat,
+  .zuc-u[data-who='cheat'] .if-honest,
+  .zuc-u[data-check='on'] .if-off,
+  .zuc-u[data-check='off'] .if-on {
+    display: none;
+  }
+
+  /* the testing variant always shows the cheater's numbers, since its table covers both tests */
+  .zuc-u[data-variant='testing'] .zuc-result .if-honest {
+    display: none;
+  }
+
+  .zuc-caption {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    max-width: 70ch;
+    font-size: 0.92em;
+    color: var(--zw-text-2);
+  }
+
+  .zuc-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6em 1em;
+    padding: 0.8em 1.1em 0;
+  }
+
+  .zuc-who {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em;
+  }
+
+  .zuc-label {
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zuc-range {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 0.86em;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .zuc-range input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  .zuc-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.2em;
+    height: 1.25em;
+    background: var(--zw-line);
+    border-radius: 999px;
+    transition: background 0.2s;
+  }
+
+  .zuc-switch::after {
+    content: '';
+    position: absolute;
+    top: 0.15em;
+    left: 0.15em;
+    width: 0.95em;
+    height: 0.95em;
+    background: var(--zw-bg);
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .zuc-range input:checked + .zuc-switch {
+    background: var(--zw-public);
+  }
+
+  .zuc-range input:checked + .zuc-switch::after {
+    transform: translateX(0.95em);
+  }
+
+  .zuc-range input:focus-visible + .zuc-switch {
+    outline: 2px solid var(--zw-public);
+    outline-offset: 2px;
+  }
+
+  .zuc-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.9em;
+    padding: 0.9em 1em;
+  }
+
+  .zuc-code {
+    display: grid;
+    gap: 0.3em;
+    padding: 0.55em 0.6em;
+    font-size: 0.84em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 9px;
+  }
+
+  .zuc-code code {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .zuc-rule {
+    color: var(--zw-public);
+  }
+
+  .zuc-missing {
+    font-size: 0.92em;
+    color: var(--zw-bad-ink);
+  }
+
+  .zuc-clock {
+    width: 100%;
+    max-width: 13em;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .zuc-clock .face {
+    fill: var(--zw-bg);
+    stroke: var(--zw-line);
+    stroke-width: 2;
+  }
+
+  .zuc-clock .tick {
+    stroke: var(--zw-muted);
+    stroke-width: 2;
+  }
+
+  .zuc-clock .lbl {
+    font: 600 11px var(--zw-mono);
+    fill: var(--zw-text-2);
+  }
+
+  .zuc-clock .mid {
+    font: 600 10px var(--zw-mono);
+    fill: var(--zw-text);
+  }
+
+  .zuc-clock .trip {
+    fill: none;
+    stroke-width: 5;
+    stroke-linecap: round;
+  }
+
+  .zuc-clock .trip.ok,
+  .zuc-clock .end.ok {
+    stroke: var(--zw-public);
+    fill: var(--zw-public);
+  }
+
+  .zuc-clock .trip.ok {
+    fill: none;
+  }
+
+  .zuc-clock .trip.bad {
+    stroke: var(--zw-bad);
+    stroke-dasharray: 7 4;
+  }
+
+  .zuc-clock .end.bad {
+    fill: var(--zw-bad);
+  }
+
+  .zuc-clock .start {
+    fill: var(--zw-text);
+  }
+
+  .zuc-clock-note {
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zuc-math {
+    display: grid;
+    gap: 0.35em;
+    font-family: var(--zw-mono);
+  }
+
+  .zuc-math > span {
+    display: grid;
+    gap: 0.35em;
+  }
+
+  .zuc-tests {
+    display: grid;
+    margin: 0 1em 0.9em;
+    font-size: 0.86em;
+    border: 1px solid var(--zw-line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .zuc-tests > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.6em;
+    align-items: center;
+    padding: 0.55em 0.8em;
+    border-top: 1px solid var(--zw-line);
+  }
+
+  .zuc-tests > .head {
+    font: 600 0.8em var(--zw-mono);
+    color: var(--zw-muted);
+    background: var(--zw-panel);
+    border-top: 0;
+  }
+
+  .zuc-tests small {
+    display: block;
+    font: 500 0.85em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  /* the column for the circuit the switch has selected */
+  .zuc-u[data-check='off'] .zuc-tests .col-on,
+  .zuc-u[data-check='on'] .zuc-tests .col-off {
+    opacity: 0.45;
+  }
+
+  .zuc-result {
+    margin: 0 1em;
+    padding: 0.7em 0.9em;
+    font-size: 0.9em;
+    color: var(--zw-text);
+    background: color-mix(in srgb, var(--zw-public) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+    border-radius: 10px;
+  }
+
+  .zuc-u[data-who='cheat'][data-check='off'] .zuc-result {
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border-color: color-mix(in srgb, var(--zw-bad) 45%, transparent);
+  }
+
+  .zuc-ok {
+    font-weight: 700;
+    color: var(--zw-public);
+  }
+
+  .zuc-bug {
+    font-weight: 500;
+  }
+
+  .zuc-u .zw-legend {
+    padding-top: 0.8em;
+  }
+
+  @container (max-width: 560px) {
+    .zuc-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .zuc-tests > div {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .zuc-tests [role='rowheader'],
+    .zuc-tests > .head > span:first-child {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

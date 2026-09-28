@@ -1,0 +1,344 @@
+---
+// "Which proof system should I use?" in three plain questions (learn/proof-systems). The card
+// restates the page's side-by-side facts for the recommendation. PlonK stays visible as experimental
+// but is never the recommendation.
+import './walkthrough.css';
+import { DEFAULT_ANSWERS, PLONK_NOTE, renderResult } from './proof-system-data';
+
+const questions = [
+  {
+    key: 'need',
+    q: 'What should the verifier learn?',
+    options: [
+      { value: 'compute', label: 'A yes/no answer about hidden values', hint: 'age ≥ 18, on a list, balance above a limit' },
+      { value: 'reveal', label: 'Some signed facts, shown as issued', hint: 'country = NZ, KYC level = verified' },
+      { value: 'both', label: 'Both', hint: 'show some facts, prove a rule about another' },
+    ],
+  },
+  {
+    key: 'setup',
+    q: 'Can you run a setup ceremony for each circuit?',
+    options: [
+      { value: 'ceremony', label: 'Yes, or I will before going live', hint: '' },
+      { value: 'universal', label: "I'd rather not", hint: '' },
+    ],
+  },
+  {
+    key: 'where',
+    q: 'Where will proofs be checked?',
+    options: [
+      { value: 'cardano', label: 'On Cardano', hint: '' },
+      { value: 'offchain', label: 'In my Java service', hint: '' },
+    ],
+  },
+] as const;
+---
+
+<figure class="zw-frame not-content" aria-label="Choosing a proof system">
+  <div class="zw zps" data-total="1">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Which proof system? · <b>three questions</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zps-caption">
+      What you're seeing: answer the questions on the left, and the card on the right picks the proof
+      system that fits, with the facts behind the choice.
+    </p>
+
+    <div class="zps-body">
+      <div class="zps-questions">
+        {questions.map((g, gi) => (
+          <fieldset class="zps-q" data-q={g.key} data-hide-for={g.key === 'setup' ? 'reveal' : undefined}>
+            <legend><span>{gi + 1}</span>{g.q}</legend>
+            <div class="zps-opts">
+              {g.options.map((o) => (
+                <button
+                  type="button"
+                  data-answer={o.value}
+                  aria-pressed={(DEFAULT_ANSWERS as Record<string, string>)[g.key] === o.value ? 'true' : 'false'}
+                >
+                  <span class="zps-opt-label">{o.label}</span>
+                  {o.hint && <span class="zps-opt-hint">{o.hint}</span>}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+
+      <div class="zps-result" aria-live="polite" data-result set:html={renderResult(DEFAULT_ANSWERS)} />
+    </div>
+
+    <div class="zps-all" aria-label="The three systems in ZeroJ">
+      <span class="zps-chip" data-chip="groth16"><b>Groth16</b> default for circuits</span>
+      <span class="zps-chip" data-chip="bbs"><b>BBS</b> signed credentials</span>
+      <span class="zps-chip exp"><b>PlonK</b> experimental</span>
+      <p class="zw-note">{PLONK_NOTE}</p>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { DEFAULT_ANSWERS, recommend, renderResult, type Answers } from './proof-system-data';
+
+  document.querySelectorAll<HTMLElement>('.zps').forEach((root) => {
+    initWalkthrough(root);
+    const answers: Answers = { ...DEFAULT_ANSWERS };
+    const result = root.querySelector<HTMLElement>('[data-result]');
+
+    const update = () => {
+      root.querySelectorAll<HTMLElement>('[data-q]').forEach((group) => {
+        const key = group.dataset.q as keyof Answers;
+        group.querySelectorAll<HTMLButtonElement>('[data-answer]').forEach((b) =>
+          b.setAttribute('aria-pressed', String(answers[key] === b.dataset.answer)),
+        );
+        // The ceremony question only matters when a circuit is involved.
+        if (group.dataset.hideFor) group.hidden = answers.need === group.dataset.hideFor;
+      });
+      if (result) result.innerHTML = renderResult(answers);
+      const systems = recommend(answers).systems;
+      root.querySelectorAll<HTMLElement>('[data-chip]').forEach((chip) =>
+        chip.classList.toggle('on', systems.includes(chip.dataset.chip as 'groth16' | 'bbs')),
+      );
+    };
+
+    root.querySelectorAll<HTMLElement>('[data-q]').forEach((group) => {
+      const key = group.dataset.q as keyof Answers;
+      group.querySelectorAll<HTMLButtonElement>('[data-answer]').forEach((b) =>
+        b.addEventListener('click', () => {
+          (answers as Record<string, string>)[key] = b.dataset.answer ?? '';
+          update();
+        }),
+      );
+    });
+    update();
+  });
+</script>
+
+<style is:global>
+  /* global (prefixed) because the result card is injected with set:html / innerHTML */
+  .zps-caption {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    font-size: 0.86em;
+    color: var(--zw-text-2);
+  }
+
+  .zps-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1em;
+    padding: 0.9em 1em 1em;
+  }
+
+  .zps-questions {
+    display: grid;
+    align-content: start;
+    gap: 0.8em;
+  }
+
+  .zps-q {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .zps-q legend {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin-bottom: 0.4em;
+    padding: 0;
+    font-weight: 600;
+    font-size: 0.92em;
+  }
+
+  .zps-q legend span {
+    display: grid;
+    place-items: center;
+    width: 1.5em;
+    height: 1.5em;
+    font: 600 0.8em var(--zw-mono);
+    color: var(--zw-bg);
+    background: var(--zw-public);
+    border-radius: 50%;
+  }
+
+  .zps-opts {
+    display: grid;
+    gap: 0.3em;
+  }
+
+  .zps-opts button {
+    display: grid;
+    gap: 0.1em;
+    padding: 0.45em 0.7em;
+    text-align: left;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 9px;
+  }
+
+  .zps-opts button:hover {
+    border-color: var(--zw-public);
+  }
+
+  .zps-opts button[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--zw-public) 12%, var(--zw-bg));
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-public) 18%, transparent);
+  }
+
+  .zps-opt-label {
+    font-size: 0.86em;
+    font-weight: 600;
+  }
+
+  .zps-opt-hint {
+    font-size: 0.76em;
+    color: var(--zw-muted);
+  }
+
+  .zps-result {
+    display: grid;
+    align-content: start;
+    gap: 0.55em;
+    padding: 0.9em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-public);
+    border-radius: 12px;
+  }
+
+  .zps-result p {
+    margin: 0;
+  }
+
+  .zps-pick-label {
+    font: 600 0.7em var(--zw-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zps-pick {
+    font-family: var(--zw-display);
+    font-size: 1.35em;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--zw-public);
+  }
+
+  .zps-why {
+    font-size: 0.86em;
+    color: var(--zw-text-2);
+  }
+
+  .zps-sys-list {
+    display: grid;
+    gap: 0.5em;
+  }
+
+  .zps-sys {
+    padding: 0.5em 0.6em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 9px;
+  }
+
+  .zps-sys-name {
+    display: block;
+    margin-bottom: 0.3em;
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--zw-text-2);
+  }
+
+  .zps-facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.2em 0.6em;
+    margin: 0;
+    font-size: 0.78em;
+  }
+
+  .zps-facts dt {
+    color: var(--zw-muted);
+  }
+
+  .zps-facts dd {
+    margin: 0;
+    color: var(--zw-text);
+  }
+
+  .zps-notes {
+    display: grid;
+    gap: 0.35em;
+  }
+
+  .zps-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3em 1em;
+    font-size: 0.84em;
+    font-weight: 600;
+  }
+
+  .zps-links a {
+    color: var(--zw-public);
+    text-decoration: none;
+  }
+
+  .zps-links a:hover {
+    text-decoration: underline;
+  }
+
+  .zps-all {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.7em 1em 1em;
+    border-top: 1px solid var(--zw-line);
+  }
+
+  .zps-all .zw-note {
+    flex-basis: 100%;
+  }
+
+  .zps-chip {
+    padding: 0.25em 0.65em;
+    font-size: 0.8em;
+    color: var(--zw-muted);
+    border: 1px solid var(--zw-line);
+    border-radius: 999px;
+  }
+
+  .zps-chip b {
+    margin-right: 0.3em;
+    color: var(--zw-text-2);
+  }
+
+  .zps-chip.on {
+    color: var(--zw-text);
+    border-color: var(--zw-public);
+    background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+  }
+
+  .zps-chip.exp {
+    color: var(--zw-warn-ink);
+    border-style: dashed;
+    border-color: var(--sl-color-orange);
+  }
+
+  @container (max-width: 560px) {
+    .zps-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

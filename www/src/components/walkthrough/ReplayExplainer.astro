@@ -1,0 +1,446 @@
+---
+// "A proof is a public, copyable object": Alice's transaction sits in the mempool, the reader switches
+// protections on and off, and each copy attack shows whether it still works. Rules: replay-data.ts.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { ATTACKS, GUARDS, outcome, statement, summary, type Guards } from './replay-data';
+
+const none: Guards = { spend: false, recipient: false, nullifier: false, nonce: false };
+const proof = fakeHash('alice-claim-proof');
+const cls = (state: string) => (state === 'ok' ? 'zw-check' : state === 'warn' ? 'zw-check warn' : 'zw-check no');
+---
+
+<figure class="zw-frame not-content" aria-label="Replay and front-running: try to reuse a proof">
+  <div class="zw zrp" data-total="1">
+    <div class="zw-head">
+      <span class="zw-eyebrow">A proof is public · <b>try to reuse it</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zrp-body">
+      <p class="zrp-caption">
+        <b>What you're seeing:</b> Alice's claim is waiting in the mempool, where anyone can read it. Switch on
+        the protections your application has, and see which ways of copying her proof still work.
+      </p>
+
+      <section class="zrp-tx" aria-label="Alice's transaction in the mempool">
+        <div class="zrp-tx-head">
+          <span class="zw-actor-name">Alice's transaction</span>
+          <em class="zw-tag public">IN THE MEMPOOL · PUBLIC</em>
+        </div>
+        <div class="zrp-tx-grid">
+          <div class="zw-row" data-kind="public">
+            <span class="k">redeemer: proof π</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{proof}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">outputs</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">pay Alice</span>
+          </div>
+        </div>
+        <div class="zrp-commits">
+          <span class="zrp-commits-label">The proof commits to</span>
+          <span class="zrp-chips" data-statement>
+            {statement(none).map((s) => <code>{s}</code>)}
+          </span>
+        </div>
+      </section>
+
+      <fieldset class="zrp-guards">
+        <legend>
+          Your protections
+          <span class="zrp-quick">
+            <button type="button" data-all="on">All on</button>
+            <button type="button" data-all="off">None</button>
+          </span>
+        </legend>
+        {GUARDS.map((g) => (
+          <label class="zrp-guard">
+            <input type="checkbox" data-guard={g.id} />
+            <span class="zrp-switch" aria-hidden="true"></span>
+            <span class="zrp-guard-text">
+              <b>{g.name}</b>
+              <small>{g.how}</small>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <p class="zw-note zrp-caveat" data-caveat="spend" hidden>
+        Compute spendRef in your own validator from <code>ScriptContext</code>. The bundled
+        <code>Groth16BLS12381TxOutRefBindingVerifier</code> reads it from the datum, so it shows the check but
+        can't lock real funds as-is.
+      </p>
+      <p class="zw-note zrp-caveat" data-caveat="nullifier" hidden>
+        The nullifier must come from the same secret as the membership proof, or a member can mint fresh ones.
+      </p>
+
+      <ol class="zrp-attacks" aria-live="polite" aria-label="What an attacker can do">
+        {ATTACKS.map((a) => {
+          const o = outcome(a.id, none);
+          return (
+            <li class="zrp-attack" data-attack={a.id} data-state={o.state}>
+              <div class="zrp-attack-head">
+                <b>{a.name}</b>
+                <span class="zrp-where">{a.where}</span>
+              </div>
+              <p class="zrp-does">{a.does}</p>
+              <span class={cls(o.state)} data-outcome>{o.text}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <p class="zrp-summary" data-summary>{summary(none)}</p>
+    </div>
+
+    <div class="zw-legend">
+      <span class="zrp-key ok">✓ blocked</span>
+      <span class="zrp-key bad">✕ works for the attacker</span>
+      <span class="zrp-key warn">! partly</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { ATTACKS, outcome, statement, summary, type Guards } from './replay-data';
+
+  document.querySelectorAll<HTMLElement>('.zrp').forEach((root) => {
+    initWalkthrough(root);
+    const boxes = [...root.querySelectorAll<HTMLInputElement>('[data-guard]')];
+
+    const update = () => {
+      const g = Object.fromEntries(boxes.map((b) => [b.dataset.guard, b.checked])) as Guards;
+      ATTACKS.forEach((a) => {
+        const o = outcome(a.id, g);
+        const card = root.querySelector<HTMLElement>(`[data-attack="${a.id}"]`);
+        const line = card?.querySelector<HTMLElement>('[data-outcome]');
+        if (!card || !line) return;
+        card.dataset.state = o.state;
+        line.textContent = o.text;
+        line.className = o.state === 'ok' ? 'zw-check' : o.state === 'warn' ? 'zw-check warn' : 'zw-check no';
+      });
+      const chips = root.querySelector('[data-statement]');
+      if (chips)
+        chips.replaceChildren(
+          ...statement(g).map((s) => {
+            const c = document.createElement('code');
+            c.textContent = s;
+            return c;
+          }),
+        );
+      const sum = root.querySelector('[data-summary]');
+      if (sum) sum.textContent = summary(g);
+      root.querySelectorAll<HTMLElement>('[data-caveat]').forEach((p) => {
+        p.hidden = !g[p.dataset.caveat as keyof Guards];
+      });
+    };
+
+    boxes.forEach((b) => b.addEventListener('change', update));
+    root.querySelectorAll<HTMLButtonElement>('[data-all]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        boxes.forEach((b) => (b.checked = btn.dataset.all === 'on'));
+        update();
+      }),
+    );
+    update();
+  });
+</script>
+
+<style>
+  .zrp-body {
+    display: grid;
+    gap: 0.9em;
+    padding: 1em;
+  }
+
+  .zrp-caption {
+    margin: 0;
+    max-width: 68ch;
+    color: var(--zw-text-2);
+  }
+
+  .zrp-caption b {
+    color: var(--zw-text);
+  }
+
+  /* the transaction everyone can see */
+  .zrp-tx {
+    display: grid;
+    gap: 0.6em;
+    padding: 0.8em;
+    background: var(--zw-panel);
+    border: 1px dashed color-mix(in srgb, var(--zw-public) 55%, var(--zw-line));
+    border-radius: 12px;
+  }
+
+  .zrp-tx-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4em;
+  }
+
+  .zrp-tx-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5em;
+  }
+
+  .zrp-commits {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em 0.6em;
+  }
+
+  .zrp-commits-label {
+    font: 600 0.72em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zrp-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+  }
+
+  .zrp-chips :global(code) {
+    padding: 0.15em 0.5em;
+    font: 600 0.74em var(--zw-mono);
+    color: var(--zw-public-ink);
+    background: var(--zw-bg);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+    border-radius: 6px;
+    animation: zw-in 0.3s ease-out;
+  }
+
+  /* protections */
+  .zrp-guards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5em;
+    margin: 0;
+    padding: 0.7em 0.8em 0.8em;
+    border: 1px solid var(--zw-line);
+    border-radius: 12px;
+  }
+
+  .zrp-guards legend {
+    display: flex;
+    align-items: center;
+    gap: 0.8em;
+    padding: 0 0.4em;
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--zw-text-2);
+  }
+
+  .zrp-quick {
+    display: inline-flex;
+    gap: 0.3em;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .zrp-quick button {
+    padding: 0.15em 0.55em;
+    font-size: 0.95em;
+    font-weight: 600;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 6px;
+  }
+
+  .zrp-quick button:hover {
+    border-color: var(--zw-public);
+  }
+
+  .zrp-guard {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55em;
+    padding: 0.5em 0.6em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+
+  .zrp-guard:has(input:checked) {
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-public) 14%, transparent);
+  }
+
+  .zrp-guard input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .zrp-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.1em;
+    height: 1.2em;
+    margin-top: 0.1em;
+    background: var(--zw-line);
+    border-radius: 999px;
+    transition: background 0.2s;
+  }
+
+  .zrp-switch::after {
+    content: '';
+    position: absolute;
+    top: 0.15em;
+    left: 0.15em;
+    width: 0.9em;
+    height: 0.9em;
+    background: var(--zw-bg);
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .zrp-guard input:checked + .zrp-switch {
+    background: var(--zw-public);
+  }
+
+  .zrp-guard input:checked + .zrp-switch::after {
+    transform: translateX(0.9em);
+  }
+
+  .zrp-guard input:focus-visible + .zrp-switch {
+    outline: 2px solid var(--zw-public);
+    outline-offset: 2px;
+  }
+
+  .zrp-guard-text {
+    display: grid;
+    gap: 0.15em;
+    min-width: 0;
+  }
+
+  .zrp-guard-text b {
+    font-size: 0.86em;
+  }
+
+  .zrp-guard-text small {
+    font-size: 0.76em;
+    line-height: 1.35;
+    color: var(--zw-muted);
+  }
+
+  .zrp-caveat {
+    margin-top: -0.4em;
+    padding: 0.45em 0.6em;
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border-radius: 8px;
+  }
+
+  .zrp-caveat code {
+    overflow-wrap: anywhere;
+  }
+
+  /* attacks */
+  .zrp-attacks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zrp-attack {
+    display: grid;
+    align-content: start;
+    gap: 0.35em;
+    padding: 0.6em 0.7em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 10px;
+    transition:
+      border-color 0.25s,
+      background 0.25s;
+  }
+
+  .zrp-attack[data-state='bad'] {
+    border-color: color-mix(in srgb, var(--zw-bad) 55%, var(--zw-line));
+    background: color-mix(in srgb, var(--zw-bad) 6%, var(--zw-panel));
+  }
+
+  .zrp-attack[data-state='ok'] {
+    border-color: color-mix(in srgb, var(--zw-public) 55%, var(--zw-line));
+  }
+
+  .zrp-attack[data-state='warn'] {
+    border-color: color-mix(in srgb, var(--sl-color-orange) 60%, var(--zw-line));
+  }
+
+  .zrp-attack-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.3em 0.6em;
+  }
+
+  .zrp-attack-head b {
+    font-family: var(--zw-display);
+    font-size: 0.95em;
+  }
+
+  .zrp-where {
+    padding: 0.05em 0.45em;
+    font: 600 0.66em var(--zw-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+    border: 1px solid var(--zw-line);
+    border-radius: 4px;
+  }
+
+  .zrp-does {
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zrp-summary {
+    margin: 0;
+    padding: 0.6em 0.8em;
+    font-weight: 600;
+    color: var(--zw-text);
+    background: var(--zw-panel);
+    border-left: 3px solid var(--zw-public);
+    border-radius: 6px;
+  }
+
+  .zrp-key.ok {
+    color: var(--zw-public);
+  }
+
+  .zrp-key.bad {
+    color: var(--zw-bad-ink);
+  }
+
+  .zrp-key.warn {
+    color: var(--zw-warn-ink);
+  }
+
+  @container (max-width: 560px) {
+    .zrp-tx-grid,
+    .zrp-guards,
+    .zrp-attacks {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

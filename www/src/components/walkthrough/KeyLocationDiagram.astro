@@ -1,0 +1,334 @@
+---
+// "Choose where the proving key lives": two questions pick one of the Groth16 guide's three flows
+// and show the calls for it. Calls follow the current zeroj-crypto API (ZkeyPkStoreImporter's pinned
+// overloads, Groth16Keys.load with a manifest pin).
+import './walkthrough.css';
+
+const flows = [
+  {
+    id: 'f1',
+    name: 'Flow 1',
+    title: 'Keys in memory',
+    home: 'the Java heap',
+    fit: 'tests, small circuits',
+    dev: true,
+  },
+  {
+    id: 'f2',
+    name: 'Flow 2',
+    title: 'Keys on disk',
+    home: 'memory-mapped files',
+    fit: 'large local circuits',
+    dev: true,
+  },
+  {
+    id: 'f3',
+    name: 'Flow 3',
+    title: 'Ceremony keys',
+    home: 'imported, then pinned',
+    fit: 'anything beyond testing',
+    dev: false,
+  },
+];
+
+const code: Record<string, string> = {
+  f1: `// DEV/TEST ONLY: needs -Dzeroj.allowInsecureTrustedSetup=true
+BigInteger tau = PowersOfTauBLS381.generate(4).tauScalar();
+try (var keys = Groth16Keys.setupInMemory(
+        r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), tau)) {
+    var proof = keys.prove(witness, r1cs.constraints());
+}`,
+  f2: `// DEV/TEST ONLY: streamed setup, the key is memory-mapped from disk
+try (var keys = Groth16Keys.setupToStore(r1cs.flat(), r1cs.numWires(),
+        r1cs.numPublicInputs(), tau, keysDir, true)) {   // true = sparse format
+    var proof = keys.prove(witness, r1cs.constraints());
+}
+
+// Later runs reopen the same store
+try (var keys = Groth16Keys.load(keysDir)) { ... }`,
+  f3store: `// Once: import the ceremony's .zkey, pinned to the SHA-256 in its transcript
+var imported = ZkeyPkStoreImporter.importToPkStore(
+        Path.of("circuit_final.zkey"), keysDir, expectedSha256);
+
+// Every later load is pinned to the store's manifest hash
+try (var keys = Groth16Keys.load(keysDir, imported.manifestSha256())) {
+    var proof = keys.prove(witness, ZkeyPkStoreImporter.snarkjsConstraints(
+            r1cs.constraints(), r1cs.numPublicInputs()));
+}`,
+  f3mem: `// Keys up to 128 MB: parse in memory, pinned to the transcript's SHA-256
+var zkey = ZkeyImporterBLS381.importZkeyFull(
+        Files.readAllBytes(zkeyPath), expectedSha256);   // 32-byte hash
+var proof = Groth16ProverBLS381.prove(
+        zkey.provingKey(), witness, zkey.constraints(), zkey.numWires());`,
+};
+
+type Note = { text: string; kind: 'ok' | 'warn' };
+const notes: Record<string, Note[]> = {
+  f1: [
+    { kind: 'ok', text: 'Nothing touches disk. Fine up to a few hundred thousand constraints.' },
+    { kind: 'warn', text: 'Your process knows the setup randomness and could forge proofs.' },
+  ],
+  f2: [
+    { kind: 'ok', text: 'The key never sits on the heap in full: it uses the page cache instead.' },
+    { kind: 'warn', text: 'Still a single-party setup: your process could forge proofs.' },
+  ],
+  f3store: [
+    { kind: 'ok', text: 'The target directory must not exist yet. Keep the manifest hash with your deployment config.' },
+    { kind: 'ok', text: 'Optional fourth argument: the exact circuit fingerprint, sealed into the store.' },
+    { kind: 'warn', text: "The two-argument importToPkStore(zkey, dir) always throws now, so the hash can't be skipped by accident." },
+  ],
+  f3mem: [
+    { kind: 'ok', text: 'The .zkey carries the constraints, including the rows snarkjs adds for public inputs.' },
+    { kind: 'warn', text: 'The whole key sits on the heap, so this suits small ceremony keys only.' },
+  ],
+};
+
+const variants = [
+  { id: 'f1', flow: 'f1', label: 'Flow 1 · setupInMemory' },
+  { id: 'f2', flow: 'f2', label: 'Flow 2 · setupToStore' },
+  { id: 'f3store', flow: 'f3', label: 'Flow 3 · import into a key store' },
+  { id: 'f3mem', flow: 'f3', label: 'Flow 3 · in-memory import' },
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Choose where the proving key lives">
+  <div class="zw zdg-keys" data-total="1" data-view="insider" data-variant="f1">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Where does the proving key live?</span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zdg-keys-cap">
+      <b>What you're seeing:</b> answer two questions and the matching flow lights up, with the calls
+      it needs.
+    </p>
+
+    <div class="zdg-keys-q">
+      <div class="zdg-keys-qrow">
+        <span class="zdg-keys-qlabel">How big is the circuit?</span>
+        <div class="zw-seg" role="group" aria-label="Circuit size">
+          <button type="button" data-size="small" aria-pressed="true">Small</button>
+          <button type="button" data-size="large" aria-pressed="false">Millions of constraints</button>
+        </div>
+      </div>
+      <div class="zdg-keys-qrow">
+        <span class="zdg-keys-qlabel">Where do the keys come from?</span>
+        <div class="zw-seg" role="group" aria-label="Key source">
+          <button type="button" data-source="dev" aria-pressed="true">Development setup</button>
+          <button type="button" data-source="ceremony" aria-pressed="false">Multi-party ceremony</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="zdg-keys-flows">
+      {flows.map((f) => (
+        <div class={`zdg-keys-flow ${f.id === 'f1' ? 'on' : ''}`} data-flow={f.id}>
+          <span class="zdg-keys-fname">{f.name}</span>
+          <span class="zdg-keys-ftitle">{f.title}</span>
+          <span class="zdg-keys-fline">Key lives in: {f.home}</span>
+          <span class="zdg-keys-fline">For: {f.fit}</span>
+          <span class={f.dev ? 'zdg-keys-badge dev' : 'zdg-keys-badge real'}>
+            {f.dev ? 'development keys' : 'real deployments'}
+          </span>
+        </div>
+      ))}
+    </div>
+
+    <div class="zdg-keys-out" aria-live="polite">
+      {variants.map((v) => (
+        <div class="zdg-keys-variant" data-variant-panel={v.id} hidden={v.id !== 'f1'}>
+          <p class="zdg-keys-vlabel">{v.label}</p>
+          <pre class="zdg-keys-code"><code>{code[v.id]}</code></pre>
+          <ul class="zdg-keys-notes">
+            {notes[v.id].map((n) => (
+              <li class={n.kind === 'warn' ? 'zw-check warn' : 'zw-check'}>{n.text}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+
+    <div class="zw-legend">
+      <span>Development keys need <code>-Dzeroj.allowInsecureTrustedSetup=true</code> and must never protect anything real.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zdg-keys').forEach((root) => {
+    initWalkthrough(root);
+    let size = 'small';
+    let source = 'dev';
+    const update = () => {
+      const variant = source === 'dev' ? (size === 'small' ? 'f1' : 'f2') : size === 'small' ? 'f3mem' : 'f3store';
+      const flow = variant.startsWith('f3') ? 'f3' : variant;
+      root.dataset.variant = variant;
+      root.querySelectorAll<HTMLElement>('[data-size]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.size === size)),
+      );
+      root.querySelectorAll<HTMLElement>('[data-source]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.source === source)),
+      );
+      root.querySelectorAll<HTMLElement>('[data-flow]').forEach((el) =>
+        el.classList.toggle('on', el.dataset.flow === flow),
+      );
+      root.querySelectorAll<HTMLElement>('[data-variant-panel]').forEach((el) => {
+        el.hidden = el.dataset.variantPanel !== variant;
+      });
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-size]').forEach((b) =>
+      b.addEventListener('click', () => ((size = b.dataset.size ?? 'small'), update())),
+    );
+    root.querySelectorAll<HTMLButtonElement>('[data-source]').forEach((b) =>
+      b.addEventListener('click', () => ((source = b.dataset.source ?? 'dev'), update())),
+    );
+    update();
+  });
+</script>
+
+<style>
+  .zdg-keys-cap {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    font-size: 0.86em;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-keys-q {
+    display: grid;
+    gap: 0.55em;
+    padding: 0.8em 1.1em 0.2em;
+  }
+
+  .zdg-keys-qrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4em 1em;
+  }
+
+  .zdg-keys-qlabel {
+    font-weight: 600;
+    font-size: 0.9em;
+  }
+
+  .zdg-keys-flows {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.7em;
+    padding: 0.9em 1em;
+  }
+
+  .zdg-keys-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    padding: 0.7em 0.75em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 11px;
+    opacity: 0.5;
+    transition:
+      opacity 0.25s,
+      border-color 0.25s,
+      box-shadow 0.25s;
+  }
+
+  .zdg-keys-flow.on {
+    opacity: 1;
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-public) 16%, transparent);
+  }
+
+  .zdg-keys-fname {
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zdg-keys-ftitle {
+    font-family: var(--zw-display);
+    font-weight: 600;
+  }
+
+  .zdg-keys-fline {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-keys-badge {
+    align-self: flex-start;
+    margin-top: 0.3em;
+    padding: 0.1em 0.45em;
+    font: 600 0.66em var(--zw-mono);
+    border-radius: 4px;
+  }
+
+  .zdg-keys-badge.dev {
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+  }
+
+  .zdg-keys-badge.real {
+    color: var(--zw-public);
+    background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+  }
+
+  .zdg-keys-out {
+    padding: 0 1em 0.8em;
+  }
+
+  .zdg-keys-variant {
+    display: grid;
+    gap: 0.55em;
+  }
+
+  .zdg-keys-vlabel {
+    margin: 0;
+    font: 600 0.8em var(--zw-mono);
+    color: var(--zw-public);
+  }
+
+  .zdg-keys-code {
+    margin: 0;
+    padding: 0.8em 0.9em;
+    overflow-x: auto;
+    font: 500 0.8em/1.55 var(--zw-mono);
+    color: #e1e4e8;
+    background: #0d1117;
+    border: 1px solid var(--zw-line);
+    border-radius: 10px;
+  }
+
+  .zdg-keys-code code {
+    font: inherit;
+    color: inherit;
+    background: none;
+    padding: 0;
+  }
+
+  .zdg-keys-notes {
+    display: grid;
+    gap: 0.35em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zw-legend code {
+    font-size: 0.95em;
+  }
+
+  @container (max-width: 560px) {
+    .zdg-keys-flows {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

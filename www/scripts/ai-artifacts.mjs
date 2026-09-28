@@ -177,6 +177,14 @@ export function toPlainMarkdown(body, { mdx }) {
         return `**${title ? `${kind}: ${title}` : kind}:** `;
       })
       .replace(/<Badge\s([^>]*?)\/>/g, (_, a) => `[${attr(a, 'text') ?? ''}]`)
+      // Interactive illustrations (src/components/walkthrough/, named *Walkthrough, *Explainer or
+      // *Diagram) have no text form of their own: the page text covers the same ground, and any
+      // diagram they replace is kept for these exports inside <TextOnly>.
+      .replace(
+        /<[A-Z]\w*(?:Walkthrough|Explainer|Diagram)\b[^>]*\/>/g,
+        '_The web version of this page has an interactive illustration here._',
+      )
+      .replace(/<\/?TextOnly>/g, '')
       .replace(/<\/?(Steps|Tabs|CardGrid|FileTree|Card|TabItem|Aside)(\s[^>]*)?>/g, '');
   }
   text = convertDirectives(text);

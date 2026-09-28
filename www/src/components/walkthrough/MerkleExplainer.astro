@@ -1,0 +1,716 @@
+---
+// "The idea in one picture" for tutorials/private-allowlist: pick a member, see their Merkle path
+// light up, claim once per event, and try someone who isn't on the list.
+// Names and rules follow the tutorial; hash values are illustrative stand-ins (see merkle-data.ts).
+import './walkthrough.css';
+import {
+  EVENTS,
+  MEMBERS,
+  ROOT,
+  TREE,
+  TUTORIAL_MEMBER,
+  WIDTH,
+  leafOf,
+  nodeName,
+  nullifierKey,
+  nullifierOf,
+  pathOf,
+  recompute,
+  trapdoor,
+} from './merkle-data';
+
+const sel = TUTORIAL_MEMBER;
+const event = EVENTS[0];
+const path = pathOf(sel);
+
+// geometry: leaves at the bottom, root at the top
+const W = 560;
+const H = 262;
+const ys = [206, 142, 82, 26];
+const xs: number[][] = [Array.from({ length: WIDTH }, (_, i) => 35 + i * 70)];
+for (let l = 1; l < TREE.length; l++) {
+  const below = xs[l - 1];
+  const up: number[] = [];
+  for (let i = 0; i < below.length; i += 2) up.push((below[i] + below[i + 1]) / 2);
+  xs.push(up);
+}
+const radius = (l: number) => (l === 0 ? 20 : l === 3 ? 21 : 17);
+const onPath = (l: number, i: number) => sel >> l === i;
+const sibOrder = (l: number, i: number) => (l < 3 && ((sel >> l) ^ 1) === i ? l + 1 : 0);
+const side = (bit: number) => (bit === 0 ? "you're left" : "you're right");
+---
+
+<figure class="zw-frame not-content" aria-label="Merkle allowlist explainer">
+  <div class="zw zml" data-total="1" data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Private allowlist · <b>explainer</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Member's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Verifier's view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zml-body">
+      <p class="zml-caption">
+        <b>What you're seeing:</b> each member's <b>leaf</b> is a fingerprint (a hash) of their two
+        secrets. Leaves are hashed in pairs, round by round like a tournament bracket, until one
+        value is left at the top: the <b>root</b>. Only the root is published. Pick a member, or
+        click a leaf.
+      </p>
+
+      <div class="zml-controls">
+        <div class="zml-ctl">
+          <span class="zml-ctl-label">Who's proving?</span>
+          <span class="zw-choice zml-who" role="group" aria-label="Who is proving">
+            {Array.from({ length: MEMBERS }, (_, i) => (
+              <button type="button" data-member={i} aria-pressed={i === sel ? 'true' : 'false'}>#{i}</button>
+            ))}
+            <button type="button" data-member="out" aria-pressed="false">Not on the list</button>
+          </span>
+        </div>
+        <div class="zml-ctl">
+          <span class="zml-ctl-label">Event</span>
+          <span class="zw-choice zml-events" role="group" aria-label="Event">
+            {EVENTS.map((e, i) => (
+              <button type="button" data-event={e.id} aria-pressed={i === 0 ? 'true' : 'false'}>{e.label}</button>
+            ))}
+          </span>
+        </div>
+      </div>
+
+      <svg class="zml-tree" viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label="A Merkle tree with eight slots: five member leaves and three empty slots, hashed in pairs up to one published root.">
+        {xs.slice(0, 3).map((row, l) =>
+          row.map((x, i) => (
+            <line x1={x} y1={ys[l]} x2={xs[l + 1][i >> 1]} y2={ys[l + 1]}
+              class={onPath(l, i) ? 't-edge on-path' : 't-edge'} data-l={l} data-i={i} />
+          )),
+        )}
+        {xs.map((row, l) =>
+          row.map((x, i) => {
+            const empty = l === 0 && i >= MEMBERS;
+            const cls = [
+              't-node',
+              l === 3 ? 'root' : '',
+              empty ? 'empty' : '',
+              l === 0 && !empty ? 'member' : '',
+              l === 0 && i === sel ? 'sel' : '',
+              l > 0 && onPath(l, i) ? 'on-path' : '',
+              sibOrder(l, i) ? 'sib' : '',
+            ].join(' ');
+            const r = radius(l);
+            return (
+              <g class={cls} data-l={l} data-i={i} data-member={l === 0 && !empty ? i : undefined}>
+                <circle cx={x} cy={ys[l]} r={r} />
+                <text x={x} y={ys[l]} class="t-name">{empty ? '0' : nodeName(l, i)}</text>
+                <text x={x + r - 2} y={ys[l] - r + 2} class="t-badge">{sibOrder(l, i) || ''}</text>
+              </g>
+            );
+          }),
+        )}
+        {xs[0].map((x, i) => (
+          <text x={x} y={ys[0] + 38} class="t-cap">{i < MEMBERS ? `#${i}` : 'empty'}</text>
+        ))}
+        <text x={xs[3][0] + 30} y={ys[3] + 5} class="t-published">published</text>
+        <text x={xs[3][0] - 30} y={ys[3] + 5} class="t-mismatch-tag">≠ root</text>
+      </svg>
+
+      <div class="zml-grid">
+        <section class="zw-actor zml-panel" aria-label="On the member's device">
+          <div class="zw-actor-head">
+            <span class="zw-actor-name" data-when="insider">On the member's device</span>
+            <span class="zw-actor-name" data-when="public">Hidden from the verifier</span>
+            <span class="zw-actor-sub" data-when="insider" data-who-label>member #{sel}</span>
+          </div>
+          <div class="zw-row" data-kind="secret">
+            <span class="k">nullifierKey</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real" data-f="nk">{nullifierKey(sel)}</span><span class="mask">████████</span></span>
+          </div>
+          <div class="zw-row" data-kind="secret">
+            <span class="k">trapdoor</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real" data-f="td">{trapdoor(sel)}</span><span class="mask">████████</span></span>
+          </div>
+          <div class="zw-row" data-kind="secret">
+            <span class="k">leaf = Poseidon(nullifierKey, trapdoor)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v wrap"><span class="real" data-f="leaf">{leafOf(sel)}</span><span class="mask">████████</span></span>
+          </div>
+          <div class="zw-box" data-when="insider">
+            <span class="zw-box-title" data-path-title>Merkle path · SECRET</span>
+            <ol class="zml-path" data-path>
+              {path.map((s, n) => (
+                <li>
+                  <span class="n">{n + 1}</span>
+                  <code>{s.name}</code>
+                  <span class="hv">{s.value}</span>
+                  <span class="side">{side(s.bit)}</span>
+                </li>
+              ))}
+            </ol>
+            <p class="zw-note" data-path-note>
+              Your Merkle path is these 3 sibling hashes. With them and your leaf you can recompute
+              the root, without saying which leaf is yours.
+            </p>
+          </div>
+          <span class="zw-check" data-when="insider" data-recompute>
+            leaf + path → {recompute(leafOf(sel), path)}: matches the published root
+          </span>
+          <p class="zw-note" data-when="public">
+            The verifier sees none of this: not the secrets, not the leaf, not the path. So it can't
+            tell which member is proving.
+          </p>
+        </section>
+
+        <section class="zw-actor zml-panel" aria-label="Sent to the gate">
+          <div class="zw-actor-head">
+            <span class="zw-actor-name">Sent to the gate</span>
+            <span class="zw-actor-sub">public inputs</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">root</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{ROOT}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">eventId</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-f="event">{event.id}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">nullifier = Poseidon(nullifierKey, eventId)</span><em class="zw-tag">PUBLIC</em>
+            <span class="v wrap" data-f="nf">{nullifierOf(sel, event.id)}</span>
+          </div>
+          <div class="zw-proof" data-proof>
+            <span class="pi">π</span><span>Groth16 proof</span><small>"I own a leaf under this root"</small>
+          </div>
+          <span class="zw-check no" data-noproof hidden>no proof: there's no valid witness</span>
+
+          <div class="zw-box zml-gate">
+            <span class="zw-box-title"><code>EventGate</code> · <span data-gate-event>{event.label}</span></span>
+            <span class="zml-rule">Checks the root and event, refuses a used nullifier, verifies the proof, then records the nullifier.</span>
+            <span class="zml-used-title">Used nullifiers</span>
+            <ul class="zml-used" data-used>
+              <li class="zml-none">none yet</li>
+            </ul>
+            <div class="zml-actions">
+              <button type="button" class="zw-btn zml-claim" data-claim>Claim entry</button>
+              <button type="button" class="zw-btn" data-reset>Reset gates</button>
+            </div>
+            <span class="zw-check" data-claim-result hidden></span>
+          </div>
+        </section>
+      </div>
+
+      <p class="zml-live" aria-live="polite" data-live>
+        Member #{sel} can recompute the published root from their leaf and 3 sibling hashes, so they
+        can prove "I'm on the list". The gate will learn the root, {event.label} and a nullifier, but
+        not which leaf.
+      </p>
+    </div>
+
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays on the member's device</span>
+      <span><em class="zw-tag public">PUBLIC</em> the gate sees it</span>
+      <span>Drawn with 8 slots; the tutorial's tree has depth 4 (16 slots, 4 sibling hashes). Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import {
+    EVENTS,
+    TREE,
+    TUTORIAL_MEMBER,
+    leafOf,
+    nullifierKey,
+    nullifierOf,
+    pathOf,
+    recompute,
+    trapdoor,
+  } from './merkle-data';
+
+  document.querySelectorAll<HTMLElement>('.zml').forEach((root) => {
+    initWalkthrough(root);
+
+    type Who = number | 'out';
+    let who: Who = TUTORIAL_MEMBER;
+    let event = EVENTS[0];
+    // one EventGate per event, each with its own spentNullifiers
+    const used = new Map<string, { nf: string; who: number }[]>(EVENTS.map((e) => [e.id, []]));
+    let lastResult: { ok: boolean; text: string } | null = null;
+
+    const $ = <T extends Element = HTMLElement>(sel: string) => root.querySelector<T>(sel as string) as T | null;
+    const setText = (sel: string, text: string) => {
+      const el = $(sel);
+      if (el) el.textContent = text;
+    };
+    const side = (bit: number) => (bit === 0 ? "you're left" : "you're right");
+    const top = TREE.length - 1;
+    const publishedRoot = TREE[top][0];
+
+    const paintTree = () => {
+      root.querySelectorAll('.zml-tree .t-node, .zml-tree .t-edge').forEach((el) =>
+        el.classList.remove('sel', 'on-path', 'sib', 'borrowed', 'mismatch'),
+      );
+      root.querySelectorAll('.zml-tree .t-badge').forEach((el) => (el.textContent = ''));
+      const at = (kind: string, l: number, i: number) => root.querySelector(`.zml-tree .${kind}[data-l="${l}"][data-i="${i}"]`);
+      // an outsider borrows member #2's path, as in the tutorial
+      const index = who === 'out' ? TUTORIAL_MEMBER : who;
+      for (let l = 0; l <= top; l++) {
+        const mine = index >> l;
+        if (who !== 'out') {
+          if (l === 0) at('t-node', 0, mine)?.classList.add('sel');
+          else at('t-node', l, mine)?.classList.add('on-path');
+          if (l < top) at('t-edge', l, mine)?.classList.add('on-path');
+        }
+        if (l < top) {
+          const sib = at('t-node', l, mine ^ 1);
+          sib?.classList.add(who === 'out' ? 'borrowed' : 'sib');
+          const badge = sib?.querySelector('.t-badge');
+          if (badge) badge.textContent = String(l + 1);
+        }
+      }
+      if (who === 'out') at('t-node', top, 0)?.classList.add('mismatch');
+    };
+
+    const narrate = () => {
+      if (who === 'out') {
+        return "Someone not on the list has a leaf that isn't in the tree. Even borrowing member #2's path, their leaf hashes up to a different root, so there's no valid witness and no proof. The tutorial's outsider gets a constraint violation.";
+      }
+      const nf = nullifierOf(who, event.id);
+      if (lastResult) {
+        return lastResult.ok
+          ? `Admitted. The gate recorded this nullifier for ${event.label}. It still doesn't know which member it belongs to.`
+          : `Refused. Same member, same event, same nullifier: it's already in the gate's list. The proof is still valid; the gate's memory is what stops the repeat.`;
+      }
+      const other = EVENTS.find((e) => e.id !== event.id && used.get(e.id)?.some((u) => u.who === who));
+      const base = `Member #${who} can recompute the published root from their leaf and 3 sibling hashes, so they can prove "I'm on the list". The gate will learn the root, ${event.label} and a nullifier, but not which leaf.`;
+      return other && !used.get(event.id)?.some((u) => u.nf === nf)
+        ? `${base} They already came to ${other.label}, but here their nullifier is different and unrelated, so nobody can link the two visits.`
+        : base;
+    };
+
+    const render = () => {
+      root.querySelectorAll<HTMLElement>('[data-member]').forEach((b) => {
+        if (b.tagName === 'BUTTON') b.setAttribute('aria-pressed', String(b.dataset.member === String(who)));
+      });
+      root.querySelectorAll<HTMLElement>('[data-event]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.event === event.id)),
+      );
+      paintTree();
+
+      const index = who === 'out' ? TUTORIAL_MEMBER : who;
+      const path = pathOf(index);
+      const leaf = leafOf(who);
+      const recomputed = recompute(leaf, path);
+      setText('[data-who-label]', who === 'out' ? 'not on the list' : `member #${who}`);
+      setText('[data-f="nk"]', nullifierKey(who));
+      setText('[data-f="td"]', trapdoor(who));
+      setText('[data-f="leaf"]', who === 'out' ? `${leaf} (not in the tree)` : leaf);
+      setText('[data-path-title]', who === 'out' ? "Borrowed: member #2's path" : 'Merkle path · SECRET');
+      const list = $('[data-path]');
+      if (list) {
+        list.replaceChildren(
+          ...path.map((s, n) => {
+            const li = document.createElement('li');
+            const num = Object.assign(document.createElement('span'), { className: 'n', textContent: String(n + 1) });
+            const name = Object.assign(document.createElement('code'), { textContent: s.name });
+            const value = Object.assign(document.createElement('span'), { className: 'hv', textContent: s.value });
+            const where = Object.assign(document.createElement('span'), { className: 'side', textContent: side(s.bit) });
+            li.append(num, name, value, where);
+            return li;
+          }),
+        );
+      }
+      setText(
+        '[data-path-note]',
+        who === 'out'
+          ? "A real member's siblings don't help: they only lead to the root when combined with that member's own leaf."
+          : 'Your Merkle path is these 3 sibling hashes. With them and your leaf you can recompute the root, without saying which leaf is yours.',
+      );
+      const check = $('[data-recompute]');
+      if (check) {
+        const ok = recomputed === publishedRoot;
+        check.textContent = ok
+          ? `leaf + path → ${recomputed}: matches the published root`
+          : `leaf + borrowed path → ${recomputed}: not the published root, so no valid witness`;
+        check.classList.toggle('no', !ok);
+      }
+
+      setText('[data-f="event"]', event.id);
+      setText('[data-f="nf"]', who === 'out' ? '— (no proof to carry it)' : nullifierOf(who, event.id));
+      const proof = $('[data-proof]');
+      const noproof = $('[data-noproof]');
+      if (proof) proof.hidden = who === 'out';
+      if (noproof) noproof.hidden = who !== 'out';
+
+      setText('[data-gate-event]', event.label);
+      const usedHere = used.get(event.id) ?? [];
+      const ul = $('[data-used]');
+      if (ul) {
+        ul.replaceChildren(
+          ...(usedHere.length
+            ? usedHere.map((u) => {
+                const li = document.createElement('li');
+                const code = Object.assign(document.createElement('code'), { textContent: u.nf });
+                const tag = Object.assign(document.createElement('span'), { className: 'owner', textContent: `#${u.who}` });
+                tag.dataset.when = 'insider';
+                li.append(code, tag);
+                return li;
+              })
+            : [Object.assign(document.createElement('li'), { className: 'zml-none', textContent: 'none yet' })]),
+        );
+      }
+      const claim = $<HTMLButtonElement>('[data-claim]');
+      if (claim) {
+        claim.disabled = who === 'out';
+        const mine = who !== 'out' && usedHere.some((u) => u.nf === nullifierOf(who, event.id));
+        claim.textContent = who === 'out' ? 'No proof to claim with' : mine ? 'Claim again' : 'Claim entry';
+      }
+      const result = $('[data-claim-result]');
+      if (result) {
+        result.hidden = !lastResult;
+        if (lastResult) {
+          result.textContent = lastResult.text;
+          result.classList.toggle('no', !lastResult.ok);
+        }
+      }
+      setText('[data-live]', narrate());
+    };
+
+    const pick = (next: Who) => {
+      who = next;
+      lastResult = null;
+      render();
+    };
+    root.querySelectorAll<HTMLElement>('button[data-member]').forEach((b) =>
+      b.addEventListener('click', () => pick(b.dataset.member === 'out' ? 'out' : Number(b.dataset.member))),
+    );
+    root.querySelectorAll<SVGGElement>('.zml-tree .t-node.member').forEach((g) =>
+      g.addEventListener('click', () => pick(Number(g.dataset.member))),
+    );
+    root.querySelectorAll<HTMLElement>('[data-event]').forEach((b) =>
+      b.addEventListener('click', () => {
+        event = EVENTS.find((e) => e.id === b.dataset.event) ?? EVENTS[0];
+        lastResult = null;
+        render();
+      }),
+    );
+    $('[data-claim]')?.addEventListener('click', () => {
+      if (who === 'out') return;
+      const nf = nullifierOf(who, event.id);
+      const list = used.get(event.id) ?? [];
+      if (list.some((u) => u.nf === nf)) {
+        lastResult = { ok: false, text: 'refused: this nullifier is already used' };
+      } else {
+        list.push({ nf, who });
+        used.set(event.id, list);
+        lastResult = { ok: true, text: 'admitted: nullifier recorded' };
+      }
+      render();
+    });
+    $('[data-reset]')?.addEventListener('click', () => {
+      used.forEach((list) => (list.length = 0));
+      lastResult = null;
+      render();
+    });
+
+    render();
+  });
+</script>
+
+<style>
+  .zml-body {
+    display: grid;
+    gap: 0.85em;
+    padding: 0.9em 1em 1em;
+    background:
+      radial-gradient(40em 14em at 50% -6em, color-mix(in srgb, var(--zw-public) 7%, transparent), transparent 70%),
+      var(--zw-bg);
+  }
+
+  .zml-caption {
+    margin: 0;
+    max-width: 70ch;
+    font-size: 0.9em;
+    color: var(--zw-text-2);
+  }
+
+  .zml-caption b {
+    color: var(--zw-text);
+  }
+
+  .zml-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em 1.4em;
+  }
+
+  .zml-ctl {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45em;
+  }
+
+  .zml-ctl-label {
+    font: 600 0.7em var(--zw-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zml-events button[aria-pressed='true'] {
+    color: var(--zw-bg);
+    background: var(--zw-public);
+  }
+
+  /* ---- tree */
+
+  .zml-tree {
+    width: 100%;
+    height: auto;
+    max-height: 19em;
+  }
+
+  .zml-tree .t-edge {
+    stroke: var(--zw-line);
+    stroke-width: 2.5;
+    transition:
+      stroke 0.25s,
+      stroke-width 0.25s;
+  }
+
+  .zml-tree .t-node circle {
+    fill: var(--zw-bg);
+    stroke: var(--zw-muted);
+    stroke-width: 2.5;
+    transition:
+      fill 0.25s,
+      stroke 0.25s;
+  }
+
+  .zml-tree .t-name {
+    font: 600 13px var(--zw-mono);
+    text-anchor: middle;
+    dominant-baseline: central;
+    fill: var(--zw-text-2);
+    pointer-events: none;
+  }
+
+  .zml-tree .t-node.empty circle {
+    stroke: var(--zw-line);
+    stroke-dasharray: 4 4;
+  }
+
+  .zml-tree .t-node.empty .t-name {
+    fill: var(--zw-muted);
+  }
+
+  .zml-tree .t-node.member {
+    cursor: pointer;
+  }
+
+  .zml-tree .t-node.member:hover circle {
+    stroke: var(--zw-secret);
+  }
+
+  .zml-tree .t-cap {
+    font: 600 12px var(--zw-mono);
+    text-anchor: middle;
+    fill: var(--zw-muted);
+  }
+
+  .zml-tree .t-published {
+    font: 600 12px var(--zw-mono);
+    fill: var(--zw-public);
+  }
+
+  .zml-tree .t-mismatch-tag {
+    display: none;
+    font: 700 12px var(--zw-mono);
+    text-anchor: end;
+    fill: var(--zw-bad);
+  }
+
+  .zml-tree .t-badge {
+    font: 700 12px var(--zw-mono);
+    fill: var(--zw-secret);
+    pointer-events: none;
+  }
+
+  /* member's view: your leaf, the path to the root, and the numbered siblings */
+  .zw:not([data-view='public']) .zml-tree .t-node.sel circle {
+    fill: var(--zw-secret);
+    stroke: var(--zw-secret);
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-node.sel .t-name {
+    fill: #fff;
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-node.on-path circle {
+    stroke: var(--zw-secret);
+    stroke-width: 3.5;
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-edge.on-path {
+    stroke: var(--zw-secret);
+    stroke-width: 5;
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-node.sib circle {
+    fill: color-mix(in srgb, var(--zw-secret) 22%, var(--zw-bg));
+    stroke: var(--zw-secret);
+    stroke-dasharray: 4 3;
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-node.borrowed circle {
+    fill: var(--zw-warn-bg);
+    stroke: var(--sl-color-orange);
+    stroke-dasharray: 4 3;
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-node.borrowed .t-badge {
+    fill: var(--zw-warn-ink);
+  }
+
+  /* the root is public: it stays teal whatever else is highlighted */
+  .zml-tree .t-node.root circle,
+  .zw:not([data-view='public']) .zml-tree .t-node.root.on-path circle {
+    fill: var(--zw-public);
+    stroke: var(--zw-public);
+  }
+
+  .zml-tree .t-node.root .t-name {
+    fill: var(--zw-bg);
+  }
+
+  .zw:not([data-view='public']) .zml-tree .t-node.root.mismatch circle {
+    stroke: var(--zw-bad);
+    stroke-width: 5;
+  }
+
+  .zw:not([data-view='public']) .zml-tree:has(.t-node.mismatch) .t-mismatch-tag {
+    display: inline;
+  }
+
+  .zw[data-view='public'] .zml-tree .t-badge {
+    display: none;
+  }
+
+  /* ---- panels */
+
+  .zml-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.8em;
+  }
+
+  .zml-path {
+    display: grid;
+    gap: 0.3em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8em;
+  }
+
+  .zml-path :global(li) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2em 0.45em;
+  }
+
+  .zml-path :global(.n) {
+    display: grid;
+    place-items: center;
+    width: 1.5em;
+    height: 1.5em;
+    font: 700 0.85em var(--zw-mono);
+    color: #fff;
+    background: var(--zw-secret);
+    border-radius: 50%;
+  }
+
+  .zml-path :global(.hv) {
+    font: 600 1em var(--zw-mono);
+  }
+
+  .zml-path :global(.side) {
+    font-size: 0.9em;
+    color: var(--zw-muted);
+  }
+
+  .zml-rule,
+  .zml-used-title {
+    font-size: 0.78em;
+    color: var(--zw-text-2);
+  }
+
+  .zml-used-title {
+    font: 600 0.7em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zml-used {
+    display: grid;
+    gap: 0.25em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8em;
+  }
+
+  .zml-used :global(li) {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.4em;
+    padding: 0.2em 0.45em;
+    border: 1px solid var(--zw-line);
+    border-radius: 6px;
+  }
+
+  .zml-used :global(li.zml-none) {
+    color: var(--zw-muted);
+    font-style: italic;
+    border-style: dashed;
+  }
+
+  .zml-used :global(.owner) {
+    font: 600 0.9em var(--zw-mono);
+    color: var(--zw-secret);
+  }
+
+  .zml-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+  }
+
+  .zml-claim:not(:disabled) {
+    color: var(--zw-bg);
+    background: var(--zw-public);
+    border-color: var(--zw-public);
+  }
+
+  .zml-live {
+    margin: 0;
+    padding: 0.7em 0.9em;
+    max-width: none;
+    font-size: 0.92em;
+    color: var(--zw-text-2);
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 10px;
+  }
+
+  @container (max-width: 560px) {
+    .zml-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

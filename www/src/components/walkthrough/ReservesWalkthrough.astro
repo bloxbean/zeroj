@@ -1,0 +1,358 @@
+---
+// Proof of reserves, step by step: snapshot -> prove -> attest on-chain -> customers verify -> repeat.
+// Values follow the proof-of-reserves demo (reserves-data.ts). Hashes are illustrative stand-ins
+// (see fakeHash), not Poseidon outputs.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import {
+  ACCOUNTS,
+  DECLARED_RESERVES,
+  RESERVE_RANGE,
+  SLOTS,
+  TOTAL_LIABILITIES,
+  TREE_DEPTH,
+  ada,
+  isSolvent,
+} from './reserves-data';
+
+const liabilitiesRoot = fakeHash(`liabilities:${ACCOUNTS.map((a) => `${a.id}=${a.ada}`).join(',')}`);
+const alice = ACCOUNTS[0];
+const aliceLeaf = fakeHash(`leaf:${alice.id}:${alice.ada}`);
+const solvent = isSolvent(DECLARED_RESERVES);
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Proof of reserves, step by step">
+  <div class="zw zrs" data-total="5" data-view="insider" data-solvent={solvent ? '1' : '0'}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Proof of reserves · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Custodian's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- customer -->
+      <section class="zw-actor" data-hl="4" aria-label="Customer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Customer</span>
+          <span class="zw-actor-sub" data-when="insider">{alice.name}</span>
+          <span class="zw-actor-sub" data-when="public">identity hidden</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-hl="1">
+          <span class="k">balance</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{ada(alice.ada)}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="4-5" data-hl="4">
+          <span class="k">leaf = Poseidon(accountId, balance)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{aliceLeaf}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="4-5" data-hl="4">
+          <span class="k">Merkle path</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{TREE_DEPTH} sibling hashes</span><span class="mask">████████</span></span>
+        </div>
+        <span class="zw-check" data-show="4-5">hashes up to <code>liabilitiesRoot</code>: counted, at {ada(alice.ada)}</span>
+        <p class="zw-note" data-show="1-3">Her balance is one of the leaves.</p>
+        <p class="zw-note" data-show="4-5">Only customers who check can catch a missing or understated account.</p>
+      </section>
+
+      <div class="zw-wire zrs-w1" data-hl="1,4" aria-hidden="true">
+        <span class="arrow" data-show="1">→</span>
+        <span class="arrow" data-show="4">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">snapshot</span>
+        <span class="zw-msg" data-show="4">your path</span>
+      </div>
+
+      <!-- custodian -->
+      <section class="zw-actor" data-hl="1-2" aria-label="Custodian">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Custodian</span>
+          <span class="zw-actor-sub" data-when="insider">the books</span>
+          <span class="zw-actor-sub" data-when="public">books hidden</span>
+        </div>
+        <div class="zw-box zrs-books" data-kind="secret">
+          <span class="zw-box-title">{ACCOUNTS.length} accounts · {SLOTS} slots</span>
+          <em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <ul class="zrs-accounts">
+            {ACCOUNTS.map((a) => (
+              <li class={a.id === alice.id ? 'you' : ''}>
+                <span class="real">{a.name}</span><span class="mask">████</span>
+                <span class="real amt">{a.ada.toLocaleString('en-US')}</span><span class="mask">████</span>
+              </li>
+            ))}
+          </ul>
+          <p class="zw-note">+ {SLOTS - ACCOUNTS.length} empty slots, balance 0</p>
+        </div>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">liabilitiesRoot</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{liabilitiesRoot}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-5" data-hl="2">
+          <span class="k">totalLiabilities</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{ada(TOTAL_LIABILITIES)}</span>
+        </div>
+        <div class="zw-row zrs-reserves" data-kind="public" data-show="2-5" data-hl="2">
+          <span class="k">totalReserves (declared)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-reserves-out>{ada(DECLARED_RESERVES)}</span>
+          <input
+            type="range"
+            id="zrs-reserves"
+            min={RESERVE_RANGE.min}
+            max={RESERVE_RANGE.max}
+            step={RESERVE_RANGE.step}
+            value={DECLARED_RESERVES}
+            data-reserves
+            data-when="insider"
+            aria-label="Declared reserves in ADA"
+          />
+        </div>
+        <div class="zrs-prove" data-show="2" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Proving over the private balances</span>
+        </div>
+        <div class="zw-box" data-show="2">
+          <span class="zw-check">every balance fits in 64 bits (no negatives)</span>
+          <span class="zw-check">the leaves rebuild <code>liabilitiesRoot</code></span>
+          <span class="zw-check">they add up to <code>totalLiabilities</code></span>
+          <span class={solvent ? 'zw-check' : 'zw-check no'} data-solvent-check>
+            {solvent ? 'isSolvent = 1: reserves cover liabilities' : "isSolvent = 0: reserves don't cover liabilities"}
+          </span>
+        </div>
+        <div class="zw-proof" data-show="2-3">
+          <span class="pi">π</span><span>Groth16 proof</span><small>192 bytes</small>
+        </div>
+      </section>
+
+      <div class="zw-wire zrs-w2" data-hl="3" aria-hidden="true">
+        <span class="arrow" data-show="3">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3">π + datum</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor zrs-chain" data-hl="3,5" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">attestation UTxO</span>
+        </div>
+        <p class="zw-note" data-show="1-2">Waiting for an attestation.</p>
+        <div class="zw-box" data-show="3-5">
+          <span class="zw-box-title"><code>ReserveAttestationValidator</code></span>
+          <dl class="zrs-datum">
+            <dt>totalReserves</dt><dd data-datum-reserves>{DECLARED_RESERVES.toLocaleString('en-US')}</dd>
+            <dt>liabilitiesRoot</dt><dd>{liabilitiesRoot}</dd>
+            <dt>totalLiabilities</dt><dd>{TOTAL_LIABILITIES.toLocaleString('en-US')}</dd>
+            <dt>isSolvent</dt><dd data-datum-solvent>{solvent ? '1' : '0'}</dd>
+          </dl>
+          <span class="zw-check" data-show="3">Groth16 proof valid</span>
+          <span class={solvent ? 'zw-check' : 'zw-check no'} data-show="3" data-verdict>
+            {solvent ? 'isSolvent = 1: attestation accepted' : 'isSolvent = 0: attestation rejected'}
+          </span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">Next period</span>
+          <span class="zrs-period">A fresh snapshot and proof keep the attestation current.</span>
+          <span class="zrs-period">Bind the period on-chain too, or an old proof can be replayed. The demo doesn't.</span>
+        </div>
+        <p class="zw-note zrs-caution" data-show="3-5">
+          Reserves are declared, not proven: check holdings at known addresses, or trust an attestation.
+        </p>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Snapshot</p>
+        <p>The custodian takes every customer balance at one moment and builds a Poseidon Merkle tree with one leaf per account, <code>Poseidon(accountId, balance)</code>. Only the root is published.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Prove</p>
+        <p>The proof shows that every balance is a non-negative 64-bit number, that the leaves rebuild the published root, that they add up to exactly the total, and whether the declared reserves cover it. Drag the reserves below {ada(TOTAL_LIABILITIES)} to see what changes.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Attest on-chain</p>
+        <p>The custodian spends an attestation UTxO whose datum holds the four public inputs. The validator verifies the proof and requires <code>isSolvent = 1</code>, so an honest proof of insolvency is rejected. A proof claiming solvency for these balances can't be made.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Customers verify</p>
+        <p>Alice gets the Merkle path for her own leaf and checks, off-chain, that it hashes up to the published root. If her account had been left out or understated, she would notice. No other balance is revealed to her.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Repeat</p>
+        <p>A fresh proof every period keeps the attestation current. The reserves figure still needs its own evidence, because the proof only shows that the declared number covers the liabilities.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Snapshot</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Prove</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Attest</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Customers verify</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Repeat</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays in the custodian's books</span>
+      <span><em class="zw-tag public">PUBLIC</em> in the attestation datum</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { TOTAL_LIABILITIES, ada, isSolvent } from './reserves-data';
+
+  document.querySelectorAll<HTMLElement>('.zrs').forEach((root) => {
+    initWalkthrough(root);
+    const slider = root.querySelector<HTMLInputElement>('[data-reserves]');
+    const chain = root.querySelector<HTMLElement>('.zrs-chain');
+    const wire = root.querySelector<HTMLElement>('.zrs-w2');
+
+    // An insolvent attestation fails at step 3: the proof is valid, but isSolvent is 0.
+    const syncRejection = () => {
+      const bad = root.dataset.step === '3' && root.dataset.solvent === '0';
+      chain?.toggleAttribute('data-bad-on', bad);
+      wire?.toggleAttribute('data-bad-on', bad);
+    };
+
+    const setReserves = (reserves: number) => {
+      const ok = isSolvent(reserves);
+      root.dataset.solvent = ok ? '1' : '0';
+      const out = root.querySelector('[data-reserves-out]');
+      if (out) out.textContent = ada(reserves);
+      const datum = root.querySelector('[data-datum-reserves]');
+      if (datum) datum.textContent = reserves.toLocaleString('en-US');
+      const flag = root.querySelector('[data-datum-solvent]');
+      if (flag) flag.textContent = ok ? '1' : '0';
+      const check = root.querySelector<HTMLElement>('[data-solvent-check]');
+      if (check) {
+        check.textContent = ok
+          ? 'isSolvent = 1: reserves cover liabilities'
+          : `isSolvent = 0: short by ${ada(TOTAL_LIABILITIES - reserves)}`;
+        check.classList.toggle('no', !ok);
+      }
+      const verdict = root.querySelector<HTMLElement>('[data-verdict]');
+      if (verdict) {
+        verdict.textContent = ok ? 'isSolvent = 1: attestation accepted' : 'isSolvent = 0: attestation rejected';
+        verdict.classList.toggle('no', !ok);
+      }
+      syncRejection();
+    };
+
+    slider?.addEventListener('input', () => setReserves(Number(slider.value)));
+    root.addEventListener('zw:step', syncRejection);
+    if (slider) setReserves(Number(slider.value));
+  });
+</script>
+
+<style>
+  .zrs-books > .zw-tag {
+    justify-self: start;
+  }
+
+  .zrs-accounts {
+    display: grid;
+    gap: 0.15em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: 500 0.76em var(--zw-mono);
+  }
+
+  .zrs-accounts li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5em;
+    color: var(--zw-text-2);
+  }
+
+  .zrs-accounts .amt {
+    font-weight: 600;
+    color: var(--zw-text);
+  }
+
+  .zw:not([data-view='public']) .zrs-accounts li.you {
+    color: var(--zw-secret);
+  }
+
+  .zrs-accounts .mask {
+    display: none;
+  }
+
+  .zrs-reserves input[type='range'] {
+    flex-basis: 100%;
+    width: 100%;
+    margin: 0.35em 0 0.1em;
+    accent-color: var(--zw-public);
+    cursor: pointer;
+  }
+
+  .zw[data-solvent='0'] .zrs-reserves .v {
+    color: var(--zw-bad-ink);
+  }
+
+  .zrs-prove {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zrs-datum {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.15em 0.5em;
+    margin: 0;
+    font: 500 0.74em var(--zw-mono);
+  }
+
+  .zrs-datum dt {
+    overflow-wrap: anywhere;
+    color: var(--zw-muted);
+  }
+
+  .zrs-datum dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .zw[data-solvent='0'] .zrs-datum [data-datum-solvent] {
+    color: var(--zw-bad-ink);
+  }
+
+  .zrs-period {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zrs-caution {
+    padding: 0.4em 0.55em;
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border-radius: 8px;
+  }
+
+  .zw[data-step='4'] .zrs-w1 .zw-wire-line::after {
+    animation-name: zw-travel-left;
+  }
+</style>

@@ -1,0 +1,427 @@
+---
+// "A circuit is a system of equations": the page's x³ + x + 5 = 35 example. The reader slides x and
+// the witness fills in; then edits wires by hand and sees which constraint breaks. Values stay small,
+// so ordinary integer arithmetic is the field arithmetic here.
+import './walkthrough.css';
+
+const X0 = 3;
+const OUT = 35;
+const v1 = X0 * X0;
+const v2 = v1 * X0;
+const cells = [
+  { idx: 0, name: 'one', kind: 'const', val: '1', note: 'constant' },
+  { idx: 1, name: 'out', kind: 'public', val: String(OUT), note: 'public' },
+  { idx: 2, name: 'x', kind: 'secret', val: String(X0), wire: 'x' },
+  { idx: 3, name: 'v1', kind: 'secret', val: String(v1), wire: 'v1' },
+  { idx: 4, name: 'v2', kind: 'secret', val: String(v2), wire: 'v2' },
+];
+---
+
+<figure class="zw-frame not-content" aria-label="The circuit for x³ + x + 5 = 35 and its witness">
+  <div class="zw zuc-w" data-total="1" data-view="insider" data-mode="honest">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Circuit · <b>x³ + x + 5 = 35</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Prover's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Verifier's view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zuc-caption">
+      <b>What you're seeing:</b> the circuit is just three equations. The prover's job is to fill in a
+      value for every wire so that all three hold at once. Slide <code>x</code> to find the answer,
+      then try to cheat.
+    </p>
+
+    <div class="zuc-grid">
+      <section class="zw-actor" aria-label="Witness">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Witness</span>
+          <span class="zw-actor-sub">every wire, filled in</span>
+        </div>
+
+        <label class="zuc-x" data-when="insider">
+          <span>x = <b data-x-out>{X0}</b></span>
+          <input type="range" id="zuc-w-x" min="0" max="6" step="1" value={X0} data-x aria-label="Value of x" />
+        </label>
+
+        <ol class="zuc-cells" aria-label="The witness array">
+          {cells.map((c) => (
+            <li class="zuc-cell" data-kind={c.kind}>
+              <span class="idx">[{c.idx}]</span>
+              <span class="name">{c.name}</span>
+              <span class="real">
+                <span class="zuc-auto" data-cell={c.wire}>{c.val}</span>
+                {(c.wire === 'v1' || c.wire === 'v2') && (
+                  <input class="zuc-edit" type="number" min="0" max="99999" step="1" value={c.val}
+                    data-edit={c.wire} aria-label={`Hand-picked value for ${c.name}`} />
+                )}
+              </span>
+              <span class="mask" aria-hidden="true">██</span>
+              {c.kind === 'secret' ? (
+                <em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              ) : (
+                <em class={c.kind === 'public' ? 'zw-tag public' : 'zw-tag zuc-const'}>{c.kind === 'public' ? 'PUBLIC' : 'CONST'}</em>
+              )}
+            </li>
+          ))}
+        </ol>
+
+        <label class="zuc-cheat" data-when="insider">
+          <input type="checkbox" id="zuc-w-cheat" data-cheat />
+          <span class="zuc-switch" aria-hidden="true"></span>
+          <span>Try to cheat: pick <code>v1</code> and <code>v2</code> by hand</span>
+        </label>
+      </section>
+
+      <section class="zw-actor" aria-label="Constraints">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Constraints</span>
+          <span class="zw-actor-sub">all three must hold</span>
+        </div>
+        <ol class="zuc-constraints">
+          <li data-c="1">
+            <code class="eq">v1 = x · x</code>
+            <span class="sub" data-when="insider" data-sub="1">{v1} = {X0} · {X0}</span>
+            <span class="zw-check" data-when="insider" data-mark="1">holds</span>
+          </li>
+          <li data-c="2">
+            <code class="eq">v2 = v1 · x</code>
+            <span class="sub" data-when="insider" data-sub="2">{v2} = {v1} · {X0}</span>
+            <span class="zw-check" data-when="insider" data-mark="2">holds</span>
+          </li>
+          <li data-c="3">
+            <code class="eq">out = v2 + x + 5</code>
+            <span class="sub" data-when="insider" data-sub="3">{OUT} = {v2} + {X0} + 5</span>
+            <span class="zw-check" data-when="insider" data-mark="3">holds</span>
+          </li>
+        </ol>
+        <p class="zw-note" data-when="public">
+          The equations are public: they're the circuit. The verifier never sees <code>x</code>,
+          <code>v1</code> or <code>v2</code>, only <code>out = 35</code> and a proof that some values fit all three.
+        </p>
+      </section>
+    </div>
+
+    <div class="zuc-result" data-ok="true" aria-live="polite">
+      <span data-when="insider" data-result-insider>
+        All three equations hold, so <code>[1, 35, 3, 9, 27]</code> is a valid witness and the prover can make a proof.
+      </span>
+      <span data-when="public" data-result-public>
+        Proof valid. The verifier learns that the prover knows an <code>x</code> with x³ + x + 5 = 35, and nothing else.
+      </span>
+    </div>
+
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays with the prover</span>
+      <span><em class="zw-tag public">PUBLIC</em> part of the statement</span>
+      <span>Small numbers here, so nothing wraps around the field.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  const OUT = 35;
+
+  document.querySelectorAll<HTMLElement>('.zuc-w').forEach((root) => {
+    initWalkthrough(root);
+    const xInput = root.querySelector<HTMLInputElement>('[data-x]');
+    const cheat = root.querySelector<HTMLInputElement>('[data-cheat]');
+    const edits = {
+      v1: root.querySelector<HTMLInputElement>('[data-edit="v1"]'),
+      v2: root.querySelector<HTMLInputElement>('[data-edit="v2"]'),
+    };
+    const set = (sel: string, text: string) => {
+      const el = root.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+    const num = (el: HTMLInputElement | null, fallback: number) => {
+      const n = Math.trunc(Number(el?.value));
+      return Number.isFinite(n) ? Math.min(Math.max(n, 0), 99999) : fallback;
+    };
+
+    const update = () => {
+      const x = Number(xInput?.value ?? 3);
+      const cheating = cheat?.checked ?? false;
+      root.dataset.mode = cheating ? 'cheat' : 'honest';
+      const honestV1 = x * x;
+      const v1 = cheating ? num(edits.v1, honestV1) : honestV1;
+      const honestV2 = v1 * x;
+      const v2 = cheating ? num(edits.v2, honestV2) : honestV2;
+      const sum = v2 + x + 5;
+      const ok = [v1 === x * x, v2 === v1 * x, OUT === sum];
+
+      set('[data-x-out]', String(x));
+      set('[data-cell="x"]', String(x));
+      set('[data-cell="v1"]', String(v1));
+      set('[data-cell="v2"]', String(v2));
+      set('[data-sub="1"]', ok[0] ? `${v1} = ${x} · ${x}` : `${v1} ≠ ${x} · ${x} = ${x * x}`);
+      set('[data-sub="2"]', ok[1] ? `${v2} = ${v1} · ${x}` : `${v2} ≠ ${v1} · ${x} = ${v1 * x}`);
+      set('[data-sub="3"]', ok[2] ? `${OUT} = ${v2} + ${x} + 5` : `${OUT} ≠ ${v2} + ${x} + 5 = ${sum}`);
+      ok.forEach((good, i) => {
+        const mark = root.querySelector(`[data-mark="${i + 1}"]`);
+        if (mark) {
+          mark.textContent = good ? 'holds' : 'fails';
+          mark.classList.toggle('no', !good);
+        }
+        root.querySelector(`[data-c="${i + 1}"]`)?.toggleAttribute('data-broken', !good);
+      });
+
+      const all = ok.every(Boolean);
+      const first = ok.findIndex((g) => !g) + 1;
+      const result = root.querySelector<HTMLElement>('.zuc-result');
+      if (result) result.dataset.ok = String(all);
+      const insider = root.querySelector('[data-result-insider]');
+      const pub = root.querySelector('[data-result-public]');
+      if (insider) {
+        if (all && !cheating) {
+          insider.innerHTML = `All three equations hold, so <code>[1, ${OUT}, ${x}, ${v1}, ${v2}]</code> is a valid witness and the prover can make a proof.`;
+        } else if (all) {
+          insider.textContent = 'All three still hold: these are the honest values. Change v1 or v2 and see what breaks.';
+        } else if (!cheating) {
+          insider.innerHTML = `x = ${x} fills every wire honestly, but <code>v2 + x + 5</code> comes to ${sum}, not ${OUT}. Constraint 3 fails, so there's no proof that ${x} is the answer.`;
+        } else {
+          insider.innerHTML = `Constraint ${first} fails. The circuit doesn't run your code or care how you got the numbers; it only checks that every equation holds. No valid witness, no proof.`;
+        }
+      }
+      if (pub) {
+        pub.innerHTML = all
+          ? `Proof valid. The verifier learns that the prover knows an <code>x</code> with x³ + x + 5 = ${OUT}, and nothing else.`
+          : 'No valid witness exists for these values, so no proof can be made and there is nothing to accept.';
+      }
+    };
+
+    xInput?.addEventListener('input', update);
+    cheat?.addEventListener('change', () => {
+      // Start hand-editing from the honest values for the current x.
+      const x = Number(xInput?.value ?? 3);
+      if (edits.v1) edits.v1.value = String(x * x);
+      if (edits.v2) edits.v2.value = String(x * x * x);
+      update();
+    });
+    Object.values(edits).forEach((el) => el?.addEventListener('input', update));
+    update();
+  });
+</script>
+
+<style>
+  .zuc-caption {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    max-width: 70ch;
+    font-size: 0.92em;
+    color: var(--zw-text-2);
+  }
+
+  .zuc-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.9em;
+    padding: 0.9em 1em;
+  }
+
+  .zuc-x {
+    display: grid;
+    gap: 0.3em;
+    font: 600 0.9em var(--zw-mono);
+  }
+
+  .zuc-x b {
+    color: var(--zw-secret);
+  }
+
+  .zuc-x input {
+    width: 100%;
+    accent-color: var(--zw-secret);
+    cursor: pointer;
+  }
+
+  .zuc-cells {
+    display: grid;
+    gap: 0.3em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zuc-cell {
+    display: grid;
+    grid-template-columns: 2.2em 2.4em minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.3em 0.5em;
+    font-family: var(--zw-mono);
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 8px;
+  }
+
+  .zuc-cell .idx {
+    font-size: 0.72em;
+    color: var(--zw-muted);
+  }
+
+  .zuc-cell .name {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zuc-cell .real,
+  .zuc-cell .mask {
+    font-weight: 600;
+    font-size: 0.9em;
+  }
+
+  .zuc-cell .mask {
+    display: none;
+  }
+
+  /* verifier's view: secret wires are masked (stated here too, so it doesn't depend on CSS order) */
+  .zuc-w[data-view='public'] .zuc-cell[data-kind='secret'] .real {
+    display: none;
+  }
+
+  .zuc-w[data-view='public'] .zuc-cell[data-kind='secret'] .mask {
+    display: inline;
+    color: var(--zw-secret);
+    opacity: 0.6;
+  }
+
+  .zuc-const {
+    color: var(--zw-muted);
+    border: 1px solid var(--zw-line);
+  }
+
+  .zuc-edit {
+    width: 5.5em;
+    padding: 0.1em 0.3em;
+    font: inherit;
+    color: var(--zw-text);
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-secret);
+    border-radius: 5px;
+  }
+
+  .zuc-w[data-mode='honest'] .zuc-edit,
+  .zuc-w[data-mode='cheat'] [data-cell='v1'],
+  .zuc-w[data-mode='cheat'] [data-cell='v2'] {
+    display: none;
+  }
+
+  .zuc-cheat {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 0.82em;
+    color: var(--zw-text-2);
+    cursor: pointer;
+  }
+
+  .zuc-cheat input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  .zuc-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.2em;
+    height: 1.25em;
+    background: var(--zw-line);
+    border-radius: 999px;
+    transition: background 0.2s;
+  }
+
+  .zuc-switch::after {
+    content: '';
+    position: absolute;
+    top: 0.15em;
+    left: 0.15em;
+    width: 0.95em;
+    height: 0.95em;
+    background: var(--zw-bg);
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .zuc-cheat input:checked + .zuc-switch {
+    background: var(--zw-bad);
+  }
+
+  .zuc-cheat input:checked + .zuc-switch::after {
+    transform: translateX(0.95em);
+  }
+
+  .zuc-cheat input:focus-visible + .zuc-switch {
+    outline: 2px solid var(--zw-public);
+    outline-offset: 2px;
+  }
+
+  .zuc-constraints {
+    display: grid;
+    gap: 0.45em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zuc-constraints li {
+    display: grid;
+    gap: 0.25em;
+    padding: 0.5em 0.6em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 9px;
+    transition:
+      border-color 0.3s,
+      box-shadow 0.3s;
+  }
+
+  .zuc-constraints li[data-broken] {
+    border-color: var(--zw-bad);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-bad) 18%, transparent);
+  }
+
+  .zuc-constraints .eq {
+    font: 600 0.88em var(--zw-mono);
+  }
+
+  .zuc-constraints .sub {
+    font: 500 0.8em var(--zw-mono);
+    color: var(--zw-text-2);
+    overflow-wrap: anywhere;
+  }
+
+  .zuc-result {
+    margin: 0 1em;
+    padding: 0.7em 0.9em;
+    font-size: 0.9em;
+    color: var(--zw-text);
+    background: color-mix(in srgb, var(--zw-public) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+    border-radius: 10px;
+  }
+
+  .zuc-result[data-ok='false'] {
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border-color: color-mix(in srgb, var(--zw-bad) 45%, transparent);
+  }
+
+  .zuc-w .zw-legend {
+    padding-top: 0.8em;
+  }
+
+  @container (max-width: 560px) {
+    .zuc-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

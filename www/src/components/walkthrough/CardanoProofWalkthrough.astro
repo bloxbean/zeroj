@@ -1,0 +1,470 @@
+---
+// A proof's life on Cardano: bake the key into the script -> lock -> spend -> validate -> the copy
+// problem. Shared by learn/zk-on-cardano, tutorials/verify-on-cardano and guides/verifying/on-chain.
+// Values follow the verify-on-cardano tutorial: statement 3 x b = 33, datum [3, 33], secret b = 11,
+// 5 ADA locked at the generic Groth16BLS12381Verifier. Hashes and addresses are illustrative.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const address = (key: string) => `addr_test1w${fakeHash(`addr:${key}`).slice(2)}`;
+const scriptHash = (key: string) => fakeHash(`script:${key}`);
+const txA = fakeHash('lock-tx-A');
+const txB = fakeHash('lock-tx-B');
+const spendRefA = fakeHash(`spendRef:${txA}#0`);
+const spendRefB = fakeHash(`spendRef:${txB}#0`);
+---
+
+<figure class="zw-frame not-content" aria-label="A proof's life on Cardano, step by step">
+  <div class="zw zoc" data-total="5" data-view="insider" data-key="1" data-tamper="0" data-attack="same" data-stolen="1" data-bind-spend="0">
+    <div class="zw-head">
+      <span class="zw-eyebrow">A proof on Cardano · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Prover's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- ============================================================ your app -->
+      <section class="zw-actor" data-hl="1-3" aria-label="Your app">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Your app</span>
+          <span class="zw-actor-sub">off-chain, Java</span>
+        </div>
+
+        <div class="zw-box" data-show="1">
+          <span class="zw-box-title">Verification key</span>
+          <ul class="zoc-vk">
+            <li><code>vkAlpha</code> 48 B</li>
+            <li><code>vkBeta</code>, <code>vkGamma</code>, <code>vkDelta</code> 96 B each</li>
+            <li><code>vkIc</code> 3 points: one per public input, plus one</li>
+          </ul>
+          <span class="zw-choice" role="group" aria-label="Which key">
+            <button type="button" data-key-btn="1" aria-pressed="true">Key 1</button>
+            <button type="button" data-key-btn="2" aria-pressed="false">Key 2</button>
+          </span>
+        </div>
+
+        <div class="zw-box" data-show="2">
+          <span class="zw-box-title">Lock transaction</span>
+          <span class="zoc-line">pays <b>5 ADA</b> to the script address</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">datum</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">[3, 33]</span>
+          </div>
+        </div>
+
+        <div class="zw-row" data-kind="secret" data-show="3-5" data-hl="3">
+          <span class="k">b, the secret</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">11</span><span class="mask">████████</span></span>
+        </div>
+        <p class="zw-note" data-show="3">Proves 3 × b = 33 without saying b.</p>
+
+        <div class="zw-box zoc-proof" data-show="3-5">
+          <span class="zw-box-title">Proof π · 192 bytes</span>
+          <div class="zoc-chips" aria-label="Proof points">
+            <span><code>piA</code> 48</span>
+            <span><code>piB</code> 96</span>
+            <span><code>piC</code> 48</span>
+          </div>
+          <label class="zoc-switch" data-show="4">
+            <input type="checkbox" data-tamper-toggle />
+            <span class="zoc-switch-ui" aria-hidden="true"></span>
+            <span>Tamper with the proof</span>
+          </label>
+        </div>
+
+        <div class="zw-box zoc-watcher" data-show="5">
+          <span class="zw-box-title">A watcher</span>
+          <span class="zoc-line">sees your redeemer in the mempool and copies it</span>
+          <span class="zw-choice zoc-attack" role="group" aria-label="What the watcher tries">
+            <button type="button" data-attack-btn="same" aria-pressed="true">Race you</button>
+            <button type="button" data-attack-btn="other" aria-pressed="false">Other UTxO</button>
+          </span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1-3" data-bad="5" aria-hidden="true">
+        <span class="arrow" data-show="1-3,5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">key as params</span>
+        <span class="zw-msg" data-show="2">lock 5 ADA</span>
+        <span class="zw-msg" data-show="3">redeemer π</span>
+        <span class="zw-msg" data-show="5">copied π</span>
+      </div>
+
+      <!-- ============================================================ ledger -->
+      <section class="zw-actor" data-hl="1-3" aria-label="Cardano ledger">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">ledger</span>
+        </div>
+
+        <div class="zw-box" data-hl="1">
+          <span class="zw-box-title">Script: verifier + your key</span>
+          <div class="zw-row" data-kind="public" data-hl="1">
+            <span class="k">script hash</span><em class="zw-tag">PUBLIC</em>
+            <span class="v"><span data-key-show="1">{scriptHash('1')}</span><span data-key-show="2">{scriptHash('2')}</span></span>
+          </div>
+          <div class="zw-row" data-kind="public" data-hl="1">
+            <span class="k">address</span><em class="zw-tag">PUBLIC</em>
+            <span class="v"><span data-key-show="1">{address('1')}</span><span data-key-show="2">{address('2')}</span></span>
+          </div>
+        </div>
+
+        <div class="zw-box" data-show="2-5" data-hl="2">
+          <span class="zw-box-title">UTxO <code>{txA}#0</code></span>
+          <span class="zoc-line"><b>5 ADA</b> at the script address</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">datum: public inputs</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">[3, 33]</span>
+          </div>
+        </div>
+
+        <div class="zw-box" data-show="3-4" data-hl="3">
+          <span class="zw-box-title">Your spending transaction</span>
+          <span class="zoc-line">spends <code>{txA}#0</code></span>
+          <span class="zoc-line">redeemer: π, 192 bytes</span>
+          <span class="zoc-line">pays: you</span>
+        </div>
+
+        <div class="zw-box" data-show="5" data-attack-show="other">
+          <span class="zw-box-title">UTxO <code>{txB}#0</code></span>
+          <span class="zoc-line">someone else's 5 ADA, same datum [3, 33]</span>
+        </div>
+
+        <div class="zw-box zoc-copy" data-show="5">
+          <span class="zw-box-title">The watcher's copy</span>
+          <span class="zoc-line" data-attack-show="same">spends <code>{txA}#0</code>, the same UTxO</span>
+          <span class="zoc-line" data-attack-show="other">spends <code>{txB}#0</code></span>
+          <span class="zoc-line">redeemer: your π</span>
+          <span class="zoc-line">pays: <b>the watcher</b></span>
+          <span class="zoc-spendref" data-attack-show="same">spendRef({txA}#0) = the proof's {spendRefA}</span>
+          <span class="zoc-spendref" data-attack-show="other">spendRef({txB}#0) = {spendRefB}, not the proof's {spendRefA}</span>
+        </div>
+      </section>
+
+      <div class="zw-wire zoc-w2" data-hl="4" data-bad="5" aria-hidden="true">
+        <span class="arrow" data-show="4-5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4">tx + datum</span>
+        <span class="zw-msg" data-show="5">the copy</span>
+      </div>
+
+      <!-- ============================================================ validator -->
+      <section class="zw-actor zoc-val" data-hl="4" aria-label="Validator">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Validator</span>
+          <span class="zw-actor-sub">Plutus V3</span>
+        </div>
+
+        <div class="zw-box" data-show="1-3">
+          <span class="zw-box-title"><code>Groth16BLS12381Verifier</code></span>
+          <span class="zoc-line">The key is baked in. It runs only when a transaction tries to spend a UTxO at its address.</span>
+        </div>
+
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title">Every node checks</span>
+          <span class="zw-check" data-tamper-show="0">each public input is in range (below r)</span>
+          <span class="zw-check" data-tamper-show="0">the points are well-formed (canonical, not infinity)</span>
+          <span class="zw-check" data-tamper-show="0">combines the inputs with the key, one multiplication each</span>
+          <span class="zw-check" data-tamper-show="0">pairing check: 4 Miller loops, 1 final check</span>
+          <span class="zw-check no" data-tamper-show="1">a changed proof fails these checks</span>
+        </div>
+        <span class="zw-check" data-show="4" data-tamper-show="0">transaction succeeds: 5 ADA unlocked</span>
+        <span class="zw-check no" data-show="4" data-tamper-show="1">the whole transaction fails: the 5 ADA stay locked</span>
+        <p class="zw-note" data-show="4">About 2.8 billion of the 10 billion CPU units allowed per transaction.</p>
+
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">What your validator checks</span>
+          <span class="zw-check">the proof (the math)</span>
+          <label class="zoc-switch">
+            <input type="checkbox" data-bind="spend" />
+            <span class="zoc-switch-ui" aria-hidden="true"></span>
+            <span>which UTxO is spent</span>
+          </label>
+          <label class="zoc-switch">
+            <input type="checkbox" data-bind="recipient" />
+            <span class="zoc-switch-ui" aria-hidden="true"></span>
+            <span>who gets paid</span>
+          </label>
+        </div>
+        <span class="zw-check warn" data-show="5" data-verdict>accepted: the proof is valid and nothing else is checked</span>
+        <span class="zw-check no" data-show="5" data-outcome>the watcher's copy can land first and take the 5 ADA</span>
+        <p class="zw-note" data-show="5">
+          Your own validator computes these from <code>ScriptContext</code>. The bundled <code>Groth16BLS12381TxOutRefBindingVerifier</code> reads spendRef from its datum, so it can't guard a real UTxO.
+        </p>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Bake in the key</p>
+        <p>The verification key is the public half of the setup. ZeroJ's verifier script takes it as parameters, so the key becomes part of the script: a different key means a different script hash and a different address. Try Key 2.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Lock</p>
+        <p>Someone locks 5 ADA at that address. The datum holds the public inputs, <code>[3, 33]</code>. The statement is "some secret b makes 3 × b = 33".</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Spend</p>
+        <p>To unlock it, you build a transaction that spends the UTxO. Its redeemer carries the proof: three compressed curve points, 48 + 96 + 48 = 192 bytes. The secret b = 11 never goes on-chain.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Validate</p>
+        <p>Every node runs the validator. It checks that the inputs are in range and the points are well-formed, then runs the pairing check with Plutus V3's BLS12-381 builtins. Tamper with the proof and the whole transaction fails.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. The copy problem</p>
+        <p>Your redeemer is public once it reaches the mempool. The generic verifier only checks the math, so a watcher can reuse your proof and pay themselves. A valid proof is not authorization: switch on what your own validator checks and see which copies it stops.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Key</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Lock</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Spend</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Validate</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>The copy</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays with the prover</span>
+      <span><em class="zw-tag public">PUBLIC</em> on-chain, visible to anyone</span>
+      <span>Hashes and addresses are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zoc').forEach((root) => {
+    initWalkthrough(root);
+
+    const press = (selector: string, attr: string, value: string) =>
+      root.querySelectorAll<HTMLElement>(selector).forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.getAttribute(attr) === value)),
+      );
+
+    // Step 1: a different key gives a different script hash and address.
+    root.querySelectorAll<HTMLButtonElement>('[data-key-btn]').forEach((b) =>
+      b.addEventListener('click', () => {
+        root.dataset.key = b.dataset.keyBtn;
+        press('[data-key-btn]', 'data-key-btn', b.dataset.keyBtn ?? '1');
+      }),
+    );
+
+    // Step 4: a changed proof fails the checks.
+    root.querySelector<HTMLInputElement>('[data-tamper-toggle]')?.addEventListener('change', (e) => {
+      root.dataset.tamper = (e.target as HTMLInputElement).checked ? '1' : '0';
+    });
+
+    // Step 5: which copies does the validator stop?
+    const verdict = root.querySelector<HTMLElement>('[data-verdict]');
+    const outcome = root.querySelector<HTMLElement>('[data-outcome]');
+    const update = () => {
+      const attack = root.dataset.attack === 'other' ? 'other' : 'same';
+      const spend = root.querySelector<HTMLInputElement>('[data-bind="spend"]')?.checked ?? false;
+      const recipient = root.querySelector<HTMLInputElement>('[data-bind="recipient"]')?.checked ?? false;
+      root.dataset.bindSpend = spend ? '1' : '0';
+      let reason: string;
+      let stopped = true;
+      if (spend && attack === 'other') reason = 'rejected: this UTxO gives a different spendRef, so the proof fails';
+      else if (recipient) reason = 'rejected: no output pays the recipient the proof names';
+      else {
+        stopped = false;
+        reason = spend
+          ? 'accepted: same UTxO, same spendRef, and nothing names who gets paid'
+          : 'accepted: the proof is valid and nothing else is checked';
+      }
+      root.dataset.stolen = stopped ? '0' : '1';
+      if (verdict) {
+        verdict.textContent = reason;
+        verdict.className = stopped ? 'zw-check' : 'zw-check warn';
+      }
+      if (outcome) {
+        outcome.textContent = stopped
+          ? 'the copy fails: the watcher gets nothing'
+          : attack === 'same'
+            ? "the watcher's copy can land first and take the 5 ADA"
+            : 'the watcher unlocks the other UTxO and takes its 5 ADA';
+        outcome.className = stopped ? 'zw-check' : 'zw-check no';
+      }
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-attack-btn]').forEach((b) =>
+      b.addEventListener('click', () => {
+        root.dataset.attack = b.dataset.attackBtn;
+        press('[data-attack-btn]', 'data-attack-btn', b.dataset.attackBtn ?? 'same');
+        update();
+      }),
+    );
+    root.querySelectorAll<HTMLInputElement>('[data-bind]').forEach((c) => c.addEventListener('change', update));
+    update();
+  });
+</script>
+
+<style>
+  /* the three switchable states: key, tampered proof, attack */
+  .zoc[data-key='1'] [data-key-show='2'],
+  .zoc[data-key='2'] [data-key-show='1'],
+  .zoc[data-tamper='0'] [data-tamper-show='1'],
+  .zoc[data-tamper='1'] [data-tamper-show='0'],
+  .zoc[data-attack='same'] [data-attack-show='other'],
+  .zoc[data-attack='other'] [data-attack-show='same'],
+  .zoc[data-bind-spend='0'] .zoc-spendref {
+    display: none;
+  }
+
+  .zoc-vk {
+    display: grid;
+    gap: 0.2em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.76em;
+    color: var(--zw-text-2);
+  }
+
+  .zoc-vk code,
+  .zoc-line code,
+  .zoc-chips code,
+  .zoc-spendref {
+    font-family: var(--zw-mono);
+  }
+
+  .zoc-line {
+    font-size: 0.78em;
+    color: var(--zw-text-2);
+  }
+
+  .zoc-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3em;
+  }
+
+  .zoc-chips span {
+    padding: 0.15em 0.45em;
+    font: 600 0.72em var(--zw-mono);
+    color: var(--zw-public-ink);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 45%, transparent);
+    border-radius: 6px;
+  }
+
+  .zoc[data-step='4'][data-tamper='1'] .zoc-proof {
+    border-color: var(--zw-bad);
+  }
+
+  .zoc[data-step='4'][data-tamper='1'] .zoc-chips span:first-child {
+    color: var(--zw-bad-ink);
+    border-color: var(--zw-bad);
+    text-decoration: line-through;
+  }
+
+  .zoc[data-step='4'][data-tamper='1'] .zoc-val {
+    border-color: var(--zw-bad);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-bad) 18%, transparent);
+  }
+
+  .zoc[data-step='4'][data-tamper='1'] .zoc-w2 .zw-wire-line {
+    background: color-mix(in srgb, var(--zw-bad) 45%, transparent);
+  }
+
+  .zoc-watcher {
+    border-color: color-mix(in srgb, var(--zw-bad) 50%, var(--zw-line));
+  }
+
+  .zoc-attack button[aria-pressed='true'] {
+    background: var(--zw-bad);
+  }
+
+  .zoc-copy {
+    transition: border-color 0.3s;
+  }
+
+  .zoc[data-stolen='1'] .zoc-copy {
+    border-color: var(--zw-bad);
+  }
+
+  .zoc[data-stolen='0'] .zoc-copy {
+    border-color: var(--zw-public);
+    opacity: 0.75;
+  }
+
+  .zoc-spendref {
+    font-size: 0.7em;
+    color: var(--zw-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .zoc[data-step='5'][data-stolen='0'] .zoc-val {
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-public) 16%, transparent);
+  }
+
+  .zoc-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--zw-text-2);
+    cursor: pointer;
+  }
+
+  .zoc-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .zoc-switch-ui {
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.2em;
+    height: 1.25em;
+    background: var(--zw-line);
+    border-radius: 999px;
+    transition: background 0.2s;
+  }
+
+  .zoc-switch-ui::after {
+    content: '';
+    position: absolute;
+    top: 0.15em;
+    left: 0.15em;
+    width: 0.95em;
+    height: 0.95em;
+    background: var(--zw-bg);
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .zoc-switch input:checked + .zoc-switch-ui {
+    background: var(--zw-public);
+  }
+
+  .zoc-proof .zoc-switch input:checked + .zoc-switch-ui {
+    background: var(--zw-bad);
+  }
+
+  .zoc-switch input:checked + .zoc-switch-ui::after {
+    transform: translateX(0.95em);
+  }
+
+  .zoc-switch input:focus-visible + .zoc-switch-ui {
+    outline: 2px solid var(--zw-public);
+    outline-offset: 2px;
+  }
+</style>

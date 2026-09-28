@@ -1,0 +1,332 @@
+---
+// circom/snarkjs <-> ZeroJ <-> Cardano: which file goes where, in both directions. Three steps (one
+// per direction, plus Cardano); every arrow is clickable and explains itself.
+import './walkthrough.css';
+
+type Row = {
+  file: string;
+  what: string;
+  secret?: boolean;
+  arrow: string;
+  dir: 'right' | 'left' | 'both';
+  step: number;
+  hl: string;
+  zeroj: string;
+  zerojWhat: string;
+  explain: string;
+};
+
+const rows: Row[] = [
+  {
+    file: 'multiplier.zkey',
+    what: 'proving key + constraints',
+    arrow: 'import',
+    dir: 'right',
+    step: 1,
+    hl: '1',
+    zeroj: 'ZkeyImporterBLS381.importZkeyFull',
+    zerojWhat: 'reads the key',
+    explain:
+      "ZeroJ reads snarkjs' proving key, and the circuit's constraints that a .zkey carries. For keys you care about, pass the ceremony's SHA-256 so a swapped file is refused.",
+  },
+  {
+    file: 'witness.wtns',
+    what: 'every signal, made from input.json',
+    secret: true,
+    arrow: 'import',
+    dir: 'right',
+    step: 1,
+    hl: '1',
+    zeroj: 'ZkeyImporterBLS381.importWtns',
+    zerojWhat: 'proves in pure Java',
+    explain:
+      "circom's witness calculator turns input.json into witness.wtns, which includes the secret b. Treat the file like a private key. From here ZeroJ proves with no Node.js.",
+  },
+  {
+    file: 'verification_key.json',
+    what: 'the key both sides check with',
+    arrow: 'same JSON',
+    dir: 'both',
+    step: 1,
+    hl: '1,2',
+    zeroj: 'SnarkjsJsonCodec + verifier',
+    zerojWhat: 'checks either tool\'s proof',
+    explain:
+      "Both tools use the same verification_key.json. ZeroJ checks proofs from either side against it, and writes one for its own keys with SnarkjsGroth16Json.verificationKeyJson.",
+  },
+  {
+    file: 'proof.json, public.json',
+    what: 'snarkjs groth16 verify reads these',
+    arrow: 'export',
+    dir: 'left',
+    step: 2,
+    hl: '2',
+    zeroj: 'SnarkjsGroth16Json',
+    zerojWhat: 'proofJson, publicJson',
+    explain:
+      'SnarkjsGroth16Json writes the same bytes snarkjs 0.7.6 writes, so snarkjs groth16 verify accepts ZeroJ proofs, and rejects them if a public input is changed.',
+  },
+];
+
+const cardanoExplain =
+  "SnarkjsToCardano compresses the key and the proof into the shapes the Plutus V3 Groth16 verifier takes. The public inputs go into the datum in snarkjs' order: outputs first.";
+---
+
+<figure class="zw-frame not-content" aria-label="How circom and snarkjs files move to and from ZeroJ and Cardano">
+  <div class="zw zdg-io" data-total="3" data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">snarkjs ⇄ ZeroJ · step <b data-counter>1 / 3</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zdg-io-cap">
+      <b>What you're seeing:</b> the files the two toolchains share. Pick a direction below, or click
+      any arrow to see what crosses it.
+    </p>
+
+    <div class="zdg-io-grid">
+      <span class="zdg-io-col">circom + snarkjs <small>Node.js</small></span>
+      <span></span>
+      <span class="zdg-io-col">ZeroJ <small>pure Java</small></span>
+
+      {rows.map((r) => (
+        <>
+          <div class="zw-row zdg-io-file" data-kind={r.secret ? 'secret' : 'public'} data-hl={r.hl}>
+            <span class="k">{r.what}</span>
+            <em class="zw-tag">{r.secret ? 'SECRET' : 'PUBLIC'}</em>
+            <span class="v wrap">{r.file}</span>
+          </div>
+          <button type="button" class="zdg-io-arrow" data-dir={r.dir} data-goto={r.step} data-explain={r.explain} data-hl={r.hl}>
+            <span class="glyph" aria-hidden="true">{r.dir === 'right' ? '→' : r.dir === 'left' ? '←' : '⇄'}</span>
+            <span class="lbl">{r.arrow}</span>
+          </button>
+          <div class="zw-row zdg-io-api" data-kind="public" data-hl={r.hl}>
+            <span class="k">{r.zerojWhat}</span>
+            <span class="v wrap"><code>{r.zeroj}</code></span>
+          </div>
+        </>
+      ))}
+
+      <div class="zdg-io-chain" data-hl="3">
+        <button type="button" class="zdg-io-arrow down" data-goto="3" data-explain={cardanoExplain} data-hl="3">
+          <span class="glyph" aria-hidden="true">↓</span>
+          <span class="lbl">SnarkjsToCardano</span>
+        </button>
+        <div class="zdg-io-cardano">
+          <span class="zdg-io-col">Cardano <small>Plutus V3 Groth16 verifier</small></span>
+          <div class="zdg-io-map">
+            <span><code>verification_key.json</code> → script parameters</span>
+            <span><code>proof.json</code> → redeemer</span>
+            <span><code>public.json</code> → datum, outputs first</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="zdg-io-explain" aria-live="polite" data-explain-out hidden></p>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. snarkjs in, ZeroJ proves</p>
+        <p>circom compiles the circuit and snarkjs runs the setup. ZeroJ imports the proving key and the witness, then proves in pure Java. Its proof verifies against snarkjs' own verification key, and snarkjs' proof verifies in ZeroJ.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. ZeroJ proves, snarkjs verifies</p>
+        <p>ZeroJ proves one of its own circuits and exports the three JSON files snarkjs expects. <code>snarkjs groth16 verify</code> accepts the proof, and rejects it if you change a public input.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. On Cardano</p>
+        <p>A proof from either tool can go on-chain. <code>SnarkjsToCardano</code> turns the JSON files into script parameters, a redeemer and a datum for the Plutus V3 verifier. The same rules apply as for any on-chain proof: bind it to its context.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Directions">
+        <li><button type="button" data-goto="1"><span>1</span>snarkjs → ZeroJ</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>ZeroJ → snarkjs</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>On Cardano</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> holds the secret input: keep it private</span>
+      <span><em class="zw-tag public">PUBLIC</em> safe to share</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zdg-io').forEach((root) => {
+    initWalkthrough(root);
+    const out = root.querySelector<HTMLElement>('[data-explain-out]');
+    // A step change (Prev/Next/Play or the direction list) clears the arrow note; an arrow click
+    // sets it right after the engine has moved to that arrow's step.
+    root.addEventListener('zw:step', () => {
+      if (out) out.hidden = true;
+      root.querySelectorAll('.zdg-io-arrow.picked').forEach((a) => a.classList.remove('picked'));
+    });
+    root.querySelectorAll<HTMLButtonElement>('[data-explain]').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (!out) return;
+        out.textContent = b.dataset.explain ?? '';
+        out.hidden = false;
+        b.classList.add('picked');
+      }),
+    );
+  });
+</script>
+
+<style>
+  .zdg-io-cap {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    font-size: 0.86em;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-io-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6.4em minmax(0, 1fr);
+    align-items: center;
+    gap: 0.55em 0.5em;
+    padding: 0.9em 1em 1em;
+    background:
+      radial-gradient(40em 12em at 50% -5em, color-mix(in srgb, var(--zw-public) 7%, transparent), transparent 70%),
+      var(--zw-bg);
+  }
+
+  .zdg-io-col {
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-io-col small {
+    margin-left: 0.4em;
+    font-size: 0.95em;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--zw-muted);
+  }
+
+  .zdg-io-file,
+  .zdg-io-api {
+    height: 100%;
+    background: var(--zw-panel);
+  }
+
+  .zdg-io-api code {
+    font: inherit;
+    overflow-wrap: anywhere;
+  }
+
+  .zdg-io-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1em;
+    padding: 0.35em 0.2em;
+    color: var(--zw-muted);
+    background: transparent;
+    border: 1px dashed var(--zw-line);
+    border-radius: 8px;
+    transition:
+      color 0.2s,
+      border-color 0.2s,
+      background 0.2s;
+  }
+
+  .zdg-io-arrow .glyph {
+    font-size: 1.15em;
+    line-height: 1;
+  }
+
+  .zdg-io-arrow .lbl {
+    font: 600 0.66em var(--zw-mono);
+  }
+
+  .zdg-io-arrow:hover,
+  .zdg-io-arrow[data-hl-on] {
+    color: var(--zw-public);
+    border-style: solid;
+    border-color: var(--zw-public);
+    background: color-mix(in srgb, var(--zw-public) 8%, transparent);
+  }
+
+  .zdg-io-arrow.picked {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-public) 22%, transparent);
+  }
+
+  .zdg-io-chain {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 6.4em minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5em;
+    margin-top: 0.3em;
+    padding-top: 0.7em;
+    border-top: 1px dashed var(--zw-line);
+  }
+
+  .zdg-io-cardano {
+    display: grid;
+    gap: 0.4em;
+    padding: 0.6em 0.7em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 10px;
+    transition:
+      border-color 0.25s,
+      box-shadow 0.25s;
+  }
+
+  .zdg-io-chain[data-hl-on] .zdg-io-cardano {
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-public) 16%, transparent);
+  }
+
+  .zdg-io-map {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em 1.1em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-io-map code {
+    font-size: 0.95em;
+  }
+
+  .zdg-io-explain {
+    margin: 0;
+    padding: 0.6em 1.1em;
+    font-size: 0.86em;
+    color: var(--zw-public-ink);
+    background: color-mix(in srgb, var(--zw-public) 8%, transparent);
+    border-top: 1px solid var(--zw-line);
+  }
+
+  @container (max-width: 560px) {
+    .zdg-io-grid {
+      grid-template-columns: minmax(0, 1fr) 4.6em minmax(0, 1fr);
+      padding-inline: 0.7em;
+    }
+
+    .zdg-io-arrow .lbl {
+      font-size: 0.58em;
+    }
+
+    .zdg-io-chain {
+      grid-template-columns: 4.6em minmax(0, 1fr);
+    }
+  }
+</style>

@@ -1,0 +1,373 @@
+---
+// "How the pieces fit": the six stages every ZeroJ application goes through, as a clickable picture.
+// Each stage shows what goes in, what comes out, and which of those things are secret.
+import './walkthrough.css';
+
+type Item = { k: string; v: string; kind: 'secret' | 'public' };
+type Stage = {
+  name: string;
+  sub: string;
+  secret: boolean;
+  title: string;
+  text: string;
+  inputs: Item[];
+  outputs: Item[];
+  warn?: string;
+  link: { href: string; label: string };
+};
+
+const stages: Stage[] = [
+  {
+    name: 'Circuit',
+    sub: 'you write it',
+    secret: false,
+    title: 'Write the rule',
+    text: 'You describe the rule you want to prove as a Java class, for example "age ≥ threshold". Compiling it produces R1CS: a list of small equations that any valid answer must satisfy. Nothing here is secret. The rules are public.',
+    inputs: [{ k: 'Java class with @ZKCircuit', v: 'the rule, written as code', kind: 'public' }],
+    outputs: [{ k: 'R1CS constraints', v: 'the equations a valid answer satisfies', kind: 'public' }],
+    link: { href: '/guides/circuits/annotations/', label: 'Write circuits with annotations' },
+  },
+  {
+    name: 'Witness',
+    sub: 'prover, each proof',
+    secret: true,
+    title: 'Fill in the values',
+    text: 'The prover plugs in real values: the public inputs everyone will see, and the secret inputs only they know. The circuit then works out a value for every wire. That filled-in table is the witness, and it never leaves the prover\'s machine.',
+    inputs: [
+      { k: 'public inputs', v: 'e.g. threshold = 18', kind: 'public' },
+      { k: 'secret inputs', v: 'e.g. age = 27', kind: 'secret' },
+    ],
+    outputs: [{ k: 'witness', v: 'a value for every wire', kind: 'secret' }],
+    link: { href: '/learn/circuits-and-witnesses/', label: 'Circuits & witnesses' },
+  },
+  {
+    name: 'Setup',
+    sub: 'once per circuit',
+    secret: true,
+    title: 'Make the keys',
+    text: 'Setup turns the R1CS into a proving key and a verification key, and both are safe to share. The catch is the random numbers used to make them: whoever keeps them could forge proofs. Real keys come from a multi-party ceremony, where no single party ever holds that randomness.',
+    inputs: [
+      { k: 'R1CS constraints', v: 'from stage 1', kind: 'public' },
+      { k: 'setup randomness', v: '"toxic waste": must be destroyed', kind: 'secret' },
+    ],
+    outputs: [
+      { k: 'proving key', v: 'used to make proofs', kind: 'public' },
+      { k: 'verification key', v: 'used to check them', kind: 'public' },
+    ],
+    warn: 'ZeroJ\'s quick in-process setup is for development only, because that process could forge proofs. It stays off unless you pass -Dzeroj.allowInsecureTrustedSetup=true.',
+    link: { href: '/learn/trusted-setup/', label: 'Trusted setup, explained' },
+  },
+  {
+    name: 'Prove',
+    sub: 'prover, each proof',
+    secret: true,
+    title: 'Make the proof',
+    text: 'The prover combines the proving key with the witness and gets a proof: 192 bytes for Groth16 on BLS12-381, however big the circuit is. The proof reveals nothing about the secret inputs, and proving the same statement again gives different bytes.',
+    inputs: [
+      { k: 'proving key', v: 'from stage 3', kind: 'public' },
+      { k: 'witness', v: 'from stage 2', kind: 'secret' },
+    ],
+    outputs: [{ k: 'proof', v: '192 bytes', kind: 'public' }],
+    link: { href: '/guides/proving/groth16/', label: 'Prove with Groth16' },
+  },
+  {
+    name: 'Verify',
+    sub: 'off-chain',
+    secret: false,
+    title: 'Check it in Java',
+    text: 'Anyone with the verification key can check the proof against the public inputs, in pure Java, in your backend or in a client. The answer is simply true or false. The verifier never needs the secret inputs.',
+    inputs: [
+      { k: 'verification key', v: 'from stage 3', kind: 'public' },
+      { k: 'proof', v: 'from stage 4', kind: 'public' },
+      { k: 'public inputs', v: 'e.g. threshold = 18', kind: 'public' },
+    ],
+    outputs: [{ k: 'result', v: 'true or false', kind: 'public' }],
+    link: { href: '/guides/verifying/off-chain/', label: 'Verify proofs in Java' },
+  },
+  {
+    name: 'Verify',
+    sub: 'on-chain',
+    secret: false,
+    title: 'Check it on Cardano',
+    text: 'The same check runs inside a Plutus V3 validator, written in Java with JuLC. The verification key is baked into the script, the public inputs sit in the datum, and the proof arrives in the redeemer. Your validator adds the application rules: who may spend, and only once.',
+    inputs: [
+      { k: 'verification key', v: 'script parameters', kind: 'public' },
+      { k: 'public inputs', v: 'the datum', kind: 'public' },
+      { k: 'proof', v: 'the redeemer', kind: 'public' },
+    ],
+    outputs: [{ k: 'result', v: 'transaction accepted or rejected', kind: 'public' }],
+    warn: 'A valid proof is not authorization. Bind it to the spend and the recipient, or anyone can copy it.',
+    link: { href: '/guides/verifying/on-chain/', label: 'Verify proofs on Cardano' },
+  },
+];
+
+const tag = (kind: Item['kind']) => (kind === 'secret' ? 'SECRET' : 'PUBLIC');
+---
+
+<figure class="zw-frame not-content" aria-label="How the pieces fit: the six stages of a ZeroJ application">
+  <div class="zw zdg-pipe" data-total={stages.length} data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">How the pieces fit · stage <b data-counter>1 / {stages.length}</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zdg-pipe-cap">
+      <b>What you're seeing:</b> the six stages every ZeroJ application goes through. Click a stage, or
+      press Play. Stages marked <span class="zdg-pipe-mark">secret inside</span> handle something that
+      must never leave the machine they run on.
+    </p>
+
+    <ol class="zdg-pipe-track" aria-label="Stages">
+      {stages.map((s, i) => (
+        <li>
+          <button type="button" class="zdg-pipe-stage" data-goto={i + 1} data-secret={s.secret ? 'yes' : 'no'}>
+            <span class="n">{i + 1}</span>
+            <span class="name">{s.name}</span>
+            <span class="sub">{s.sub}</span>
+            {s.secret && <span class="zdg-pipe-mark">secret inside</span>}
+          </button>
+        </li>
+      ))}
+    </ol>
+
+    <div class="zdg-pipe-detail" aria-live="polite">
+      {stages.map((s, i) => (
+        <div data-show={String(i + 1)}>
+          <p class="zw-narr-title">{i + 1}. {s.title}</p>
+          <p class="zdg-pipe-text">{s.text}</p>
+          <div class="zdg-pipe-io">
+            <div class="zw-box">
+              <span class="zw-box-title">Goes in</span>
+              {s.inputs.map((it) => (
+                <div class="zw-row" data-kind={it.kind}>
+                  <span class="k">{it.k}</span><em class="zw-tag">{tag(it.kind)}</em>
+                  <span class="v wrap">{it.v}</span>
+                </div>
+              ))}
+            </div>
+            <span class="zdg-pipe-arrow" aria-hidden="true">→</span>
+            <div class="zw-box">
+              <span class="zw-box-title">Comes out</span>
+              {s.outputs.map((it) => (
+                <div class="zw-row" data-kind={it.kind}>
+                  <span class="k">{it.k}</span><em class="zw-tag">{tag(it.kind)}</em>
+                  <span class="v wrap">{it.v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {s.warn && <p class="zw-check warn zdg-pipe-warn">{s.warn}</p>}
+          <a class="zdg-pipe-link" href={s.link.href}>Read more: {s.link.label} →</a>
+        </div>
+      ))}
+    </div>
+
+    <div class="zw-foot">
+      <span class="zdg-pipe-hint">Only stage 1 is yours to design; the rest are library calls.</span>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous stage">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next stage">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays with whoever holds it</span>
+      <span><em class="zw-tag public">PUBLIC</em> safe to share or publish</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zdg-pipe').forEach((root) => initWalkthrough(root));
+</script>
+
+<style>
+  .zdg-pipe-cap {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    font-size: 0.86em;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-pipe-track {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.9em;
+    margin: 0;
+    padding: 0.9em 1em 1em;
+    list-style: none;
+    background:
+      radial-gradient(40em 12em at 50% -5em, color-mix(in srgb, var(--zw-public) 8%, transparent), transparent 70%),
+      var(--zw-bg);
+  }
+
+  .zdg-pipe-track li {
+    position: relative;
+    display: flex;
+  }
+
+  /* arrow between stages */
+  .zdg-pipe-track li + li::before {
+    content: '→';
+    position: absolute;
+    top: 50%;
+    left: -0.78em;
+    transform: translateY(-50%);
+    font-size: 0.9em;
+    color: var(--zw-muted);
+  }
+
+  .zdg-pipe-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25em;
+    width: 100%;
+    padding: 0.65em 0.35em 0.6em;
+    text-align: center;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 11px;
+    transition:
+      border-color 0.25s,
+      box-shadow 0.25s,
+      transform 0.25s;
+  }
+
+  .zdg-pipe-stage:hover {
+    border-color: color-mix(in srgb, var(--zw-public) 60%, var(--zw-line));
+  }
+
+  .zdg-pipe-stage[aria-current='step'] {
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-public) 18%, transparent);
+    transform: translateY(-2px);
+  }
+
+  .zdg-pipe-stage .n {
+    display: grid;
+    place-items: center;
+    width: 1.7em;
+    height: 1.7em;
+    font: 600 0.78em var(--zw-mono);
+    border-radius: 50%;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+  }
+
+  .zdg-pipe-stage[aria-current='step'] .n {
+    color: var(--zw-bg);
+    background: var(--zw-public);
+    border-color: var(--zw-public);
+  }
+
+  .zdg-pipe-stage .name {
+    font-family: var(--zw-display);
+    font-size: 0.95em;
+    font-weight: 600;
+  }
+
+  .zdg-pipe-stage .sub {
+    font-size: 0.7em;
+    line-height: 1.25;
+    color: var(--zw-muted);
+  }
+
+  .zdg-pipe-mark {
+    padding: 0.08em 0.4em;
+    font: 600 0.62em var(--zw-mono);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    color: var(--zw-secret);
+    background: color-mix(in srgb, var(--zw-secret) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-secret) 38%, transparent);
+    border-radius: 4px;
+  }
+
+  .zdg-pipe-cap .zdg-pipe-mark {
+    font-size: 0.78em;
+  }
+
+  .zdg-pipe-stage[data-secret='yes'] {
+    border-bottom: 3px solid color-mix(in srgb, var(--zw-secret) 55%, var(--zw-line));
+  }
+
+  .zdg-pipe-detail {
+    min-height: 15em;
+    padding: 0.9em 1.1em 0.3em;
+    border-top: 1px solid var(--zw-line);
+  }
+
+  .zdg-pipe-detail > div {
+    display: grid;
+    gap: 0.65em;
+  }
+
+  .zdg-pipe-detail p {
+    margin: 0;
+  }
+
+  .zdg-pipe-text {
+    max-width: 68ch;
+    color: var(--zw-text-2);
+  }
+
+  .zdg-pipe-io {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.6em;
+  }
+
+  .zdg-pipe-arrow {
+    align-self: center;
+    font-size: 1.2em;
+    color: var(--zw-public);
+  }
+
+  .zdg-pipe-warn {
+    max-width: 68ch;
+  }
+
+  .zdg-pipe-link {
+    justify-self: start;
+    font-size: 0.86em;
+    font-weight: 600;
+    color: var(--zw-public);
+    text-decoration: none;
+  }
+
+  .zdg-pipe-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .zdg-pipe-hint {
+    font-size: 0.82em;
+    color: var(--zw-muted);
+  }
+
+  @container (max-width: 560px) {
+    .zdg-pipe-track {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      row-gap: 0.7em;
+    }
+
+    .zdg-pipe-track li:nth-child(4)::before {
+      display: none;
+    }
+
+    .zdg-pipe-io {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .zdg-pipe-arrow {
+      justify-self: center;
+      transform: rotate(90deg);
+    }
+  }
+</style>

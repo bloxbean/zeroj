@@ -1,0 +1,340 @@
+---
+// "One honest contributor is enough": the multi-party ceremony from learn/trusted-setup, as a line of
+// people passing the key file along. The reader decides who destroys their secret randomness; the
+// verdict follows the page's 1-of-N rule (forging needs every contribution).
+import './walkthrough.css';
+
+const people = [
+  { id: 'alice', name: 'Alice', out: 'key_1', kept: true },
+  { id: 'bob', name: 'Bob', out: 'key_2', kept: true },
+  { id: 'carol', name: 'Carol', out: 'key_3', kept: false },
+];
+const honest = people.filter((p) => !p.kept).map((p) => p.name);
+const kept = people.filter((p) => p.kept).map((p) => p.name);
+const list = (names: string[]) =>
+  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+// Same wording as the client script below, so the first paint matches.
+const verdictText = honest.length
+  ? `Safe. ${list(honest)} destroyed ${honest.length === 1 ? 'their piece' : 'their pieces'}, so nobody knows the whole secret, and nobody can forge proofs.`
+  : 'Not safe. Together they hold every piece, so they could forge proofs for this circuit.';
+const detailText = honest.length === 0
+  ? 'A forged proof looks exactly like an honest one. No verifier, on-chain or off-chain, could tell.'
+  : kept.length > 1
+    ? `${list(kept)} could even work together: one missing piece is enough.`
+    : kept.length === 1
+      ? `${kept[0]} alone knows one piece, which is useless without the rest.`
+      : 'Everyone destroyed their piece. One would have been enough.';
+---
+
+<figure class="zw-frame not-content" aria-label="A multi-party ceremony: one honest contributor is enough">
+  <div class="zw zts zts-chain" data-total="1">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Multi-party ceremony · <b>one honest person is enough</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zts-caption">
+      <b>What you're seeing:</b> the key file passes down a line of people. Each one mixes in a secret
+      random number, like adding their own twist to the mould, and is supposed to destroy it afterwards.
+      Choose who destroys theirs.
+    </p>
+
+    <div class="zts-start"><code>key_0</code> from the coordinator enters the line</div>
+
+    <ol class="zts-line">
+      {people.map((p) => (
+        <li class="zts-person" data-person={p.id} data-name={p.name} data-kept={String(p.kept)}>
+          <span class="zts-name">{p.name}</span>
+          <span class="zts-secret">
+            <em class="zw-tag secret">SECRET</em>
+            <span class="zts-state kept">kept</span>
+            <span class="zts-state gone">destroyed</span>
+          </span>
+          <span class="zw-choice" role="group" aria-label={`What ${p.name} does with the secret`}>
+            <button type="button" data-choice="destroy" aria-pressed={p.kept ? 'false' : 'true'}>Destroy</button>
+            <button type="button" data-choice="keep" aria-pressed={p.kept ? 'true' : 'false'}>Keep</button>
+          </span>
+          <code class="zts-out">→ {p.out}</code>
+        </li>
+      ))}
+      <li class="zts-person beacon">
+        <span class="zts-name">Public beacon</span>
+        <span class="zts-beacon-text">A value nobody could predict, such as a future block hash</span>
+        <code class="zts-out">→ key_final</code>
+      </li>
+    </ol>
+
+    <div class="zts-product" aria-hidden="true">
+      <span class="zts-product-label">The final secret combines every piece:</span>
+      <span class="zts-factors">
+        {people.map((p, i) => (
+          <>
+            {i > 0 && <span class="zts-times">×</span>}
+            <span class="zts-factor" data-factor={p.id} data-known={String(p.kept)}>
+              <span class="known">{p.name}'s</span>
+              <span class="unknown">?</span>
+            </span>
+          </>
+        ))}
+      </span>
+    </div>
+
+    <div class="zts-result" aria-live="polite">
+      <span class={honest.length ? 'zw-check' : 'zw-check no'} data-verdict>{verdictText}</span>
+      <p class="zw-note" data-detail>{detailText}</p>
+    </div>
+
+    <p class="zw-note zts-foot">
+      The beacon is public on purpose: it adds no secret, it just stops the last person from steering the
+      result. <code>snarkjs zkey verify</code> re-checks that every step was done correctly, but nothing can
+      prove that someone destroyed their secret. That's why a ceremony wants many independent people.
+    </p>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  const list = (names: string[]) =>
+    names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+
+  document.querySelectorAll<HTMLElement>('.zts-chain').forEach((root) => {
+    initWalkthrough(root);
+    const people = [...root.querySelectorAll<HTMLElement>('[data-person]')];
+    const verdict = root.querySelector<HTMLElement>('[data-verdict]');
+    const detail = root.querySelector<HTMLElement>('[data-detail]');
+
+    const update = () => {
+      const kept = people.filter((p) => p.dataset.kept === 'true');
+      const honest = people.filter((p) => p.dataset.kept !== 'true').map((p) => p.dataset.name ?? '');
+      people.forEach((p) => {
+        const factor = root.querySelector<HTMLElement>(`[data-factor="${p.dataset.person}"]`);
+        if (factor) factor.dataset.known = p.dataset.kept ?? 'false';
+      });
+      if (verdict) {
+        verdict.classList.toggle('no', honest.length === 0);
+        verdict.textContent = honest.length
+          ? `Safe. ${list(honest)} destroyed ${honest.length === 1 ? 'their piece' : 'their pieces'}, so nobody knows the whole secret, and nobody can forge proofs.`
+          : 'Not safe. Together they hold every piece, so they could forge proofs for this circuit.';
+      }
+      if (detail) {
+        detail.textContent = honest.length === 0
+          ? 'A forged proof looks exactly like an honest one. No verifier, on-chain or off-chain, could tell.'
+          : kept.length > 1
+            ? `${list(kept.map((p) => p.dataset.name ?? ''))} could even work together: one missing piece is enough.`
+            : kept.length === 1
+              ? `${kept[0].dataset.name} alone knows one piece, which is useless without the rest.`
+              : 'Everyone destroyed their piece. One would have been enough.';
+      }
+    };
+
+    people.forEach((p) =>
+      p.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((b, _, all) =>
+        b.addEventListener('click', () => {
+          p.dataset.kept = String(b.dataset.choice === 'keep');
+          all.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+          update();
+        }),
+      ),
+    );
+    update();
+  });
+</script>
+
+<style>
+  .zts-caption {
+    margin: 0;
+    padding: 0.9em 1.1em 0.2em;
+    color: var(--zw-text-2);
+  }
+
+  .zts-start {
+    padding: 0.6em 1.1em 0;
+    font-size: 0.82em;
+    color: var(--zw-muted);
+  }
+
+  .zts-start code,
+  .zts-out {
+    font: 600 1em var(--zw-mono);
+    color: var(--zw-text);
+  }
+
+  .zts-line {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.4em;
+    margin: 0;
+    padding: 0.7em 1.1em 0.4em;
+    list-style: none;
+  }
+
+  .zts-person {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    min-width: 0;
+    padding: 0.7em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 12px;
+    transition:
+      border-color 0.3s,
+      box-shadow 0.3s;
+  }
+
+  /* the arrow to the next person in line */
+  .zts-person:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    top: 50%;
+    right: -1.15em;
+    transform: translateY(-50%);
+    color: var(--zw-muted);
+  }
+
+  .zts-person[data-kept='true'] {
+    border-color: var(--zw-bad);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-bad) 18%, transparent);
+  }
+
+  .zts-person[data-kept='false'] {
+    border-color: var(--zw-public);
+  }
+
+  .zts-person.beacon {
+    border-style: dashed;
+  }
+
+  .zts-name {
+    font-family: var(--zw-display);
+    font-weight: 600;
+  }
+
+  .zts-secret {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em;
+    font-size: 0.8em;
+  }
+
+  .zts-state {
+    display: none;
+    font-weight: 600;
+  }
+
+  [data-kept='true'] .zts-state.kept {
+    display: inline;
+    color: var(--zw-bad-ink);
+  }
+
+  [data-kept='false'] .zts-state.gone {
+    display: inline;
+    color: var(--zw-muted);
+    text-decoration: line-through;
+  }
+
+  [data-kept='false'] .zts-secret .zw-tag {
+    opacity: 0.45;
+  }
+
+  .zts-person .zw-choice {
+    align-self: flex-start;
+  }
+
+  .zts-person[data-kept='true'] .zw-choice button[aria-pressed='true'] {
+    background: var(--zw-bad);
+  }
+
+  .zts-person[data-kept='false'] .zw-choice button[aria-pressed='true'] {
+    background: var(--zw-public);
+  }
+
+  .zts-beacon-text {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zts-out {
+    margin-top: auto;
+    font-size: 0.8em;
+  }
+
+  .zts-product {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em 0.8em;
+    margin: 0.4em 1.1em 0;
+    padding: 0.6em 0.8em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 10px;
+  }
+
+  .zts-product-label {
+    font-size: 0.82em;
+    color: var(--zw-text-2);
+  }
+
+  .zts-factors {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em;
+  }
+
+  .zts-times {
+    color: var(--zw-muted);
+  }
+
+  .zts-factor {
+    padding: 0.15em 0.55em;
+    font: 600 0.82em var(--zw-mono);
+    border-radius: 6px;
+  }
+
+  .zts-factor[data-known='true'] {
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+  }
+
+  .zts-factor[data-known='false'] {
+    color: var(--zw-secret);
+    background: color-mix(in srgb, var(--zw-secret) 13%, transparent);
+  }
+
+  .zts-factor[data-known='true'] .unknown,
+  .zts-factor[data-known='false'] .known {
+    display: none;
+  }
+
+  .zts-result {
+    display: grid;
+    gap: 0.3em;
+    padding: 0.8em 1.1em 0.2em;
+  }
+
+  .zts-result .zw-check {
+    font-size: 0.95em;
+    font-weight: 600;
+  }
+
+  .zts-foot {
+    padding: 0.4em 1.1em 1em;
+  }
+
+  @container (max-width: 560px) {
+    .zts-line {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .zts-person:not(:last-child)::after {
+      display: none;
+    }
+  }
+</style>

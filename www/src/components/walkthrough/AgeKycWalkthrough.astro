@@ -1,0 +1,414 @@
+---
+// Age & KYC eligibility, step by step: issue -> deploy the gate -> prove -> spend -> reuse.
+// Values follow the identity-kyc demo (five test holders, minAge 18, five approved countries).
+// Hashes are illustrative stand-ins (see fakeHash), not Poseidon or Jubjub outputs.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { APPROVED, COUNTRY_TREE_DEPTH, HOLDERS, MIN_AGE, evaluate } from './age-kyc-data';
+
+const issuerKey = fakeHash('jubjub-issuer-pk:identity-kyc');
+const countryRoot = fakeHash('country-root:' + APPROVED.map((c) => c.code).join(','));
+const holder = HOLDERS[0];
+const outcome = evaluate(holder);
+
+// A depth-3 tree drawn for the picture (the demo's tree has depth 4). Leaves 0-4 hold the approved
+// countries in IssuerService order.
+const W = 320;
+const leafX = (i: number) => 20 + i * 40;
+const levels = [
+  Array.from({ length: 8 }, (_, i) => ({ x: leafX(i), y: 118 })),
+  Array.from({ length: 4 }, (_, i) => ({ x: (leafX(2 * i) + leafX(2 * i + 1)) / 2, y: 80 })),
+  Array.from({ length: 2 }, (_, i) => ({ x: (leafX(4 * i) + leafX(4 * i + 3)) / 2, y: 46 })),
+  [{ x: W / 2, y: 14 }],
+];
+const pathOf = (leaf: number) => (leaf < 0 ? [-1, -1, -1, -1] : [leaf, leaf >> 1, leaf >> 2, 0]);
+const sibOf = (leaf: number) => (leaf < 0 ? [-1, -1, -1, -1] : [leaf ^ 1, (leaf >> 1) ^ 1, (leaf >> 2) ^ 1, -1]);
+const path = pathOf(outcome.leaf);
+const sib = sibOf(outcome.leaf);
+const edges = levels.slice(0, 3).flatMap((level, l) =>
+  level.map((n, i) => ({ l, i, from: n, to: levels[l + 1][Math.floor(i / 2)] })),
+);
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Age and KYC eligibility, step by step">
+  <div class="zw zak" data-total="5" data-view="insider" data-holder="alice">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Age &amp; KYC · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Validator's view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- issuer -->
+      <section class="zw-actor" data-hl="1" aria-label="Issuer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Issuer</span>
+          <span class="zw-actor-sub">KYC provider</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">issuer key</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{issuerKey}</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">EdDSA-Jubjub signature over</span>
+          <code class="zak-formula">Poseidon(age, country)</code>
+        </div>
+        <p class="zw-note">Checks the person out of band, signs offline, keeps its secret key.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="1" aria-hidden="true">
+        <span class="arrow" data-show="1">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">signed attrs</span>
+      </div>
+
+      <!-- holder -->
+      <section class="zw-actor" data-hl="3" aria-label="Holder">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Holder</span>
+          <span class="zw-actor-sub" data-when="insider">their own device</span>
+          <span class="zw-actor-sub" data-when="public">identity hidden</span>
+        </div>
+        <span class="zw-choice zak-pick" role="group" aria-label="Holder" data-when="insider">
+          {HOLDERS.map((h, i) => (
+            <button type="button" data-holder-btn={h.id} aria-pressed={i === 0 ? 'true' : 'false'}>{h.name}</button>
+          ))}
+        </span>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">age</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="age">{holder.age}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">country</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="country">{holder.country} · {holder.iso}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">signature</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="sig">σ {fakeHash(`sig:${holder.name}`)}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-f-row="path">
+          <span class="k">Merkle path</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v wrap"><span class="real" data-f="path">{COUNTRY_TREE_DEPTH} sibling hashes</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zak-proving" data-show="3" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Proving about 11,000 constraints on this device</span>
+        </div>
+        <div class="zw-box" data-show="3-5" data-when="insider">
+          <span class="zw-box-title">The circuit checks</span>
+          <span class="zw-check">1. the issuer signed these attributes</span>
+          <span class={outcome.canProve ? 'zw-check' : 'zw-check no'} data-c="tree">
+            {outcome.canProve ? `2. ${holder.iso} is a leaf of countryRoot` : `2. ${holder.iso} has no leaf`}
+          </span>
+          <span class={outcome.eligible ? 'zw-check' : 'zw-check warn'} data-c="age">
+            3. eligible = (age ≥ {MIN_AGE}) = {outcome.eligible}
+          </span>
+        </div>
+        <p class="zw-note" data-show="3-5" data-when="public">The validator never sees these checks run, only their proof.</p>
+        <div class="zw-proof" data-show="3-5" data-proof-ok hidden={!outcome.canProve}>
+          <span class="pi">π</span><span data-proof-label>eligible = {outcome.eligible}</span><small>192 bytes</small>
+        </div>
+        <span class="zw-check no" data-show="3-5" data-proof-none hidden={outcome.canProve}>no valid proof exists</span>
+      </section>
+
+      <div class="zw-wire" data-dyn="w2" data-dyn-hl="4" aria-hidden="true">
+        <span class="arrow" data-show="4">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4" data-w2-msg>π + 5 inputs</span>
+      </div>
+
+      <!-- validator -->
+      <section class="zw-actor" data-dyn="validator" data-dyn-hl="2,4" aria-label="Validator">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Validator</span>
+          <span class="zw-actor-sub">Cardano script</span>
+        </div>
+        <div class="zw-box" data-show="2-5">
+          <span class="zw-box-title"><code>CredentialGatedValidator</code></span>
+          <div class="zw-row" data-kind="public" data-hl="2">
+            <span class="k">pinned parameters</span><em class="zw-tag">PUBLIC</em>
+            <span class="v wrap">VK · issuer key · minAge {MIN_AGE} · countryRoot</span>
+          </div>
+          <span class="zw-note">The demo locks 5 ADA here.</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Approved countries</span>
+          <svg class="zak-tree" viewBox={`0 0 ${W} 156`} role="img"
+            aria-label="A Merkle tree of the five approved country codes. Only its root is public.">
+            {edges.map((e) => (
+              <line x1={e.from.x} y1={e.from.y} x2={e.to.x} y2={e.to.y} data-l={e.l} data-i={e.i}
+                class={path[e.l] === e.i ? 't-edge on-path' : 't-edge'} />
+            ))}
+            {levels.map((level, l) =>
+              level.map((n, i) => {
+                const cls = [
+                  't-node',
+                  l === 0 && i >= APPROVED.length ? 'empty' : '',
+                  path[l] === i ? 'on-path' : '',
+                  sib[l] === i ? 'sib' : '',
+                  l === 0 && i === outcome.leaf ? 'you' : '',
+                  l === 3 ? 'root' : '',
+                ].join(' ');
+                return <circle cx={n.x} cy={n.y} r={l === 3 ? 12 : l === 0 ? 11 : 8} class={cls} data-l={l} data-i={i} />;
+              }),
+            )}
+            {APPROVED.map((c, i) => (
+              <text x={leafX(i)} y="148" class={i === outcome.leaf ? 't-label you' : 't-label'} data-i={i}>{c.iso}</text>
+            ))}
+          </svg>
+          <div class="zw-row" data-kind="public">
+            <span class="k">countryRoot</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{countryRoot}</span>
+          </div>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-check" data-v="policy" hidden={!outcome.canProve}>issuer key and policy are the pinned ones</span>
+          <span class={outcome.unlock ? 'zw-check' : 'zw-check no'} data-v="eligible">
+            {outcome.unlock ? 'eligible = 1' : outcome.canProve ? 'eligible = 0: rejected' : 'no proof to check'}
+          </span>
+          <span class="zw-check" data-v="pairing" hidden={!outcome.unlock}>pairing check passes</span>
+          <span class={outcome.unlock ? 'zw-check' : 'zw-check no'} data-v="result">
+            {outcome.unlock ? '5 ADA unlocked' : 'stays locked'}
+          </span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-check">no nullifier: the credential can prove again</span>
+          <span class="zw-check warn">stateless gate: a copied proof passes too</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Issue</p>
+        <p>The KYC provider checks the person once, out of band, and signs <code>Poseidon(age, country)</code> with EdDSA over Jubjub. The holder gets their attributes and the signature. Pick a holder to load their credential.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Deploy the gate</p>
+        <p>The protocol compiles a validator with the verification key, the issuer's public key, <code>minAge</code> {MIN_AGE} and the approved-country root as script parameters. Changing the policy produces a new script address.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Prove</p>
+        <p>On the holder's device, one circuit checks that the issuer signed these attributes, that the country is a leaf of the approved-country tree, and that <code>eligible</code> equals <code>age ≥ {MIN_AGE}</code>. Try Charlie (16) and Diana (Brazil), then switch to <b>Validator's view</b>.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Spend</p>
+        <p>The redeemer carries the proof and five public inputs: the issuer key's two coordinates, <code>minAge</code>, <code>countryRoot</code> and <code>eligible</code>. The validator checks the issuer and the policy, requires <code>eligible = 1</code> and runs the pairing check.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Reuse</p>
+        <p>No nullifier is involved, so the same credential can prove eligibility again and again. The flip side: this gate is stateless, so anyone who sees an unlock transaction can copy its proof. A real protocol binds the proof to the recipient or the spent <code>TxOutRef</code>.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Issue</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Deploy</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Prove</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Spend</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Reuse</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays on the holder's device</span>
+      <span><em class="zw-tag public">PUBLIC</em> in the redeemer or the script</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+  import { COUNTRY_TREE_DEPTH, HOLDERS, MIN_AGE, evaluate } from './age-kyc-data';
+
+  document.querySelectorAll<HTMLElement>('.zak').forEach((root) => {
+    initWalkthrough(root);
+    let holder = HOLDERS[0];
+
+    const set = (sel: string, text: string) => {
+      const el = root.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+    const check = (sel: string, text: string, kind: '' | 'no' | 'warn') => {
+      const el = root.querySelector<HTMLElement>(sel);
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('no', kind === 'no');
+      el.classList.toggle('warn', kind === 'warn');
+    };
+
+    const markTree = (leaf: number) => {
+      const path = leaf < 0 ? [-1, -1, -1, -1] : [leaf, leaf >> 1, leaf >> 2, 0];
+      const sib = leaf < 0 ? [-1, -1, -1, -1] : [leaf ^ 1, (leaf >> 1) ^ 1, (leaf >> 2) ^ 1, -1];
+      root.querySelectorAll<SVGElement>('.zak-tree [data-l]').forEach((el) => {
+        const l = Number(el.dataset.l);
+        const i = Number(el.dataset.i);
+        el.classList.toggle('on-path', path[l] === i);
+        if (el.tagName === 'circle') {
+          el.classList.toggle('sib', sib[l] === i);
+          el.classList.toggle('you', l === 0 && i === leaf);
+        }
+      });
+      root.querySelectorAll<SVGElement>('.zak-tree text[data-i]').forEach((t) =>
+        t.classList.toggle('you', Number(t.dataset.i) === leaf),
+      );
+    };
+
+    const apply = () => {
+      const o = evaluate(holder);
+      const step = Number(root.dataset.step);
+      root.dataset.holder = holder.id;
+      root.querySelectorAll('[data-holder-btn]').forEach((b) =>
+        b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.holderBtn === holder.id)),
+      );
+
+      set('[data-f="age"]', String(holder.age));
+      set('[data-f="country"]', `${holder.country} · ${holder.iso}`);
+      set('[data-f="sig"]', `σ ${fakeHash(`sig:${holder.name}`)}`);
+      set('[data-f="path"]', o.canProve ? `${COUNTRY_TREE_DEPTH} sibling hashes` : `none: ${holder.iso} isn't approved`);
+      root.querySelector('[data-f-row="path"]')?.toggleAttribute('data-bad-on', !o.canProve && step >= 3);
+
+      check('[data-c="tree"]', o.canProve ? `2. ${holder.iso} is a leaf of countryRoot` : `2. ${holder.iso} has no leaf`, o.canProve ? '' : 'no');
+      check('[data-c="age"]', `3. eligible = (age ≥ ${MIN_AGE}) = ${o.eligible}`, o.eligible ? '' : 'warn');
+
+      const proofOk = root.querySelector<HTMLElement>('[data-proof-ok]');
+      const proofNone = root.querySelector<HTMLElement>('[data-proof-none]');
+      if (proofOk) proofOk.hidden = !o.canProve;
+      if (proofNone) proofNone.hidden = o.canProve;
+      set('[data-proof-label]', `eligible = ${o.eligible}`);
+
+      set('[data-w2-msg]', o.unlock ? 'π + 5 inputs' : o.canProve ? 'eligible = 0' : 'no proof');
+      check('[data-v="eligible"]', o.unlock ? 'eligible = 1' : o.canProve ? 'eligible = 0: rejected' : 'no proof to check', o.unlock ? '' : 'no');
+      const policy = root.querySelector<HTMLElement>('[data-v="policy"]');
+      if (policy) policy.hidden = !o.canProve;
+      const pairing = root.querySelector<HTMLElement>('[data-v="pairing"]');
+      if (pairing) pairing.hidden = !o.unlock;
+      check('[data-v="result"]', o.unlock ? '5 ADA unlocked' : 'stays locked', o.unlock ? '' : 'no');
+
+      // The spend step succeeds or fails depending on the holder, so its highlight is set here
+      // rather than by the engine's static data-hl / data-bad.
+      root.querySelectorAll<HTMLElement>('[data-dyn]').forEach((el) => {
+        const hlSteps = (el.dataset.dynHl ?? '').split(',').map(Number);
+        const bad = step === 4 && !o.unlock;
+        el.toggleAttribute('data-bad-on', bad);
+        el.toggleAttribute('data-hl-on', hlSteps.includes(step) && !bad);
+      });
+      markTree(o.leaf);
+    };
+
+    root.querySelectorAll<HTMLButtonElement>('[data-holder-btn]').forEach((b) =>
+      b.addEventListener('click', () => {
+        holder = HOLDERS.find((h) => h.id === b.dataset.holderBtn) ?? HOLDERS[0];
+        apply();
+      }),
+    );
+    root.addEventListener('zw:step', apply);
+    apply();
+  });
+</script>
+
+<style>
+  .zak-formula {
+    font-size: 0.78em;
+    overflow-wrap: anywhere;
+  }
+
+  .zak-pick {
+    flex-wrap: wrap;
+    align-self: flex-start;
+  }
+
+  .zak-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zak-tree {
+    width: 100%;
+    height: auto;
+    max-height: 9.5em;
+  }
+
+  .zak-tree .t-edge {
+    stroke: var(--zw-line);
+    stroke-width: 2.5;
+  }
+
+  .zak-tree .t-node {
+    fill: var(--zw-bg);
+    stroke: var(--zw-muted);
+    stroke-width: 2.5;
+    transition:
+      fill 0.3s,
+      stroke 0.3s;
+  }
+
+  .zak-tree .t-node.empty {
+    stroke-dasharray: 3 3;
+    stroke: var(--zw-line);
+  }
+
+  .zak-tree .t-node.root {
+    fill: var(--zw-public);
+    stroke: var(--zw-public);
+  }
+
+  .zak-tree .t-label {
+    font: 600 17px var(--zw-mono);
+    text-anchor: middle;
+    fill: var(--zw-muted);
+  }
+
+  /* holder's view, while proving and spending: the holder's country leaf; step 3 adds the path */
+  .zak:is([data-step='3'], [data-step='4']):not([data-view='public']) .zak-tree .t-node.you {
+    fill: var(--zw-secret);
+    stroke: var(--zw-secret);
+  }
+
+  .zak:is([data-step='3'], [data-step='4']):not([data-view='public']) .zak-tree .t-label.you {
+    fill: var(--zw-secret);
+  }
+
+  .zak[data-step='3']:not([data-view='public']) .zak-tree .t-edge.on-path {
+    stroke: var(--zw-secret);
+    stroke-width: 5;
+  }
+
+  .zak[data-step='3']:not([data-view='public']) .zak-tree .t-node.sib {
+    fill: color-mix(in srgb, var(--zw-secret) 25%, var(--zw-bg));
+    stroke: var(--zw-secret);
+    stroke-dasharray: 3 2;
+  }
+
+  .zak[data-step='2'] .zak-tree .t-node.root {
+    animation: zak-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes zak-pulse {
+    50% {
+      stroke-width: 6;
+      stroke: color-mix(in srgb, var(--zw-public) 40%, transparent);
+    }
+  }
+</style>
