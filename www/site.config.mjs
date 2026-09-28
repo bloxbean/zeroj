@@ -1,10 +1,14 @@
 // Single source of truth for site-wide values used by astro.config.mjs, the landing page,
 // the AI artifact generator and the build checks.
 //
-// Versions are read from the ZeroJ build at build time, so the docs never drift from the code:
-//   ZEROJ_VERSION  gradle.properties `version` with any -SNAPSHOT suffix removed
-//   JULC_VERSION   zeroj-onchain-julc/build.gradle `julcVersion`
-//   CCL_VERSION    root build.gradle `ext.cclVersion`
+// Versions come from www/release.json, which maintainers update after each release is on Maven
+// Central, so the docs only advertise what users can download (main's gradle.properties is usually
+// the NEXT, unpublished version):
+//   ZEROJ_VERSION   release.json `zeroj`   the published ZeroJ version the docs install
+//   JULC_VERSION    release.json `julc`    the JuLC version that release was built with
+//   CCL_VERSION     release.json `ccl`     the Cardano Client Lib version that release was built with
+//   ZEROJ_RELEASED  release.json `released` false until `zeroj` is on Maven Central (pages then show
+//                   a "not released yet" note; scripts/check-release.mjs skips the Central check)
 // Markdown/MDX pages reference them as %ZEROJ_VERSION%, %JULC_VERSION% and %CCL_VERSION%;
 // scripts/remark-versions.mjs substitutes them in rendered pages and the AI exports.
 
@@ -49,14 +53,27 @@ function match(text, pattern, what) {
   return found;
 }
 
+// The version main is building (usually the next release, with -SNAPSHOT). Recorded in the AI
+// manifest only; the docs never tell users to install it.
 export const ZEROJ_DEV_VERSION = match(read('gradle.properties'), /^version\s*=\s*(\S+)/m, 'ZeroJ version');
-export const ZEROJ_VERSION = ZEROJ_DEV_VERSION.replace(/-SNAPSHOT$/, '');
-export const JULC_VERSION = match(
-  read('zeroj-onchain-julc/build.gradle'),
-  /julcVersion\s*=\s*'([^']+)'/,
-  'JuLC version',
-);
-export const CCL_VERSION = match(read('build.gradle'), /ext\.cclVersion\s*=\s*'([^']+)'/, 'CCL version');
+
+export const RELEASE = readRelease();
+export const ZEROJ_VERSION = RELEASE.zeroj;
+export const JULC_VERSION = RELEASE.julc;
+export const CCL_VERSION = RELEASE.ccl;
+export const ZEROJ_RELEASED = RELEASE.released;
+
+function readRelease() {
+  const release = JSON.parse(readFileSync(resolve(WWW_ROOT, 'release.json'), 'utf8'));
+  for (const key of ['zeroj', 'julc', 'ccl']) {
+    if (typeof release[key] !== 'string' || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(release[key])) {
+      throw new Error(`release.json: "${key}" must be a release version like 0.1.0-pre12, got ${JSON.stringify(release[key])}`);
+    }
+    if (release[key].endsWith('-SNAPSHOT')) throw new Error(`release.json: "${key}" must not be a SNAPSHOT`);
+  }
+  if (typeof release.released !== 'boolean') throw new Error('release.json: "released" must be true or false');
+  return release;
+}
 
 export const VERSION_TOKENS = {
   '%ZEROJ_VERSION%': ZEROJ_VERSION,

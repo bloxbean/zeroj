@@ -1,0 +1,342 @@
+---
+// Digital product passport, step by step: register -> audit -> prove -> mint -> check.
+// Values follow the digital-product-passport demo (battery packs BAT-SN001..003 from
+// BatteryAssembly GmbH; carbon <= 50 kg CO2e, recycled content >= 30 %). Hashes are illustrative
+// stand-ins (see fakeHash), not Poseidon outputs.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import {
+  BATTERIES,
+  CARBON_MAX_KG,
+  MANUFACTURER,
+  RECYCLED_MIN_PCT,
+  canMint,
+  claims,
+} from './product-passport-data';
+
+const product = BATTERIES[0];
+const ok = claims(product);
+const mintable = canMint(product);
+const auditorSecret = fakeHash('dpp-auditor-secret');
+const auditorHash = (claim: string, id: string, value: number) => fakeHash(`ah:${claim}:${id}:${value}`);
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Digital product passport, step by step">
+  <div class="zw zpp" data-total="5" data-view="insider" data-ok={String(mintable)}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Product passport · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Supply-chain view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- auditor -->
+      <section class="zw-actor" data-hl="2" aria-label="Auditor">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Auditor</span>
+          <span class="zw-actor-sub">measures, commits</span>
+        </div>
+        <p class="zw-note" data-show="1">Measures each product once it's registered.</p>
+        <div class="zw-row" data-kind="secret" data-show="2-5" data-hl="2">
+          <span class="k">carbon</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-pp="carbon">{product.carbonKg} kg CO₂e</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="2-5" data-hl="2">
+          <span class="k">recycled</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-pp="recycled">{product.recycledPct} %</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="2-5">
+          <span class="k">auditorSecret</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{auditorSecret}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-5" data-hl="2">
+          <span class="k">auditorHash · carbon</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-pp="ah-carbon">{auditorHash('carbon', product.id, product.carbonKg)}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-5" data-hl="2">
+          <span class="k">auditorHash · recycled</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-pp="ah-recycled">{auditorHash('recycled', product.id, product.recycledPct)}</span>
+        </div>
+        <p class="zw-note" data-show="2-5">
+          Demo: one service plays auditor and manufacturer, so this is a keyed hash, not a signature.
+        </p>
+      </section>
+
+      <div class="zw-wire" data-hl="2" aria-hidden="true">
+        <span class="arrow" data-show="2">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">measurement</span>
+      </div>
+
+      <!-- manufacturer -->
+      <section class="zw-actor" data-hl="1,3" aria-label="Manufacturer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Manufacturer</span>
+          <span class="zw-actor-sub">{MANUFACTURER}</span>
+        </div>
+        <div class="zpp-pick">
+          <span class="zpp-pick-label">Product</span>
+          <span class="zw-choice" role="group" aria-label="Battery pack">
+            {BATTERIES.map((b, i) => (
+              <button type="button" data-product={b.id} aria-pressed={i === 0 ? 'true' : 'false'}>{b.short}</button>
+            ))}
+          </span>
+        </div>
+        <p class="zw-note" data-pp="name">{product.name}</p>
+        <div class="zw-box">
+          <span class="zw-box-title">Registry · Poseidon MPF trie</span>
+          <ul class="zpp-registry">
+            {BATTERIES.map((b, i) => (
+              <li data-id={b.id} class={i === 0 ? 'sel' : ''}><code>{b.id}</code></li>
+            ))}
+          </ul>
+          <span class="zw-note">plus 3 textile batches</span>
+        </div>
+        <div class="zpp-proving" data-show="3" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Proving each claim with Groth16</span>
+        </div>
+        <div class="zpp-claims" data-show="3-5">
+          <span class={ok.carbon ? 'zw-check' : 'zw-check no'} data-claim="carbon">
+            carbon ≤ {CARBON_MAX_KG} kg: isCompliant = <b>{ok.carbon ? 1 : 0}</b>
+          </span>
+          <span class={ok.recycled ? 'zw-check' : 'zw-check no'} data-claim="recycled">
+            recycled ≥ {RECYCLED_MIN_PCT} %: isCompliant = <b>{ok.recycled ? 1 : 0}</b>
+          </span>
+        </div>
+        <div class="zw-proof" data-show="3-4">
+          <span class="pi">π</span><span>one proof per claim</span>
+        </div>
+      </section>
+
+      <div class="zw-wire zpp-w2" data-hl="4" aria-hidden="true">
+        <span class="arrow" data-show="4">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4">π + datum</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor zpp-chain" data-hl="4,5" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">Plutus V3</span>
+        </div>
+        <p class="zw-note" data-show="1-3">No passport token yet.</p>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title"><code>DppMintingPolicy</code></span>
+          <span class="zw-check">manufacturer signed the tx</span>
+          <span class="zw-check">exactly one token minted</span>
+          <span class="zw-check">Groth16 proof over the datum</span>
+          <span class={mintable ? 'zw-check' : 'zw-check no'} data-pp="policy-compliant">
+            {mintable ? 'isCompliant = 1' : 'isCompliant = 0: mint rejected'}
+          </span>
+        </div>
+        <div class="zw-box zpp-if-ok" data-show="4-5">
+          <span class="zw-box-title">Passport token · inline datum</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">productId</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-pp="pid">{product.id}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">threshold</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{CARBON_MAX_KG} kg CO₂e</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">auditorHash</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-pp="pah">{auditorHash('carbon', product.id, product.carbonKg)}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">isCompliant</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">1</span>
+          </div>
+        </div>
+        <p class="zw-note zpp-if-ok" data-show="5">The carbon figure is not on-chain.</p>
+        <span class="zw-check no zpp-if-bad" data-show="5">
+          No passport for <b data-pp="nopass-id">{product.id}</b>: a non-compliant product can't mint one.
+        </span>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Register</p>
+        <p>The battery pack goes into the product registry. The demo keeps the registry in a Merkle Patricia Forestry trie hashed with Poseidon, so its root stays circuit-friendly.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Audit</p>
+        <p>The auditor measures the pack and publishes a commitment to <code>(productId, measurement)</code> for each claim. Because <code>productId</code> is inside the hash, the commitment belongs to this product only. In the demo one service plays both roles, so it's a keyed hash rather than a signature (see the caution below).</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Prove</p>
+        <p>For each claim, the manufacturer proves that the committed measurement passes the public threshold. <code>isCompliant</code> is proven equal to the comparison, so a failing pack proves <code>isCompliant = 0</code>. Pick SN003 to see one fail.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Mint the passport</p>
+        <p><code>DppMintingPolicy</code> checks the manufacturer's signature, that exactly one token is minted, and the proof over the output's inline datum, and it requires <code>isCompliant = 1</code>. Only then does the passport token exist.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Check</p>
+        <p>Anyone can read the passport and its public inputs on Cardano, but not the carbon figure or the recycled percentage. A production passport must also tie <code>auditorHash</code> to an accredited auditor and pin the threshold to the regulation (see On Cardano below).</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Register</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Audit</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Prove</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Mint</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Check</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> known only to the auditor and manufacturer</span>
+      <span><em class="zw-tag public">PUBLIC</em> anyone can read it on Cardano</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+  import { BATTERIES, CARBON_MAX_KG, RECYCLED_MIN_PCT, canMint, claims } from './product-passport-data';
+
+  document.querySelectorAll<HTMLElement>('.zpp').forEach((root) => {
+    initWalkthrough(root);
+    const set = (key: string, text: string) => {
+      const el = root.querySelector(`[data-pp="${key}"]`);
+      if (el) el.textContent = text;
+    };
+    const setProduct = (id: string) => {
+      const b = BATTERIES.find((x) => x.id === id) ?? BATTERIES[0];
+      const ok = claims(b);
+      const mintable = canMint(b);
+      root.dataset.ok = String(mintable);
+      root.querySelectorAll<HTMLElement>('[data-product]').forEach((btn) =>
+        btn.setAttribute('aria-pressed', String(btn.dataset.product === b.id)),
+      );
+      root.querySelectorAll<HTMLElement>('.zpp-registry [data-id]').forEach((li) =>
+        li.classList.toggle('sel', li.dataset.id === b.id),
+      );
+      const carbonHash = fakeHash(`ah:carbon:${b.id}:${b.carbonKg}`);
+      set('name', b.name);
+      set('carbon', `${b.carbonKg} kg CO₂e`);
+      set('recycled', `${b.recycledPct} %`);
+      set('ah-carbon', carbonHash);
+      set('ah-recycled', fakeHash(`ah:recycled:${b.id}:${b.recycledPct}`));
+      set('pid', b.id);
+      set('pah', carbonHash);
+      set('nopass-id', b.id);
+      const lines: Record<string, [boolean, string]> = {
+        carbon: [ok.carbon, `carbon ≤ ${CARBON_MAX_KG} kg`],
+        recycled: [ok.recycled, `recycled ≥ ${RECYCLED_MIN_PCT} %`],
+      };
+      Object.entries(lines).forEach(([claim, [pass, label]]) => {
+        const el = root.querySelector<HTMLElement>(`[data-claim="${claim}"]`);
+        if (!el) return;
+        el.innerHTML = `${label}: isCompliant = <b>${pass ? 1 : 0}</b>`;
+        el.classList.toggle('no', !pass);
+      });
+      const policy = root.querySelector<HTMLElement>('[data-pp="policy-compliant"]');
+      if (policy) {
+        policy.textContent = mintable ? 'isCompliant = 1' : 'isCompliant = 0: mint rejected';
+        policy.classList.toggle('no', !mintable);
+      }
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-product]').forEach((btn) =>
+      btn.addEventListener('click', () => setProduct(btn.dataset.product ?? BATTERIES[0].id)),
+    );
+  });
+</script>
+
+<style>
+  .zpp-pick {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em;
+  }
+
+  .zpp-pick-label {
+    font: 600 0.72em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zpp-registry {
+    display: grid;
+    gap: 0.25em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zpp-registry li {
+    padding: 0.2em 0.5em;
+    font-size: 0.8em;
+    border: 1px solid var(--zw-line);
+    border-radius: 7px;
+  }
+
+  .zpp-registry li.sel {
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-public) 16%, transparent);
+  }
+
+  .zpp-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zpp-claims {
+    display: grid;
+    gap: 0.35em;
+  }
+
+  /* a non-compliant product: the mint fails and no passport appears */
+  .zpp[data-ok='true'] .zpp-if-bad,
+  .zpp[data-ok='false'] .zpp-if-ok {
+    display: none;
+  }
+
+  .zpp[data-ok='false'][data-step='4'] .zpp-chain {
+    border-color: var(--zw-bad);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zw-bad) 18%, transparent);
+  }
+
+  .zpp[data-ok='false'][data-step='4'] .zpp-w2 .zw-wire-line {
+    background: color-mix(in srgb, var(--zw-bad) 45%, transparent);
+  }
+
+  .zpp[data-ok='false'][data-step='4'] .zpp-w2 .zw-wire-line::after {
+    background: linear-gradient(90deg, transparent, var(--zw-bad), transparent);
+  }
+
+  .zpp[data-ok='false'][data-step='4'] .zpp-w2 .arrow {
+    color: var(--zw-bad);
+  }
+
+  .zpp[data-ok='false'][data-step='4'] .zpp-w2 .zw-msg {
+    color: var(--zw-bad-ink);
+    border-color: color-mix(in srgb, var(--zw-bad) 50%, transparent);
+  }
+</style>

@@ -6,10 +6,16 @@ sidebar:
 ---
 
 import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+import InteropDiagram from '../../../components/walkthrough/InteropDiagram.astro';
+import TextOnly from '../../../components/TextOnly.astro';
 
 Maybe you already have circuits written in [circom](https://docs.circom.io/), or keys from a
 snarkjs trusted-setup ceremony. You don't have to rewrite anything to use ZeroJ. Groth16 on
 BLS12-381 speaks the same formats in both directions:
+
+<InteropDiagram />
+
+<TextOnly>
 
 ```text
   circom + snarkjs                                   ZeroJ (pure Java)
@@ -19,6 +25,8 @@ BLS12-381 speaks the same formats in both directions:
   verification_key.json    ◄─── same JSON ───►   verify snarkjs or ZeroJ proofs
   proof.json, public.json  ◄─── same JSON ───►   export for `snarkjs groth16 verify`
 ```
+
+</TextOnly>
 
 **What you'll build:** a tiny circom circuit set up with snarkjs, proved by ZeroJ's pure-Java
 prover; and a ZeroJ circuit whose proof snarkjs verifies.
@@ -295,8 +303,9 @@ use exactly this order.
   `ZkeyImporterBLS381.importZkeyFull(bytes, expectedSha256)` overload so the import fails
   unless the file matches the hash published with the ceremony transcript.
 - **Large circuits.** `importZkeyFull` loads the whole key into the heap. For big keys,
-  `ZkeyPkStoreImporter.importToPkStore(zkeyFile, dir)` converts the `.zkey` once into a
-  memory-mapped key store that you open with `Groth16Keys.load(dir)`. The
+  `ZkeyPkStoreImporter.importToPkStore(zkeyFile, dir, expectedSha256)` converts the `.zkey` once
+  into a memory-mapped key store, pinned to the same hash, and returns the store's manifest hash
+  that you open it with: `Groth16Keys.load(dir, manifestSha256)`. The
   [Groth16 guide](/guides/proving/groth16/) shows that flow, including the extra argument that
   snarkjs-made keys need at prove time.
 - **The witness must match the key.** A `.zkey` is made for one exact constraint system, so

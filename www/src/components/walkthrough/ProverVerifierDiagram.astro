@@ -1,0 +1,162 @@
+---
+// "Two roles: prover and verifier" from "Zero-knowledge in plain English", as a picture: the prover
+// holds a secret (age 42) and a public value (threshold 18); only the proof and the public value
+// travel; the verifier accepts or rejects. The reader can change the secret age: when the rule is
+// false there is no valid proof to send, so the verifier rejects.
+import './walkthrough.css';
+
+const THRESHOLD = 18;
+const AGE = 42;
+---
+
+<figure class="zw-frame not-content" aria-label="Prover and verifier">
+  <div class="zw zcb-pv" data-total="1" data-view="insider" data-ok="1" data-threshold={THRESHOLD}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Two roles · rule: <b>age ≥ {THRESHOLD}</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Everything</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">What the verifier sees</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <section class="zw-actor" aria-label="Prover">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Prover</span>
+          <span class="zw-actor-sub">knows the secret</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">age</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-age>{AGE}</span><span class="mask">████</span></span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">threshold</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{THRESHOLD}</span>
+        </div>
+        <label class="zcb-pv-slider" data-when="insider">
+          <span>Try another secret age</span>
+          <input type="range" min="10" max="60" value={AGE} data-age-input aria-label="Secret age" />
+        </label>
+      </section>
+
+      <div class="zw-wire zcb-pv-wire" aria-hidden="true">
+        <span class="arrow">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-when-ok="1">π proof</span>
+        <span class="zw-msg" data-when-ok="0">no valid π</span>
+        <span class="zw-msg">public: {THRESHOLD}</span>
+      </div>
+
+      <section class="zw-actor" aria-label="Verifier">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Verifier</span>
+          <span class="zw-actor-sub">checks the proof</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">threshold</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{THRESHOLD}</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">proof</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">π</span>
+        </div>
+        <p class="zw-note">The age is never sent.</p>
+        <span class="zw-check" data-when-ok="1">accepts: the rule holds</span>
+        <span class="zw-check no" data-when-ok="0">rejects: no valid proof exists</span>
+      </section>
+    </div>
+
+    <p class="zcb-pv-caption" aria-live="polite">
+      <span data-when-ok="1">
+        The prover shows that <b>age ≥ {THRESHOLD}</b> holds for its secret age. The verifier learns
+        that, and only that. <span data-when="insider">The secret (<b data-age>{AGE}</b>) never leaves the prover.</span>
+      </span>
+      <span data-when-ok="0">
+        <b data-age-false>{AGE} ≥ {THRESHOLD}</b> is false, so no valid proof exists. Whatever the prover
+        sends, the verifier rejects it, still without learning the age.
+      </span>
+    </p>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zcb-pv').forEach((root) => {
+    initWalkthrough(root);
+    const threshold = Number(root.dataset.threshold) || 18;
+    const input = root.querySelector<HTMLInputElement>('[data-age-input]');
+    const update = () => {
+      const age = Number(input?.value ?? 42);
+      root.querySelectorAll('[data-age]').forEach((el) => (el.textContent = String(age)));
+      const falseEl = root.querySelector('[data-age-false]');
+      if (falseEl) falseEl.textContent = `${age} ≥ ${threshold}`;
+      root.dataset.ok = age >= threshold ? '1' : '0';
+    };
+    input?.addEventListener('input', update);
+    update();
+  });
+</script>
+
+<style>
+  .zcb-pv[data-ok='1'] [data-when-ok='0'],
+  .zcb-pv[data-ok='0'] [data-when-ok='1'] {
+    display: none;
+  }
+
+  /* the wire is always "live" here: the proof and the public value travel on every run */
+  .zcb-pv-wire .zw-wire-line {
+    background: color-mix(in srgb, var(--zw-public) 35%, transparent);
+  }
+
+  .zcb-pv-wire .arrow {
+    color: var(--zw-public);
+  }
+
+  .zcb-pv[data-ok='0'] .zcb-pv-wire .zw-wire-line {
+    background: color-mix(in srgb, var(--zw-bad) 45%, transparent);
+  }
+
+  .zcb-pv[data-ok='0'] .zcb-pv-wire .arrow {
+    color: var(--zw-bad);
+  }
+
+  .zcb-pv[data-ok='0'] .zcb-pv-wire .zw-msg[data-when-ok='0'] {
+    color: var(--zw-bad-ink);
+    border-color: color-mix(in srgb, var(--zw-bad) 50%, transparent);
+  }
+
+  .zcb-pv-slider {
+    display: grid;
+    gap: 0.25em;
+    font-size: 0.78em;
+    color: var(--zw-muted);
+  }
+
+  .zcb-pv-slider input {
+    width: 100%;
+    accent-color: var(--zw-secret);
+    cursor: pointer;
+  }
+
+  .zcb-pv-caption {
+    margin: 0;
+    padding: 0.85em 1.1em 1em;
+    color: var(--zw-text-2);
+    border-top: 1px solid var(--zw-line);
+  }
+
+  /* two lanes and one wire instead of three lanes */
+  .zcb-pv .zw-stage {
+    grid-template-columns: minmax(0, 1fr) 6.5em minmax(0, 1fr);
+  }
+
+  @container (max-width: 560px) {
+    .zcb-pv .zw-stage {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

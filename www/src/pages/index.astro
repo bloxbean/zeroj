@@ -1,7 +1,7 @@
 ---
 import { Code } from 'astro:components';
 import '../styles/landing.css';
-import { SITE_URL, REPO_URL, USECASES_URL, ZEROJ_VERSION } from '../../site.config.mjs';
+import { SITE_URL, REPO_URL, USECASES_URL, ZEROJ_RELEASED, ZEROJ_VERSION } from '../../site.config.mjs';
 
 const install = `implementation platform('org.zeroj:zeroj-bom-core:${ZEROJ_VERSION}')`;
 
@@ -271,6 +271,12 @@ valid and an invalid witness, and the code to verify the proof in Java.`;
               Copy
             </button>
           </div>
+          {!ZEROJ_RELEASED && (
+            <p class="install-note">
+              {ZEROJ_VERSION} is the upcoming release and isn't on Maven Central yet.{' '}
+              <a href="/start/installation/">Installation</a> explains how to build it meanwhile.
+            </p>
+          )}
           <ul class="hero-footnote" aria-label="Highlights">
             <li>JAVA 25</li>
             <li>PURE-JAVA PROVER</li>
@@ -356,8 +362,6 @@ valid and an invalid witness, and the code to verify the proof in Java.`;
             <li>Groth16</li>
             <li>BLS12-381</li>
             <li>Plutus V3</li>
-            <li>JuLC</li>
-            <li>snarkjs</li>
             <li>Poseidon</li>
           </ul>
         </div>

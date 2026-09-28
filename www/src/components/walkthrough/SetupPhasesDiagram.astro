@@ -1,0 +1,199 @@
+---
+// Phase 1 (universal) vs phase 2 (per circuit), from learn/trusted-setup. The reader picks a change
+// from the page's "What needs a new setup?" table and sees which phase has to be redone.
+import './walkthrough.css';
+
+const changes = [
+  { id: 'proof', label: 'A new user or a new proof', p1: false, p2: false,
+    why: 'Same keys. Setup happens once per circuit, not once per proof.' },
+  { id: 'values', label: 'Different public input values', p1: false, p2: false,
+    why: 'Same keys. The values change with every proof; the circuit itself does not.' },
+  { id: 'constraint', label: 'A changed constraint', p1: false, p2: true,
+    why: 'A new phase 2 and new keys. Phase 1 still fits, so you reuse it.' },
+  { id: 'inputs', label: 'More, fewer or reordered public inputs', p1: false, p2: true,
+    why: "A new phase 2. The number and order of public inputs are part of the circuit's shape." },
+  { id: 'param', label: 'A different circuit parameter, such as Merkle depth', p1: false, p2: true,
+    why: "It's a different circuit, so it needs its own phase 2." },
+  { id: 'grow', label: 'The circuit outgrows the phase 1 size', p1: true, p2: true,
+    why: 'You need a larger phase 1 first, then a new phase 2.' },
+];
+const initial = changes[2];
+---
+
+<figure class="zw-frame not-content" aria-label="Phase 1 and phase 2 of a Groth16 setup">
+  <div class="zw zts zts-phases" data-total="1" data-change={initial.id}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Groth16 setup · <b>two phases</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zts-phases-row">
+      <section class="zts-phase" data-phase="1" data-redo={String(initial.p1)}>
+        <span class="zts-phase-name">Phase 1 · universal</span>
+        <p>Powers of tau for BLS12-381, up to 2ⁿ constraints.</p>
+        <p class="zw-note">Once per curve and size. Every circuit that fits can reuse it, including a big public ceremony.</p>
+        <span class="zts-badge"><span class="keep">Reuse</span><span class="redo">Redo (larger)</span></span>
+      </section>
+      <span class="zts-phase-arrow" aria-hidden="true">→</span>
+      <section class="zts-phase" data-phase="2" data-redo={String(initial.p2)}>
+        <span class="zts-phase-name">Phase 2 · your circuit</span>
+        <p>Powers of tau + your compiled circuit give its proving key and verification key (a <code>.zkey</code> file).</p>
+        <p class="zw-note">Once per circuit version, with its own toxic waste.</p>
+        <span class="zts-badge"><span class="keep">Reuse</span><span class="redo">Redo</span></span>
+      </section>
+    </div>
+
+    <div class="zts-changes">
+      <span class="zts-q" id="zts-phases-q">What changed? Pick one:</span>
+      <div class="zts-chips" role="group" aria-labelledby="zts-phases-q">
+        {changes.map((c) => (
+          <button type="button" data-change-btn={c.id} data-p1={String(c.p1)} data-p2={String(c.p2)} data-why={c.why}
+            aria-pressed={c.id === initial.id ? 'true' : 'false'}>{c.label}</button>
+        ))}
+      </div>
+      <p class="zts-answer" aria-live="polite" data-answer>{initial.why}</p>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zts-phases').forEach((root) => {
+    initWalkthrough(root);
+    const answer = root.querySelector<HTMLElement>('[data-answer]');
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-change-btn]')];
+    buttons.forEach((b) =>
+      b.addEventListener('click', () => {
+        buttons.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        root.dataset.change = b.dataset.changeBtn;
+        root.querySelector<HTMLElement>('[data-phase="1"]')?.setAttribute('data-redo', b.dataset.p1 ?? 'false');
+        root.querySelector<HTMLElement>('[data-phase="2"]')?.setAttribute('data-redo', b.dataset.p2 ?? 'false');
+        if (answer) answer.textContent = b.dataset.why ?? '';
+      }),
+    );
+  });
+</script>
+
+<style>
+  .zts-phases-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 2em minmax(0, 1fr);
+    align-items: stretch;
+    padding: 1em 1.1em 0.4em;
+  }
+
+  .zts-phase {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    min-width: 0;
+    padding: 0.8em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 12px;
+    transition:
+      border-color 0.3s,
+      box-shadow 0.3s;
+  }
+
+  .zts-phase p {
+    margin: 0;
+    font-size: 0.9em;
+    color: var(--zw-text-2);
+  }
+
+  .zts-phase-name {
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--zw-text-2);
+  }
+
+  .zts-phase-arrow {
+    display: grid;
+    place-items: center;
+    color: var(--zw-muted);
+  }
+
+  .zts-badge {
+    align-self: flex-start;
+    margin-top: auto;
+    padding: 0.2em 0.6em;
+    font: 600 0.78em var(--zw-mono);
+    border-radius: 6px;
+  }
+
+  .zts-phase[data-redo='false'] .zts-badge {
+    color: var(--zw-public);
+    background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+  }
+
+  .zts-phase[data-redo='true'] .zts-badge {
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+  }
+
+  .zts-phase[data-redo='true'] {
+    border-color: var(--zw-bad);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-bad) 16%, transparent);
+  }
+
+  .zts-phase[data-redo='false'] .redo,
+  .zts-phase[data-redo='true'] .keep {
+    display: none;
+  }
+
+  .zts-changes {
+    display: grid;
+    gap: 0.5em;
+    padding: 0.6em 1.1em 1em;
+  }
+
+  .zts-q {
+    font-size: 0.85em;
+    font-weight: 600;
+  }
+
+  .zts-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+  }
+
+  .zts-chips button {
+    padding: 0.3em 0.7em;
+    font-size: 0.82em;
+    color: var(--zw-text-2);
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 999px;
+  }
+
+  .zts-chips button[aria-pressed='true'] {
+    color: var(--zw-text);
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-public) 16%, transparent);
+  }
+
+  .zts-answer {
+    margin: 0;
+    padding: 0.55em 0.75em;
+    font-weight: 600;
+    background: var(--zw-panel);
+    border-radius: 8px;
+  }
+
+  @container (max-width: 560px) {
+    .zts-phases-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.4em;
+    }
+
+    .zts-phase-arrow {
+      transform: rotate(90deg);
+    }
+  }
+</style>

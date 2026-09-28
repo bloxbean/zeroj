@@ -1,0 +1,286 @@
+---
+// Private token transfers (shielded pool), step by step: deposit -> grow the tree -> wait ->
+// withdraw through a relayer -> pool validator pays. The page is a design with no runnable demo, so
+// every value here is illustrative and follows the page text only.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const secret = fakeHash('pool:secret:alice');
+const nullifier = fakeHash('pool:nullifier:alice');
+const commitment = fakeHash(`cm:${secret}:${nullifier}`);
+const nullifierHash = fakeHash(`nh:${nullifier}`);
+const aliceAddr = `addr1${fakeHash('pool:alice-address').slice(2)}`;
+const freshAddr = `addr1${fakeHash('pool:fresh-address').slice(2)}`;
+
+// Pool sizes the reader can pick. The page's own example is 5 deposits ("1 in 5").
+const SIZES = [5, 20, 100];
+const DEFAULT_N = 5;
+const ALICE_LEAF = 2;
+const MAX = SIZES[SIZES.length - 1];
+---
+
+<figure class="zw-frame not-content" aria-label="Private token transfers, step by step">
+  <div class="zw zpy" data-total="5" data-view="insider" data-n={DEFAULT_N}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Private transfers · design · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Alice's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- Alice -->
+      <section class="zw-actor" data-hl="1,4" aria-label="Alice">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name" data-when="insider">Alice</span>
+          <span class="zw-actor-name" data-when="public">Depositor</span>
+          <span class="zw-actor-sub">address visible</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">deposit address</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{aliceAddr}</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-hl="1">
+          <span class="k">secret</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{secret}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-hl="1">
+          <span class="k">nullifier</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{nullifier}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">commitment = Poseidon(secret, nullifier)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{commitment}</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="4-5" data-hl="4">
+          <span class="k">Merkle path</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">siblings + pathBits</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="4-5" data-hl="4">
+          <span class="k">nullifierHash = Poseidon(nullifier, 0)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{nullifierHash}</span>
+        </div>
+        <div class="zw-proof" data-show="4-5">
+          <span class="pi">π</span><span>Groth16 proof</span><small>binds recipient + fee</small>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1" aria-hidden="true">
+        <span class="arrow" data-show="1">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">100 ADA + cm</span>
+      </div>
+
+      <!-- Pool -->
+      <section class="zw-actor" data-hl="2,3,5" aria-label="Pool validator">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Pool</span>
+          <span class="zw-actor-sub">validator, design</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="1" data-hl="1">
+          <span class="k">new deposit UTxO</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap">100 ADA + {commitment}</span>
+        </div>
+        <p class="zw-note" data-show="1">Collected as its own UTxO, waiting for the next batch.</p>
+        <div class="zw-box" data-show="2-5">
+          <span class="zw-box-title">Commitment tree · 100 ADA notes</span>
+          <span class="zw-choice zpy-sizes" role="group" aria-label="Deposits in the pool">
+            {SIZES.map((n) => (
+              <button type="button" data-size={n} aria-pressed={n === DEFAULT_N ? 'true' : 'false'}>{n}</button>
+            ))}
+          </span>
+          <div class="zpy-dots" aria-hidden="true">
+            {Array.from({ length: MAX }, (_, i) => (
+              <i class={[i === ALICE_LEAF ? 'alice' : '', i >= DEFAULT_N ? 'off' : ''].join(' ')}></i>
+            ))}
+          </div>
+          <span class="zw-note"><span data-n>{DEFAULT_N}</span> deposits of 100 ADA</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-5" data-hl="2">
+          <span class="k">merkleRoot</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-root>{fakeHash(`pool:root:${DEFAULT_N}`)}</span>
+        </div>
+        <div class="zpy-anon" data-show="3-5" data-hl="3">
+          <span class="zpy-big">1 in <span data-n>{DEFAULT_N}</span></span>
+          <span class="zw-note">anonymity set: every note of the same amount</span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-check">proof valid</span>
+          <span class="zw-check"><code>merkleRoot</code> is one the pool published</span>
+          <span class="zw-check"><code>nullifierHash</code> is new, now recorded</span>
+          <span class="zw-check">pays the recipient, fee to the relayer</span>
+        </div>
+      </section>
+
+      <div class="zw-wire zpy-w2" data-hl="4,5" aria-hidden="true">
+        <span class="arrow" data-show="4">←</span>
+        <span class="arrow" data-show="5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4">π + tag</span>
+        <span class="zw-msg" data-show="5">100 ADA − fee</span>
+      </div>
+
+      <!-- Relayer and the fresh address -->
+      <section class="zw-actor" data-hl="4,5" aria-label="Relayer and fresh address">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Withdraw</span>
+          <span class="zw-actor-sub">relayer, fresh address</span>
+        </div>
+        <p class="zw-note" data-show="1-3">Nothing yet. Alice hasn't withdrawn.</p>
+        <div class="zw-row" data-kind="public" data-show="4-5">
+          <span class="k">recipient</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{freshAddr}</span>
+        </div>
+        <p class="zw-note" data-show="4-5">
+          <span data-when="insider">Alice's new address, with no ADA to pay fees.</span>
+          <span data-when="public">Owner unknown: no link to any deposit.</span>
+        </p>
+        <div class="zw-row" data-kind="public" data-show="4-5">
+          <span class="k">relayerFee</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap">bound in the proof</span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title">Relayer</span>
+          <span class="zw-note">Gets the proof from Alice off-chain and submits the transaction.</span>
+          <span class="zw-check">can't redirect: recipient and fee are bound</span>
+          <span class="zw-check warn">can refuse to submit, so use more than one</span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-check">recipient gets 100 ADA − fee</span>
+          <span class="zw-check">relayer gets its fee</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Deposit</p>
+        <p>Alice picks two random values, <code>secret</code> and <code>nullifier</code>, and deposits 100 ADA with <code>commitment = Poseidon(secret, nullifier)</code>. Her address is visible, but the secret and nullifier stay with her.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Grow the tree</p>
+        <p>The pool adds deposits to its commitment tree. A single shared root UTxO would serialize every deposit, so the design collects deposits as individual UTxOs and folds them in periodic batches.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Wait</p>
+        <p>Time and more deposits grow the anonymity set: every deposit of the same amount is a candidate. Withdrawing right after depositing gives most of it away. Try a bigger pool.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Withdraw through a relayer</p>
+        <p>Alice proves her commitment is somewhere in the tree and reveals <code>nullifierHash</code>. Her fresh address has no ADA for fees, so a relayer submits the transaction. The proof binds the recipient and the fee, so the relayer can't redirect the funds.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. The pool validator pays</p>
+        <p>The validator verifies the proof, checks the root is one it published and that <code>nullifierHash</code> is new, records it and pays the recipient. Switch to <b>Public view</b>: the chain sees a deposit and a withdrawal, but nothing links them.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Deposit</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Grow the tree</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Wait</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Withdraw</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Pay out</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays with Alice</span>
+      <span><em class="zw-tag public">PUBLIC</em> visible on Cardano</span>
+      <span>A design, not a runnable demo. Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zpy').forEach((root) => {
+    initWalkthrough(root);
+    const setSize = (n: number) => {
+      root.dataset.n = String(n);
+      root.querySelectorAll<HTMLElement>('[data-size]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(Number(b.dataset.size) === n)),
+      );
+      root.querySelectorAll('.zpy-dots i').forEach((dot, i) => dot.classList.toggle('off', i >= n));
+      root.querySelectorAll('[data-n]').forEach((el) => (el.textContent = String(n)));
+      const merkleRoot = root.querySelector('[data-root]');
+      if (merkleRoot) merkleRoot.textContent = fakeHash(`pool:root:${n}`);
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-size]').forEach((b) =>
+      b.addEventListener('click', () => setSize(Number(b.dataset.size))),
+    );
+  });
+</script>
+
+<style>
+  .zpy-sizes {
+    justify-self: start;
+  }
+
+  /* pool size is public, so the picked size uses the public colour, not the secret violet */
+  .zpy-sizes button[aria-pressed='true'] {
+    color: var(--zw-bg);
+    background: var(--zw-public);
+  }
+
+  .zpy-dots {
+    display: grid;
+    grid-template-columns: repeat(10, 0.75em);
+    gap: 0.22em;
+  }
+
+  .zpy-dots i {
+    width: 0.75em;
+    height: 0.75em;
+    background: color-mix(in srgb, var(--zw-public) 55%, var(--zw-bg));
+    border-radius: 3px;
+  }
+
+  .zpy-dots i.off {
+    display: none;
+  }
+
+  /* Alice knows which note is hers; nobody else does. */
+  .zw:not([data-view='public']) .zpy-dots i.alice {
+    background: var(--zw-secret);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-secret) 30%, transparent);
+  }
+
+  .zpy-anon {
+    display: grid;
+    gap: 0.2em;
+    padding: 0.5em 0.6em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 9px;
+    transition:
+      border-color 0.3s,
+      box-shadow 0.3s;
+  }
+
+  .zpy-anon[data-hl-on] {
+    border-color: var(--zw-public);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-public) 18%, transparent);
+  }
+
+  .zpy-big {
+    font-family: var(--zw-display);
+    font-size: 1.5em;
+    font-weight: 600;
+    color: var(--zw-public);
+  }
+
+  .zw[data-step='4'] .zpy-w2 .zw-wire-line::after {
+    animation-name: zw-travel-left;
+  }
+</style>

@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+import UnderConstrainedExplainer from '../../../components/walkthrough/UnderConstrainedExplainer.astro';
 
 A website wants to know you're an adult. Today you'd show an ID card and hand over your name,
 birth date and address to answer a yes/no question. In this tutorial you'll answer only the
@@ -315,6 +316,8 @@ and the public `threshold`), prove anyway, and the verifier answers
 That's why an honest run proves nothing about soundness. A circuit that forgets a constraint
 still works perfectly for honest users. Always test inputs that must fail, like this page
 does. [Testing circuits](/guides/circuits/testing-circuits/) goes deeper.
+
+<UnderConstrainedExplainer variant="tutorial" />
 
 ## Public inputs: order and ownership
 

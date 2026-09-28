@@ -1,0 +1,665 @@
+---
+// Selective disclosure, step by step, in the page's two flavours:
+//   BBS     issue -> challenge -> present -> verify -> replay   (the reusable-kyc demo)
+//   Groth16 issue -> prove -> unlock, for Alice, Bob or Charlie (the selective-disclosure demo)
+// mode 'both' (default) shows both behind tabs; 'bbs' or 'g16' shows one of them, without tabs
+// (the BBS guide and the proof-systems page use 'bbs').
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import {
+  BBS_ATTRIBUTES,
+  BBS_REQUIRED,
+  CURRENT_YEAR,
+  HOLDERS,
+  adultResident,
+  seniorDoctor,
+} from './disclosure-data';
+
+interface Props {
+  mode?: 'both' | 'bbs' | 'g16';
+}
+const { mode = 'both' } = Astro.props;
+const both = mode === 'both';
+const showBbs = mode !== 'g16';
+const showG16 = mode !== 'bbs';
+const label = both
+  ? 'Selective disclosure, step by step'
+  : showBbs
+    ? 'BBS selective disclosure, step by step'
+    : 'Groth16 predicates over a credential, step by step';
+
+const issuerKey = fakeHash('bbs-issuer-pk');
+const jubjubKey = fakeHash('jubjub-issuer-pk');
+const holder = HOLDERS[0];
+const adult = adultResident(holder);
+const doctor = seniorDoctor(holder);
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame zd-frame not-content" aria-label={label}>
+  {both && (
+    <div class="zw-modes" role="tablist" aria-label="Approach">
+      <button type="button" role="tab" id="zd-tab-bbs" aria-controls="zd-bbs" aria-selected="true">
+        Reveal attributes<small>BBS</small>
+      </button>
+      <button type="button" role="tab" id="zd-tab-g16" aria-controls="zd-g16" aria-selected="false" tabindex="-1">
+        Prove a rule<small>Groth16</small>
+      </button>
+    </div>
+  )}
+
+  <!-- ============================================================ BBS -->
+  {showBbs && (
+  <div class="zw zd-bbs" id="zd-bbs" role={both ? 'tabpanel' : undefined} aria-labelledby={both ? 'zd-tab-bbs' : undefined} data-total="5" data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">BBS · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Verifier's view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <section class="zw-actor" data-hl="1" aria-label="Issuer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Issuer</span>
+          <span class="zw-actor-sub">KYC provider</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">issuer public key</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{issuerKey}</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">One BBS signature over all five</span>
+          <ol class="zd-attr-names" start="0">
+            {BBS_ATTRIBUTES.map((a) => <li><code>{a.name}</code></li>)}
+          </ol>
+        </div>
+        <p class="zw-note">No circuit and no trusted setup.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="1" aria-hidden="true">
+        <span class="arrow" data-show="1">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">credential</span>
+      </div>
+
+      <section class="zw-actor" data-hl="3" data-bad="5" aria-label="Holder">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Holder</span>
+          <span class="zw-actor-sub">Alice's wallet</span>
+        </div>
+        {BBS_ATTRIBUTES.map((a, i) => {
+          const shown = BBS_REQUIRED.includes(i);
+          return (
+            <div class="zw-row zd-attr" data-kind={shown ? 'public' : 'secret'} data-attr={i}>
+              <span class="k">{i} · {a.name}</span>
+              <label class="zd-switch" data-when="insider">
+                <input type="checkbox" data-reveal={i} checked={shown} />
+                <span class="zd-switch-ui" aria-hidden="true"></span>
+                <span class="zd-switch-label">Reveal<span class="sr-only"> {a.name}</span></span>
+              </label>
+              <span class="v"><span class="real">{a.value}</span><span class="mask">████████</span></span>
+              <em class="zw-tag"><span class="t-rev">REVEALED</span><span class="t-sec vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            </div>
+          );
+        })}
+        <div class="zw-proof" data-show="3-5">
+          <span class="pi">π</span><span data-pres-bytes>{fakeHash('presentation-1')}</span><small>new bytes each time</small>
+        </div>
+      </section>
+
+      <div class="zw-wire zd-w2" data-hl="2,3" data-bad="5" aria-hidden="true">
+        <span class="arrow" data-show="2">←</span>
+        <span class="arrow" data-show="3,5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">challenge</span>
+        <span class="zw-msg" data-show="3">presentation</span>
+        <span class="zw-msg" data-show="5">replay</span>
+      </div>
+
+      <section class="zw-actor" data-hl="2,4" data-bad="5" aria-label="Verifier">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Verifier</span>
+          <span class="zw-actor-sub">app or Cardano validator</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Policy</span>
+          <span class="zd-policy"><code>country</code> is allowed</span>
+          <span class="zd-policy"><code>kycLevel</code> = verified</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-5" data-hl="2">
+          <span class="k">challenge (fresh, single-use)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-challenge>{fakeHash('challenge-1')}</span>
+        </div>
+        <div class="zw-box" data-show="3-5">
+          <span class="zw-box-title">Presentation received</span>
+          <ul class="zd-received">
+            {BBS_ATTRIBUTES.map((a, i) => (
+              <li data-recv={i} class={BBS_REQUIRED.includes(i) ? 'shown' : ''}>
+                <code>{a.name}</code>
+                <span class="val">{a.value}</span>
+                <span class="hidden-val">hidden, but signed</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div class="zw-box" data-show="4-5">
+          <span class="zw-check">proof valid for the issuer key</span>
+          <span class="zw-check" data-show="4">challenge is new, now marked used</span>
+          <span class="zw-check no" data-show="5">challenge already used: rejected</span>
+          <span class="zw-check" data-policy data-show="4">policy met</span>
+          <span class="zw-check warn" data-extra data-show="4" hidden></span>
+          <span class="zw-check" data-onchain data-show="4">on Cardano, <code>BbsKycClaimValidator</code> pays the voucher</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Issue</p>
+        <p>The KYC provider checks Alice's documents once and signs all five attributes as one BBS credential. Alice keeps it in her wallet.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Challenge</p>
+        <p>The verifier sends a fresh random challenge. The verifier picks it, never the holder, so a presentation made for this verifier can't be replayed elsewhere.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Present</p>
+        <p>Alice's wallet derives a presentation that reveals only the attributes she ticks, bound to the challenge. It proves the hidden attributes were signed too, without showing them. Each presentation has new proof bytes, so two verifiers can't link them. Try ticking other attributes.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Verify</p>
+        <p>The verifier checks the proof against the issuer's public key, checks that the challenge is one it issued and hasn't seen, then applies its policy. On Cardano, a validator runs the same BBS check natively and releases a voucher.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Replay</p>
+        <p>Someone resends the same presentation. Its challenge was already used, so it's rejected. On-chain, the challenge is derived from the voucher UTxO, which is already spent.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Issue</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Challenge</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Present</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Verify</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Replay</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays in the wallet</span>
+      <span><em class="zw-tag public">REVEALED</em> the verifier sees the value</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+  )}
+
+  <!-- ============================================================ Groth16 -->
+  {showG16 && (
+  <div class="zw zd-g16" id="zd-g16" role={both ? 'tabpanel' : undefined} aria-labelledby={both ? 'zd-tab-g16' : undefined} data-total="3" data-view="insider" hidden={both}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Groth16 · step <b data-counter>1 / 3</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Gate's view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <section class="zw-actor" data-hl="1" aria-label="Issuer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Issuer</span>
+          <span class="zw-actor-sub">signs once</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">issuer key (pkU, pkV)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{jubjubKey}</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">EdDSA-Jubjub signature over</span>
+          <code class="zd-formula">Poseidon(dobYear, country, roleId, salaryBracket, nameHash)</code>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1" aria-hidden="true">
+        <span class="arrow" data-show="1">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">credential</span>
+      </div>
+
+      <section class="zw-actor" data-hl="2" aria-label="Holder">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Holder</span>
+          <span class="zw-choice" role="group" aria-label="Holder" data-when="insider">
+            {HOLDERS.map((h, i) => (
+              <button type="button" data-holder={h.id} aria-pressed={i === 0 ? 'true' : 'false'}>{h.name}</button>
+            ))}
+          </span>
+          <span class="zw-actor-sub" data-when="public">identity hidden</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">dobYear</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="dobYear">{holder.dobYear}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">country</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="country">{holder.country} · {holder.countryName}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">roleId</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="role">{holder.roleId} · {holder.role}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">salaryBracket, nameHash, signature</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-f="rest">{holder.salaryBracket} · {fakeHash(`name:${holder.name}`)} · σ</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zd-proving" data-show="2" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Running each gate's circuit on this device</span>
+        </div>
+        <div class="zd-proofs" data-show="2-3">
+          <span class={adult.ok ? 'zw-check' : 'zw-check no'} data-proof="adult">
+            {adult.ok ? 'π for the adult-resident gate' : 'no valid proof for adult resident'}
+          </span>
+          <span class={doctor.ok ? 'zw-check' : 'zw-check no'} data-proof="doctor">
+            {doctor.ok ? 'π for the senior-doctor gate' : 'no valid proof for senior doctor'}
+          </span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="3" aria-hidden="true">
+        <span class="arrow" data-show="3">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3">π + inputs</span>
+      </div>
+
+      <section class="zw-actor" data-hl="3" aria-label="Gates">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Gates</span>
+          <span class="zw-actor-sub">spending validators</span>
+        </div>
+        <div class="zw-box zd-gate" data-gate="adult">
+          <span class="zw-box-title">Adult resident</span>
+          <span class="zd-rule">born {CURRENT_YEAR - 21} or earlier, and country on the approved list</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">sees</span><em class="zw-tag">PUBLIC</em>
+            <span class="v wrap">issuer key · {CURRENT_YEAR} · countryRoot · eligible = 1</span>
+          </div>
+          <span class="zd-why" data-why="adult" data-show="2-3">{adult.why}</span>
+          <span class={adult.ok ? 'zw-check' : 'zw-check no'} data-result="adult" data-show="3">
+            {adult.ok ? 'unlocked' : 'stays locked'}
+          </span>
+        </div>
+        <div class="zw-box zd-gate" data-gate="doctor">
+          <span class="zw-box-title">Senior doctor</span>
+          <span class="zd-rule">role is doctor (1001), born {CURRENT_YEAR - 30} or earlier</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">sees</span><em class="zw-tag">PUBLIC</em>
+            <span class="v wrap">issuer key · {CURRENT_YEAR} · eligible = 1</span>
+          </div>
+          <span class="zd-why" data-why="doctor" data-show="2-3">{doctor.why}</span>
+          <span class={doctor.ok ? 'zw-check' : 'zw-check no'} data-result="doctor" data-show="3">
+            {doctor.ok ? 'unlocked' : 'stays locked'}
+          </span>
+        </div>
+        <p class="zw-note">Approved: USA, UK, Germany, France, Japan, committed as a Merkle root.</p>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Issue</p>
+        <p>The issuer signs a Poseidon hash of all five fields with EdDSA-Jubjub, once. Pick Alice, Bob or Charlie to load their credential.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Prove</p>
+        <p>For each gate, the holder runs that gate's circuit on their own device. It recomputes the hash, checks the issuer's signature and checks the gate's rule. When the rule is false, no valid proof exists.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Unlock</p>
+        <p>Each gate is a spending validator with the issuer key and the current year pinned as script parameters. It verifies the proof and releases the funds. Switch to <b>Gate's view</b>: the gate never learns the birth year, country, role or salary.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Issue</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Prove</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Unlock</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays with the holder</span>
+      <span><em class="zw-tag public">PUBLIC</em> what the gate sees</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+  )}
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash, randomHex } from './engine';
+  import { BBS_ATTRIBUTES, BBS_REQUIRED, HOLDERS, adultResident, seniorDoctor } from './disclosure-data';
+
+  document.querySelectorAll<HTMLElement>('.zd-frame').forEach((frame) => {
+    const bbs = frame.querySelector<HTMLElement>('.zd-bbs');
+    const g16 = frame.querySelector<HTMLElement>('.zd-g16');
+    if (bbs) setupBbs(bbs);
+    if (g16) setupG16(g16);
+
+    // ---- mode tabs (only when both panels are shown)
+    const tabs = [...frame.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const select = (tab: HTMLButtonElement, focus = false) => {
+      tabs.forEach((t) => {
+        const on = t === tab;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        const panel = frame.querySelector<HTMLElement>(`#${t.getAttribute('aria-controls')}`);
+        if (panel) panel.hidden = !on;
+      });
+      if (focus) tab.focus();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(t));
+      t.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        select(tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length], true);
+      });
+    });
+  });
+
+  // ---- BBS: which attributes are revealed
+  function setupBbs(bbs: HTMLElement) {
+    initWalkthrough(bbs);
+    const revealed = () =>
+      [...bbs.querySelectorAll<HTMLInputElement>('[data-reveal]')]
+        .filter((c) => c.checked)
+        .map((c) => Number(c.dataset.reveal));
+    const updateBbs = (fresh: boolean) => {
+      const shown = revealed();
+      bbs.querySelectorAll<HTMLElement>('.zd-attr').forEach((row) =>
+        row.setAttribute('data-kind', shown.includes(Number(row.dataset.attr)) ? 'public' : 'secret'),
+      );
+      bbs.querySelectorAll<HTMLElement>('[data-recv]').forEach((li) =>
+        li.classList.toggle('shown', shown.includes(Number(li.dataset.recv))),
+      );
+      const missing = BBS_REQUIRED.filter((i) => !shown.includes(i)).map((i) => BBS_ATTRIBUTES[i].name);
+      const extra = shown.filter((i) => !BBS_REQUIRED.includes(i)).map((i) => BBS_ATTRIBUTES[i].name);
+      const policy = bbs.querySelector<HTMLElement>('[data-policy]');
+      if (policy) {
+        policy.textContent = missing.length ? `policy not met: ${missing.join(' and ')} not revealed` : 'policy met';
+        policy.classList.toggle('no', missing.length > 0);
+      }
+      const extraEl = bbs.querySelector<HTMLElement>('[data-extra]');
+      if (extraEl) {
+        extraEl.hidden = extra.length === 0;
+        extraEl.textContent = `also revealed ${extra.join(', ')}: more than the policy needs`;
+      }
+      const onchain = bbs.querySelector<HTMLElement>('[data-onchain]');
+      if (onchain) {
+        const exact = missing.length === 0 && extra.length === 0;
+        onchain.innerHTML = exact
+          ? 'on Cardano, <code>BbsKycClaimValidator</code> pays the voucher'
+          : 'off-chain only: the on-chain profile needs exactly <code>country</code> + <code>kycLevel</code>';
+        onchain.classList.toggle('warn', !exact);
+      }
+      if (fresh) {
+        const bytes = bbs.querySelector('[data-pres-bytes]');
+        if (bytes) bytes.textContent = randomHex(32);
+      }
+    };
+    bbs.querySelectorAll<HTMLInputElement>('[data-reveal]').forEach((c) =>
+      c.addEventListener('change', () => updateBbs(true)),
+    );
+    bbs.addEventListener('zw:step', (e) => {
+      const step = (e as CustomEvent<number>).detail;
+      if (step === 2) {
+        const challenge = bbs.querySelector('[data-challenge]');
+        if (challenge) challenge.textContent = randomHex(32);
+      }
+      if (step === 3) updateBbs(true);
+    });
+    updateBbs(false);
+  }
+
+  // ---- Groth16: which holder
+  function setupG16(g16: HTMLElement) {
+    initWalkthrough(g16);
+    const setHolder = (id: string) => {
+      const h = HOLDERS.find((x) => x.id === id) ?? HOLDERS[0];
+      g16.querySelectorAll<HTMLElement>('[data-holder]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.holder === h.id)),
+      );
+      const fields: Record<string, string> = {
+        dobYear: String(h.dobYear),
+        country: `${h.country} · ${h.countryName}`,
+        role: `${h.roleId} · ${h.role}`,
+        rest: `${h.salaryBracket} · ${fakeHash(`name:${h.name}`)} · σ`,
+      };
+      Object.entries(fields).forEach(([k, v]) => {
+        const el = g16.querySelector(`[data-f="${k}"]`);
+        if (el) el.textContent = v;
+      });
+      const results = { adult: adultResident(h), doctor: seniorDoctor(h) };
+      const labels = { adult: 'the adult-resident gate', doctor: 'the senior-doctor gate' };
+      (Object.keys(results) as (keyof typeof results)[]).forEach((gate) => {
+        const r = results[gate];
+        const proof = g16.querySelector<HTMLElement>(`[data-proof="${gate}"]`);
+        if (proof) {
+          proof.textContent = r.ok ? `π for ${labels[gate]}` : `no valid proof for ${labels[gate].replace('the ', '')}`;
+          proof.classList.toggle('no', !r.ok);
+        }
+        const why = g16.querySelector(`[data-why="${gate}"]`);
+        if (why) why.textContent = r.why;
+        const result = g16.querySelector<HTMLElement>(`[data-result="${gate}"]`);
+        if (result) {
+          result.textContent = r.ok ? 'unlocked' : 'stays locked';
+          result.classList.toggle('no', !r.ok);
+        }
+      });
+    };
+    g16.querySelectorAll<HTMLButtonElement>('[data-holder]').forEach((b) =>
+      b.addEventListener('click', () => setHolder(b.dataset.holder ?? 'alice')),
+    );
+  }
+</script>
+
+<style>
+  .zd-attr-names {
+    display: grid;
+    gap: 0.15em;
+    margin: 0;
+    padding-left: 1.6em;
+    font-size: 0.8em;
+    color: var(--zw-muted);
+  }
+
+  /* holder's view: name + switch, then value + tag; verifier's view: name + tag, then value */
+  .zd-attr .k {
+    order: 1;
+  }
+
+  .zd-attr .zd-switch {
+    order: 2;
+  }
+
+  .zd-attr .v {
+    order: 3;
+    flex: 1 1 55%;
+  }
+
+  .zd-attr > .zw-tag {
+    order: 4;
+  }
+
+  .zd-attr[data-kind='public'] .t-sec,
+  .zd-attr[data-kind='secret'] .t-rev {
+    display: none;
+  }
+
+  .zw[data-view='public'] .zd-attr > .zw-tag {
+    order: 2;
+  }
+
+  .zw[data-view='public'] .zd-attr .v {
+    flex-basis: 100%;
+  }
+
+  .zd-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    font-size: 0.72em;
+    font-weight: 600;
+    color: var(--zw-muted);
+    cursor: pointer;
+  }
+
+  .zd-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .zd-switch-ui {
+    position: relative;
+    width: 2.2em;
+    height: 1.25em;
+    background: var(--zw-line);
+    border-radius: 999px;
+    transition: background 0.2s;
+  }
+
+  .zd-switch-ui::after {
+    content: '';
+    position: absolute;
+    top: 0.15em;
+    left: 0.15em;
+    width: 0.95em;
+    height: 0.95em;
+    background: var(--zw-bg);
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .zd-switch input:checked + .zd-switch-ui {
+    background: var(--zw-public);
+  }
+
+  .zd-switch input:checked + .zd-switch-ui::after {
+    transform: translateX(0.95em);
+  }
+
+  .zd-switch input:focus-visible + .zd-switch-ui {
+    outline: 2px solid var(--zw-public);
+    outline-offset: 2px;
+  }
+
+  .zd-policy,
+  .zd-rule,
+  .zd-why {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zd-why {
+    font-family: var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zd-formula {
+    font-size: 0.74em;
+    overflow-wrap: anywhere;
+  }
+
+  .zd-received {
+    display: grid;
+    gap: 0.25em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.78em;
+  }
+
+  .zd-received li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0 0.5em;
+  }
+
+  /* attribute names are short; keep them whole (lane code may otherwise break anywhere) */
+  .zd-received code {
+    overflow-wrap: normal;
+  }
+
+  .zd-received .val {
+    display: none;
+    font: 600 1em var(--zw-mono);
+    color: var(--zw-public-ink);
+  }
+
+  .zd-received .hidden-val {
+    color: var(--zw-muted);
+    font-style: italic;
+  }
+
+  .zd-received li.shown .val {
+    display: inline;
+  }
+
+  .zd-received li.shown .hidden-val {
+    display: none;
+  }
+
+  .zd-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zd-proofs {
+    display: grid;
+    gap: 0.35em;
+  }
+
+  .zw[data-step='2'] .zd-w2 .zw-wire-line::after {
+    animation-name: zw-travel-left;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

@@ -1,0 +1,346 @@
+---
+// Prove you own a Cardano account, step by step: vouchers -> prove -> verify -> one claim, for three
+// claimants: the real owner, a key thief (leaked address key + account xpub) and a copier who lifts
+// the owner's proof from the mempool. Values follow the account-ownership demo: default path
+// m/1852'/1815'/0'/0/0 (ProveCommand), refund 2 ADA (OnChainOwnershipService.DEMO_REFUND_LOVELACE),
+// OwnershipProofValidator's checks. Hashes are illustrative stand-ins (see fakeHash).
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const pkh = fakeHash('pkh:hacked-address');
+const ownerRecipient = fakeHash('recipient:owner');
+const copierRecipient = fakeHash('recipient:copier');
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Proving account ownership, step by step">
+  <div class="zw zar" data-total="4" data-view="insider" data-claimant="owner">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Account recovery · step <b data-counter>1 / 4</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Claimant's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- operator -->
+      <section class="zw-actor" data-hl="1" aria-label="Operator">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Operator</span>
+          <span class="zw-actor-sub">exchange or wallet</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">hacked address pkh</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{pkh}</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">refundAmount</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">2 ADA</span>
+        </div>
+        <p class="zw-note">Knows which accounts were hit and what they're owed. It doesn't choose who gets paid.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="1" aria-hidden="true">
+        <span class="arrow" data-show="1">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">voucher</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor" data-hl-if="1:owner,thief,copier;3:owner;4:owner,copier" data-bad-if="3:thief,copier" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">Plutus V3</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Voucher UTxO · datum</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">pkh</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{pkh}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">refundAmount</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">2 ADA</span>
+          </div>
+        </div>
+        <div class="zw-box" data-show="3">
+          <span class="zw-box-title"><code>OwnershipProofValidator</code></span>
+          <span class="zw-check" data-for="owner">proof verifies over <code>pkh</code> + <code>recipient</code></span>
+          <span class="zw-check" data-for="owner">an output pays the recipient ≥ 2 ADA</span>
+          <span class="zw-check" data-for="owner"><code>pkh</code> comes from this voucher's datum</span>
+          <span class="zw-check no" data-for="thief">no proof, and a signature isn't accepted</span>
+          <span class="zw-check no" data-for="copier">payee swapped: the proof fails</span>
+          <span class="zw-check no" data-for="copier">payee kept but paid less: the payout check fails</span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-check" data-for="owner">voucher spent: it paid out once</span>
+          <span class="zw-check no" data-for="owner">a second claim finds no voucher</span>
+          <span class="zw-check" data-for="thief">voucher still locked for the owner</span>
+          <span class="zw-check" data-for="copier">relayed unchanged: the owner still gets 2 ADA</span>
+        </div>
+      </section>
+
+      <div class="zw-wire zar-w2" data-dir="left" data-hl-if="3:owner;4:owner,copier" data-bad-if="3:thief,copier" aria-hidden="true">
+        <span class="arrow" data-show="3">←</span>
+        <span class="arrow" data-show="4" data-for="owner copier">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3" data-for="owner">claim + π</span>
+        <span class="zw-msg" data-show="3" data-for="thief">signature</span>
+        <span class="zw-msg" data-show="3" data-for="copier">π, new payee</span>
+        <span class="zw-msg" data-show="4" data-for="owner copier">2 ADA</span>
+      </div>
+
+      <!-- claimant -->
+      <section class="zw-actor" data-hl-if="2:owner,copier" data-bad-if="2:thief" aria-label="Claimant">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name" data-for="owner">Owner's machine</span>
+          <span class="zw-actor-name" data-for="thief">Key thief</span>
+          <span class="zw-actor-name" data-for="copier">Copier</span>
+        </div>
+        <div class="zar-who" data-when="insider">
+          <span class="zw-box-title">Who's claiming?</span>
+          <span class="zw-choice" role="group" aria-label="Who's claiming">
+            <button type="button" data-claimant-btn="owner" aria-pressed="true">Owner</button>
+            <button type="button" data-claimant-btn="thief" aria-pressed="false">Thief</button>
+            <button type="button" data-claimant-btn="copier" aria-pressed="false">Copier</button>
+          </span>
+        </div>
+
+        <div class="zar-chain">
+          <div class="zw-row zar-node zar-root" data-kind="secret">
+            <span class="k">root key</span>
+            <em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real"><span data-for="owner">from the recovery phrase</span><span data-for="thief copier">unknown</span></span><span class="mask">████████</span></span>
+          </div>
+          <div class="zar-edge hard">
+            <span>1852' · 1815' · 0'</span>
+            <span class="zar-edge-note" data-for="owner copier">hardened, one-way</span>
+            <span class="zar-edge-note wall" data-for="thief">one-way wall: can't climb</span>
+          </div>
+          <div class="zw-row zar-node zar-derived" data-kind="secret" data-bad-if="1-4:thief">
+            <span class="k">account key</span>
+            <em class="zw-tag"><span class="vis" data-for="owner copier">SECRET</span><span class="vis" data-for="thief">LEAKED</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real"><span data-for="owner">m/1852'/1815'/0'</span><span data-for="thief">worked out from the leak</span><span data-for="copier">unknown</span></span><span class="mask">████████</span></span>
+          </div>
+          <div class="zar-edge soft">
+            <span>0 · 0</span>
+            <span class="zar-edge-note" data-for="owner copier">soft, reversible with the xpub</span>
+            <span class="zar-edge-note" data-for="thief">reversed with the xpub ↑</span>
+          </div>
+          <div class="zw-row zar-node zar-derived" data-kind="secret" data-bad-if="1-4:thief">
+            <span class="k">address key</span>
+            <em class="zw-tag"><span class="vis" data-for="owner copier">SECRET</span><span class="vis" data-for="thief">LEAKED</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real"><span data-for="owner">m/1852'/1815'/0'/0/0</span><span data-for="thief">leaked in the hack</span><span data-for="copier">unknown</span></span><span class="mask">████████</span></span>
+          </div>
+          <div class="zar-edge">
+            <span>Blake2b-224</span>
+          </div>
+          <div class="zw-row zar-node" data-kind="public">
+            <span class="k">pkh</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{pkh}</span>
+          </div>
+        </div>
+
+        <div class="zw-row" data-kind="public" data-show="2-4" data-for="owner">
+          <span class="k">recipient</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{ownerRecipient}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-3" data-for="copier" data-bad-if="2-3:copier">
+          <span class="k">recipient, swapped</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{copierRecipient}</span>
+        </div>
+
+        <div class="zar-proving" data-show="2" data-for="owner" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Replaying the derivation in-circuit: about 19 million constraints</span>
+        </div>
+        <div class="zw-proof" data-show="2-4" data-for="owner">
+          <span class="pi">π</span><span>Groth16 proof</span><small>2 public inputs</small>
+        </div>
+        <div class="zw-proof" data-show="2-3" data-for="copier">
+          <span class="pi">π</span><span>owner's proof</span><small>copied from the mempool</small>
+        </div>
+        <span class="zw-check no" data-show="2-4" data-for="thief">can sign with the leaked keys, can't prove: the root key is unknown</span>
+        <p class="zw-note" data-for="thief">If the recovery phrase had leaked too, nothing could tell thief and owner apart.</p>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Vouchers</p>
+        <p>The operator locks one refund voucher for each affected account. Its datum holds the hacked address's payment key hash and the refund amount, 2 ADA in the demo. The operator doesn't choose who gets paid. Pick who's claiming to compare the owner with a thief and a copier.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Prove</p>
+        <p data-for="owner">The owner enters the recovery phrase at a hidden prompt and picks a recipient. The prover replays the whole CIP-1852 derivation from the root key inside the proof and binds the recipient. The seed stays in memory and is never sent anywhere.</p>
+        <p data-for="thief">The thief has a leaked address key and the account xpub, so the soft steps run backwards to the account key, and they can sign with any key in the account. The root key sits above hardened steps, so they can't build the proof.</p>
+        <p data-for="copier">The copier proves nothing. They watch the mempool, lift the owner's proof from a pending claim and put their own address in as the payee.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Verify</p>
+        <p data-for="owner">Anyone can check the proof off-chain in under a second. On-chain, the claim spends the voucher. The validator verifies the proof over <code>pkh</code> and <code>recipient</code>, taking <code>pkh</code> from the voucher's datum, and requires an output that pays the recipient at least the refund.</p>
+        <p data-for="thief">A signature from a leaked key proves nothing here, and the validator doesn't accept one. Without a proof the voucher stays locked.</p>
+        <p data-for="copier">The recipient is bound into the proof, so with a new payee it no longer verifies. Keeping the owner as payee but paying less than 2 ADA fails the payout check.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. One claim</p>
+        <p data-for="owner">A UTxO can only be spent once, so each voucher pays out once. Anyone, such as a fee sponsor, may submit the claim, and the funds still go to the bound recipient.</p>
+        <p data-for="thief">The voucher is still there for the real owner to claim.</p>
+        <p data-for="copier">Submitting the owner's claim unchanged is allowed, and the refund still goes to the owner.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Vouchers</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Prove</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Verify</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>One claim</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> never leaves the owner's machine</span>
+      <span><em class="zw-tag public">PUBLIC</em> visible on-chain</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  // Claimant-dependent highlight / failure states: data-hl-if / data-bad-if="steps:who[,who];…".
+  const inSteps = (spec: string, step: number) =>
+    spec.split(',').some((part) => {
+      const [from, to] = part.split('-').map(Number);
+      return step >= from && step <= (to || from);
+    });
+  const matches = (spec: string | undefined, step: number, who: string) =>
+    !!spec &&
+    spec.split(';').some((rule) => {
+      const [steps, list] = rule.split(':');
+      return inSteps(steps, step) && list.split(',').includes(who);
+    });
+
+  document.querySelectorAll<HTMLElement>('.zar').forEach((root) => {
+    initWalkthrough(root);
+    const conditional = [...root.querySelectorAll<HTMLElement>('[data-hl-if],[data-bad-if]')];
+    const apply = () => {
+      const step = Number(root.dataset.step) || 1;
+      const who = root.dataset.claimant ?? 'owner';
+      conditional.forEach((el) => {
+        el.toggleAttribute('data-hl-on', matches(el.dataset.hlIf, step, who));
+        el.toggleAttribute('data-bad-on', matches(el.dataset.badIf, step, who));
+      });
+    };
+    root.addEventListener('zw:step', apply);
+    root.querySelectorAll<HTMLButtonElement>('[data-claimant-btn]').forEach((b, _, all) =>
+      b.addEventListener('click', () => {
+        root.dataset.claimant = b.dataset.claimantBtn;
+        all.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        apply();
+      }),
+    );
+    apply();
+  });
+</script>
+
+<style>
+  /* Operator | Cardano | claimant: the claimant lane carries the most. */
+  .zar .zw-stage {
+    grid-template-columns: minmax(0, 0.9fr) 3.6em minmax(0, 1fr) 3.6em minmax(0, 1.25fr);
+  }
+
+  @container (max-width: 560px) {
+    .zar .zw-stage {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* only the chosen claimant's content */
+  .zar[data-claimant='owner'] [data-for]:not([data-for~='owner']),
+  .zar[data-claimant='thief'] [data-for]:not([data-for~='thief']),
+  .zar[data-claimant='copier'] [data-for]:not([data-for~='copier']) {
+    display: none !important;
+  }
+
+  .zar-who {
+    display: grid;
+    gap: 0.3em;
+  }
+
+  .zar-who .zw-choice {
+    flex-wrap: wrap;
+  }
+
+  .zar-who .zw-choice button {
+    padding: 0.15em 0.5em;
+  }
+
+  .zar-chain {
+    display: grid;
+    gap: 0.2em;
+  }
+
+  .zar-edge {
+    display: grid;
+    gap: 0.05em;
+    margin-left: 0.9em;
+    padding: 0.15em 0 0.15em 0.7em;
+    font: 600 0.68em var(--zw-mono);
+    color: var(--zw-text-2);
+    border-left: 2px solid var(--zw-line);
+  }
+
+  .zar-edge.soft {
+    border-left-style: dashed;
+  }
+
+  .zar-edge-note {
+    font-weight: 500;
+    color: var(--zw-muted);
+  }
+
+  .zar-edge-note.wall {
+    color: var(--zw-bad-ink);
+  }
+
+  .zar[data-claimant='thief'] .zar-edge.hard {
+    border-left-color: var(--zw-bad);
+    border-left-width: 3px;
+  }
+
+  /* keys the claimant doesn't hold */
+  .zar:not([data-claimant='owner']) .zar-root,
+  .zar[data-claimant='copier'] .zar-derived {
+    border-style: dashed;
+    opacity: 0.7;
+  }
+
+  .zar-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zw[data-step='4'] .zar-w2 .zw-wire-line::after {
+    animation-name: zw-travel;
+  }
+</style>

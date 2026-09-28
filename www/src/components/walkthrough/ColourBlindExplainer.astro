@@ -1,0 +1,454 @@
+---
+// The colour-blind friend from "Zero-knowledge in plain English", as a game. The reader plays the
+// prover: honest (the balls really differ) or a cheater (both balls are the same colour). Each round
+// the friend secretly swaps the balls or doesn't; the honest prover sees the colours trade places and
+// is always right, the cheater can only guess. A guesser survives n rounds with probability 1/2^n.
+import './walkthrough.css';
+
+const MAX_ROUNDS = 40;
+---
+
+<figure class="zw-frame not-content" aria-label="The colour-blind friend, as a game">
+  <div class="zw zcb" data-total="1" data-role="honest" data-max={MAX_ROUNDS}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">The colour-blind friend · <b>a game</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Your role">
+          <button type="button" data-role-btn="honest" aria-pressed="true">Honest</button>
+          <button type="button" data-role-btn="cheater" aria-pressed="false">Cheater</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <p class="zcb-caption">
+      <b>What you're seeing:</b> you are the prover. Your friend can't see colours. Each round they
+      hide the balls, secretly swap them or not, and ask you which it was.
+    </p>
+
+    <div class="zcb-stage">
+      <section class="zcb-panel" aria-label="What you see">
+        <span class="zw-actor-name">You see</span>
+        <svg class="zcb-balls" viewBox="0 0 120 50" aria-hidden="true">
+          <circle class="zcb-ball" data-ball="0" cx="32" cy="25" r="17"></circle>
+          <circle class="zcb-ball" data-ball="1" cx="88" cy="25" r="17"></circle>
+        </svg>
+        <p class="zcb-role" data-when-role="honest">
+          <b>Honest:</b> the balls really differ. You can see the colours, so you always know whether
+          they were swapped.
+        </p>
+        <p class="zcb-role" data-when-role="cheater">
+          <b>Cheater:</b> both balls are the same colour. Swapped or not, they look the same to you too,
+          so you have to guess.
+        </p>
+      </section>
+      <section class="zcb-panel" aria-label="What your friend sees">
+        <span class="zw-actor-name">Your friend sees</span>
+        <svg class="zcb-balls friend" viewBox="0 0 120 50" aria-hidden="true">
+          <circle class="zcb-ball grey" cx="32" cy="25" r="17"></circle>
+          <circle class="zcb-ball grey" cx="88" cy="25" r="17"></circle>
+        </svg>
+        <p class="zcb-role">
+          Two balls that look identical. They know whether they swapped, and nothing else.
+        </p>
+      </section>
+    </div>
+
+    <div class="zcb-controls">
+      <button type="button" class="zw-btn zcb-primary" data-play-one>Play a round</button>
+      <button type="button" class="zw-btn" data-play-many>Play 20 rounds</button>
+      <button type="button" class="zw-btn" data-reset>Start over</button>
+    </div>
+
+    <div class="zcb-results">
+      <p class="zcb-last" data-last aria-live="polite">Play a round to start.</p>
+      <ol class="zcb-rounds" data-rounds aria-label="Round results"></ol>
+
+      <div class="zcb-odds">
+        <span class="zcb-odds-label" data-odds-label>
+          Chance that a guesser gets every answer right
+        </span>
+        <div class="zcb-bar" aria-hidden="true"><span data-bar></span></div>
+        <span class="zcb-odds-value" data-odds>1 in 1 (no rounds yet)</span>
+      </div>
+
+      <p class="zcb-verdict" data-verdict></p>
+      <p class="zcb-finish" data-finish hidden>
+        Your friend learned the balls differ — never which one is red.
+      </p>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zcb').forEach((root) => {
+    initWalkthrough(root);
+    const max = Number(root.dataset.max) || 40;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel);
+    const balls = [...root.querySelectorAll<SVGCircleElement>('[data-ball]')];
+    const friend = root.querySelector<SVGSVGElement>('.zcb-balls.friend');
+    const list = $<HTMLOListElement>('[data-rounds]');
+    const last = $<HTMLElement>('[data-last]');
+    const odds = $<HTMLElement>('[data-odds]');
+    const oddsLabel = $<HTMLElement>('[data-odds-label]');
+    const bar = $<HTMLElement>('[data-bar]');
+    const verdict = $<HTMLElement>('[data-verdict]');
+    const finish = $<HTMLElement>('[data-finish]');
+    const playOne = $<HTMLButtonElement>('[data-play-one]');
+    const playMany = $<HTMLButtonElement>('[data-play-many]');
+    const reset = $<HTMLButtonElement>('[data-reset]');
+
+    let role: 'honest' | 'cheater' = 'honest';
+    let rounds = 0;
+    let caughtAt = 0; // round in which the cheater first answered wrong; 0 = never
+    let leftIsRed = true; // honest game only: which side the red ball is on
+    let running: number | undefined;
+
+    const bit = () => (crypto.getRandomValues(new Uint8Array(1))[0] & 1) === 1;
+    const fmt = (n: number) => n.toLocaleString('en-US');
+    const swapWord = (s: boolean) => (s ? '“swapped”' : '“not swapped”');
+
+    const paintBalls = () => {
+      const colours = role === 'honest' ? (leftIsRed ? ['red', 'green'] : ['green', 'red']) : ['red', 'red'];
+      balls.forEach((b, i) => {
+        b.classList.remove('red', 'green');
+        b.classList.add(colours[i]);
+      });
+    };
+
+    const paintOdds = () => {
+      // A guesser is right with probability 1/2 each round, so all n rounds: 1 in 2^n.
+      const oneIn = 2 ** rounds;
+      const answers = rounds === 0 ? 'every answer' : rounds === 1 ? 'the 1 answer' : `all ${rounds} answers`;
+      oddsLabel!.textContent =
+        role === 'cheater' ? `Chance of guessing ${answers} right` : `Chance that a guesser gets ${answers} right`;
+      if (rounds === 0) {
+        odds!.textContent = '1 in 1 (no rounds yet)';
+      } else {
+        const exact = rounds <= 40 ? `1 in ${fmt(oneIn)}` : `1 in 2^${rounds}`;
+        odds!.textContent = rounds === 20 ? `${exact}, about one in a million` : exact;
+      }
+      bar!.style.width = `${Math.max(100 / oneIn, 0.4)}%`;
+    };
+
+    const paintVerdict = () => {
+      let text = '';
+      if (rounds === 0) text = '';
+      else if (role === 'honest') {
+        text =
+          rounds >= 10
+            ? `${rounds} of ${rounds} right. A guesser would manage that about once in ${fmt(2 ** rounds)} tries, so your friend is convinced the balls differ.`
+            : `${rounds} of ${rounds} right. Each right answer makes “just guessing” less believable.`;
+      } else if (caughtAt) {
+        text = `Caught in round ${caughtAt}. One wrong answer is enough: someone who can really tell the colours never misses.`;
+      } else {
+        text = `Lucky so far: ${rounds} right ${rounds === 1 ? 'guess' : 'guesses in a row'}. Every round halves your chances.`;
+      }
+      verdict!.textContent = text;
+      verdict!.dataset.state = role === 'cheater' && caughtAt ? 'bad' : rounds ? 'ok' : '';
+      finish!.hidden = !(role === 'honest' && rounds > 0);
+    };
+
+    const setButtons = () => {
+      const busy = running !== undefined;
+      playOne!.disabled = busy || rounds >= max;
+      playMany!.disabled = busy || rounds >= max;
+      reset!.disabled = busy;
+    };
+
+    const playRound = () => {
+      if (rounds >= max) return;
+      rounds += 1;
+      const swapped = bit();
+      let answer: boolean;
+      let how: string;
+      if (role === 'honest') {
+        if (swapped) leftIsRed = !leftIsRed;
+        answer = swapped; // the colours traded places, or didn't: you can see which
+        how = swapped ? 'You saw the colours trade places and said' : 'You saw the colours stay put and said';
+      } else {
+        answer = bit(); // identical balls: nothing to see, so guess
+        how = 'The balls look the same to you, so you guessed';
+      }
+      const right = answer === swapped;
+      if (!right && !caughtAt) caughtAt = rounds;
+      paintBalls();
+      if (friend && !reduce) {
+        friend.classList.remove('shuffle');
+        void friend.getBoundingClientRect();
+        friend.classList.add('shuffle');
+      }
+
+      const li = document.createElement('li');
+      li.className = right ? 'ok' : 'bad';
+      li.textContent = right ? '✓' : '✕';
+      li.title = `Round ${rounds}: ${swapped ? 'swapped' : 'not swapped'}; you said ${answer ? 'swapped' : 'not swapped'}`;
+      list!.append(li);
+
+      const what = swapped ? 'swapped the balls' : "didn't swap the balls";
+      const result = right ? (role === 'honest' ? 'Right.' : 'Right, by luck.') : 'Wrong: caught.';
+      last!.textContent = `Round ${rounds}: your friend ${what}. ${how} ${swapWord(answer)}. ${result}`;
+      paintOdds();
+      paintVerdict();
+      setButtons();
+    };
+
+    const start = (nextRole: typeof role) => {
+      window.clearInterval(running);
+      running = undefined;
+      role = nextRole;
+      root.dataset.role = role;
+      rounds = 0;
+      caughtAt = 0;
+      leftIsRed = true;
+      list!.replaceChildren();
+      last!.textContent = 'Play a round to start.';
+      root.querySelectorAll<HTMLButtonElement>('[data-role-btn]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.roleBtn === role)),
+      );
+      paintBalls();
+      paintOdds();
+      paintVerdict();
+      setButtons();
+    };
+
+    root.querySelectorAll<HTMLButtonElement>('[data-role-btn]').forEach((b) =>
+      b.addEventListener('click', () => start(b.dataset.roleBtn === 'cheater' ? 'cheater' : 'honest')),
+    );
+    playOne!.addEventListener('click', playRound);
+    reset!.addEventListener('click', () => start(role));
+    playMany!.addEventListener('click', () => {
+      const target = Math.min(rounds + 20, max);
+      if (reduce) {
+        while (rounds < target) playRound();
+        return;
+      }
+      running = window.setInterval(() => {
+        if (rounds >= target) {
+          window.clearInterval(running);
+          running = undefined;
+          setButtons();
+          return;
+        }
+        playRound();
+      }, 110);
+      setButtons();
+    });
+
+    start('honest');
+  });
+</script>
+
+<style>
+  .zcb-caption {
+    margin: 0;
+    padding: 0.8em 1.1em 0;
+    font-size: 0.92em;
+    color: var(--zw-text-2);
+  }
+
+  .zcb-stage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8em;
+    padding: 0.9em 1em 0.2em;
+  }
+
+  .zcb-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    padding: 0.8em;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 12px;
+  }
+
+  .zcb-balls {
+    width: 100%;
+    max-width: 11em;
+    height: auto;
+    align-self: center;
+  }
+
+  .zcb-ball {
+    stroke-width: 2.5;
+    transition:
+      fill 0.35s,
+      stroke 0.35s;
+  }
+
+  .zcb-ball.red {
+    fill: var(--sl-color-red);
+    stroke: color-mix(in srgb, var(--sl-color-red) 60%, var(--zw-text));
+  }
+
+  .zcb-ball.green {
+    fill: var(--sl-color-green);
+    stroke: color-mix(in srgb, var(--sl-color-green) 60%, var(--zw-text));
+  }
+
+  .zcb-ball.grey {
+    fill: color-mix(in srgb, var(--zw-muted) 55%, var(--zw-bg));
+    stroke: var(--zw-muted);
+  }
+
+  .zcb-balls.friend.shuffle {
+    animation: zcb-shuffle 0.45s ease-in-out;
+  }
+
+  .zcb-role {
+    margin: 0;
+    font-size: 0.84em;
+    color: var(--zw-text-2);
+  }
+
+  .zcb[data-role='honest'] [data-when-role='cheater'],
+  .zcb[data-role='cheater'] [data-when-role='honest'] {
+    display: none;
+  }
+
+  .zcb-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    padding: 0.8em 1em 0;
+  }
+
+  .zcb-primary {
+    color: var(--zw-bg);
+    background: var(--zw-public);
+    border-color: var(--zw-public);
+  }
+
+  .zcb-primary:hover:not(:disabled) {
+    border-color: var(--zw-text);
+  }
+
+  .zcb-results {
+    display: grid;
+    gap: 0.7em;
+    padding: 0.8em 1.1em 1.1em;
+  }
+
+  .zcb-last {
+    min-height: 2.9em;
+    margin: 0;
+    font-size: 0.9em;
+    color: var(--zw-text-2);
+  }
+
+  .zcb-rounds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3em;
+    min-height: 1.8em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .zcb-rounds :global(li) {
+    display: grid;
+    place-items: center;
+    width: 1.6em;
+    height: 1.6em;
+    font-size: 0.8em;
+    font-weight: 700;
+    border-radius: 50%;
+    animation: zw-in 0.3s ease-out;
+  }
+
+  .zcb-rounds :global(li.ok) {
+    color: var(--zw-bg);
+    background: var(--zw-public);
+  }
+
+  .zcb-rounds :global(li.bad) {
+    color: #fff;
+    background: var(--zw-bad);
+  }
+
+  .zcb-odds {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.35em 0.8em;
+  }
+
+  .zcb-odds-label {
+    grid-column: 1 / -1;
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zcb-bar {
+    height: 0.7em;
+    overflow: hidden;
+    background: var(--zw-panel);
+    border: 1px solid var(--zw-line);
+    border-radius: 999px;
+  }
+
+  .zcb-bar span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--zw-secret), var(--zw-public));
+    border-radius: inherit;
+    transition: width 0.35s ease-out;
+  }
+
+  .zcb-odds-value {
+    font: 600 0.86em var(--zw-mono);
+    white-space: nowrap;
+  }
+
+  .zcb-verdict {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .zcb-verdict:empty {
+    display: none;
+  }
+
+  .zcb-verdict[data-state='bad'] {
+    color: var(--zw-bad-ink);
+  }
+
+  .zcb-finish {
+    margin: 0;
+    padding: 0.55em 0.8em;
+    font-family: var(--zw-display);
+    font-weight: 600;
+    color: var(--zw-public-ink);
+    background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+    border-radius: 10px;
+  }
+
+  @container (max-width: 560px) {
+    .zcb-stage {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .zcb-odds {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @keyframes zcb-shuffle {
+    30% {
+      transform: translateX(-6px) rotate(-3deg);
+    }
+    60% {
+      transform: translateX(6px) rotate(3deg);
+    }
+  }
+</style>

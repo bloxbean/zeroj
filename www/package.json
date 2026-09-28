@@ -11,6 +11,7 @@
     "build": "astro build && node scripts/check-site.mjs",
     "check": "astro check && node scripts/check-api-refs.mjs",
     "check:api": "node scripts/check-api-refs.mjs",
+    "check:release": "node scripts/check-release.mjs",
     "preview": "astro preview"
   },
   "dependencies": {

@@ -1,0 +1,402 @@
+---
+// Private NFT ownership, step by step: snapshot -> prove -> access -> reuse rejected.
+// Values follow the nft-ownership demo's `demo.sh --run`: a holder with secretKey 12345 registers token 101,
+// the tree has depth 10, and the context is "nft-demo-v1" (application.yml zk.default-context). The on-chain
+// nullifier list starts with only its root node. Hashes are illustrative stand-ins (see fakeHash).
+//
+// The one interaction is the nullifier design from the page's caution: the demo derives it from the
+// token name, which anyone can match; deriving it from the holder secret hides the token but limits use
+// per holder rather than per NFT.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const secretKey = '12345';
+const tokenName = '101';
+const contextId = 'nft-demo-v1';
+const snapshotRoot = fakeHash('nft-snapshot-root');
+const nullifiers = {
+  token: fakeHash(`nf:${tokenName}:${contextId}`),
+  secret: fakeHash(`nf:${secretKey}:${contextId}`),
+};
+
+// A depth-3 tree drawn for the picture (the demo's tree has depth 10, up to 1,024 holders). The holder's
+// leaf is leaf 2; the Merkle path is the siblings along leaf 2 -> node 1 -> node 0 -> root.
+const W = 320;
+const leafX = (i: number) => 20 + i * 40;
+const levels = [
+  Array.from({ length: 8 }, (_, i) => ({ x: leafX(i), y: 118 })),
+  Array.from({ length: 4 }, (_, i) => ({ x: (leafX(2 * i) + leafX(2 * i + 1)) / 2, y: 80 })),
+  Array.from({ length: 2 }, (_, i) => ({ x: (leafX(4 * i) + leafX(4 * i + 3)) / 2, y: 46 })),
+  [{ x: W / 2, y: 14 }],
+];
+const onPath = [2, 1, 0, 0];
+const sibling = [3, 0, 1, -1];
+const edges = levels.slice(0, 3).flatMap((level, l) =>
+  level.map((n, i) => ({ from: n, to: levels[l + 1][Math.floor(i / 2)], path: onPath[l] === i })),
+);
+---
+
+<figure class="zw-frame not-content" aria-label="Private NFT ownership, step by step">
+  <div class="zw znf" data-total="4" data-view="insider" data-nf="token">
+    <div class="zw-head">
+      <span class="zw-eyebrow">NFT ownership · step <b data-counter>1 / 4</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- indexer -->
+      <section class="zw-actor" data-hl="1" aria-label="Indexer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Indexer</span>
+          <span class="zw-actor-sub">ownership snapshot</span>
+        </div>
+        <svg class="znf-tree" viewBox={`0 0 ${W} 132`} role="img"
+          aria-label="A Merkle tree of (ownerHash, tokenName) leaves. Only the root is published.">
+          {edges.map((e) => (
+            <line x1={e.from.x} y1={e.from.y} x2={e.to.x} y2={e.to.y} class={e.path ? 't-edge on-path' : 't-edge'} />
+          ))}
+          {levels.map((level, l) =>
+            level.map((n, i) => {
+              const leaf = l === 0;
+              const cls = [
+                't-node',
+                leaf && i > 4 ? 'empty' : '',
+                onPath[l] === i ? 'on-path' : '',
+                sibling[l] === i ? 'sib' : '',
+                leaf && i === 2 ? 'you' : '',
+                l === 3 ? 'root' : '',
+              ].join(' ');
+              return <circle cx={n.x} cy={n.y} r={l === 3 ? 12 : leaf ? 11 : 8} class={cls} />;
+            }),
+          )}
+          <text x={leafX(2)} y="99" class="t-you-tag" data-when="insider">you</text>
+        </svg>
+        <p class="zw-note">Each leaf is <code>Poseidon(ownerHash, tokenName)</code>. The demo's tree has depth 10 (up to 1,024 holders).</p>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">snapshotRoot</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{snapshotRoot}</span>
+        </div>
+        <p class="zw-note znf-trust">Trust point: in the demo, holders register with the service. A real indexer must check each <code>ownerHash</code> belongs to the wallet holding the token.</p>
+      </section>
+
+      <div class="zw-wire" data-dir="left" data-hl="1" aria-hidden="true">
+        <span class="arrow" data-show="1">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">register</span>
+      </div>
+
+      <!-- holder device -->
+      <section class="zw-actor" data-hl="2" data-bad="4" aria-label="Holder's device">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name" data-when="insider">Holder</span>
+          <span class="zw-actor-name" data-when="public">A holder</span>
+          <span class="zw-actor-sub" data-when="insider">wallet stays unconnected</span>
+          <span class="zw-actor-sub" data-when="public">wallet hidden</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-hl="1">
+          <span class="k">secretKey</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{secretKey}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-hl="1">
+          <span class="k">tokenName</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{tokenName}</span><span class="mask">████████</span></span>
+          <span class="znf-leak" data-when="public" data-nfmode="token" data-show="3-4">matchable from the nullifier</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-hl="2">
+          <span class="k">Merkle path</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">10 sibling hashes</span><span class="mask">████████</span></span>
+        </div>
+        <div class="znf-design">
+          <span class="znf-design-label">nullifier from</span>
+          <span class="zw-choice" role="group" aria-label="Nullifier design">
+            <button type="button" data-nf-btn="token" aria-pressed="true">tokenName</button>
+            <button type="button" data-nf-btn="secret" aria-pressed="false">secretKey</button>
+          </span>
+          <span class="zw-note" data-nfmode="token">the demo's choice</span>
+          <span class="zw-note" data-nfmode="secret">the caution's alternative</span>
+        </div>
+        <div class="znf-prove" data-show="2" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            <path class="r1" d="M116.28 43.93A56 56 0 1 1 29.76 19.69"></path>
+            <path class="r2" d="M45.87 98.53A39 39 0 1 1 94.31 39.46"></path>
+            <path class="r3" d="M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63"></path>
+          </svg>
+          <span>Proving in pure Java, on this device</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-4" data-hl="2" data-bad="4">
+          <span class="k" data-nfmode="token">nullifier = Poseidon(tokenName, contextId)</span>
+          <span class="k" data-nfmode="secret">nullifier = Poseidon(secretKey, contextId)</span>
+          <em class="zw-tag">PUBLIC</em>
+          <span class="v" data-nfmode="token">{nullifiers.token}</span>
+          <span class="v" data-nfmode="secret">{nullifiers.secret}</span>
+        </div>
+        <div class="zw-proof" data-show="2-3">
+          <span class="pi">π</span><span>Groth16 proof</span><small>192 bytes</small>
+        </div>
+        <p class="zw-note znf-again" data-show="4">
+          <span data-nfmode="token">Second access with NFT {tokenName}: the <b>same nullifier</b>.</span>
+          <span data-nfmode="secret">Second access by this holder: the <b>same nullifier</b>.</span>
+        </p>
+      </section>
+
+      <div class="zw-wire" data-hl="3" data-bad="4" aria-hidden="true">
+        <span class="arrow" data-show="3-4">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3">π + 4 inputs</span>
+        <span class="zw-msg" data-show="4">same nullifier</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor" data-hl="3" data-bad="4" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">access gate</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">contextId (event)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{contextId}</span>
+        </div>
+        <div class="zw-box" data-show="3-4">
+          <span class="zw-box-title"><code>ZkProofMintingPolicy</code></span>
+          <span class="zw-check">Groth16 proof valid</span>
+          <span class="zw-check"><code>isOwner</code> = 1</span>
+          <span class="zw-check">mints 1 token named <code>nullifier</code></span>
+          <span class="zw-note" data-show="3">The demo takes the root and <code>contextId</code> from the redeemer. A real gate pins them.</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title"><code>NullifierListValidator</code> · sorted list</span>
+          <ol class="znf-list">
+            <li class="root"><code>root node</code></li>
+            <li class="you" data-show="3-4" data-hl="3">
+              <code data-nfmode="token">{nullifiers.token}</code>
+              <code data-nfmode="secret">{nullifiers.secret}</code>
+              <span class="znf-new" data-show="3">inserted</span>
+            </li>
+          </ol>
+          <span class="zw-note" data-show="1-2">No accesses yet: only the root node.</span>
+          <span class="zw-check no" data-show="4">insert fails: already in the list</span>
+        </div>
+        <div class="zw-box" data-show="3-4">
+          <span class="zw-box-title">Can anyone link it?</span>
+          <span class="zw-check no" data-nfmode="token">yes: hashing every token name with <code>{contextId}</code> finds {tokenName}, which usually reveals the wallet too</span>
+          <span class="zw-check" data-nfmode="secret">not to a token or wallet without the holder's secret</span>
+          <span class="zw-check warn" data-nfmode="secret">the limit is per holder secret, so after a sale the NFT could get in again</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Snapshot</p>
+        <p>The indexer records who holds which token and builds a Merkle tree of <code>Poseidon(ownerHash, tokenName)</code> leaves, where <code>ownerHash = Poseidon(secretKey, 0)</code>. Only the root is published. The holder never connects a wallet to the verifier.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Prove</p>
+        <p>The holder's device finds the Merkle path to its leaf, computes the nullifier for this event, and proves the leaf is in the snapshot without saying which one. Switch to <b>Public view</b> to see what leaves the device.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Access</p>
+        <p>The transaction mints one token named after the nullifier. The minting policy verifies the proof and requires <code>isOwner = 1</code>, and the list validator inserts the nullifier in sorted order. The proof hides the wallet, but the nullifier design decides whether it stays hidden: compare the two options under the holder.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Reuse is rejected</p>
+        <p data-nfmode="token">Using NFT {tokenName} again in this event gives the same nullifier, even after it changes hands. It's already in the list, so the insert fails and the transaction is rejected.</p>
+        <p data-nfmode="secret">The same holder gets the same nullifier, so a second access fails. After a sale, though, the new holder's secret gives a new nullifier, so the same NFT could get in again.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Snapshot</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Prove</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Access</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Reuse</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> stays on the holder's device</span>
+      <span><em class="zw-tag public">PUBLIC</em> visible to anyone on Cardano</span>
+      <span>Hash values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.znf').forEach((root) => {
+    initWalkthrough(root);
+    root.querySelectorAll<HTMLButtonElement>('[data-nf-btn]').forEach((b, _, all) =>
+      b.addEventListener('click', () => {
+        root.dataset.nf = b.dataset.nfBtn;
+        all.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      }),
+    );
+  });
+</script>
+
+<style>
+  /* the nullifier design switch: show only the chosen variant */
+  .znf[data-nf='token'] [data-nfmode='secret'],
+  .znf[data-nf='secret'] [data-nfmode='token'] {
+    display: none !important;
+  }
+
+  .znf-tree {
+    width: 100%;
+    height: auto;
+    max-height: 8.5em;
+  }
+
+  .znf-tree .t-edge {
+    stroke: var(--zw-line);
+    stroke-width: 2.5;
+  }
+
+  .znf-tree .t-node {
+    fill: var(--zw-bg);
+    stroke: var(--zw-muted);
+    stroke-width: 2.5;
+    transition:
+      fill 0.3s,
+      stroke 0.3s;
+  }
+
+  .znf-tree .t-node.empty {
+    stroke-dasharray: 3 3;
+    stroke: var(--zw-line);
+  }
+
+  .znf-tree .t-node.root {
+    fill: var(--zw-public);
+    stroke: var(--zw-public);
+  }
+
+  .znf-tree .t-you-tag {
+    font: 700 17px var(--zw-mono);
+    text-anchor: middle;
+    fill: var(--zw-secret);
+  }
+
+  /* holder's view: their leaf; step 2 adds the path they prove and its (secret) siblings */
+  .zw:not([data-view='public']) .znf-tree .t-node.you {
+    fill: var(--zw-secret);
+    stroke: var(--zw-secret);
+  }
+
+  .zw[data-step='2']:not([data-view='public']) .znf-tree .t-edge.on-path {
+    stroke: var(--zw-secret);
+    stroke-width: 5;
+  }
+
+  .zw[data-step='2']:not([data-view='public']) .znf-tree .t-node.sib {
+    fill: color-mix(in srgb, var(--zw-secret) 25%, var(--zw-bg));
+    stroke: var(--zw-secret);
+    stroke-dasharray: 3 2;
+  }
+
+  .zw[data-step='1'] .znf-tree .t-node.root {
+    animation: znf-pulse 1.6s ease-in-out infinite;
+  }
+
+  .znf-trust {
+    padding: 0.4em 0.55em;
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border-radius: 8px;
+  }
+
+  .znf-leak {
+    flex-basis: 100%;
+    font: 600 0.72em var(--zw-mono);
+    color: var(--zw-bad-ink);
+  }
+
+  .znf-design {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3em 0.5em;
+    padding: 0.4em 0.5em;
+    border: 1px dashed var(--zw-line);
+    border-radius: 8px;
+  }
+
+  .znf-design-label {
+    font: 500 0.75em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .znf-prove {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .znf-again {
+    padding: 0.4em 0.55em;
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border-radius: 8px;
+  }
+
+  .znf-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .znf-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4em;
+    padding: 0.25em 0.5em;
+    font-size: 0.8em;
+    border: 1px solid var(--zw-line);
+    border-radius: 7px;
+  }
+
+  .znf-list li.root {
+    color: var(--zw-muted);
+    border-style: dashed;
+  }
+
+  .znf-list li.you {
+    border-color: var(--zw-public);
+    animation: zw-in 0.4s ease-out;
+  }
+
+  .zw[data-step='4'] .znf-list li.you {
+    border-color: var(--zw-bad);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-bad) 20%, transparent);
+  }
+
+  .znf-new {
+    font: 600 0.8em var(--zw-mono);
+    color: var(--zw-public);
+  }
+
+  @keyframes znf-pulse {
+    50% {
+      stroke-width: 6;
+      stroke: color-mix(in srgb, var(--zw-public) 40%, transparent);
+    }
+  }
+</style>

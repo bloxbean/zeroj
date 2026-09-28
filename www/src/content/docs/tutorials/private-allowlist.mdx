@@ -6,6 +6,8 @@ sidebar:
 ---
 
 import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+import MerkleExplainer from '../../../components/walkthrough/MerkleExplainer.astro';
+import TextOnly from '../../../components/TextOnly.astro';
 
 An event has a guest list. At the door you want to prove *"I'm on the list"* without saying
 *which* guest you are, and the door wants to make sure nobody gets in twice. Those two goals
@@ -36,6 +38,12 @@ Java 25 and Gradle (see [Installation](/start/installation/)). It helps to have 
 Each member holds two random secrets, a `nullifierKey` and a `trapdoor`. They give the
 organizer only a hash of them, the **leaf**. The organizer puts all leaves into a Merkle tree
 and publishes the **root**.
+Try it below: pick a member to light up their path, claim an entry, then try someone who isn't on
+the list.
+
+<MerkleExplainer />
+
+<TextOnly>
 
 ```text
                     root  (public)
@@ -46,6 +54,8 @@ and publishes the **root**.
         /  \    /  \    /  \   /  \
       L0   L1  L2  L3  L4  L5 L6  L7 ...  leaf = Poseidon(nullifierKey, trapdoor)
 ```
+
+</TextOnly>
 
 To prove membership, a member shows (in zero knowledge) that their leaf, hashed together with
 its **siblings** on the way up, reproduces the published root. The **path bits** say whether the
