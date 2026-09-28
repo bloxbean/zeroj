@@ -155,7 +155,7 @@ For anything beyond local testing, the flow is:
 2. Start phase 2 from a trusted .ptau:   snarkjs groth16 setup      → key_0000.zkey
 3. Contributors mix in randomness:       zeroj-ceremony contribute  (or snarkjs zkey contribute)
 4. Close with a pre-announced beacon, and let anyone re-check:  snarkjs zkey verify
-5. Import the final key into ZeroJ:      zeroj-ceremony finalize    → proving-key store
+5. Import the verified key into ZeroJ:   zeroj-ceremony finalize --sha256 <verified hash>  → proving-key store
 6. Pin the verification key (and, on Cardano, the resulting script hash).
 ```
 
