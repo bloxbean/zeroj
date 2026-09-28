@@ -33,7 +33,8 @@ files from the repository (see below), so run it from a full checkout.
 | `src/components/walkthrough/` | Interactive use-case walkthroughs (`VotingWalkthrough`, `DisclosureWalkthrough`): actors, messages, who-sees-what views, step narration and a fullscreen **Present** mode. `engine.ts` drives steps from `data-show` / `data-hl` / `data-bad` attributes; `walkthrough.css` holds the shared look. Components are named `*Walkthrough` (stepped flows), `*Explainer` (one-screen interactive ideas) or `*Diagram` (clickable pictures). A page embeds one as `<Name />` (the page must be `.mdx`); the Markdown export replaces it with a one-line note. When an illustration replaces an ASCII diagram, wrap the diagram in `<TextOnly>` (`src/components/TextOnly.astro`): hidden on the web page, kept in the Markdown exports for AI readers. |
 | `src/components/SiteTitle.astro`, `DocTitle.astro` | Starlight overrides: brand header, and **View Markdown / Copy page for AI** under each page title. |
 | `src/styles/docs.css` | Starlight theme (ink `#080b12`, teal `#2dd4bf`, violet `#8b5cf6`). |
-| `site.config.mjs` | Site URL and versions. Versions are read from the ZeroJ build, never typed by hand. |
+| `release.json` | The released versions the docs install: `zeroj`, and the `julc` and `ccl` versions that release was built with, plus `released`. Updated by hand after each release (see [Releasing](#releasing)). |
+| `site.config.mjs` | Site URL and versions (read from `release.json`; the development version from `gradle.properties` goes only into `/ai/manifest.json`). |
 | `scripts/remark-versions.mjs` | Replaces `%ZEROJ_VERSION%`, `%JULC_VERSION%`, `%CCL_VERSION%`, `%SITE_URL%` in pages and code blocks. |
 | `scripts/ai-artifacts.mjs`, `ai-integration.mjs` | Generates the AI artifacts at build time (and serves them in `astro dev`). |
 | `scripts/circuit-catalog.mjs` | Extracts the symbolic circuit API (annotations, `Zk*` types, gadget adapters) from the Java sources. |
@@ -46,7 +47,8 @@ files from the repository (see below), so run it from a full checkout.
 - Every page needs `title` and `description` frontmatter (they feed search and `llms.txt`), and
   `sidebar.order` for its position in the section.
 - Prefer `.md`; use `.mdx` only for Starlight components (`Steps`, `Tabs`, `CardGrid`, `LinkCard`…).
-- Never hardcode versions: write `%ZEROJ_VERSION%` (and friends). The build fails on a leftover token.
+- Never hardcode the current version: write `%ZEROJ_VERSION%` (and friends). The build fails on a leftover token.
+  Historical facts ("from 0.1.0-pre12 the group is `org.zeroj`") stay literal.
 - Every class and method in a Java block must exist — `npm run check` enforces it for ZeroJ APIs.
   Snippets the tutorials present as runnable were compiled and run against the published artifacts.
 - Keep maturity claims aligned with the support matrix in the root `README.md`. Groth16 on
@@ -72,10 +74,30 @@ Generated on every build (nothing is committed):
 
 ## Deployment
 
-`.github/workflows/docs.yml` builds every PR that touches `www/` (or the Java sources the site
-reads) and uploads the built site as an artifact. Pushes to `main` publish `www/dist` to the
-`gh-pages` branch with `CNAME` `zeroj.dev`.
+`.github/workflows/docs.yml` builds PRs that touch `www/**` or `gradle.properties`, checks
+`release.json` against Maven Central, and uploads the built site as an artifact. Pushes to `main`
+publish `www/dist` to the `gh-pages` branch with `CNAME` `zeroj.dev`, from the `release-staging`
+environment. The site also reads ZeroJ's Java sources; after changing those, run the workflow
+manually.
 
 One-time setup: in **Settings → Pages** choose **Deploy from a branch** → `gh-pages` / `(root)`,
 set the custom domain to `zeroj.dev`, and enable HTTPS. To use a different domain, change
 `SITE_URL` in `site.config.mjs`, `public/CNAME`, `public/robots.txt`, and `cname:` in the workflow.
+
+## Releasing
+
+The docs show the versions in `release.json`, not main's `gradle.properties` (which is usually the
+next, unpublished version). After a release:
+
+1. Wait until `publish-central.yml` has succeeded and the version is listed in
+   `https://repo1.maven.org/maven2/org/zeroj/zeroj-bom-core/maven-metadata.xml`.
+2. In `release.json`, set `zeroj` to it, `julc` and `ccl` to the versions that release was built
+   with (`zeroj-onchain-julc/build.gradle` and root `build.gradle` at the release tag), and
+   `"released": true`.
+3. Run `npm run check:release`. It fails if a version isn't on Maven Central, or if `julc`/`ccl`
+   don't match the published `zeroj-onchain-julc` POM. The docs CI runs the same check.
+4. Merge. Any change under `www/` rebuilds and redeploys the site.
+
+While `released` is `false`, the Installation and Quickstart pages and the landing page say the
+pinned version isn't on Maven Central yet.
+

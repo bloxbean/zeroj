@@ -1,9 +1,10 @@
 name: Documentation site
 
 # Builds the zeroj.dev docsite (www/) on pull requests that touch it, and publishes it to the
-# gh-pages branch from main. Only www/ and gradle.properties (the version the pages render) trigger
-# it. The build also reads ZeroJ Java sources (circuit API catalog, API-reference check) and other
-# Gradle files (JuLC/CCL versions); after changing those, run this workflow manually on main.
+# gh-pages branch from main. Only www/ and gradle.properties trigger it. The versions the pages
+# render (ZeroJ, JuLC, CCL) come from www/release.json, which is updated after each release reaches
+# Maven Central; check:release verifies them there. The build also reads ZeroJ Java sources (circuit
+# API catalog, API-reference check); after changing those, run this workflow manually on main.
 
 on:
   pull_request:
@@ -36,6 +37,8 @@ jobs:
           cache: npm
           cache-dependency-path: www/package-lock.json
       - run: npm ci
+      - name: Check the versions in release.json against Maven Central
+        run: npm run check:release
       - name: Type-check pages and verify Java snippets against ZeroJ sources
         run: npm run check
       - name: Build site, AI artifacts and link/checksum verification

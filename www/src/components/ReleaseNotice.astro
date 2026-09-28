@@ -1,0 +1,20 @@
+---
+// Shown on pages with copy-paste install snippets while release.json says the pinned ZeroJ version
+// isn't on Maven Central yet. Renders nothing once "released" is true.
+import { Aside } from '@astrojs/starlight/components';
+import { ZEROJ_RELEASED, ZEROJ_VERSION } from '../../site.config.mjs';
+---
+
+{
+  !ZEROJ_RELEASED && (
+    <Aside type="caution" title={`ZeroJ ${ZEROJ_VERSION} isn't on Maven Central yet`}>
+      The snippets on this page use the upcoming release, so they won't resolve until it's published.
+      To try ZeroJ now, build it from source with <code>./gradlew publishToMavenLocal</code> and add
+      <code>mavenLocal()</code> to your repositories. Local builds are versioned
+      <code>{ZEROJ_VERSION}-&lt;commit&gt;-SNAPSHOT</code>; the exact version is under
+      <code>~/.m2/repository/org/zeroj/zeroj-bom-core/</code>. Releases up to 0.1.0-pre11 used the old
+      <code>com.bloxbean.cardano</code> group and packages, so the code in these docs doesn't compile
+      against them.
+    </Aside>
+  )
+}

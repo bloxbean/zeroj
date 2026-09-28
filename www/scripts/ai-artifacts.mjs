@@ -25,6 +25,7 @@ import {
   SITE_URL,
   USECASES_URL,
   ZEROJ_DEV_VERSION,
+  ZEROJ_RELEASED,
   ZEROJ_VERSION,
   replaceVersionTokens,
   sourceRevision,
@@ -185,6 +186,11 @@ export function toPlainMarkdown(body, { mdx }) {
         '_The web version of this page has an interactive illustration here._',
       )
       .replace(/<\/?TextOnly>/g, '')
+      .replace(/<ReleaseNotice\s*\/>/g, () =>
+        ZEROJ_RELEASED
+          ? ''
+          : `> **Caution:** ZeroJ ${ZEROJ_VERSION} isn't on Maven Central yet, so these snippets won't resolve until it's published. Build from source with \`./gradlew publishToMavenLocal\` meanwhile (local versions are \`${ZEROJ_VERSION}-<commit>-SNAPSHOT\`).`,
+      )
       .replace(/<\/?(Steps|Tabs|CardGrid|FileTree|Card|TabItem|Aside)(\s[^>]*)?>/g, '');
   }
   text = convertDirectives(text);
@@ -225,7 +231,7 @@ const KEY_FACTS = [
   'ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano: define circuits in Java, prove with a pure-Java prover, verify in Java (off-chain) or on Cardano (Plutus V3 via JuLC).',
   'Status: experimental research software, not externally audited, not for production or value-bearing/mainnet use. "Beta" components are feature-complete and correctness-tested but not audited.',
   '**Groth16 on BLS12-381 is the supported path for the current release.** PlonK (prover, verifier and on-chain validators) is experimental: make no correctness claims about it and do not choose it by default. BN254 is legacy and disabled by default.',
-  `Maven group and Java packages are \`org.zeroj\` (from 0.1.0-pre12). Current version: ${ZEROJ_VERSION}. Import the BOM \`org.zeroj:zeroj-bom-core:${ZEROJ_VERSION}\`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used \`com.bloxbean.cardano\`.`,
+  `Maven group and Java packages are \`org.zeroj\` (from 0.1.0-pre12). Current version: ${ZEROJ_VERSION}${ZEROJ_RELEASED ? '' : ' (not on Maven Central yet; build from source meanwhile)'}. Import the BOM \`org.zeroj:zeroj-bom-core:${ZEROJ_VERSION}\`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used \`com.bloxbean.cardano\`.`,
   'Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` carries the blst-java JNI jar for its native verifier, and `VerifierRegistry.withServiceLoader()` lists that verifier first: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path.',
   'Write application circuits with annotations: `@ZKCircuit`, `@Prove`, `@Public`/`@Secret`, symbolic types `ZkField`, `ZkBool`, `ZkUInt` (always with `@UInt(bits = N)`), `ZkArray`/`ZkBits`/`ZkBytes` (with `@FixedSize`). The annotation processor generates a `<Name>Circuit` companion. Never use Java `if`, `&&`, `||` on secret values — use `ZkBool.and/or/not/select`.',
   'For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). MiMC and the no-params Poseidon overload are BN254-oriented; do not use them for Cardano.',
@@ -337,6 +343,7 @@ export async function buildAiArtifacts() {
         schemaVersion: 1,
         site: SITE_URL,
         zerojVersion: ZEROJ_VERSION,
+        zerojReleased: ZEROJ_RELEASED,
         zerojDevelopmentVersion: ZEROJ_DEV_VERSION,
         julcVersion: JULC_VERSION,
         cclVersion: CCL_VERSION,
