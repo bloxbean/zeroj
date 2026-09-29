@@ -13,7 +13,7 @@ description = 'ZeroJ cross-module integration and end-to-end regression tests (n
 // Tutorials and runnable applications live in https://github.com/bloxbean/zeroj-usecases.
 
 ext {
-    julcVersion = '0.1.0-pre16'
+    julcVersion = '0.1.0-pre17'
 }
 
 repositories {
@@ -46,16 +46,16 @@ dependencies {
     testAnnotationProcessor project(':zeroj-onchain-julc')
 
     // Julc for on-chain compilation
-    testImplementation "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
+    testImplementation "org.julclang:julc-stdlib:${julcVersion}"
     testAnnotationProcessor project(':zeroj-circuit-annotation-processor')
-    testAnnotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
+    testAnnotationProcessor "org.julclang:julc-annotation-processor:${julcVersion}"
 
     // Cardano Client Lib for tx building in E2E tests
     testImplementation "com.bloxbean.cardano:cardano-client-lib:${rootProject.ext.cclVersion}"
     testImplementation "com.bloxbean.cardano:cardano-client-backend-blockfrost:${rootProject.ext.cclVersion}"
-    testImplementation "com.bloxbean.cardano:julc-cardano-client-lib:${julcVersion}"
-    testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
-    testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
+    testImplementation "org.julclang:julc-cardano-client-lib:${julcVersion}"
+    testImplementation "org.julclang:julc-testkit:${julcVersion}"
+    testRuntimeOnly "org.julclang:julc-vm-java:${julcVersion}"
 }
 
 // Offline regressions. The pure-Java Groth16 setup+prove tests need more than the 1g root default.

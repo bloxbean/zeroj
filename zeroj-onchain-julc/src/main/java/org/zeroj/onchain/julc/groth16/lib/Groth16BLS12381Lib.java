@@ -1,8 +1,11 @@
 package org.zeroj.onchain.julc.groth16.lib;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.stdlib.Builtins;
-import com.bloxbean.cardano.julc.stdlib.annotation.OnchainLibrary;
+import org.julclang.core.PlutusData;
+import org.julclang.core.types.JulcG1;
+import org.julclang.core.types.JulcG2;
+import org.julclang.core.types.JulcMlResult;
+import org.julclang.stdlib.Builtins;
+import org.julclang.stdlib.annotation.OnchainLibrary;
 
 import java.math.BigInteger;
 
@@ -12,13 +15,18 @@ import java.math.BigInteger;
 @OnchainLibrary
 public class Groth16BLS12381Lib {
 
-    public static PlutusData publicInputs(BigInteger pub0) {
+    /*
+     * One builder per public-input count. Julc compiles overloads by name, not signature
+     * (pre16 ran the last declaration for every call; pre17 rejects them, JULC0054), so the
+     * arity is part of each name. See ADR-0050.
+     */
+    public static PlutusData publicInputs1(BigInteger pub0) {
         return Builtins.listData(Builtins.mkCons(
                 Builtins.iData(pub0),
                 Builtins.mkNilData()));
     }
 
-    public static PlutusData publicInputs(BigInteger pub0, BigInteger pub1) {
+    public static PlutusData publicInputs2(BigInteger pub0, BigInteger pub1) {
         return Builtins.listData(Builtins.mkCons(
                 Builtins.iData(pub0),
                 Builtins.mkCons(
@@ -26,7 +34,7 @@ public class Groth16BLS12381Lib {
                         Builtins.mkNilData())));
     }
 
-    public static PlutusData publicInputs(BigInteger pub0, BigInteger pub1, BigInteger pub2) {
+    public static PlutusData publicInputs3(BigInteger pub0, BigInteger pub1, BigInteger pub2) {
         return Builtins.listData(Builtins.mkCons(
                 Builtins.iData(pub0),
                 Builtins.mkCons(
@@ -36,7 +44,7 @@ public class Groth16BLS12381Lib {
                                 Builtins.mkNilData()))));
     }
 
-    public static PlutusData publicInputs(BigInteger pub0, BigInteger pub1, BigInteger pub2,
+    public static PlutusData publicInputs4(BigInteger pub0, BigInteger pub1, BigInteger pub2,
                                           BigInteger pub3) {
         return Builtins.listData(Builtins.mkCons(
                 Builtins.iData(pub0),
@@ -49,7 +57,7 @@ public class Groth16BLS12381Lib {
                                         Builtins.mkNilData())))));
     }
 
-    public static PlutusData publicInputs(BigInteger pub0, BigInteger pub1, BigInteger pub2,
+    public static PlutusData publicInputs5(BigInteger pub0, BigInteger pub1, BigInteger pub2,
                                           BigInteger pub3, BigInteger pub4) {
         return Builtins.listData(Builtins.mkCons(
                 Builtins.iData(pub0),
@@ -64,7 +72,7 @@ public class Groth16BLS12381Lib {
                                                 Builtins.mkNilData()))))));
     }
 
-    public static PlutusData publicInputs(BigInteger pub0, BigInteger pub1, BigInteger pub2,
+    public static PlutusData publicInputs6(BigInteger pub0, BigInteger pub1, BigInteger pub2,
                                           BigInteger pub3, BigInteger pub4, BigInteger pub5) {
         return Builtins.listData(Builtins.mkCons(
                 Builtins.iData(pub0),
@@ -100,7 +108,7 @@ public class Groth16BLS12381Lib {
             return false;
         }
 
-        byte[] vkX = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+        JulcG1 vkX = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
         return verifyWithPublicInputs(inputsCursor, Builtins.tailList(icCursor), vkX,
                 piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
     }
@@ -140,18 +148,18 @@ public class Groth16BLS12381Lib {
             return false;
         }
 
-        byte[] vkX0 = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(ic0)));
-        byte[] vkX1 = addPublicInput(vkX0, pub0, ic1);
-        byte[] vkX2 = addPublicInput(vkX1, pub1, ic2);
-        byte[] vkX3 = addPublicInput(vkX2, pub2, ic3);
-        byte[] vkX4 = addPublicInput(vkX3, pub3, ic4);
+        JulcG1 vkX0 = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(ic0)));
+        JulcG1 vkX1 = addPublicInput(vkX0, pub0, ic1);
+        JulcG1 vkX2 = addPublicInput(vkX1, pub1, ic2);
+        JulcG1 vkX3 = addPublicInput(vkX2, pub2, ic3);
+        JulcG1 vkX4 = addPublicInput(vkX3, pub3, ic4);
 
         return verifyWithComputedVkX(vkX4, piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
     private static boolean verifyWithPublicInputs(PlutusData inputsCursor,
                                                   PlutusData icCursor,
-                                                  byte[] vkX,
+                                                  JulcG1 vkX,
                                                   byte[] piA,
                                                   byte[] piB,
                                                   byte[] piC,
@@ -163,12 +171,12 @@ public class Groth16BLS12381Lib {
             return false;
         }
 
-        byte[] computedVkX = computeVkX(inputsCursor, icCursor, vkX);
+        JulcG1 computedVkX = computeVkX(inputsCursor, icCursor, vkX);
         return verifyWithComputedVkX(computedVkX, piA, piB, piC,
                 vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
-    private static boolean verifyWithComputedVkX(byte[] computedVkX,
+    private static boolean verifyWithComputedVkX(JulcG1 computedVkX,
                                                  byte[] piA,
                                                  byte[] piB,
                                                  byte[] piC,
@@ -186,29 +194,29 @@ public class Groth16BLS12381Lib {
             return false;
         }
 
-        byte[] a = Builtins.bls12_381_G1_uncompress(piA);
-        byte[] b = Builtins.bls12_381_G2_uncompress(piB);
-        byte[] c = Builtins.bls12_381_G1_uncompress(piC);
+        JulcG1 a = Builtins.bls12_381_G1_uncompress(piA);
+        JulcG2 b = Builtins.bls12_381_G2_uncompress(piB);
+        JulcG1 c = Builtins.bls12_381_G1_uncompress(piC);
 
-        byte[] alpha = Builtins.bls12_381_G1_uncompress(vkAlpha);
-        byte[] beta  = Builtins.bls12_381_G2_uncompress(vkBeta);
-        byte[] gamma = Builtins.bls12_381_G2_uncompress(vkGamma);
-        byte[] delta = Builtins.bls12_381_G2_uncompress(vkDelta);
+        JulcG1 alpha = Builtins.bls12_381_G1_uncompress(vkAlpha);
+        JulcG2 beta  = Builtins.bls12_381_G2_uncompress(vkBeta);
+        JulcG2 gamma = Builtins.bls12_381_G2_uncompress(vkGamma);
+        JulcG2 delta = Builtins.bls12_381_G2_uncompress(vkDelta);
 
-        byte[] negAlpha = Builtins.bls12_381_G1_neg(alpha);
-        byte[] lhs = Builtins.bls12_381_mulMlResult(
+        JulcG1 negAlpha = Builtins.bls12_381_G1_neg(alpha);
+        JulcMlResult lhs = Builtins.bls12_381_mulMlResult(
                 Builtins.bls12_381_millerLoop(a, b),
                 Builtins.bls12_381_millerLoop(negAlpha, beta));
-        byte[] rhs = Builtins.bls12_381_mulMlResult(
+        JulcMlResult rhs = Builtins.bls12_381_mulMlResult(
                 Builtins.bls12_381_millerLoop(computedVkX, gamma),
                 Builtins.bls12_381_millerLoop(c, delta));
 
         return Builtins.bls12_381_finalVerify(lhs, rhs);
     }
 
-    private static byte[] addPublicInput(byte[] vkX, BigInteger publicInput, PlutusData icCursor) {
-        byte[] ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
-        byte[] scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
+    private static JulcG1 addPublicInput(JulcG1 vkX, BigInteger publicInput, PlutusData icCursor) {
+        JulcG1 ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+        JulcG1 scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
         return Builtins.bls12_381_G1_add(vkX, scaled);
     }
 
@@ -253,14 +261,14 @@ public class Groth16BLS12381Lib {
         }
     }
 
-    private static byte[] computeVkX(PlutusData inputsCursor, PlutusData icCursor, byte[] vkX) {
+    private static JulcG1 computeVkX(PlutusData inputsCursor, PlutusData icCursor, JulcG1 vkX) {
         if (Builtins.nullList(inputsCursor)) {
             return vkX;
         } else {
             BigInteger publicInput = Builtins.asInteger(Builtins.headList(inputsCursor));
-            byte[] ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
-            byte[] scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
-            byte[] nextVkX = Builtins.bls12_381_G1_add(vkX, scaled);
+            JulcG1 ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+            JulcG1 scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
+            JulcG1 nextVkX = Builtins.bls12_381_G1_add(vkX, scaled);
             return computeVkX(Builtins.tailList(inputsCursor), Builtins.tailList(icCursor), nextVkX);
         }
     }

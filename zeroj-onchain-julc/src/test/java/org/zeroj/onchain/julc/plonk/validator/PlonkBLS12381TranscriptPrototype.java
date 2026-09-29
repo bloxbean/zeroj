@@ -1,10 +1,12 @@
 package org.zeroj.onchain.julc.plonk.validator;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.stdlib.Builtins;
-import com.bloxbean.cardano.julc.stdlib.annotation.Entrypoint;
-import com.bloxbean.cardano.julc.stdlib.annotation.Param;
-import com.bloxbean.cardano.julc.stdlib.annotation.SpendingValidator;
+import org.julclang.core.PlutusData;
+import org.julclang.core.types.JulcG1;
+import org.julclang.core.types.JulcG2;
+import org.julclang.stdlib.Builtins;
+import org.julclang.stdlib.annotation.Entrypoint;
+import org.julclang.stdlib.annotation.Param;
+import org.julclang.stdlib.annotation.SpendingValidator;
 
 import java.math.BigInteger;
 
@@ -157,28 +159,28 @@ public class PlonkBLS12381TranscriptPrototype {
         BigInteger r0 = pi.subtract(l1.multiply(alpha2).mod(fr)).mod(fr).subtract(e3).mod(fr);
 
         // ======== G1 operations ========
-        byte[] qm = Builtins.bls12_381_G1_uncompress(vkQm);
-        byte[] ql = Builtins.bls12_381_G1_uncompress(vkQl);
-        byte[] qr = Builtins.bls12_381_G1_uncompress(vkQr);
-        byte[] qo = Builtins.bls12_381_G1_uncompress(vkQo);
-        byte[] qc = Builtins.bls12_381_G1_uncompress(vkQc);
-        byte[] s3u = Builtins.bls12_381_G1_uncompress(vkS3);
-        byte[] x2u = Builtins.bls12_381_G2_uncompress(vkX2);
-        byte[] cA = Builtins.bls12_381_G1_uncompress(p.cmA());
-        byte[] cB = Builtins.bls12_381_G1_uncompress(p.cmB());
-        byte[] cC = Builtins.bls12_381_G1_uncompress(p.cmC());
-        byte[] cZ = Builtins.bls12_381_G1_uncompress(p.cmZ());
-        byte[] t1 = Builtins.bls12_381_G1_uncompress(p.cmT1());
-        byte[] t2 = Builtins.bls12_381_G1_uncompress(p.cmT2());
-        byte[] t3 = Builtins.bls12_381_G1_uncompress(p.cmT3());
-        byte[] wXi = Builtins.bls12_381_G1_uncompress(p.wXi());
-        byte[] wXiw = Builtins.bls12_381_G1_uncompress(p.wXiw());
-        byte[] g1 = Builtins.bls12_381_G1_uncompress(g1Gen);
-        byte[] g2 = Builtins.bls12_381_G2_uncompress(g2Gen);
+        JulcG1 qm = Builtins.bls12_381_G1_uncompress(vkQm);
+        JulcG1 ql = Builtins.bls12_381_G1_uncompress(vkQl);
+        JulcG1 qr = Builtins.bls12_381_G1_uncompress(vkQr);
+        JulcG1 qo = Builtins.bls12_381_G1_uncompress(vkQo);
+        JulcG1 qc = Builtins.bls12_381_G1_uncompress(vkQc);
+        JulcG1 s3u = Builtins.bls12_381_G1_uncompress(vkS3);
+        JulcG2 x2u = Builtins.bls12_381_G2_uncompress(vkX2);
+        JulcG1 cA = Builtins.bls12_381_G1_uncompress(p.cmA());
+        JulcG1 cB = Builtins.bls12_381_G1_uncompress(p.cmB());
+        JulcG1 cC = Builtins.bls12_381_G1_uncompress(p.cmC());
+        JulcG1 cZ = Builtins.bls12_381_G1_uncompress(p.cmZ());
+        JulcG1 t1 = Builtins.bls12_381_G1_uncompress(p.cmT1());
+        JulcG1 t2 = Builtins.bls12_381_G1_uncompress(p.cmT2());
+        JulcG1 t3 = Builtins.bls12_381_G1_uncompress(p.cmT3());
+        JulcG1 wXi = Builtins.bls12_381_G1_uncompress(p.wXi());
+        JulcG1 wXiw = Builtins.bls12_381_G1_uncompress(p.wXiw());
+        JulcG1 g1 = Builtins.bls12_381_G1_uncompress(g1Gen);
+        JulcG2 g2 = Builtins.bls12_381_G2_uncompress(g2Gen);
 
         // ======== [D] ========
         BigInteger ab = p.evalA().multiply(p.evalB()).mod(fr);
-        byte[] d1 = Builtins.bls12_381_G1_add(
+        JulcG1 d1 = Builtins.bls12_381_G1_add(
                 Builtins.bls12_381_G1_add(Builtins.bls12_381_G1_scalarMul(ab, qm), Builtins.bls12_381_G1_scalarMul(p.evalA(), ql)),
                 Builtins.bls12_381_G1_add(Builtins.bls12_381_G1_scalarMul(p.evalB(), qr),
                         Builtins.bls12_381_G1_add(Builtins.bls12_381_G1_scalarMul(p.evalC(), qo), qc)));
@@ -189,18 +191,18 @@ public class PlonkBLS12381TranscriptPrototype {
                 .multiply(p.evalC().add(betaxi.multiply(k2).mod(fr)).add(gamma).mod(fr)).mod(fr)
                 .multiply(alpha).mod(fr)
                 .add(l1.multiply(alpha2).mod(fr)).mod(fr);
-        byte[] d2 = Builtins.bls12_381_G1_scalarMul(d2c, cZ);
+        JulcG1 d2 = Builtins.bls12_381_G1_scalarMul(d2c, cZ);
 
         BigInteger d3c = p.evalA().add(beta.multiply(p.evalS1()).mod(fr)).add(gamma).mod(fr)
                 .multiply(p.evalB().add(beta.multiply(p.evalS2()).mod(fr)).add(gamma).mod(fr)).mod(fr)
                 .multiply(alpha.multiply(beta).mod(fr).multiply(p.evalZw()).mod(fr)).mod(fr);
-        byte[] d3 = Builtins.bls12_381_G1_scalarMul(d3c, s3u);
+        JulcG1 d3 = Builtins.bls12_381_G1_scalarMul(d3c, s3u);
 
         BigInteger xi4sq = xi4.multiply(xi4).mod(fr);
-        byte[] d4 = Builtins.bls12_381_G1_scalarMul(zh,
+        JulcG1 d4 = Builtins.bls12_381_G1_scalarMul(zh,
                 Builtins.bls12_381_G1_add(t1, Builtins.bls12_381_G1_add(Builtins.bls12_381_G1_scalarMul(xi4, t2), Builtins.bls12_381_G1_scalarMul(xi4sq, t3))));
 
-        byte[] dPt = Builtins.bls12_381_G1_add(Builtins.bls12_381_G1_add(d1, d2), Builtins.bls12_381_G1_neg(Builtins.bls12_381_G1_add(d3, d4)));
+        JulcG1 dPt = Builtins.bls12_381_G1_add(Builtins.bls12_381_G1_add(d1, d2), Builtins.bls12_381_G1_neg(Builtins.bls12_381_G1_add(d3, d4)));
 
         // ======== [F], [E], pairing ========
         // (simplified — gnark's v/u challenges come from KZG fold, not PlonK transcript)

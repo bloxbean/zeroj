@@ -9,21 +9,21 @@ buildscript {
         }
     }
     dependencies {
-        classpath "com.bloxbean.cardano:julc-gradle-plugin:0.1.0-pre16"
+        classpath "org.julclang:julc-gradle-plugin:0.1.0-pre17"
     }
 }
 
 plugins {
     id 'java-library'
-    id 'com.bloxbean.cardano.julc' version '0.1.0-pre16'
+    id 'org.julclang.julc' version '0.1.0-pre17'
 }
 
-apply plugin: 'com.bloxbean.cardano.julc'
+apply plugin: 'org.julclang.julc'
 
 description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 validators'
 
 ext {
-    julcVersion = '0.1.0-pre16'
+    julcVersion = '0.1.0-pre17'
 }
 
 repositories {
@@ -37,9 +37,9 @@ repositories {
 
 dependencies {
     // Julc on-chain compilation
-    api "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
-    api "com.bloxbean.cardano:julc-ledger-api:${julcVersion}"
-    annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
+    api "org.julclang:julc-stdlib:${julcVersion}"
+    api "org.julclang:julc-ledger-api:${julcVersion}"
+    annotationProcessor "org.julclang:julc-annotation-processor:${julcVersion}"
 
     // ZeroJ — blst for point compression in SnarkjsToCardano / ProverToCardano
     api project(':zeroj-api')
@@ -54,9 +54,9 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 
     // Test — Julc VM for running Plutus validators
-    testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
-    testImplementation "com.bloxbean.cardano:julc-compiler:${julcVersion}"
-    testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
+    testImplementation "org.julclang:julc-testkit:${julcVersion}"
+    testImplementation "org.julclang:julc-compiler:${julcVersion}"
+    testRuntimeOnly "org.julclang:julc-vm-java:${julcVersion}"
 
     // Test — circuit DSL for on-chain verification tests
     testImplementation project(':zeroj-circuit-dsl')
@@ -67,6 +67,14 @@ dependencies {
     // Test — off-chain BBS (build real presentations to differential-test the on-chain BBS gadgets).
     // Test-scope only: the on-chain BBS gadgets themselves have no zeroj-bbs dependency.
     testImplementation project(':zeroj-bbs')
+}
+
+// compileJulc compiles Julc's .plutus DSL sources from src/main/plutus; ZeroJ's validators are Java,
+// compiled by the annotation processor. Julc pre16 skipped a missing src/main/plutus, but pre17's
+// task fails `build` without it (a known upstream follow-up in Julc ADR-040), so the task only runs
+// if that directory exists (ADR-0050).
+tasks.named('compileJulc') {
+    enabled = file('src/main/plutus').isDirectory()
 }
 
 test {

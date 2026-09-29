@@ -8,7 +8,7 @@ import com.bloxbean.cardano.client.plutus.spec.*;
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.ScriptTx;
 import com.bloxbean.cardano.client.quicktx.Tx;
-import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
+import org.julclang.clientlib.JulcScriptLoader;
 import org.zeroj.examples.dsl.auction.onchain.ZkAuctionVerifier;
 import org.zeroj.examples.dsl.common.YaciHelper;
 import org.zeroj.examples.dsl.common.ZkE2ETestBase;
