@@ -82,9 +82,11 @@ notes list each diagnostic with its fix.
 
 ## 4. The Gradle plugin's `compileJulc` task
 
-JuLC `0.1.0-pre17`'s `compileJulc` task compiles `.plutus` DSL sources from `src/main/plutus`,
-and it fails `build` when that directory doesn't exist. JuLC `0.1.0-pre16` skipped it. If your
-validators are Java, as ZeroJ's are, either create the directory or enable the task only when it
+JuLC `0.1.0-pre17`'s `compileJulc` task compiles validator Java sources kept in `src/main/plutus`,
+and it fails `build` when that directory doesn't exist
+([bloxbean/julc#216](https://github.com/bloxbean/julc/issues/216)). JuLC `0.1.0-pre16` skipped the
+task. If your validators are in `src/main/java` and compiled by the annotation processor, as
+ZeroJ's are, either create an empty `src/main/plutus` or enable the task only when the directory
 exists:
 
 ```groovy

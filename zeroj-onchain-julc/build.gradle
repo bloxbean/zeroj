@@ -69,10 +69,11 @@ dependencies {
     testImplementation project(':zeroj-bbs')
 }
 
-// compileJulc compiles Julc's .plutus DSL sources from src/main/plutus; ZeroJ's validators are Java,
-// compiled by the annotation processor. Julc pre16 skipped a missing src/main/plutus, but pre17's
-// task fails `build` without it (a known upstream follow-up in Julc ADR-040), so the task only runs
-// if that directory exists (ADR-0050).
+// compileJulc compiles validator Java sources kept in src/main/plutus, a directory the plugin
+// excludes from javac. ZeroJ's validators live in src/main/java and are compiled by the annotation
+// processor during compileJava, so the task has no sources here. Julc pre16 skipped it when
+// src/main/plutus was missing; pre17 fails `build` instead (bloxbean/julc#216). Run it only if that
+// directory exists (ADR-0050).
 tasks.named('compileJulc') {
     enabled = file('src/main/plutus').isDirectory()
 }

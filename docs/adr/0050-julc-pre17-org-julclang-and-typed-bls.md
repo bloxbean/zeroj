@@ -109,12 +109,17 @@ in this repository. The one known on-chain caller, `zeroj-usecases/personhood-ai
 
 ### Finding: the pre17 Gradle plugin fails `build` without `src/main/plutus`
 
-`compileJulc` compiles Julc's `.plutus` DSL sources from `src/main/plutus`. Its `sourceDir` input
-was `@SkipWhenEmpty` in pre16 and is `@Optional` in pre17. As a result, pre17 fails `build` with an
-input-validation error when the directory is absent, even though the property is optional. Julc
-ADR-040 lists this as an open follow-up. ZeroJ's validators are Java and are compiled by the
-annotation processor, so the task has no work here. `zeroj-onchain-julc/build.gradle` enables it
-only when `src/main/plutus` exists. `test` never runs the task, so only `build` exposed this.
+`compileJulc` is the plugin's second compilation route. It compiles validator Java sources kept in
+`src/main/plutus`, a directory the plugin excludes from `javac`. ZeroJ's validators live in
+`src/main/java` and are compiled by the annotation processor during `compileJava`, so the task has
+no sources here. Its `sourceDir` input was `@SkipWhenEmpty` in pre16, which skipped the task as
+`NO-SOURCE`. In pre17 it is `@Optional`. The plugin always sets the property to `src/main/plutus`, so
+`@Optional` has no effect. Gradle's `@InputDirectory` validation then fails `build` when the
+directory is absent, before the task's action runs, even though the action itself tolerates a
+missing directory. A three-file project reproduces this. It is filed upstream as
+[bloxbean/julc#216](https://github.com/bloxbean/julc/issues/216), and Julc ADR-040 lists it as an
+open follow-up. `zeroj-onchain-julc/build.gradle` enables the task only when `src/main/plutus`
+exists. `test` never runs the task, so only `build` exposed this.
 
 ## Security invariants (must hold before and after)
 
