@@ -3,9 +3,9 @@
 Reusable Julc validators and on-chain helpers for Cardano Plutus V3 proof
 verification.
 
-The build baseline is Julc `0.1.0-pre17` (Maven group `org.julclang`, plugin `org.julclang.julc`;
+The build baseline is Julc `0.1.0-pre18` (Maven group `org.julclang`, plugin `org.julclang.julc`;
 see [ADR-0050](../docs/adr/0050-julc-pre17-org-julclang-and-typed-bls.md)). The authenticated-state
-release tooling binds `julc-0.1.0-pre17/plutus-v3` into each release identity. A Julc compiler
+release tooling binds `julc-0.1.0-pre18/plutus-v3` into each release identity. A Julc compiler
 upgrade therefore requires regenerated script bytes, a new reviewed template digest/release
 manifest, and fresh protocol-budget validation; an older applied script is not silently relabelled.
 

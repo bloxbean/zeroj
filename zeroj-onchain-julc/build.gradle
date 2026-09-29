@@ -9,13 +9,13 @@ buildscript {
         }
     }
     dependencies {
-        classpath "org.julclang:julc-gradle-plugin:0.1.0-pre17"
+        classpath "org.julclang:julc-gradle-plugin:0.1.0-pre18"
     }
 }
 
 plugins {
     id 'java-library'
-    id 'org.julclang.julc' version '0.1.0-pre17'
+    id 'org.julclang.julc' version '0.1.0-pre18'
 }
 
 apply plugin: 'org.julclang.julc'
@@ -23,7 +23,7 @@ apply plugin: 'org.julclang.julc'
 description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 validators'
 
 ext {
-    julcVersion = '0.1.0-pre17'
+    julcVersion = '0.1.0-pre18'
 }
 
 repositories {
@@ -67,15 +67,6 @@ dependencies {
     // Test — off-chain BBS (build real presentations to differential-test the on-chain BBS gadgets).
     // Test-scope only: the on-chain BBS gadgets themselves have no zeroj-bbs dependency.
     testImplementation project(':zeroj-bbs')
-}
-
-// compileJulc compiles validator Java sources kept in src/main/plutus, a directory the plugin
-// excludes from javac. ZeroJ's validators live in src/main/java and are compiled by the annotation
-// processor during compileJava, so the task has no sources here. Julc pre16 skipped it when
-// src/main/plutus was missing; pre17 fails `build` instead (bloxbean/julc#216). Run it only if that
-// directory exists (ADR-0050).
-tasks.named('compileJulc') {
-    enabled = file('src/main/plutus').isDirectory()
 }
 
 test {
