@@ -1,8 +1,8 @@
 package org.zeroj.onchain.julc.groth16.validator;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.testkit.ContractTest;
-import com.bloxbean.cardano.julc.testkit.TestDataBuilder;
+import org.julclang.core.PlutusData;
+import org.julclang.testkit.ContractTest;
+import org.julclang.testkit.TestDataBuilder;
 import org.zeroj.api.AuthenticatedStateCircuitManifest;
 import org.zeroj.api.Groth16ArtifactBundleIdentity;
 import org.zeroj.onchain.julc.groth16.codec.Groth16VerificationKeyCodec;

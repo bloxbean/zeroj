@@ -1,9 +1,9 @@
 package org.zeroj.onchain.julc.bbs;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.ledger.ScriptContext;
-import com.bloxbean.cardano.julc.stdlib.annotation.Entrypoint;
-import com.bloxbean.cardano.julc.stdlib.annotation.SpendingValidator;
+import org.julclang.core.PlutusData;
+import org.julclang.ledger.ScriptContext;
+import org.julclang.stdlib.annotation.Entrypoint;
+import org.julclang.stdlib.annotation.SpendingValidator;
 import org.zeroj.onchain.julc.bbs.lib.BbsHashToScalar;
 
 import java.math.BigInteger;

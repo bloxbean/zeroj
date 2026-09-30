@@ -1,9 +1,9 @@
 package org.zeroj.onchain.julc.bbs;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.ledger.TxOutRef;
-import com.bloxbean.cardano.julc.testkit.ContractTest;
-import com.bloxbean.cardano.julc.testkit.TestDataBuilder;
+import org.julclang.core.PlutusData;
+import org.julclang.ledger.TxOutRef;
+import org.julclang.testkit.ContractTest;
+import org.julclang.testkit.TestDataBuilder;
 import org.zeroj.bbs.BbsCiphersuite;
 import org.zeroj.bbs.internal.CfrgBbsCore;
 import org.junit.jupiter.api.Test;
@@ -47,7 +47,7 @@ class BbsHashToScalarVmTest extends ContractTest {
         assertSuccess(evaluate(program(), probeCtx(message, DST, expected)));
     }
 
-    private com.bloxbean.cardano.julc.core.Program program() {
+    private org.julclang.core.Program program() {
         return compileValidator(BbsHashToScalarProbe.class, Path.of("src/test/java")).program();
     }
 

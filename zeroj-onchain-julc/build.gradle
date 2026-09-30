@@ -9,22 +9,18 @@ buildscript {
         }
     }
     dependencies {
-        classpath "com.bloxbean.cardano:julc-gradle-plugin:0.1.0-pre16"
+        classpath "org.julclang:julc-gradle-plugin:${julcVersion}"
     }
 }
 
 plugins {
     id 'java-library'
-    id 'com.bloxbean.cardano.julc' version '0.1.0-pre16'
 }
 
-apply plugin: 'com.bloxbean.cardano.julc'
+// The plugin comes from the buildscript classpath above (julcVersion, root gradle.properties).
+apply plugin: 'org.julclang.julc'
 
 description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 validators'
-
-ext {
-    julcVersion = '0.1.0-pre16'
-}
 
 repositories {
     maven {
@@ -37,9 +33,9 @@ repositories {
 
 dependencies {
     // Julc on-chain compilation
-    api "com.bloxbean.cardano:julc-stdlib:${julcVersion}"
-    api "com.bloxbean.cardano:julc-ledger-api:${julcVersion}"
-    annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:${julcVersion}"
+    api "org.julclang:julc-stdlib:${julcVersion}"
+    api "org.julclang:julc-ledger-api:${julcVersion}"
+    annotationProcessor "org.julclang:julc-annotation-processor:${julcVersion}"
 
     // ZeroJ — blst for point compression in SnarkjsToCardano / ProverToCardano
     api project(':zeroj-api')
@@ -54,9 +50,9 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 
     // Test — Julc VM for running Plutus validators
-    testImplementation "com.bloxbean.cardano:julc-testkit:${julcVersion}"
-    testImplementation "com.bloxbean.cardano:julc-compiler:${julcVersion}"
-    testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:${julcVersion}"
+    testImplementation "org.julclang:julc-testkit:${julcVersion}"
+    testImplementation "org.julclang:julc-compiler:${julcVersion}"
+    testRuntimeOnly "org.julclang:julc-vm-java:${julcVersion}"
 
     // Test — circuit DSL for on-chain verification tests
     testImplementation project(':zeroj-circuit-dsl')
@@ -70,6 +66,8 @@ dependencies {
 }
 
 test {
+    // CompilerProfileTest checks COMPILER_PROFILE names the JuLC this build compiles with.
+    systemProperty 'zeroj.julcVersion', julcVersion
     def poseidonMpfArtifacts = System.getProperty('zeroj.poseidonMpf.cardanoArtifacts')
     if (poseidonMpfArtifacts != null) {
         systemProperty 'zeroj.poseidonMpf.cardanoArtifacts', poseidonMpfArtifacts

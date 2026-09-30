@@ -225,7 +225,7 @@ Setup validates the relation and fails closed: every public wire (and the consta
 ## 7. Verifying on Cardano
 
 ```java
-import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
+import org.julclang.clientlib.JulcScriptLoader;
 import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 

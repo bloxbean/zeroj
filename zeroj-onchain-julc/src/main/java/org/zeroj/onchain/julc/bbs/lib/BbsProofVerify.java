@@ -1,7 +1,8 @@
 package org.zeroj.onchain.julc.bbs.lib;
 
-import com.bloxbean.cardano.julc.stdlib.Builtins;
-import com.bloxbean.cardano.julc.stdlib.annotation.OnchainLibrary;
+import org.julclang.core.types.JulcG1;
+import org.julclang.stdlib.Builtins;
+import org.julclang.stdlib.annotation.OnchainLibrary;
 
 import java.math.BigInteger;
 
@@ -53,26 +54,26 @@ public final class BbsProofVerify {
             BigInteger mHat0, BigInteger mHat1, BigInteger mHat2, BigInteger c,
             byte[] msg2, byte[] msg3, byte[] ph) {
 
-        byte[] abarE = Builtins.bls12_381_G1_uncompress(abar);
-        byte[] bbarE = Builtins.bls12_381_G1_uncompress(bbar);
-        byte[] dE = Builtins.bls12_381_G1_uncompress(d);
+        JulcG1 abarE = Builtins.bls12_381_G1_uncompress(abar);
+        JulcG1 bbarE = Builtins.bls12_381_G1_uncompress(bbar);
+        JulcG1 dE = Builtins.bls12_381_G1_uncompress(d);
 
         // T1 = c*Bbar + eHat*Abar + r1Hat*D
-        byte[] t1 = g1add(g1add(g1mul(c, bbarE), g1mul(eHat, abarE)), g1mul(r1Hat, dE));
+        JulcG1 t1 = g1add(g1add(g1mul(c, bbarE), g1mul(eHat, abarE)), g1mul(r1Hat, dE));
 
         // disclosed message scalars (map_message_to_scalar_as_hash)
         BigInteger s2 = BbsHashToScalar.hashToScalar(msg2, dstMap);
         BigInteger s3 = BbsHashToScalar.hashToScalar(msg3, dstMap);
 
         // Bv = P1 + domain*Q1 + s2*H2 + s3*H3
-        byte[] bv = g1add(g1add(g1add(
+        JulcG1 bv = g1add(g1add(g1add(
                 Builtins.bls12_381_G1_uncompress(p1),
                 g1mul(domain, Builtins.bls12_381_G1_uncompress(q1))),
                 g1mul(s2, Builtins.bls12_381_G1_uncompress(h2))),
                 g1mul(s3, Builtins.bls12_381_G1_uncompress(h3)));
 
         // T2 = c*Bv + r3Hat*D + mHat0*H0 + mHat1*H1 + mHat2*H4   (undisclosed indexes 0,1,4)
-        byte[] t2 = g1add(g1add(g1add(g1add(
+        JulcG1 t2 = g1add(g1add(g1add(g1add(
                 g1mul(c, bv), g1mul(r3Hat, dE)),
                 g1mul(mHat0, Builtins.bls12_381_G1_uncompress(h0))),
                 g1mul(mHat1, Builtins.bls12_381_G1_uncompress(h1))),
@@ -95,11 +96,11 @@ public final class BbsProofVerify {
                 Builtins.bls12_381_millerLoop(bbarE, Builtins.bls12_381_G2_uncompress(bp2)));
     }
 
-    private static byte[] g1mul(BigInteger scalar, byte[] pointElement) {
+    private static JulcG1 g1mul(BigInteger scalar, JulcG1 pointElement) {
         return Builtins.bls12_381_G1_scalarMul(scalar, pointElement);
     }
 
-    private static byte[] g1add(byte[] a, byte[] b) {
+    private static JulcG1 g1add(JulcG1 a, JulcG1 b) {
         return Builtins.bls12_381_G1_add(a, b);
     }
 

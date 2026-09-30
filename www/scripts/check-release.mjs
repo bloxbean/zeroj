@@ -32,21 +32,28 @@ async function requirePublished(group, artifact, version, what) {
   return pom;
 }
 
-function dependencyVersion(pom, artifact) {
-  const m = pom.match(new RegExp(`<artifactId>${artifact}</artifactId>\\s*<version>([^<]+)</version>`));
+// JuLC moved from com.bloxbean.cardano to org.julclang in 0.1.0-pre17 (ADR-0050). Matching the group
+// as well as the artifact keeps a ZeroJ POM still built against the old JuLC group from passing.
+const JULC_GROUP = 'org.julclang';
+
+function dependencyVersion(pom, group, artifact) {
+  const m = pom.match(new RegExp(
+    `<groupId>${group}</groupId>\\s*<artifactId>${artifact}</artifactId>\\s*<version>([^<]+)</version>`));
   return m?.[1];
 }
 
-await requirePublished('com.bloxbean.cardano', 'julc-stdlib', RELEASE.julc, 'release.json "julc"');
+await requirePublished(JULC_GROUP, 'julc-stdlib', RELEASE.julc, 'release.json "julc"');
 await requirePublished('com.bloxbean.cardano', 'cardano-client-lib', RELEASE.ccl, 'release.json "ccl"');
 
 if (RELEASE.released) {
   await requirePublished('org.zeroj', 'zeroj-bom-core', RELEASE.zeroj, 'release.json "zeroj"');
   const onchain = await requirePublished('org.zeroj', 'zeroj-onchain-julc', RELEASE.zeroj, 'release.json "zeroj"');
   if (onchain) {
-    const julc = dependencyVersion(onchain, 'julc-stdlib');
-    const ccl = dependencyVersion(onchain, 'cardano-client-crypto');
-    if (julc && julc !== RELEASE.julc) {
+    const julc = dependencyVersion(onchain, JULC_GROUP, 'julc-stdlib');
+    const ccl = dependencyVersion(onchain, 'com.bloxbean.cardano', 'cardano-client-crypto');
+    if (!julc) {
+      problems.push(`ZeroJ ${RELEASE.zeroj}'s zeroj-onchain-julc POM has no ${JULC_GROUP}:julc-stdlib dependency`);
+    } else if (julc !== RELEASE.julc) {
       problems.push(`release.json "julc" is ${RELEASE.julc}, but ZeroJ ${RELEASE.zeroj} was built with JuLC ${julc}`);
     }
     if (ccl && ccl !== RELEASE.ccl) {

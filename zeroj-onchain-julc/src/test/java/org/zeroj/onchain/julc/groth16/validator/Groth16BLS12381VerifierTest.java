@@ -1,9 +1,9 @@
 package org.zeroj.onchain.julc.groth16.validator;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.ledger.TxOutRef;
-import com.bloxbean.cardano.julc.testkit.ContractTest;
-import com.bloxbean.cardano.julc.testkit.TestDataBuilder;
+import org.julclang.core.PlutusData;
+import org.julclang.ledger.TxOutRef;
+import org.julclang.testkit.ContractTest;
+import org.julclang.testkit.TestDataBuilder;
 import com.bloxbean.cardano.client.crypto.Blake2bUtil;
 import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
@@ -440,7 +440,7 @@ class Groth16BLS12381VerifierTest extends ContractTest {
         return PlutusData.list(values.toArray(new PlutusData[0]));
     }
 
-    private com.bloxbean.cardano.julc.core.Program txOutRefBoundProgram(SnarkjsToCardano.VkCompressed vk) {
+    private org.julclang.core.Program txOutRefBoundProgram(SnarkjsToCardano.VkCompressed vk) {
         var compiled = compileValidator(Groth16BLS12381TxOutRefBindingVerifier.class);
         return compiled.program().applyParams(
                 PlutusData.bytes(vk.alpha()),

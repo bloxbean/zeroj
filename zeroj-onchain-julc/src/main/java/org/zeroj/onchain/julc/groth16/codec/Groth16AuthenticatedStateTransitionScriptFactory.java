@@ -1,9 +1,9 @@
 package org.zeroj.onchain.julc.groth16.codec;
 
 import com.bloxbean.cardano.client.crypto.Blake2bUtil;
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.core.Program;
-import com.bloxbean.cardano.julc.core.flat.UplcFlatEncoder;
+import org.julclang.core.PlutusData;
+import org.julclang.core.Program;
+import org.julclang.core.flat.UplcFlatEncoder;
 import org.zeroj.api.AuthenticatedStateCircuitManifest;
 
 import java.nio.ByteBuffer;
@@ -36,7 +36,7 @@ public final class Groth16AuthenticatedStateTransitionScriptFactory {
             "zeroj-groth16-authenticated-state-deployment-v2";
     public static final String VALIDATOR_TEMPLATE_ID =
             "zeroj-groth16-authenticated-state-transition-validator-v1";
-    public static final String COMPILER_PROFILE = "julc-0.1.0-pre16/plutus-v3";
+    public static final String COMPILER_PROFILE = "julc-0.1.0-pre18/plutus-v3";
     public static final String STATE_TOKEN_SUPPLY_INVARIANT =
             "externally-attested-one-shot-policy-total-supply-one";
 

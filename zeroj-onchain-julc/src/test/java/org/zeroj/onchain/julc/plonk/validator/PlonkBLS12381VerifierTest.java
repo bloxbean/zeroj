@@ -1,11 +1,11 @@
 package org.zeroj.onchain.julc.plonk.validator;
 
-import com.bloxbean.cardano.julc.core.Program;
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.core.cbor.PlutusDataCborEncoder;
-import com.bloxbean.cardano.julc.core.flat.UplcFlatEncoder;
-import com.bloxbean.cardano.julc.testkit.ContractTest;
-import com.bloxbean.cardano.julc.testkit.TestDataBuilder;
+import org.julclang.core.Program;
+import org.julclang.core.PlutusData;
+import org.julclang.core.cbor.PlutusDataCborEncoder;
+import org.julclang.core.flat.UplcFlatEncoder;
+import org.julclang.testkit.ContractTest;
+import org.julclang.testkit.TestDataBuilder;
 import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.crypto.plonk.PlonKProverBLS381;
