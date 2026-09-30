@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre12
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: 277a005b1a91226c2b0a71cabd826197b54ad0fc
+Source revision: 8ec768c693329ba38e90d9cc4a719ed22f3f168d
 
 ## Key facts
 
@@ -5814,8 +5814,8 @@ String manifestSha256 = imported.manifestSha256();   // keep it with your deploy
 
 The import checks the file against that hash, validates every point (curve, subgroup and
 canonical encoding), and seals the store. It does not check that the key matches your circuit or
-re-verify the ceremony; that's what `snarkjs zkey verify` is for. The two-argument
-`importToPkStore(zkey, dir)` always throws, so the hash can't be skipped by accident.
+re-verify the ceremony; that's what `snarkjs zkey verify` is for. There is no two-argument
+`importToPkStore(zkey, dir)`: code that skips the hash doesn't compile.
 `importUnpinnedToPkStore` exists for local tests only. Later loads are pinned to the store's
 manifest hash.
 
@@ -10852,7 +10852,7 @@ tampered file can't slip through:
 
 | Before | Now |
 |---|---|
-| `ZkeyPkStoreImporter.importToPkStore(zkey, dir)` | `importToPkStore(zkey, dir, verifiedZkeySha256)`. The two-argument form always throws. `importUnpinnedToPkStore` is for local tests only. |
+| `ZkeyPkStoreImporter.importToPkStore(zkey, dir)` | `importToPkStore(zkey, dir, verifiedZkeySha256)`. The two-argument form has been removed, so a call that skips the hash no longer compiles. `importUnpinnedToPkStore` is for local tests only. |
 | `Groth16Keys.load(dir)` on an imported store | `Groth16Keys.load(dir, imported.manifestSha256())`, pinned to the manifest hash the import returns (and `zeroj-ceremony finalize` prints) |
 | `Groth16PkStore.bindCircuitFingerprint(dir, fp)` after import | Pass the fingerprint at import: `importToPkStore(zkey, dir, sha256, fp)` or `finalize --circuit-fingerprint`. Imported stores are sealed. |
 | `zeroj-ceremony finalize --zkey … --pk-store …` | Add `--sha256 <hash of the verified key>` (or `--allow-unpinned` for local tests). The output directory must not exist. |

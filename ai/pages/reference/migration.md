@@ -213,7 +213,7 @@ tampered file can't slip through:
 
 | Before | Now |
 |---|---|
-| `ZkeyPkStoreImporter.importToPkStore(zkey, dir)` | `importToPkStore(zkey, dir, verifiedZkeySha256)`. The two-argument form always throws. `importUnpinnedToPkStore` is for local tests only. |
+| `ZkeyPkStoreImporter.importToPkStore(zkey, dir)` | `importToPkStore(zkey, dir, verifiedZkeySha256)`. The two-argument form has been removed, so a call that skips the hash no longer compiles. `importUnpinnedToPkStore` is for local tests only. |
 | `Groth16Keys.load(dir)` on an imported store | `Groth16Keys.load(dir, imported.manifestSha256())`, pinned to the manifest hash the import returns (and `zeroj-ceremony finalize` prints) |
 | `Groth16PkStore.bindCircuitFingerprint(dir, fp)` after import | Pass the fingerprint at import: `importToPkStore(zkey, dir, sha256, fp)` or `finalize --circuit-fingerprint`. Imported stores are sealed. |
 | `zeroj-ceremony finalize --zkey … --pk-store …` | Add `--sha256 <hash of the verified key>` (or `--allow-unpinned` for local tests). The output directory must not exist. |

@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "277a005b1a91226c2b0a71cabd826197b54ad0fc",
+  "sourceRevision": "8ec768c693329ba38e90d9cc4a719ed22f3f168d",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -141,7 +141,7 @@
       "description": "Set up keys, generate Groth16 proofs on BLS12-381, scale to millions of constraints, and export proofs and keys for verifiers.",
       "url": "https://zeroj.dev/guides/proving/groth16/",
       "markdown": "https://zeroj.dev/ai/pages/guides/proving/groth16.md",
-      "sha256": "6d8f9053874c92ea7b71c6e53dc578b94df19a82a661222329b1d5020c99f929"
+      "sha256": "2c877d36272453503b32a8e773c788e435faa9da3c9e263e483b1ec416ed01d3"
     },
     {
       "title": "Run a trusted setup ceremony",
@@ -302,7 +302,7 @@
       "description": "Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.",
       "url": "https://zeroj.dev/reference/migration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/migration.md",
-      "sha256": "d575bdc109885e1ba59149d95c8ea4efb4f7ec52893c105d1d1d4746320fb1b9"
+      "sha256": "a609220257b5d5147973a7dd16215fbddeaeb323176d9eea34d0fe0c8ab31e08"
     },
     {
       "title": "Build with AI",
@@ -326,7 +326,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "1d0673d9693c6adeed27c6016e8531ba64b75fbbc940b12555cddd157cb3df39"
+      "sha256": "77c44cf8a3a8dc38692a913bc25c06af1998ee09dede2d27fbf2bf1c84c5d00b"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
