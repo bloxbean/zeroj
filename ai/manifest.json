@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "site": "https://zeroj.dev",
   "zerojVersion": "0.1.0-pre12",
-  "zerojReleased": false,
+  "zerojReleased": true,
   "zerojDevelopmentVersion": "0.1.0-pre12",
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "502b34fbc5da5165bc01b50c0fec28bbede13c45",
+  "sourceRevision": "6547da9b3ecbebf31559ce6c7dd7b8c1cf4497fd",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -22,14 +22,14 @@
       "description": "Add ZeroJ to a Gradle or Maven project with the BOM, wire up the annotation processor, and enable the dev-only trusted setup for local runs.",
       "url": "https://zeroj.dev/start/installation/",
       "markdown": "https://zeroj.dev/ai/pages/start/installation.md",
-      "sha256": "0a62dab675710ba743256c8ab19318391c1c7fb0007964c4b8e60706623d1780"
+      "sha256": "03c3f15aa8dacfb2f5644f9ad6e9047b40c83ea51e34972d0aa144435a1b59c9"
     },
     {
       "title": "Quickstart: your first proof",
       "description": "In about ten minutes, prove you know a secret factor without revealing it, then verify the proof in pure Java. Circuit, witness, setup, prove, verify.",
       "url": "https://zeroj.dev/start/quickstart/",
       "markdown": "https://zeroj.dev/ai/pages/start/quickstart.md",
-      "sha256": "142471a6688dcb62fd892cf4e79064530c7f286341ec3c5d0c267219b3066750"
+      "sha256": "828e213742f559c97896be313ca4856ad87bf4012f4d58e750df36d885436035"
     },
     {
       "title": "Status & maturity",
@@ -322,11 +322,11 @@
   "artifacts": [
     {
       "url": "https://zeroj.dev/llms.txt",
-      "sha256": "a2bd400419df4d9975a32b606a2e06752aeea2615d7e0bcc87367def01d8ecc1"
+      "sha256": "100416206c27d811d45adcf7f24c374f1cafd1970a547b2d3e0acf88722a9c1b"
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "0cc457a5807c0f7d3cf03270e811cf1bd8cbb6d5c4bc266666b0a020bfc2ea2f"
+      "sha256": "93e77edefb9c656860a711dc58813b47df5ea21864d8c3cfc6d9dc5ec3671a56"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",

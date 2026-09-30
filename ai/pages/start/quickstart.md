@@ -27,8 +27,6 @@ Java 25 and a Gradle version that runs on it (we tested Gradle 9.2), or Maven. S
 [Installation](https://zeroj.dev/start/installation/) if you need to set these up. No zero-knowledge background
 is needed; unfamiliar terms are defined in the [Glossary](https://zeroj.dev/learn/glossary/).
 
-> **Caution:** ZeroJ 0.1.0-pre12 isn't on Maven Central yet, so these snippets won't resolve until it's published. Build from source with `./gradlew publishToMavenLocal` meanwhile (local versions are `0.1.0-pre12-<commit>-SNAPSHOT`).
-
 ## Build it
 
 1. **Create the project.** Make an empty directory with this layout. You'll write the two Java

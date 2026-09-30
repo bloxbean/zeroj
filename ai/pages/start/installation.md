@@ -8,8 +8,6 @@ ZeroJ is a set of Maven artifacts under the group `org.zeroj`. A single BOM,
 `org.zeroj:zeroj-bom-core`, keeps the core module versions in sync. This page gets a Gradle or
 Maven project ready for the [Quickstart](https://zeroj.dev/start/quickstart/).
 
-> **Caution:** ZeroJ 0.1.0-pre12 isn't on Maven Central yet, so these snippets won't resolve until it's published. Build from source with `./gradlew publishToMavenLocal` meanwhile (local versions are `0.1.0-pre12-<commit>-SNAPSHOT`).
-
 ## Prerequisites
 
 | Requirement | Version | Notes |
