@@ -64,15 +64,6 @@ public final class ZkeyPkStoreImporter {
                            String sourceSha256, String manifestSha256) {}
 
     /**
-     * @deprecated Select a trusted expected SHA-256 or explicitly use the unpinned test API.
-     */
-    @Deprecated(forRemoval = true)
-    public static Imported importToPkStore(Path zkeyFile, Path dir) throws IOException {
-        throw new IOException("Expected .zkey SHA-256 required; use the pinned overload or "
-                + "importUnpinnedToPkStore for explicitly unpinned local/test artifacts");
-    }
-
-    /**
      * Import structurally and point-validated bytes matching a trusted external hash.
      * The sealed store is unbound; use the fingerprint overload for circuit-aware cache hits.
      * This does not verify key consistency with the R1CS or ceremony transcript.

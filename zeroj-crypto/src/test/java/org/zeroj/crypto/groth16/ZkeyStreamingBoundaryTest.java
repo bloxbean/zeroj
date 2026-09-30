@@ -165,7 +165,9 @@ class ZkeyStreamingBoundaryTest {
         byte[] manifest = Files.readAllBytes(store.resolve("manifest.properties"));
         assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importToPkStore(input, store, expected));
         assertArrayEquals(manifest, Files.readAllBytes(store.resolve("manifest.properties")));
-        assertThrows(IOException.class, () -> ZkeyPkStoreImporter.importToPkStore(input, tmp.resolve("implicit")));
+        // No unpinned two-argument import exists, so code that skips the hash does not compile.
+        assertThrows(NoSuchMethodException.class,
+                () -> ZkeyPkStoreImporter.class.getMethod("importToPkStore", Path.class, Path.class));
     }
 
     @Test void rejectsDuplicateSectionsAndBadCoefficients() throws IOException {

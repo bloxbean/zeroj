@@ -109,8 +109,8 @@ String manifestSha256 = imported.manifestSha256();   // keep it with your deploy
 
 The import checks the file against that hash, validates every point (curve, subgroup and
 canonical encoding), and seals the store. It does not check that the key matches your circuit or
-re-verify the ceremony; that's what `snarkjs zkey verify` is for. The two-argument
-`importToPkStore(zkey, dir)` always throws, so the hash can't be skipped by accident.
+re-verify the ceremony; that's what `snarkjs zkey verify` is for. There is no two-argument
+`importToPkStore(zkey, dir)`: code that skips the hash doesn't compile.
 `importUnpinnedToPkStore` exists for local tests only. Later loads are pinned to the store's
 manifest hash.
 
