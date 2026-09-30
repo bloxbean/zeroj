@@ -9,22 +9,18 @@ buildscript {
         }
     }
     dependencies {
-        classpath "org.julclang:julc-gradle-plugin:0.1.0-pre18"
+        classpath "org.julclang:julc-gradle-plugin:${julcVersion}"
     }
 }
 
 plugins {
     id 'java-library'
-    id 'org.julclang.julc' version '0.1.0-pre18'
 }
 
+// The plugin comes from the buildscript classpath above (julcVersion, root gradle.properties).
 apply plugin: 'org.julclang.julc'
 
 description = 'ZeroJ on-chain Julc verifiers — reusable Groth16 validator and experimental PlonK BLS12-381 validators'
-
-ext {
-    julcVersion = '0.1.0-pre18'
-}
 
 repositories {
     maven {
@@ -70,6 +66,8 @@ dependencies {
 }
 
 test {
+    // CompilerProfileTest checks COMPILER_PROFILE names the JuLC this build compiles with.
+    systemProperty 'zeroj.julcVersion', julcVersion
     def poseidonMpfArtifacts = System.getProperty('zeroj.poseidonMpf.cardanoArtifacts')
     if (poseidonMpfArtifacts != null) {
         systemProperty 'zeroj.poseidonMpf.cardanoArtifacts', poseidonMpfArtifacts
