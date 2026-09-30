@@ -15,7 +15,7 @@ ZeroJ is a **Java-first zero-knowledge proof toolkit for Cardano** (Java 25, Mav
 
 - **Define** circuits in Java — annotation style (`@ZKCircuit`, recommended) or the `CircuitSpec`/`SignalBuilder` DSL.
 - **Prove** with a pure-Java **Groth16** prover on **BLS12-381** (no native libraries; optional blst backend).
-- **Verify** off-chain in any JVM (`zeroj-verifier-groth16`) and on-chain in Cardano **Plutus V3** validators compiled from Java by **JuLC** (`zeroj-onchain-julc`, JuLC `0.1.0-pre16`).
+- **Verify** off-chain in any JVM (`zeroj-verifier-groth16`) and on-chain in Cardano **Plutus V3** validators compiled from Java by **JuLC** (`zeroj-onchain-julc`, JuLC `0.1.0-pre18`).
 - Also: BBS selective-disclosure credentials (`zeroj-bbs`), snarkjs/circom interop, Poseidon-rooted authenticated state (experimental).
 
 **Status — say this honestly in anything you write for users:** ZeroJ is experimental research software. It is not externally audited and must not protect real value on mainnet. "Beta" means feature-complete and correctness-tested, not audited.
@@ -224,7 +224,7 @@ Setup validates the relation and fails closed: every public wire (and the consta
 ## 7. Verifying on Cardano
 
 ```java
-import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
+import org.julclang.clientlib.JulcScriptLoader;
 import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 

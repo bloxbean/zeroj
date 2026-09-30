@@ -276,10 +276,10 @@ dependencies {
     annotationProcessor 'org.zeroj:zeroj-onchain-julc'
 
     // JuLC: write Plutus V3 validators in Java
-    implementation "com.bloxbean.cardano:julc-stdlib:0.1.0-pre16"
-    annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:0.1.0-pre16"
-    implementation "com.bloxbean.cardano:julc-cardano-client-lib:0.1.0-pre16"
-    runtimeOnly "com.bloxbean.cardano:julc-vm-java:0.1.0-pre16"
+    implementation "org.julclang:julc-stdlib:0.1.0-pre18"
+    annotationProcessor "org.julclang:julc-annotation-processor:0.1.0-pre18"
+    implementation "org.julclang:julc-cardano-client-lib:0.1.0-pre18"
+    runtimeOnly "org.julclang:julc-vm-java:0.1.0-pre18"
 
     // Cardano Client Lib: build and submit transactions
     implementation "com.bloxbean.cardano:cardano-client-lib:0.8.0-pre5"

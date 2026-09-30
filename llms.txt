@@ -3,7 +3,7 @@
 > ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano. Define circuits in Java, prove them with a pure-Java Groth16 prover on BLS12-381, verify proofs in any JVM, and verify them on-chain in Cardano Plutus V3 validators built with JuLC. Also includes BBS selective-disclosure credentials and snarkjs/circom interoperability.
 
 zerojVersion: 0.1.0-pre12
-julcVersion: 0.1.0-pre16
+julcVersion: 0.1.0-pre18
 cclVersion: 0.8.0-pre5
 
 Key facts an AI agent must know before generating ZeroJ code:
@@ -95,7 +95,7 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [API cheat sheet](https://zeroj.dev/ai/pages/reference/api-cheatsheet.md): One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification and BBS.
 - [Configuration](https://zeroj.dev/ai/pages/reference/configuration.md): Every ZeroJ system property, environment variable, native-library requirement, external tool and contributor Gradle flag, and which ones are dev-only.
 - [FAQ & troubleshooting](https://zeroj.dev/ai/pages/reference/faq.md): Straight answers about ZeroJ's maturity, proof systems, tooling and performance, plus fixes for the errors you are most likely to hit.
-- [Migration notes](https://zeroj.dev/ai/pages/reference/migration.md): Move from com.bloxbean.cardano to the org.zeroj namespace, and from the pre-cleanup module set to today's focused module surface.
+- [Migration notes](https://zeroj.dev/ai/pages/reference/migration.md): Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.
 
 ## Source code and examples
 

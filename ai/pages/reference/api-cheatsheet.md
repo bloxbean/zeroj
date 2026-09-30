@@ -112,7 +112,7 @@ bind the proof to the transaction in your own validator.
 
 | Call | Class (package) |
 |---|---|
-| `JulcScriptLoader.load(Groth16BLS12381Verifier.class, new BytesPlutusData(vk.alpha()), …, icList)` | `JulcScriptLoader` (`com.bloxbean.cardano.julc.clientlib`, artifact `julc-cardano-client-lib`); `Groth16BLS12381Verifier` (`org.zeroj.onchain.julc.groth16.validator`) |
+| `JulcScriptLoader.load(Groth16BLS12381Verifier.class, new BytesPlutusData(vk.alpha()), …, icList)` | `JulcScriptLoader` (`org.julclang.clientlib`, artifact `julc-cardano-client-lib`); `Groth16BLS12381Verifier` (`org.zeroj.onchain.julc.groth16.validator`) |
 | `AddressProvider.getEntAddress(script, Networks.testnet()).toBech32()` | Cardano Client Lib (`com.bloxbean.cardano.client.address`) |
 | Datum: `ListPlutusData.of(BigIntPlutusData.of(pub0), …)` · Redeemer: `Constr 0 [piA, piB, piC]` | Cardano Client Lib (`com.bloxbean.cardano.client.plutus.spec`) |
 | In your validator: `Groth16BLS12381Lib.verify(datum, piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta, vkIc)` | `Groth16BLS12381Lib` (`org.zeroj.onchain.julc.groth16.lib`) |

@@ -4,10 +4,10 @@
   "zerojVersion": "0.1.0-pre12",
   "zerojReleased": false,
   "zerojDevelopmentVersion": "0.1.0-pre12-SNAPSHOT",
-  "julcVersion": "0.1.0-pre16",
+  "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "ad68fc5b50c21be27f055b54a048c97a49022fe5",
+  "sourceRevision": "277a005b1a91226c2b0a71cabd826197b54ad0fc",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -22,7 +22,7 @@
       "description": "Add ZeroJ to a Gradle or Maven project with the BOM, wire up the annotation processor, and enable the dev-only trusted setup for local runs.",
       "url": "https://zeroj.dev/start/installation/",
       "markdown": "https://zeroj.dev/ai/pages/start/installation.md",
-      "sha256": "18e09227298e5613b405797b0c75b51ad5d42bed705ee6e7b829922501311a0a"
+      "sha256": "0a62dab675710ba743256c8ab19318391c1c7fb0007964c4b8e60706623d1780"
     },
     {
       "title": "Quickstart: your first proof",
@@ -99,7 +99,7 @@
       "description": "Lock test ADA behind a Groth16 verifier on a local Yaci DevKit devnet, unlock it with a proof, and learn why a bare verifier must never guard real value.",
       "url": "https://zeroj.dev/tutorials/verify-on-cardano/",
       "markdown": "https://zeroj.dev/ai/pages/tutorials/verify-on-cardano.md",
-      "sha256": "0a1e782238800fc2a6f89c32774638b74c28b329d64920474c437ba5a5e9a837"
+      "sha256": "c44f7d7210314ad2914251711af65dc8ef6c5841d4d21b98d68c422cbcbb5f3e"
     },
     {
       "title": "Bring circom & snarkjs circuits",
@@ -176,7 +176,7 @@
       "description": "Run Groth16 verification inside a Plutus V3 validator with zeroj-onchain-julc, bind proofs to the spend, and plan budgets and reference scripts.",
       "url": "https://zeroj.dev/guides/verifying/on-chain/",
       "markdown": "https://zeroj.dev/ai/pages/guides/verifying/on-chain.md",
-      "sha256": "dc058367680bc881927218d4da3e3e9b63f5eb5b567a99b7776f28cdbbd4b5de"
+      "sha256": "e24c508c23044f626281f01fae494c8aa295b2852adf8f3212151fdd8d60ecb1"
     },
     {
       "title": "Secure your ZK application",
@@ -281,7 +281,7 @@
       "description": "One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification and BBS.",
       "url": "https://zeroj.dev/reference/api-cheatsheet/",
       "markdown": "https://zeroj.dev/ai/pages/reference/api-cheatsheet.md",
-      "sha256": "bcde310275d47b115215b973ad153d83fed042edd5f85408359e2871edd6bf20"
+      "sha256": "e2636a27e3f0e62b5794e2a815278cbab712c73f7824eef69f0d72e8d4a2da60"
     },
     {
       "title": "Configuration",
@@ -299,10 +299,10 @@
     },
     {
       "title": "Migration notes",
-      "description": "Move from com.bloxbean.cardano to the org.zeroj namespace, and from the pre-cleanup module set to today's focused module surface.",
+      "description": "Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.",
       "url": "https://zeroj.dev/reference/migration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/migration.md",
-      "sha256": "573fe64ffab14479fb66b7a3069bc1671056b7128ae72c4d3c9b436fb251e15b"
+      "sha256": "d575bdc109885e1ba59149d95c8ea4efb4f7ec52893c105d1d1d4746320fb1b9"
     },
     {
       "title": "Build with AI",
@@ -316,21 +316,21 @@
       "description": "Everything an AI coding agent needs to write correct ZeroJ code on the first try. Ingest it before generating circuits, proofs or validators.",
       "url": "https://zeroj.dev/ai/starter-pack/",
       "markdown": "https://zeroj.dev/ai/pages/ai/starter-pack.md",
-      "sha256": "4311eb952be77f295d6d24c7bc353b01c4671134137a7b8c179bbc3c46103cd3"
+      "sha256": "d2e369e0188215a85834931512755a7980d2cf81102f183138c53a56f4ec981c"
     }
   ],
   "artifacts": [
     {
       "url": "https://zeroj.dev/llms.txt",
-      "sha256": "62d34756e3a380f3979a5603efae36728adeabc7d9dec614fc092f992434e2c1"
+      "sha256": "a2bd400419df4d9975a32b606a2e06752aeea2615d7e0bcc87367def01d8ecc1"
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "380db05a1fa66dafd11c4b25010715022aabc07e15e140a111d094d4e0bd0420"
+      "sha256": "1d0673d9693c6adeed27c6016e8531ba64b75fbbc940b12555cddd157cb3df39"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
-      "sha256": "71b1b6605b24b269b1b00b201176ad358b86680e9832bb5ca5035e974032a910"
+      "sha256": "3de1b6c9f5fb7d972f3b5fd87fa7c6b618021947b52a96848d46297b76953701"
     },
     {
       "url": "https://zeroj.dev/ai/index.md",

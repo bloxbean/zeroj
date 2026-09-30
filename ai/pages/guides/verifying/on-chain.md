@@ -73,7 +73,7 @@ import com.bloxbean.cardano.client.plutus.spec.BigIntPlutusData;
 import com.bloxbean.cardano.client.plutus.spec.BytesPlutusData;
 import com.bloxbean.cardano.client.plutus.spec.ConstrPlutusData;
 import com.bloxbean.cardano.client.plutus.spec.ListPlutusData;
-import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
+import org.julclang.clientlib.JulcScriptLoader;
 import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
 
@@ -117,9 +117,9 @@ Dependencies for the off-chain side:
 dependencies {
     implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
     implementation 'org.zeroj:zeroj-onchain-julc'
-    implementation "com.bloxbean.cardano:julc-cardano-client-lib:0.1.0-pre16"   // JulcScriptLoader
+    implementation "org.julclang:julc-cardano-client-lib:0.1.0-pre18"   // JulcScriptLoader
     implementation "com.bloxbean.cardano:cardano-client-lib:0.8.0-pre5"
-    runtimeOnly "com.bloxbean.cardano:julc-vm-java:0.1.0-pre16"
+    runtimeOnly "org.julclang:julc-vm-java:0.1.0-pre18"
 }
 ```
 
@@ -172,14 +172,14 @@ transaction on an in-memory ledger and rejects the same proof replayed against a
 ```java title="SpendBoundGroth16Verifier.java"
 package com.example.onchain;
 
-import com.bloxbean.cardano.julc.core.PlutusData;
-import com.bloxbean.cardano.julc.ledger.ScriptContext;
-import com.bloxbean.cardano.julc.ledger.ScriptInfo;
-import com.bloxbean.cardano.julc.ledger.TxOutRef;
-import com.bloxbean.cardano.julc.stdlib.Builtins;
-import com.bloxbean.cardano.julc.stdlib.annotation.Entrypoint;
-import com.bloxbean.cardano.julc.stdlib.annotation.Param;
-import com.bloxbean.cardano.julc.stdlib.annotation.SpendingValidator;
+import org.julclang.core.PlutusData;
+import org.julclang.ledger.ScriptContext;
+import org.julclang.ledger.ScriptInfo;
+import org.julclang.ledger.TxOutRef;
+import org.julclang.stdlib.Builtins;
+import org.julclang.stdlib.annotation.Entrypoint;
+import org.julclang.stdlib.annotation.Param;
+import org.julclang.stdlib.annotation.SpendingValidator;
 import org.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 
 import java.math.BigInteger;
@@ -259,10 +259,10 @@ annotation processor to your build. The runnable apps in zeroj-usecases use:
 dependencies {
     implementation "org.zeroj:zeroj-onchain-julc:0.1.0-pre12"
     annotationProcessor "org.zeroj:zeroj-onchain-julc:0.1.0-pre12"
-    implementation "com.bloxbean.cardano:julc-stdlib:0.1.0-pre16"
-    annotationProcessor "com.bloxbean.cardano:julc-annotation-processor:0.1.0-pre16"
-    testImplementation "com.bloxbean.cardano:julc-testkit:0.1.0-pre16"    // run validators in the JuLC VM
-    testRuntimeOnly "com.bloxbean.cardano:julc-vm-java:0.1.0-pre16"
+    implementation "org.julclang:julc-stdlib:0.1.0-pre18"
+    annotationProcessor "org.julclang:julc-annotation-processor:0.1.0-pre18"
+    testImplementation "org.julclang:julc-testkit:0.1.0-pre18"    // run validators in the JuLC VM
+    testRuntimeOnly "org.julclang:julc-vm-java:0.1.0-pre18"
 }
 ```
 
@@ -322,7 +322,7 @@ circuit.
 ## JuLC version coupling
 
 The compiled UPLC, and therefore the **script hash and address**, is produced by the JuLC compiler.
-ZeroJ 0.1.0-pre12 builds against JuLC 0.1.0-pre16. Treat a JuLC upgrade as a new script:
+ZeroJ 0.1.0-pre12 builds against JuLC 0.1.0-pre18. Treat a JuLC upgrade as a new script:
 recompute the hash, re-measure budgets, and plan how funds locked at the old address move. ZeroJ's
 authenticated-state release tooling binds the compiler version into each release identity for
 exactly this reason. Renaming Java packages alone does not change the hash: the `org.zeroj`

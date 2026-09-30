@@ -1,12 +1,14 @@
 # Migration notes
 
-> Move from com.bloxbean.cardano to the org.zeroj namespace, and from the pre-cleanup module set to today's focused module surface.
+> Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.
 
 Canonical URL: https://zeroj.dev/reference/migration/
 
-ZeroJ is pre-1.0 and its coordinates have changed twice. This page covers both changes. Neither
-one changes cryptography, proof bytes, keys, transcripts or public-input order, and neither
-upgrades any maturity claim.
+ZeroJ is pre-1.0 and its coordinates have changed twice. `0.1.0-pre12` also moves the on-chain
+module to JuLC `0.1.0-pre18`, which has new coordinates of its own. This page covers all three.
+None of them changes cryptography, proof bytes, keys, transcripts or public-input order, and none
+upgrades any maturity claim. The JuLC upgrade does change compiled validator bytes, so script
+hashes differ from builds on older JuLC versions.
 
 ## The `org.zeroj` namespace
 
@@ -41,10 +43,11 @@ On GNU `sed` (Linux), drop the `''` after `-i`.
 
 > **Danger: Don't blanket-replace `com.bloxbean.cardano`**
 >
-> It still owns ZeroJ's dependencies, which have **not** moved: Cardano Client Lib
-> (`com.bloxbean.cardano:cardano-client-*`), JuLC (`com.bloxbean.cardano.julc.*`, group
-> `com.bloxbean.cardano`) and VDS (`com.bloxbean.cardano.vds.*`). Anchor every replacement on
-> `zeroj`, as the commands above do.
+> It still owns ZeroJ's dependencies Cardano Client Lib (`com.bloxbean.cardano:cardano-client-*`)
+> and VDS (`com.bloxbean.cardano.vds.*`), which have **not** moved. JuLC has moved as well, to
+> `org.julclang`, but it needs its own replacements: see
+> [JuLC and `org.julclang`](#julc-and-orgjulclang). Anchor every ZeroJ replacement on `zeroj`,
+> as the commands above do.
 
 If **your own** packages live under `com.bloxbean.cardano.zeroj.*` (the zeroj-usecases apps do,
 for example), rule 2 renames them too, which also means moving source directories. Decide that
@@ -116,10 +119,64 @@ dependencies {
 - Circuit constraint systems and their fingerprints, transcripts, domain separators and
   public-input order.
 - Artifact ids, the module graph and the core/opt-in split.
-- **On-chain script hashes.** JuLC doesn't carry the Java package name into compiled code; ZeroJ
-  measured an identical script hash for its state-transition validator before and after the
-  rename. Your own validators keep their hash too, as long as nothing else about them changes
-  (including the JuLC version).
+- **On-chain script hashes, as far as the rename goes.** JuLC doesn't carry the Java package name
+  into compiled code; ZeroJ measured an identical script hash for its state-transition validator
+  before and after the rename. `0.1.0-pre12` also moves to JuLC `0.1.0-pre18`, and that upgrade
+  does change hashes: see [Script hashes change](#script-hashes-change).
+
+## JuLC and `org.julclang`
+
+`zeroj-onchain-julc` `0.1.0-pre12` is built with JuLC **`0.1.0-pre18`**. In `0.1.0-pre17`, JuLC
+moved from the `com.bloxbean.cardano` group and the `com.bloxbean.cardano.julc.*` package root to
+**`org.julclang`** for both, and renamed its Gradle plugin. There are no aliases. Use
+`0.1.0-pre18` rather than `0.1.0-pre17`: its Gradle plugin fails `build` in projects without a
+`src/main/plutus` directory.
+
+Move to JuLC `0.1.0-pre18` together with ZeroJ `0.1.0-pre12` if your project compiles its own
+validators or uses ZeroJ's on-chain libraries (`Groth16BLS12381Lib`, `PlonkBLS12381Lib`,
+`BbsProofVerify`, `BbsHashToScalar`). Your JuLC compiles those libraries' source, and they now use
+JuLC's typed BLS12-381 values, which older JuLC versions don't have.
+
+### JuLC coordinates
+
+| Before | After |
+|--------|-------|
+| `com.bloxbean.cardano:julc-*:0.1.0-pre16` | `org.julclang:julc-*:0.1.0-pre18` |
+| `import com.bloxbean.cardano.julc.…` | `import org.julclang.…` (same subpackages) |
+| `id 'com.bloxbean.cardano.julc'` | `id 'org.julclang.julc'` |
+
+```sh
+grep -rl 'com\.bloxbean\.cardano:julc-' . | xargs sed -i '' 's#com\.bloxbean\.cardano:julc-#org.julclang:julc-#g'
+grep -rl 'com\.bloxbean\.cardano\.julc' . | xargs sed -i '' \
+  -e "s#'com\.bloxbean\.cardano\.julc'#'org.julclang.julc'#g" \
+  -e 's#com\.bloxbean\.cardano\.julc\.#org.julclang.#g'
+```
+
+Then set the JuLC version to `0.1.0-pre18`.
+
+### Source changes
+
+- **`Groth16BLS12381Lib.publicInputs(...)` is now `publicInputs1` … `publicInputs6`**, one method
+  per public-input count. JuLC compiles calls by method name, so with the old overloads JuLC
+  `0.1.0-pre16` ran the 6-input version for every call. A validator that called it with fewer
+  inputs failed at evaluation and rejected every spend; calls with 6 inputs worked. JuLC
+  `0.1.0-pre17` rejects overloads (`JULC0054`).
+- **BLS12-381 values are typed.** Declare uncompressed points and Miller-loop results as
+  `JulcG1`, `JulcG2` or `JulcMlResult` (from `org.julclang.core.types`) instead of `byte[]`, or use
+  `var`. Compressed points stay `byte[]`. JuLC reports `JULC0041` where a `byte[]` is left.
+- JuLC `0.1.0-pre17` also rejects a few shapes that earlier versions miscompiled, such as compound
+  assignment in loops and multi-variable declarations. Its release notes list them with fixes.
+
+### Script hashes change
+
+JuLC `0.1.0-pre17` and later optimize differently from `0.1.0-pre16`, so recompiling produces different
+validator bytes even where the source is unchanged. A recompiled verifier has a new script hash
+and address, and different CPU and memory costs. Scripts already on-chain are unaffected.
+Redeploy reference scripts, and regenerate authenticated-state release manifests: they now bind
+`julc-0.1.0-pre18/plutus-v3`.
+
+Off-chain code doesn't change. `ProverToCardano`, `SnarkjsToCardano`, `PlonKProverToCardano`, the
+verification-key codec, and the redeemer, datum and parameter encodings are the same.
 
 ## The focused module surface
 
@@ -166,9 +223,11 @@ Stores you create yourself with `Groth16Keys.setupToStore` are unchanged and sti
 
 ## Further reading
 
-Design notes: [ADR-0048](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0048-org-zeroj-namespace-and-central-portal-publishing.md)
+Design notes: [ADR-0048](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0048-org-zeroj-namespace-and-central-portal-publishing.md),
+[ADR-0050](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0050-julc-pre17-org-julclang-and-typed-bls.md)
 and [ADR-0044](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0044-focused-module-surface-and-optional-provider-isolation.md).
 Full migration texts: [namespace](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0048-org-zeroj-namespace.md),
+[JuLC and `org.julclang`](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0050-julc-org-julclang.md),
 [module cleanup](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0044-module-cleanup.md).
 
 ## Next steps

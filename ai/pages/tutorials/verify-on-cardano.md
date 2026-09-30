@@ -108,13 +108,13 @@ bigger picture.
        implementation 'org.zeroj:zeroj-crypto'
        implementation 'org.zeroj:zeroj-onchain-julc'  // Plutus V3 verifiers + ProverToCardano
 
-       implementation 'com.bloxbean.cardano:julc-cardano-client-lib:0.1.0-pre16'  // JulcScriptLoader
+       implementation 'org.julclang:julc-cardano-client-lib:0.1.0-pre18'  // JulcScriptLoader
        implementation 'com.bloxbean.cardano:cardano-client-lib:0.8.0-pre5'
        implementation 'com.bloxbean.cardano:cardano-client-backend-blockfrost:0.8.0-pre5'
 
        // Only for compiling your own validator (SpendBoundGroth16Verifier) to Plutus V3:
-       implementation 'com.bloxbean.cardano:julc-stdlib:0.1.0-pre16'
-       annotationProcessor 'com.bloxbean.cardano:julc-annotation-processor:0.1.0-pre16'
+       implementation 'org.julclang:julc-stdlib:0.1.0-pre18'
+       annotationProcessor 'org.julclang:julc-annotation-processor:0.1.0-pre18'
        annotationProcessor 'org.zeroj:zeroj-onchain-julc'  // lets JuLC find Groth16BLS12381Lib's source
    }
 
@@ -186,7 +186,7 @@ bigger picture.
    import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
    import com.bloxbean.cardano.client.quicktx.ScriptTx;
    import com.bloxbean.cardano.client.quicktx.Tx;
-   import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
+   import org.julclang.clientlib.JulcScriptLoader;
    import org.zeroj.api.CurveId;
    import org.zeroj.crypto.groth16.Groth16Keys;
    import org.zeroj.crypto.setup.PowersOfTauBLS381;
@@ -457,14 +457,14 @@ validator below computes `spendRef` instead of reading it.
    ```java title="src/main/java/com/example/onchain/SpendBoundGroth16Verifier.java"
    package com.example.onchain;
 
-   import com.bloxbean.cardano.julc.core.PlutusData;
-   import com.bloxbean.cardano.julc.ledger.ScriptContext;
-   import com.bloxbean.cardano.julc.ledger.ScriptInfo;
-   import com.bloxbean.cardano.julc.ledger.TxOutRef;
-   import com.bloxbean.cardano.julc.stdlib.Builtins;
-   import com.bloxbean.cardano.julc.stdlib.annotation.Entrypoint;
-   import com.bloxbean.cardano.julc.stdlib.annotation.Param;
-   import com.bloxbean.cardano.julc.stdlib.annotation.SpendingValidator;
+   import org.julclang.core.PlutusData;
+   import org.julclang.ledger.ScriptContext;
+   import org.julclang.ledger.ScriptInfo;
+   import org.julclang.ledger.TxOutRef;
+   import org.julclang.stdlib.Builtins;
+   import org.julclang.stdlib.annotation.Entrypoint;
+   import org.julclang.stdlib.annotation.Param;
+   import org.julclang.stdlib.annotation.SpendingValidator;
    import org.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 
    import java.math.BigInteger;
@@ -593,7 +593,7 @@ validator below computes `spendRef` instead of reading it.
    import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
    import com.bloxbean.cardano.client.quicktx.ScriptTx;
    import com.bloxbean.cardano.client.quicktx.Tx;
-   import com.bloxbean.cardano.julc.clientlib.JulcScriptLoader;
+   import org.julclang.clientlib.JulcScriptLoader;
    import org.zeroj.api.CurveId;
    import org.zeroj.crypto.groth16.Groth16Keys;
    import org.zeroj.crypto.setup.PowersOfTauBLS381;
