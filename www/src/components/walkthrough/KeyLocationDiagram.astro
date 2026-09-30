@@ -75,7 +75,7 @@ const notes: Record<string, Note[]> = {
   f3store: [
     { kind: 'ok', text: 'The target directory must not exist yet. Keep the manifest hash with your deployment config.' },
     { kind: 'ok', text: 'Optional fourth argument: the exact circuit fingerprint, sealed into the store.' },
-    { kind: 'warn', text: "The two-argument importToPkStore(zkey, dir) always throws now, so the hash can't be skipped by accident." },
+    { kind: 'warn', text: "There is no two-argument importToPkStore(zkey, dir): code that skips the hash doesn't compile." },
   ],
   f3mem: [
     { kind: 'ok', text: 'The .zkey carries the constraints, including the rows snarkjs adds for public inputs.' },
