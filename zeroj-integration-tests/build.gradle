@@ -12,10 +12,6 @@ description = 'ZeroJ cross-module integration and end-to-end regression tests (n
 //
 // Tutorials and runnable applications live in https://github.com/bloxbean/zeroj-usecases.
 
-ext {
-    julcVersion = '0.1.0-pre18'
-}
-
 repositories {
     maven {
         url = uri("https://central.sonatype.com/repository/maven-snapshots")
