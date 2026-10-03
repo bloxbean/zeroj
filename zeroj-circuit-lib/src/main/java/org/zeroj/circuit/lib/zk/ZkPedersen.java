@@ -11,26 +11,30 @@ import org.zeroj.circuit.lib.jubjub.JubjubCurve;
 import java.util.Objects;
 
 /**
- * Symbolic Pedersen commitment adapter for annotation-based circuits.
+ * Symbolic Pedersen commitment adapter for annotation-based circuits
+ * ({@code pedersen-jubjub-v1}, see {@code docs/specs/pedersen-jubjub-v1.md}).
+ *
+ * <p>Both scalars are asserted canonical ({@code < l}). The value keeps its declared width;
+ * the blinding must be declared at exactly {@value #BLINDING_BITS} bits and must not be a
+ * public input or a circuit constant (ADR-0051 D2). Sample it with
+ * {@link org.zeroj.circuit.lib.jubjub.PedersenCommitment#randomBlinding}.
  */
 public final class ZkPedersen {
     public static final int MAX_SCALAR_BITS = 252;
 
-    private ZkPedersen() {}
+    /** Required declared width of every blinding, in bits (ADR-0051 D2). */
+    public static final int BLINDING_BITS = InCircuitPedersen.BLINDING_BITS;
 
-    public static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding) {
-        Objects.requireNonNull(value, "value");
-        Objects.requireNonNull(blinding, "blinding");
-        return commit(zk, value, blinding, Math.max(value.bits(), blinding.bits()));
-    }
+    private ZkPedersen() {}
 
     /**
      * Commits to {@code value} with {@code blinding}.
      *
-     * <p>{@code scalarBits} is validated as an upper bound on both operands, but each scalar
-     * is multiplied at <b>its own declared width</b>: a 16-bit value alongside a 252-bit
-     * blinding pays for 16 bits on the value leg. Passing the shared maximum to both legs, as
-     * this method used to, made every small commitment cost as much as the widest operand.
+     * <p>The value leg is multiplied at the value's own declared width (1–252), so a 64-bit
+     * amount pays for 64 bits. The blinding must be declared at {@value #BLINDING_BITS} bits:
+     * a narrower blinding makes the commitment brute-forceable from public data, so it is
+     * rejected at circuit-definition time, as is a blinding that is directly a public input
+     * or a constant.
      *
      * <p><b>Order matters.</b> Both decompositions are obtained <em>before</em> the
      * canonicality check runs. {@code assertCanonicalScalar} compares against {@code l} at
@@ -39,8 +43,8 @@ public final class ZkPedersen {
      * value that has no cached bound and it mints a full 252-bit decomposition that is then
      * thrown away, which is precisely the duplicate this reuse removes.
      */
-    public static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding, int scalarBits) {
-        validateScalarInputs(zk, value, blinding, scalarBits);
+    public static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding) {
+        validateScalarInputs(zk, value, blinding);
         // Mint (or retrieve) both owned decompositions at their actual widths FIRST, so the
         // canonicality check below is satisfied from the range cache rather than emitting a
         // second, wider decomposition.
@@ -53,59 +57,62 @@ public final class ZkPedersen {
     }
 
     /**
-     * Commits using LSB-first scalar bit vectors.
+     * Commits using LSB-first scalar bit vectors. The blinding vector must be exactly
+     * {@value #BLINDING_BITS} bits, none of them a public input or a constant.
      */
     public static ZkJubjubPoint commitBits(ZkContext zk, ZkBits valueBits, ZkBits blindingBits) {
         validateBitInputs(zk, valueBits, blindingBits);
         Variable[] valueVariables = variables(valueBits);
         Variable[] blindingVariables = variables(blindingBits);
-        assertCanonicalScalar(zk, zk.builder().api().fromBinary(valueVariables));
-        assertCanonicalScalar(zk, zk.builder().api().fromBinary(blindingVariables));
+        var api = zk.builder().api();
+        for (Variable bit : blindingVariables) {
+            api.requireNotPublicOrConstant(bit);
+        }
+        assertCanonicalScalar(zk, api.fromBinary(valueVariables));
+        assertCanonicalScalar(zk, api.fromBinary(blindingVariables));
         return ZkJubjubPoint.wrap(zk, InCircuitPedersen.commit(
-                zk.builder().api(),
+                api,
                 valueVariables,
                 blindingVariables));
     }
 
-    public static void verifyOpening(
-            ZkContext zk,
-            ZkJubjubPoint commitment,
-            ZkUInt value,
-            ZkUInt blinding,
-            int scalarBits) {
-        Objects.requireNonNull(commitment, "commitment");
-        commitment.requireSameContext(zk);
-        commit(zk, value, blinding, scalarBits).assertEqual(zk, commitment);
-    }
-
+    /**
+     * Asserts that {@code (value, blinding)} opens {@code commitment}. The same width and
+     * provenance rules as {@link #commit(ZkContext, ZkUInt, ZkUInt)} apply.
+     */
     public static void verifyOpening(
             ZkContext zk,
             ZkJubjubPoint commitment,
             ZkUInt value,
             ZkUInt blinding) {
-        Objects.requireNonNull(value, "value");
-        Objects.requireNonNull(blinding, "blinding");
-        verifyOpening(zk, commitment, value, blinding, Math.max(value.bits(), blinding.bits()));
+        Objects.requireNonNull(commitment, "commitment");
+        commitment.requireSameContext(zk);
+        commit(zk, value, blinding).assertEqual(zk, commitment);
     }
 
-    private static void validateScalarInputs(ZkContext zk, ZkUInt value, ZkUInt blinding, int scalarBits) {
+    private static void validateScalarInputs(ZkContext zk, ZkUInt value, ZkUInt blinding) {
         Objects.requireNonNull(zk, "zk");
         Objects.requireNonNull(value, "value");
         Objects.requireNonNull(blinding, "blinding");
-        validateScalarBits(scalarBits);
-        if (value.bits() > scalarBits || blinding.bits() > scalarBits) {
-            throw new IllegalArgumentException("scalarBits must cover value and blinding bit widths");
-        }
         zk.requireSignal(value.signal());
         zk.requireSignal(blinding.signal());
+        if (value.bits() <= 0 || value.bits() > MAX_SCALAR_BITS) {
+            throw new IllegalArgumentException(
+                    "value width must be in [1, " + MAX_SCALAR_BITS + "], got " + value.bits());
+        }
+        requireBlindingWidth(blinding.bits());
+        zk.builder().api().requireNotPublicOrConstant(blinding.signal().variable());
     }
 
     private static void validateBitInputs(ZkContext zk, ZkBits valueBits, ZkBits blindingBits) {
         Objects.requireNonNull(zk, "zk");
         Objects.requireNonNull(valueBits, "valueBits");
         Objects.requireNonNull(blindingBits, "blindingBits");
-        validateScalarBits(valueBits.size());
-        validateScalarBits(blindingBits.size());
+        if (valueBits.size() <= 0 || valueBits.size() > MAX_SCALAR_BITS) {
+            throw new IllegalArgumentException(
+                    "value width must be in [1, " + MAX_SCALAR_BITS + "], got " + valueBits.size());
+        }
+        requireBlindingWidth(blindingBits.size());
         for (var bit : valueBits.values()) {
             zk.requireSignal(bit.signal());
         }
@@ -114,9 +121,13 @@ public final class ZkPedersen {
         }
     }
 
-    private static void validateScalarBits(int scalarBits) {
-        if (scalarBits <= 0 || scalarBits > MAX_SCALAR_BITS) {
-            throw new IllegalArgumentException("scalarBits must be in [1, " + MAX_SCALAR_BITS + "]");
+    private static void requireBlindingWidth(int bits) {
+        if (bits != BLINDING_BITS) {
+            throw new IllegalArgumentException(
+                    "blinding must be declared at exactly " + BLINDING_BITS + " bits, got " + bits
+                            + ". A narrower blinding cannot hide the committed value: a k-bit "
+                            + "blinding is recovered from the public commitment by enumerating "
+                            + "2^k candidates per value (ADR-0051 D2).");
         }
     }
 

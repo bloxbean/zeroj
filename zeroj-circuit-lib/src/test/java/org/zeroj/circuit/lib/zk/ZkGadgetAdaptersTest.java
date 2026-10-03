@@ -711,8 +711,7 @@ class ZkGadgetAdaptersTest {
                     ZkPedersen.commit(
                             zk,
                             ZkUInt.secret(c, "value", 16),
-                            ZkUInt.secret(c, "blinding", 16),
-                            16)
+                            ZkUInt.secret(c, "blinding", ZkPedersen.BLINDING_BITS))
                             .assertAffineEquals(
                                     zk,
                                     ZkField.publicInput(c, "outU"),
@@ -734,43 +733,37 @@ class ZkGadgetAdaptersTest {
     @Test
     void pedersenAdapterSupportsLsbFirstBitInputs() {
         BigInteger value = BigInteger.valueOf(5);
-        BigInteger blinding = BigInteger.valueOf(3);
+        BigInteger blinding = JubjubCurve.SUBGROUP_ORDER.subtract(BigInteger.valueOf(3));
         JubjubPoint expected = PedersenCommitment.commit(value, blinding);
 
-        var circuit = CircuitBuilder.create("zk-pedersen-bits")
+        var builder = CircuitBuilder.create("zk-pedersen-bits")
                 .publicVar("outU")
-                .publicVar("outV")
-                .secretVar("valueBit_0")
-                .secretVar("valueBit_1")
-                .secretVar("valueBit_2")
-                .secretVar("valueBit_3")
-                .secretVar("blindingBit_0")
-                .secretVar("blindingBit_1")
-                .secretVar("blindingBit_2")
-                .secretVar("blindingBit_3")
-                .defineSignals(c -> {
+                .publicVar("outV");
+        for (int i = 0; i < 4; i++) builder.secretVar("valueBit_" + i);
+        for (int i = 0; i < ZkPedersen.BLINDING_BITS; i++) builder.secretVar("blindingBit_" + i);
+        var circuit = builder.defineSignals(c -> {
                     var zk = new ZkContext(c);
                     ZkPedersen.commitBits(
                             zk,
                             ZkBits.secret(c, "valueBit", 4),
-                            ZkBits.secret(c, "blindingBit", 4))
+                            ZkBits.secret(c, "blindingBit", ZkPedersen.BLINDING_BITS))
                             .assertAffineEquals(
                                     zk,
                                     ZkField.publicInput(c, "outU"),
                                     ZkField.publicInput(c, "outV"));
                 });
 
-        assertDoesNotThrow(() -> circuit.calculateWitness(Map.of(
-                "outU", List.of(expected.affineU()),
-                "outV", List.of(expected.affineV()),
-                "valueBit_0", List.of(BigInteger.ONE),
-                "valueBit_1", List.of(BigInteger.ZERO),
-                "valueBit_2", List.of(BigInteger.ONE),
-                "valueBit_3", List.of(BigInteger.ZERO),
-                "blindingBit_0", List.of(BigInteger.ONE),
-                "blindingBit_1", List.of(BigInteger.ONE),
-                "blindingBit_2", List.of(BigInteger.ZERO),
-                "blindingBit_3", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
+        var witness = new java.util.HashMap<String, List<BigInteger>>();
+        witness.put("outU", List.of(expected.affineU()));
+        witness.put("outV", List.of(expected.affineV()));
+        for (int i = 0; i < 4; i++) {
+            witness.put("valueBit_" + i, List.of(value.testBit(i) ? BigInteger.ONE : BigInteger.ZERO));
+        }
+        for (int i = 0; i < ZkPedersen.BLINDING_BITS; i++) {
+            witness.put("blindingBit_" + i,
+                    List.of(blinding.testBit(i) ? BigInteger.ONE : BigInteger.ZERO));
+        }
+        assertDoesNotThrow(() -> circuit.calculateWitness(witness, CurveId.BLS12_381));
     }
 
     @Test
@@ -794,7 +787,7 @@ class ZkGadgetAdaptersTest {
                     ZkPedersen.commit(
                             zk,
                             ZkUInt.secret(c, "value", 8),
-                            ZkUInt.secret(c, "blinding", 8));
+                            ZkUInt.secret(c, "blinding", ZkPedersen.BLINDING_BITS));
                 });
         assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
     }
@@ -811,8 +804,7 @@ class ZkGadgetAdaptersTest {
                     ZkPedersen.commit(
                             zk,
                             ZkUInt.secret(c, "value", 252),
-                            ZkUInt.secret(c, "blinding", 252),
-                            252)
+                            ZkUInt.secret(c, "blinding", 252))
                             .assertAffineEquals(
                                     zk,
                                     ZkField.publicInput(c, "outU"),

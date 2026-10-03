@@ -711,7 +711,7 @@ meet a budget.
 | Milestone | State | Notes |
 |---|---|---|
 | M0 | Done, in review | `docs/specs/pedersen-jubjub-v1.md`. An independent standard-library Python reproduction, written from the spec and the ADR-0015 Sage Poseidon reference without reading ZeroJ Java code, is in `zeroj-circuit-lib/src/test/resources/pedersen-reference/`. It matched every spec pin; `PedersenReferenceVectorsTest` checks the library against its output (bases, 10 commitments, the wrap example, 12 negative decodes). |
-| M1 | In progress | |
+| M1 | Done, in review | `ZkPedersen`/`InCircuitPedersen` require a 252-bit blinding and reject one wired directly to a public input or constant (new `CircuitAPI.requireNotPublicOrConstant`); the shared-width overloads are removed; `PedersenCommitment.randomBlinding(SecureRandom)`; examples, guides and tests corrected; [migration note](../migration/0051-pedersen-hiding-safe-api.md). Complete safe-API pins: 2,918 rows / 13,460 nonzeros (64/252) and 4,042 / 19,338 (252/252), equal to the r1 review measurements, so full-width circuits are unchanged. |
 | M2 | Not started | |
 | M3 | Not started | Entry gate: vector spec reviewed |
 | M4 | Not started | |
