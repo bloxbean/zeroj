@@ -22,6 +22,7 @@ import org.zeroj.circuit.lib.zk.ZkPedersenVector;
 import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import org.zeroj.codec.SnarkjsJsonCodec;
 import org.zeroj.crypto.groth16.Groth16Keys;
+import org.zeroj.crypto.groth16.Groth16ProofBLS381;
 import org.zeroj.crypto.snarkjs.SnarkjsGroth16Json;
 import org.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier;
 
@@ -74,7 +75,7 @@ class PedersenVectorSchemaBindingTest {
                       Groth16Keys keys, String vkJson, byte[] vkId) {}
 
     /** A serialised proof as it travels to a verifier. */
-    record Presentation(String proofJson, String publicJson, BigInteger[] publicInputs) {}
+    record Presentation(String proofJson, String publicJson, BigInteger[] publicInputs, Groth16ProofBLS381 proof) {}
 
     @BeforeAll
     static void deploy() throws Exception {
@@ -218,12 +219,12 @@ class PedersenVectorSchemaBindingTest {
 
     record Opening(List<BigInteger> values, BigInteger blinding) {}
 
-    private static Opening opening() {
+    static Opening opening() {
         return new Opening(List.of(BigInteger.valueOf(1_000_000), BigInteger.valueOf(7)),
                 PedersenCommitment.randomBlinding(RANDOM));
     }
 
-    private static Deployment deploy(PedersenVectorSchema schema, int seed) throws Exception {
+    static Deployment deploy(PedersenVectorSchema schema, int seed) throws Exception {
         var circuit = CircuitBuilder.create("vector-binding-" + seed)
                 .publicVar("schemaDigest").publicVar("u").publicVar("v")
                 .secretVar("x0").secretVar("x1").secretVar("r")
@@ -244,7 +245,7 @@ class PedersenVectorSchemaBindingTest {
         return new Deployment(schema, circuit, r1cs, keys, vkJson, vkId);
     }
 
-    private static Map<String, List<BigInteger>> witness(BigInteger digest, PedersenVectorCommitment c, Opening o) {
+    static Map<String, List<BigInteger>> witness(BigInteger digest, PedersenVectorCommitment c, Opening o) {
         return Map.of(
                 "schemaDigest", List.of(digest),
                 "u", List.of(c.point().affineU()),
@@ -254,12 +255,12 @@ class PedersenVectorSchemaBindingTest {
                 "r", List.of(o.blinding()));
     }
 
-    private static Presentation prove(Deployment d, BigInteger digest, PedersenVectorCommitment c, Opening o) {
+    static Presentation prove(Deployment d, BigInteger digest, PedersenVectorCommitment c, Opening o) {
         BigInteger[] w = d.circuit().calculateWitness(witness(digest, c, o), CurveId.BLS12_381);
         var proof = d.keys().prove(w, d.r1cs().constraints());
         BigInteger[] pub = new BigInteger[d.r1cs().numPublicInputs()];
         System.arraycopy(w, 1, pub, 0, pub.length);
-        return new Presentation(SnarkjsGroth16Json.proofJson(proof), SnarkjsGroth16Json.publicJson(pub), pub);
+        return new Presentation(SnarkjsGroth16Json.proofJson(proof), SnarkjsGroth16Json.publicJson(pub), pub, proof);
     }
 
     private static boolean groth16Valid(Deployment verifierKey, Presentation p) {
