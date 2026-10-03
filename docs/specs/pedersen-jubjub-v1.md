@@ -162,7 +162,7 @@ little-endian integer; bit 7 of byte 31 is set iff the affine `u`-coordinate, as
 
 Otherwise `u` is the square root whose parity matches the sign bit.
 
-### 4.1 Received commitments *(enforced from M2)*
+### 4.1 Received commitments *(enforced from M2: `PedersenCommitment.decode`)*
 
 A commitment received from another party is accepted only if it decodes as above **and** lies
 in the prime-order subgroup (`[l]·P` is the identity). Decoding alone does not establish
@@ -196,8 +196,11 @@ input.
   `< l` assertion. A blinding wire that is directly a public input or a circuit constant is
   rejected at circuit-definition time. The value keeps its own declared width (1–252).
 - *(enforced from M2)* A commitment the circuit did not compute enters only through a
-  constructor that either proves subgroup membership in-circuit or requires public/constant
-  coordinates and leaves subgroup membership to the verifier (ADR-0051 D3, I4).
+  constructor that either proves subgroup membership in-circuit
+  (`ZkPedersenCommitment.witnessInSubgroup`) or requires public/constant coordinates and leaves
+  subgroup membership to the verifier (`ZkPedersenCommitment.fromVerifierCheckedPublic`;
+  ADR-0051 D3, I4). The subgroup assertion validates the point first: projective curve
+  equation, `T·Z = U·V`, `Z ≠ 0`.
 
 ---
 
@@ -218,6 +221,10 @@ equation only if all of the following hold (ADR-0051 D3a, I6):
 Both sides are then integers in `[0, l)`, so equality mod `l` implies integer equality.
 Because `l < p`, the same bound excludes aliasing mod `p` when the values are summed as field
 elements.
+
+*(enforced from M2)* `ZkPedersen.assertBalanced` checks rule 3 at circuit-definition time
+from the declared widths and coefficients, accepts only commitments whose value is known to the
+circuit (computed there), and asserts the relation on the values as field elements.
 
 ---
 

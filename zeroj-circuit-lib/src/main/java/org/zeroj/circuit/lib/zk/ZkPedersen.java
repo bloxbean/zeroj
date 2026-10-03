@@ -8,6 +8,8 @@ import org.zeroj.circuit.annotation.ZkUInt;
 import org.zeroj.circuit.lib.jubjub.InCircuitPedersen;
 import org.zeroj.circuit.lib.jubjub.JubjubCurve;
 
+import java.math.BigInteger;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -88,6 +90,136 @@ public final class ZkPedersen {
         Objects.requireNonNull(commitment, "commitment");
         commitment.requireSameContext(zk);
         commit(zk, value, blinding).assertEqual(zk, commitment);
+    }
+
+    /**
+     * One side-term of a balance: a non-negative integer coefficient times a range-bounded
+     * amount. The amount is either the known value of a {@link ZkPedersenCommitment} computed
+     * in this circuit, or an uncommitted {@link ZkUInt} such as a public fee. Its declared
+     * width is the bound the wrap check uses.
+     */
+    public static final class Term {
+        private final BigInteger coefficient;
+        private final ZkUInt amount;
+
+        private Term(BigInteger coefficient, ZkUInt amount) {
+            Objects.requireNonNull(coefficient, "coefficient");
+            Objects.requireNonNull(amount, "amount");
+            if (coefficient.signum() <= 0) {
+                throw new IllegalArgumentException(
+                        "balance coefficients must be positive integers; move a negative "
+                                + "coefficient to the other side (got " + coefficient + ")");
+            }
+            this.coefficient = coefficient;
+            this.amount = amount;
+        }
+
+        /** The commitment's value, coefficient 1. */
+        public static Term of(ZkPedersenCommitment commitment) {
+            return of(BigInteger.ONE, commitment);
+        }
+
+        /** The commitment's value times {@code coefficient}. */
+        public static Term of(BigInteger coefficient, ZkPedersenCommitment commitment) {
+            Objects.requireNonNull(commitment, "commitment");
+            if (!commitment.hasKnownValue()) {
+                throw new IllegalArgumentException(
+                        "a " + commitment.origin() + " commitment has no value known to this "
+                                + "circuit, so it cannot enter a balance. Commit to its opening "
+                                + "with ZkPedersenCommitment.commit and bind the published "
+                                + "coordinates with assertAffineEquals (ADR-0051 D3a).");
+            }
+            return new Term(coefficient, commitment.knownValue());
+        }
+
+        /** An uncommitted amount (for example a public fee), coefficient 1. */
+        public static Term amount(ZkUInt amount) {
+            return new Term(BigInteger.ONE, amount);
+        }
+
+        /** An uncommitted amount times {@code coefficient}. */
+        public static Term amount(BigInteger coefficient, ZkUInt amount) {
+            return new Term(coefficient, amount);
+        }
+
+        BigInteger maximum() {
+            return coefficient.multiply(BigInteger.ONE.shiftLeft(amount.bits()).subtract(BigInteger.ONE));
+        }
+    }
+
+    /**
+     * Asserts {@code Σ left = Σ right} as an <b>integer</b> equation over committed and
+     * uncommitted amounts (ADR-0051 D3a, invariant I6).
+     *
+     * <p>Pedersen homomorphism only proves relations mod {@code l}: with canonical openings,
+     * {@code C(l − 1, 17) + C(1, 23) = C(0, 40)}. This helper makes the integer reading sound
+     * instead of hoping for it:
+     * <ul>
+     *   <li>every term is range-bounded by its own decomposition at its declared width —
+     *       bounding only a claimed total would not prevent the wrap above;</li>
+     *   <li>coefficients are positive integers fixed now, never prover-chosen;</li>
+     *   <li><b>at circuit-definition time</b>, each side's maximum
+     *       {@code Σ coefficient·(2^width − 1)} must be below {@code l}, or this throws. Both
+     *       sides are then integers in {@code [0, l)}, and since {@code l < p} the field
+     *       equation emitted below implies integer equality, with no aliasing mod {@code p}
+     *       either.</li>
+     * </ul>
+     *
+     * <p>The relation is asserted on the opened values, which is cheaper than point arithmetic
+     * and binds the commitments because each committed term's value is the one its commitment
+     * was computed from.
+     *
+     * @throws IllegalArgumentException if a side is empty, a term belongs to another circuit,
+     *         or either side could reach {@code l}
+     */
+    public static void assertBalanced(ZkContext zk, List<Term> left, List<Term> right) {
+        Objects.requireNonNull(zk, "zk");
+        requireSide(zk, left, "left");
+        requireSide(zk, right, "right");
+        requireBelowOrder(left, "left");
+        requireBelowOrder(right, "right");
+        var api = zk.builder().api();
+        api.assertEqual(weightedSum(zk, left), weightedSum(zk, right));
+    }
+
+    private static void requireSide(ZkContext zk, List<Term> side, String name) {
+        Objects.requireNonNull(side, name);
+        if (side.isEmpty()) {
+            throw new IllegalArgumentException("the " + name + " side of a balance must not be empty");
+        }
+        for (Term term : side) {
+            Objects.requireNonNull(term, name + " term");
+            zk.requireSignal(term.amount.signal());
+        }
+    }
+
+    private static void requireBelowOrder(List<Term> side, String name) {
+        BigInteger maximum = BigInteger.ZERO;
+        for (Term term : side) {
+            maximum = maximum.add(term.maximum());
+        }
+        if (maximum.compareTo(JubjubCurve.SUBGROUP_ORDER) >= 0) {
+            throw new IllegalArgumentException(
+                    "the " + name + " side of this balance can reach " + maximum.toString(16)
+                            + " (hex), which is not below the subgroup order l. A relation mod l "
+                            + "would not imply integer conservation; narrow the declared widths or "
+                            + "coefficients (ADR-0051 D3a).");
+        }
+    }
+
+    private static Variable weightedSum(ZkContext zk, List<Term> side) {
+        var api = zk.builder().api();
+        Variable sum = null;
+        for (Term term : side) {
+            // Emits the range proof if this amount does not already carry one (a derived
+            // ZkUInt has only a widened bound until its decomposition is minted).
+            term.amount.decomposition();
+            Variable weighted = term.coefficient.equals(BigInteger.ONE)
+                    ? term.amount.signal().variable()
+                    : api.mul(term.amount.signal().variable(), api.constant(term.coefficient));
+            sum = (sum == null) ? weighted : api.add(sum, weighted);
+        }
+        return sum;
     }
 
     private static void validateScalarInputs(ZkContext zk, ZkUInt value, ZkUInt blinding) {

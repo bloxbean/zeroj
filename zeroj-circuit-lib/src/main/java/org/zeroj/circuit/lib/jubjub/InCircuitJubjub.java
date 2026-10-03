@@ -262,6 +262,62 @@ public final class InCircuitJubjub {
     }
 
     /**
+     * Negation {@code −P = (−U, V, Z, −T)} (ADR-0051 D3).
+     *
+     * <p>Two linear combinations, which the R1CS compiler folds: zero constraints. Negation
+     * preserves every well-formedness invariant ({@code V² − U² = Z² + d·T²},
+     * {@code T·Z = U·V}, {@code Z ≠ 0}) and subgroup membership, so a valid input gives a
+     * valid output; an invalid input stays invalid.
+     */
+    public static Point negate(CircuitAPI api, Point p) {
+        api.requireField(PoseidonParamsBLS12_381T3.INSTANCE.field());
+        return new Point(api.neg(p.u), p.v, p.z, api.neg(p.t));
+    }
+
+    /**
+     * Subtraction {@code P − Q = P + (−Q)} (ADR-0051 D3). Costs one {@link #add}.
+     */
+    public static Point subtract(CircuitAPI api, Point p, Point q) {
+        return add(api, p, negate(api, q));
+    }
+
+    /**
+     * Asserts that {@code p} is a valid point of the prime-order subgroup: first every
+     * well-formedness invariant ({@link #assertWellFormed}: projective curve equation,
+     * {@code T·Z = U·V}, {@code Z ≠ 0}), then {@code [l]·P = O} (ADR-0051 D3).
+     *
+     * <p>The well-formedness step is not optional. The bare {@code [l]·P = O} check accepts the
+     * all-zero tuple {@code (0, 0, 0, 0)}: its scalar multiple is all-zero, and the identity
+     * predicate {@code U = 0 ∧ V = Z} reads {@code 0 = 0}. That is why this public entry point
+     * always emits the invariants itself, whatever the caller already established.
+     *
+     * <p>A well-formed identity ({@code U = 0}, {@code V = Z ≠ 0}) is in the subgroup and is
+     * accepted. Whether a particular protocol value may be the identity is a separate policy.
+     *
+     * <p>Cost: one 252-bit variable-base multiplication by {@code l} plus the well-formedness
+     * rows. Pinned in {@code PedersenHomomorphicApiTest}.
+     */
+    public static void assertInPrimeOrderSubgroup(CircuitAPI api, Point p) {
+        assertWellFormed(api, p);
+        assertLTimesIsIdentity(api, p);
+    }
+
+    /**
+     * {@code [l]·P = O} with <b>no</b> precondition check. Callers must already have
+     * established that {@code p} is well-formed; see {@link #assertInPrimeOrderSubgroup}.
+     * Package-private for that reason. {@code InCircuitEdDSAJubjub} uses it after its own
+     * validation, which keeps the EdDSA constraint systems unchanged.
+     */
+    static void assertLTimesIsIdentity(CircuitAPI api, Point p) {
+        Point lP = scalarMulVariableBase(
+                api, p, api.constant(JubjubCurve.SUBGROUP_ORDER), JubjubCurve.SCALAR_BITS);
+        Variable isIdentity = api.and(
+                api.isZero(lP.u()),
+                api.isEqual(lP.v(), lP.z()));
+        api.assertEqual(isIdentity, api.constant(1));
+    }
+
+    /**
      * Fixed-base scalar multiplication {@code [k]·G} where {@code G} is
      * an off-circuit point baked in at compile time. Uses a simple
      * double-and-add over the bit decomposition of {@code k}.
