@@ -17,7 +17,7 @@ off-circuit secret-bearing generation stays offline/isolated only (ADR-0038).
 ## Revision history
 
 - **r1** (`b3ed909`) — initial proposal.
-- **r2** — responds to the PR #73 review of r1:
+- **r2** (`bd5837c`) — responds to the PR #73 review of r1:
   - I6 rewritten: every term on both sides of a balance is width-bounded and each side's
     maximum stays below `l`; a range check on the claimed sum alone is insufficient. New D3a
     defines the balance construction and the definition-time check that enforces it.
@@ -28,6 +28,12 @@ off-circuit secret-bearing generation stays offline/isolated only (ADR-0038).
     authenticated application statement and a typed schema.
   - New "Performance gates" section: complete safe-API cost pins, and end-to-end measurements
     rather than constraint counts alone.
+- **r3** — responds to round 2 (completion of finding 3): a schema held at definition time is
+  not a binding. D5/I11 now require a constrained public schema digest, checked against a
+  verifier registry, plus authenticated issuance provenance for received commitments.
+  Schema-separated bases become mandatory where provenance cannot be supplied. M3 and the
+  tests now require cross-schema rejection at the real serialised verifier boundary, including
+  width-only differences.
 
 ## Risk classification
 - **R2:** D1 (normative spec of the existing profile), D2 (hiding-safe API), D3 (homomorphic
@@ -339,20 +345,50 @@ C(v_0..v_{n-1}, r) = Σ_{i<n} [v_i]·G_i + [r]·H_V,      1 ≤ n ≤ N_MAX
   `G_0, G_1, …`, so `C([a], r) = C([a, 0], r)`. The profile defines this explicitly: a
   dimension-`n` commitment uses `G_0..G_{n−1}`, and equals its zero-padded extension to any
   larger dimension. Binding therefore lives in the authenticated application statement:
-  - A **vector schema** (identifier and version, dimension `n`, and for each index its meaning
-    and value width) is fixed at circuit-definition time. It is a circuit constant, so the
-    verification key fixes it, and never a prover input. The `ZkPedersen` vector entry point
-    takes the schema object rather than a bare list of values.
-  - Off-circuit, vector commitments are a typed value carrying their schema. `add` and
-    `subtract` require identical schemas. Raw points carry no schema, and code that holds only
-    raw points must obtain the schema from the authenticated statement, not from the point.
+  - A **vector schema** consists of an identifier and version, the dimension `n`, and for each
+    index its meaning and value width. The `ZkPedersen` vector entry point takes the schema
+    object rather than a bare list of values.
+  - **A schema held at circuit-definition time is not, by itself, part of the cryptographic
+    statement.** Two schemas with the same dimension and widths but a different identifier,
+    version or index meaning generate identical equations. Unused constants and metadata bind
+    nothing, so identical circuits get interchangeable verification keys. Typed Java wrappers
+    only constrain cooperative callers; an untrusted prover, or a consumer of serialised
+    points, can bypass them. The binding is therefore placed in the proof statement and in
+    authenticated provenance, as follows.
+  - **Statement binding (required).** Every proof that creates, opens or consumes vector
+    commitments carries a canonical **schema digest** `σ = SchemaDigest(schema)` as a public
+    input. The circuit constrains that input to equal the schema's constant digest. The
+    constraint makes the verification keys of same-shape schemas differ, and it satisfies
+    ADR-0045's every-public-wire-constrained rule. The verifier compares the public `σ` with
+    the **expected** digest taken from its own trusted configuration: a deployment registry that
+    associates each accepted verification key with exactly one expected schema digest. A
+    prover-supplied label is never the source. The canonical schema encoding and the digest
+    construction (hash, domain tag, reduction into the scalar field) are specified at the M3
+    entry gate. Cost: one public input and one linear constraint per proof, plus one extra
+    public-input term in the Groth16 verifier, on-chain included.
+  - **Provenance binding for received commitments (required).** A proof that a raw point opens
+    under schema B does not prove that the point was *issued* under schema B. Anyone who knows
+    an opening can relabel it to another same-shape schema, because the bases are shared. A
+    commitment received from outside therefore inherits its schema only from authenticated
+    issuance provenance: the public statement of the proof that created it, which contains both
+    the commitment coordinates and `σ`, or authenticated state written by a verifier of that
+    proof (for example, a datum holding `(commitment, σ)` guarded by the validator that
+    checked the issuing proof). A consumer accepts an external commitment only with that
+    provenance and checks that its `σ` matches the expected schema. A schema label that travels
+    with the point is never trusted.
+  - **Schema-separated bases** would bind the schema at the commitment level instead, so that
+    no opening can be relabelled. They remain deferred (see alternatives below) and become
+    **required** for any application that cannot supply the authenticated provenance above.
+  - Off-circuit, vector commitments are a typed value carrying their schema, and `add` and
+    `subtract` require identical schemas. This is a convenience for cooperative callers, not
+    the security boundary: the two required bindings above are.
   - **Homomorphism is defined only within one schema.** Combining commitments across schemas,
     or reinterpreting a commitment under a different schema (for example, treating index 1 of
     an attribute vector as an asset amount), is outside the profile.
   - Alternatives considered: per-schema domain-separated bases would bind the schema
     cryptographically, but need per-schema derivation (a runtime hash, or one pinned table per
-    schema) and give up the shared table; this is deferred until an application needs
-    self-describing commitments. A schema-tag term (`[tag]·G_tag`) is rejected because it does
+    schema) and give up the shared table. They are deferred, and become required for any
+    application that cannot supply authenticated issuance provenance. A schema-tag term (`[tag]·G_tag`) is rejected because it does
     not compose: a sum of `m` commitments carries `m·tag`.
 - The two-base v1 profile is untouched. `pedersen-jubjub-vector-v1` with `n = 1` is a
   different profile with different bases, by design.
@@ -457,10 +493,13 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
   complete statement and every prover commitment. Weak Fiat–Shamir is forbidden.
 - **I10 — Provider and platform parity (G1).** Pure Java and blst produce identical bases and
   verdicts, and on-chain `hashToGroup` reproduces the off-chain bases.
-- **I11 — Vector schema.** A vector commitment binds neither its length nor its schema. The
-  schema (identifier, version, dimension, per-index meaning and width) is fixed by the
-  authenticated statement, and homomorphic operations combine only commitments of the same
-  schema (D5).
+- **I11 — Vector schema.** A vector commitment binds neither its length nor its schema (the
+  point itself; D5). The schema (identifier, version, dimension, per-index meaning and width)
+  is bound by (a) a canonical schema digest that is a constrained public input of every proof
+  creating, opening or consuming the commitment, checked by the verifier against an expected
+  digest from trusted configuration, and (b) authenticated issuance provenance for every
+  externally received commitment. Neither prover-supplied labels nor typed host wrappers are a
+  binding. Homomorphic operations combine only commitments with the same schema digest.
 - **I12 — No soundness for budget.** Booleanity, canonicality, point validity, decomposition
   ownership and required subgroup checks are never removed to meet a cost target.
 
@@ -475,8 +514,9 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
 - Circuits that declared narrow blindings stop compiling. That is intended.
 - Balance circuits whose declared widths could wrap fail at circuit-definition time rather
   than proving a modular identity that reads as conservation.
-- Vector commitments are only meaningful together with their schema; code that passes raw
-  points around must carry the schema separately.
+- Vector commitments are only meaningful together with their schema. Every vector proof
+  carries one extra public input (the schema digest), and deployments maintain a registry
+  mapping each accepted verification key to its expected schema digest.
 - Costs: a subgroup assertion adds about 5,500 rows when a circuit must consume a commitment
   it did not compute; a vector commitment costs roughly one fixed-base multiplication per value
   at that value's width. Exact pins are a milestone deliverable (see Performance gates).
@@ -507,8 +547,11 @@ Each milestone is its own PR with a review gate. M3, M5 and M6 have entry gates.
   the balance helper with its definition-time bound check; the wrap rule and counterexample in
   spec and guide.
 - **M3** — *Entry gate: `docs/specs/pedersen-jubjub-vector-v1.md` reviewed, including the
-  schema and zero-padding semantics.* D5 constants, known-answer and independent-derivation
-  tests, the schema type, in-circuit gadget, `ZkPedersen` vector entry point.
+  zero-padding semantics, the canonical schema encoding, the `SchemaDigest` construction, the
+  verifier-registry contract (verification key → expected digest) and the provenance rule for
+  received commitments.* D5 constants, known-answer and independent-derivation tests, the schema
+  type and digest, the constrained digest public input, the in-circuit gadget, and the
+  `ZkPedersen` vector entry point.
 - **M4** — Reference application in `zeroj-integration-tests`: a confidential-balance or
   sealed-bid circuit using commitments as public inputs, Groth16 proof verified by the existing
   JuLC verifier on Yaci DevKit, with invalid-witness, tampering and wraparound negatives.
@@ -551,10 +594,21 @@ Performance gates.
   0–5 and `"r"`), `Zcash_G_`, `Zcash_H_` and `Zcash_J_` must match `sapling-crypto` constants
   bit-for-bit. A standalone script re-derives the `ZeroJ_PV` table. Plus in-circuit vs
   off-circuit cross-checks and invalid-witness tests (wrong `v_i`, wrong `r`, permuted
-  indices). Schema tests at the responsible boundary: `C([a], r) = C([a, 0], r)` is pinned as
-  the documented zero-padding behaviour; the typed API rejects `add`/`subtract` across schemas
-  that differ in identifier, version, dimension or per-index meaning; and a circuit built for
-  one schema rejects a commitment typed for another at definition time.
+  indices). Schema tests:
+  - `C([a], r) = C([a, 0], r)` is pinned as the documented zero-padding behaviour.
+  - **Cross-schema reuse through the real verifier boundary.** Use two schemas with identical
+    dimensions and widths that differ only in identifier, version or per-index meaning. Produce
+    a proof and serialised commitment under schema A, then present them, as raw serialised
+    points, proof bytes and public inputs, to a verifier configured for schema B. This bypasses
+    every Java typed wrapper. Rejection is required, and it must come from the specified checks:
+    the public `σ` against the registry's expected digest, and the provenance check on the
+    received commitment. Repeat with the prover supplying B's digest as the public input to A's
+    circuit; the in-circuit constraint must make the proof fail. M4 repeats the scenario end to
+    end against the on-chain verifier.
+  - Schemas that differ **only in a value width** are incompatible and are rejected the same
+    way.
+  - The typed host API also rejects cross-schema `add`/`subtract`. This is kept as a usability
+    test and is not counted as the security gate.
 - **D7 (M5/M6):** RFC 9380 vectors for `hash_to_curve`; CFRG -03 vectors for the relation
   algebra where the ciphersuite allows; off-chain vs on-chain base bytes via `hashToGroup`;
   pure Java vs blst parity; tamper tests on every response, commitment, challenge, session id
@@ -606,7 +660,9 @@ meet a budget.
   that combines commitments itself (off-chain or on G1) must apply the same bounds by hand, and
   nothing stops it from forgetting. The spec, guide and counterexample test exist to make that
   hard to miss.
-- **Schema confusion.** Raw points carry no schema. Code that strips the typed wrapper can
-  still reinterpret a commitment; I11 and the typed API reduce, but cannot remove, that risk.
+- **Schema confusion.** Raw points carry no schema. I11 places the binding in the proof
+  statement and in authenticated provenance. An application that accepts external commitments
+  without that provenance can still be relabelled across same-shape schemas; such an
+  application needs schema-separated bases, which are deferred.
 - **CIP-0133 timing.** Vector verification costs on-chain depend on whether the MSM builtin is
   enacted on the target network.
