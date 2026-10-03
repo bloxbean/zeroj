@@ -14,6 +14,21 @@ off-circuit secret-bearing generation stays offline/isolated only (ADR-0038).
 ## Date
 2026-10-03
 
+## Revision history
+
+- **r1** (`b3ed909`) — initial proposal.
+- **r2** — responds to the PR #73 review of r1:
+  - I6 rewritten: every term on both sides of a balance is width-bounded and each side's
+    maximum stays below `l`; a range check on the claimed sum alone is insufficient. New D3a
+    defines the balance construction and the definition-time check that enforces it.
+  - D3: the public subgroup assertion enforces point validity itself; I4 becomes an API
+    contract enforced by named constructors; the identity policy is kept separate from
+    rejecting invalid `Z = 0` representations.
+  - D5: the vector commitment does not bind its length or schema; schema binding moves into the
+    authenticated application statement and a typed schema.
+  - New "Performance gates" section: complete safe-API cost pins, and end-to-end measurements
+    rather than constraint counts alone.
+
 ## Risk classification
 - **R2:** D1 (normative spec of the existing profile), D2 (hiding-safe API), D3 (homomorphic
   building blocks, subgroup assertion, canonical decoding), D4 (public-input encoding).
@@ -37,7 +52,7 @@ C(v, r) = [v]·G + [r]·H        over the prime-order subgroup of Jubjub, order 
 | Piece | Location | State |
 |---|---|---|
 | Off-circuit `commit` / `verify` | `zeroj-circuit-lib` `jubjub/PedersenCommitment` | Algebra ready\*; `commit` is variable-time `BigInteger`, offline/isolated only (ADR-0038) |
-| Low-level gadget | `jubjub/InCircuitPedersen` | 3,020 constraints at two 252-bit scalars (measured); proves the represented bit-vector residues, does **not** assert `< l` |
+| Low-level gadget | `jubjub/InCircuitPedersen` | 3,020 constraints at two 252-bit scalars for the gadget alone (measured); proves the represented bit-vector residues, does **not** assert `< l` |
 | Annotation adapter | `zk/ZkPedersen` (`commit`, `commitBits`, `verifyOpening`) | Ready\* pending external review; asserts both scalars `< l` |
 | Fixed-limb generation candidate | `jubjub/HardenedPedersen` (package-private) | ADR-0039 M9 candidate; its own timing/platform/external gates |
 | Point toolkit | `InCircuitJubjub` (add, double, select, windowed fixed-base and variable-base scalar mul, `witnessAffine`), `JubjubPoint` (encode/decode, negate, subgroup check) | Present |
@@ -46,6 +61,18 @@ C(v, r) = [v]·G + [r]·H        over the prime-order subgroup of Jubjub, order 
 try-and-increment from the domain tag `"zeroj.pedersen.v1.H"`, cofactor-cleared, and pinned
 by a fixture in `PedersenTest`. The current tests (`PedersenTest` 18, `HardenedPedersenTest`
 5, `ZkGadgetAdaptersTest` 28) pass.
+
+The 3,020 figure covers the low-level gadget only. The complete symbolic commitment
+(`ZkPedersen`, including both canonical `< l` checks and binding both affine public
+coordinates) was measured during review of r1:
+
+| Value / blinding width | R1CS rows | Sparse nonzeros |
+|---|---:|---:|
+| 64 / 252 | 2,918 | 13,460 |
+| 252 / 252 | 4,042 | 19,338 |
+
+A 252-bit windowed fixed-base multiplication is pinned at 1,506 rows (7,865 nonzeros), against
+2,513 rows for the bit-by-bit reference (`WindowedFixedBaseTest`).
 
 The scheme is not the gap. What is missing is the layer that lets applications use it
 safely: hiding guard rails, homomorphic operations, multi-value commitments, independent
@@ -201,14 +228,81 @@ Poseidon, not ZeroJ code, must reproduce the pinned coordinates.
 
 - `InCircuitJubjub.negate` (`(−U, V, Z, −T)`, zero constraints), plus `ZkJubjubPoint.negate()`
   and `subtract(...)`.
-- The subgroup assertion is promoted to `InCircuitJubjub.assertInPrimeOrderSubgroup` and
-  `ZkJubjubPoint.assertInPrimeOrderSubgroup(zk)`. EdDSA keeps using it. It costs one 252-bit
-  variable-base multiplication by `l`, roughly 5,500 constraints by the gap between
-  `verifyStrict` and `verifyWithRegisteredKey`; M2 measures it directly.
+- **A public subgroup assertion that enforces its own preconditions.** The existing
+  `InCircuitEdDSAJubjub.assertInPrimeOrderSubgroup` relies on its callers having validated the
+  point. Called directly on the raw extended coordinates `(0, 0, 0, 0)` it accepts, because its
+  final identity predicate sees `U = 0` and `V = Z` (reproduced during review of r1). That is a
+  hazard for a public promotion, not a vulnerability in the current EdDSA entry points. So:
+  - `ZkJubjubPoint.assertInPrimeOrderSubgroup(zk)` is the public entry point. `ZkJubjubPoint`
+    is the authenticated type: it is constructed only by `witnessAffine` (curve equation,
+    `Z = 1`, `T = U·V`), `constant`, or gadget results. The method first calls
+    `assertWellFormed()`, which emits the projective curve equation, `T·Z = U·V` and `Z ≠ 0`
+    unless they are already established, and only then asserts `[l]·P = O`.
+  - If a low-level `InCircuitJubjub.assertInPrimeOrderSubgroup(api, Point)` is exposed, it
+    always emits `InCircuitJubjub.assertWellFormed` itself, unconditionally.
+  - The existing package-private helper stays as the EdDSA-internal primitive, so EdDSA
+    constraint systems and verification keys do not change.
+  - **Identity is a separate policy.** A well-formed identity (`U = 0`, `V = Z ≠ 0`) is in the
+    prime-order subgroup and passes this assertion. Whether a commitment may equal the identity
+    is the D1 policy, enforced at the commitment boundary. Rejecting malformed `Z = 0`
+    representations is a validity rule and never depends on that policy.
+  - Cost: one 252-bit variable-base multiplication by `l` plus the well-formedness rows,
+    roughly 5,500 rows by the gap between `verifyStrict` and `verifyWithRegisteredKey`. M2
+    pins the exact rows and nonzeros.
+- **I4 as an enforced API contract.** Public Pedersen APIs that consume a commitment the
+  circuit did not compute accept it only through named constructors that discharge I4:
+  - `witnessInSubgroup(zk, u, v)` — `witnessAffine` plus the subgroup assertion in-circuit
+    (case b).
+  - `fromVerifierCheckedPublic(zk, u, v)` — the DSL requires both coordinates to be public
+    inputs or constants (`CircuitAPI.requirePublicOrConstant`) and asserts the curve equation.
+    Subgroup membership becomes the verifier's documented obligation (case c), as with
+    `verifyWithRegisteredKey`.
+
+  Raw `InCircuitJubjub.Point` values are never accepted by the public homomorphic APIs.
 - `PedersenCommitment.decode(byte[])`: canonical decoding (`v < p`; `u = 0` requires sign bit
   0, per ZIP 216) plus prime-order subgroup membership, applying the D1 identity policy.
-- The wrap rule (I6) is written into the spec and the gadgets guide, with a worked balance
-  example.
+
+### D3a — Balance relations must not wrap (R2)
+
+Pedersen homomorphism proves relations **mod `l`**. The r1 wording of I6 ("bound each value
+… or range-check the sum") was insufficient. With canonical openings,
+
+```
+C(l − 1, 17) + C(1, 23) = C(0, 40)
+```
+
+holds, and a circuit using `ZkPedersen` accepts it even when the claimed total is constrained
+to one bit (reproduced during review of r1). The gadgets implement the modular relation
+correctly; the error is reading it as integer conservation.
+
+The rule (I6) for any relation `Σ a_i·v_i = Σ b_j·w_j (+ public terms)` that an application
+reads as an integer equation:
+
+- **Every term on both sides is width-bounded.** Each committed value's leg is constrained to
+  its declared `k`-bit width by its own decomposition. Bounding only the claimed total is not
+  enough.
+- **Coefficients are small non-negative integers fixed at circuit-definition time**, never
+  prover-chosen field elements. Negative coefficients move to the other side first.
+- **Each side's maximum integer value is below `l`:** `Σ a_i·(2^{k_i} − 1) < l`, and the same
+  for the other side, with public terms counted at their declared bounds. Both sides are then
+  integers in `[0, l)`, so equality mod `l` implies integer equality. Because `l < p`, the same
+  bound rules out aliasing mod the circuit field `p` when values are added as field elements.
+
+The construction depends on who holds the openings:
+
+- **Inside a circuit that knows the openings**, the supported construction is value-level
+  integer accumulation. `ZkPedersen` gains a balance helper that takes only commitments
+  computed or opened in the same circuit, so each value is a `ZkUInt` with a known width. It
+  computes both side bounds **at
+  circuit-definition time** and throws if either reaches `l`, then asserts the relation on the
+  opened values as field elements. Point arithmetic is not needed for the relation, and value
+  arithmetic is cheaper.
+- **Outside a circuit** (an off-chain verifier or a G1 validator combining commitments it
+  cannot open), the point-level check is valid only if every term carries a range proof for its
+  declared width from the proof that produced it, and the verifier applies the same side-bound
+  rule to those declared widths.
+
+The spec and the gadgets guide include this counterexample and a worked balance example.
 
 ### D4 — Public-input encoding (R2)
 
@@ -241,6 +335,25 @@ C(v_0..v_{n-1}, r) = Σ_{i<n} [v_i]·G_i + [r]·H_V,      1 ≤ n ≤ N_MAX
 - In-circuit: one windowed fixed-base multiplication per value at its own width, a full-width
   blinding leg under D2, and an addition chain. A `ZkPedersen` vector entry point mirrors D2's
   rules.
+- **The commitment does not bind its length or schema.** All dimensions share the base prefix
+  `G_0, G_1, …`, so `C([a], r) = C([a, 0], r)`. The profile defines this explicitly: a
+  dimension-`n` commitment uses `G_0..G_{n−1}`, and equals its zero-padded extension to any
+  larger dimension. Binding therefore lives in the authenticated application statement:
+  - A **vector schema** (identifier and version, dimension `n`, and for each index its meaning
+    and value width) is fixed at circuit-definition time. It is a circuit constant, so the
+    verification key fixes it, and never a prover input. The `ZkPedersen` vector entry point
+    takes the schema object rather than a bare list of values.
+  - Off-circuit, vector commitments are a typed value carrying their schema. `add` and
+    `subtract` require identical schemas. Raw points carry no schema, and code that holds only
+    raw points must obtain the schema from the authenticated statement, not from the point.
+  - **Homomorphism is defined only within one schema.** Combining commitments across schemas,
+    or reinterpreting a commitment under a different schema (for example, treating index 1 of
+    an attribute vector as an asset amount), is outside the profile.
+  - Alternatives considered: per-schema domain-separated bases would bind the schema
+    cryptographically, but need per-schema derivation (a runtime hash, or one pinned table per
+    schema) and give up the shared table; this is deferred until an application needs
+    self-describing commitments. A schema-tag term (`[tag]·G_tag`) is rejected because it does
+    not compose: a sum of `m` commitments carries `m·tag`.
 - The two-base v1 profile is untouched. `pedersen-jubjub-vector-v1` with `n = 1` is a
   different profile with different bases, by design.
 - `docs/specs/pedersen-jubjub-vector-v1.md` must be written and reviewed before any code
@@ -325,12 +438,17 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
   from profile bases, (b) witnessed with `witnessAffine` and asserted in the prime-order
   subgroup in-circuit, or (c) a public input whose subgroup membership the off-chain verifier
   checks before acceptance. On-chain consumers cannot do (c) for Jubjub at practical cost (no
-  Jubjub builtins) and must use (a) or (b).
+  Jubjub builtins) and must use (a) or (b). This is enforced by the API (D3), not left as a
+  convention: external commitments enter only through `witnessInSubgroup` (b) or
+  `fromVerifierCheckedPublic` (c), and every subgroup assertion first establishes point
+  validity (curve equation, `T·Z = U·V`, `Z ≠ 0`).
 - **I5 — Canonical encoding.** The off-circuit decoder accepts exactly one encoding per point
   and enforces subgroup membership. The public-input form is affine `(u, v)`.
-- **I6 — Wrap.** Homomorphic relations hold mod `l`. Any balance or sum check bounds each
-  value to `k` bits and the term count to `n` with `n·2^k < l`, or range-checks the sum, so a
-  relation mod `l` implies the same relation over the integers.
+- **I6 — No wraparound.** Homomorphic relations hold mod `l`. A relation is read as an integer
+  equation only if every term on **both** sides is width-bounded by its own decomposition,
+  coefficients are small non-negative integers fixed at circuit-definition time, and each
+  side's maximum `Σ a_i·(2^{k_i} − 1)` is below `l` (D3a). Range-checking only the claimed sum
+  is insufficient. The bound also excludes aliasing mod the circuit field `p`.
 - **I7 — Versioning.** A change to a domain string, derivation or base is a new profile
   version. v1 bases are frozen.
 - **I8 — Secrets.** No new secret-bearing `BigInteger` path is approved for online use. New
@@ -339,6 +457,12 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
   complete statement and every prover commitment. Weak Fiat–Shamir is forbidden.
 - **I10 — Provider and platform parity (G1).** Pure Java and blst produce identical bases and
   verdicts, and on-chain `hashToGroup` reproduces the off-chain bases.
+- **I11 — Vector schema.** A vector commitment binds neither its length nor its schema. The
+  schema (identifier, version, dimension, per-index meaning and width) is fixed by the
+  authenticated statement, and homomorphic operations combine only commitments of the same
+  schema (D5).
+- **I12 — No soundness for budget.** Booleanity, canonicality, point validity, decomposition
+  ownership and required subgroup checks are never removed to meet a cost target.
 
 ## Consequences
 
@@ -349,9 +473,13 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
 - The G1 track is explicitly blocked on a decision instead of being built on an unreviewed
   transcript.
 - Circuits that declared narrow blindings stop compiling. That is intended.
-- Costs: a subgroup assertion adds about 5,500 constraints when a circuit must consume a
-  commitment it did not compute; a vector commitment costs roughly one fixed-base
-  multiplication per value at that value's width.
+- Balance circuits whose declared widths could wrap fail at circuit-definition time rather
+  than proving a modular identity that reads as conservation.
+- Vector commitments are only meaningful together with their schema; code that passes raw
+  points around must carry the schema separately.
+- Costs: a subgroup assertion adds about 5,500 rows when a circuit must consume a commitment
+  it did not compute; a vector commitment costs roughly one fixed-base multiplication per value
+  at that value's width. Exact pins are a milestone deliverable (see Performance gates).
 
 ## Compatibility
 
@@ -361,6 +489,8 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
   or public/constant blindings are rejected. Circuits that used narrow blindings get new
   constraint systems and must regenerate keys. Circuits that already used 252-bit blindings and
   the two-argument `commit` keep identical constraints. A migration note ships with M1.
+- EdDSA-Jubjub constraint systems and keys do not change: EdDSA keeps the package-private
+  subgroup helper, and only the new public entry points add well-formedness rows.
 - The vector profile, the G1 track and every new method are additive.
 - No on-chain verifier changes for M0–M4. M6 adds a new JuLC library and changes no existing
   script hash.
@@ -372,14 +502,19 @@ Each milestone is its own PR with a review gate. M3, M5 and M6 have entry gates.
 - **M0** — `docs/specs/pedersen-jubjub-v1.md` (D1) and the independent `H` reproduction script.
 - **M1** — D2: hiding-safe `ZkPedersen` and `InCircuitPedersen`, `randomBlinding`; examples,
   README, guide and tests corrected; migration note.
-- **M2** — D3/D4: `negate`, `subtract`, public subgroup assertion (with measured cost),
-  `PedersenCommitment.decode`, wrap rule in spec and guide.
-- **M3** — *Entry gate: `docs/specs/pedersen-jubjub-vector-v1.md` reviewed.* D5 constants,
-  known-answer and independent-derivation tests, in-circuit gadget, `ZkPedersen` vector entry
-  point.
+- **M2** — D3/D3a/D4: `negate`, `subtract`; the validity-enforcing public subgroup assertion;
+  the `witnessInSubgroup` / `fromVerifierCheckedPublic` constructors; `PedersenCommitment.decode`;
+  the balance helper with its definition-time bound check; the wrap rule and counterexample in
+  spec and guide.
+- **M3** — *Entry gate: `docs/specs/pedersen-jubjub-vector-v1.md` reviewed, including the
+  schema and zero-padding semantics.* D5 constants, known-answer and independent-derivation
+  tests, the schema type, in-circuit gadget, `ZkPedersen` vector entry point.
 - **M4** — Reference application in `zeroj-integration-tests`: a confidential-balance or
   sealed-bid circuit using commitments as public inputs, Groth16 proof verified by the existing
-  JuLC verifier on Yaci DevKit, with invalid-witness and tampering negatives.
+  JuLC verifier on Yaci DevKit, with invalid-witness, tampering and wraparound negatives.
+
+Every milestone that adds or changes a circuit API also delivers the cost pins listed under
+Performance gates.
 - **M5** — *Entry gate: D7 decided; for option (b), transcript spec externally reviewed.* G1
   bases and sigma proofs off-chain, pure Java and blst.
 - **M6** — *Entry gate: M5.* JuLC on-chain verifier library, measured budgets, DevKit E2E.
@@ -392,22 +527,61 @@ Each milestone is its own PR with a review gate. M3, M5 and M6 have entry gates.
   a blinding wired to a public input or constant. Boundary witnesses: blinding `l − 1`
   accepted, `l` rejected. One test recovers a 16-bit-blinded commitment by brute force, to
   document why the rule exists.
-- **D3 (M2):** `negate`/`subtract` against off-circuit arithmetic. The subgroup assertion
-  accepts subgroup points and rejects `P + T` for each non-trivial torsion point `T` (orders 2,
-  4 and 8) as invalid witnesses. `decode` rejects `v ≥ p`, `u = 0` with sign bit set, off-curve
-  encodings and torsion-shifted points.
+- **D3 (M2):** `negate`/`subtract` against off-circuit arithmetic. The public subgroup
+  assertion:
+  - accepts subgroup points, including a projectively rescaled `(λU, λV, λZ, λT)` and the
+    well-formed identity;
+  - rejects, as invalid witnesses: the all-zero `(0, 0, 0, 0)`; `Z = 0` with other coordinates
+    non-zero; an inconsistent `T` (`T·Z ≠ U·V`); off-curve points; and `P + T` for each
+    non-trivial torsion point `T` (orders 2, 4 and 8).
+
+  The same malformed inputs are rejected through `witnessInSubgroup`, and
+  `fromVerifierCheckedPublic` rejects secret or derived coordinates at definition time.
+  `decode` rejects `v ≥ p`, `u = 0` with sign bit set, off-curve encodings and torsion-shifted
+  points.
+- **D3a (M2, M4):** the counterexample `C(l − 1, 17) + C(1, 23) = C(0, 40)` is a required
+  negative. A balance over 252-bit value legs is rejected at definition time. With widths that
+  pass the bound, the counterexample's witness cannot be expressed. A one-bit claimed total
+  does not rescue a wide input. Boundary: each side's maximum exactly `l − 1` is accepted, and
+  `l` is rejected. Coefficient cases: a coefficient that pushes a side to `l` is rejected, and a
+  negative coefficient is only accepted after moving to the other side. M4 repeats the
+  counterexample end to end and expects proving to fail.
 - **D5 (M3):** RFC 7693 BLAKE2s vectors for the test-side hash. Known answers: the Zcash
   generators derived with personalisations `Zcash_cv` (`"v"`, `"r"`), `Zcash_PH` (indices
   0–5 and `"r"`), `Zcash_G_`, `Zcash_H_` and `Zcash_J_` must match `sapling-crypto` constants
   bit-for-bit. A standalone script re-derives the `ZeroJ_PV` table. Plus in-circuit vs
   off-circuit cross-checks and invalid-witness tests (wrong `v_i`, wrong `r`, permuted
-  indices).
+  indices). Schema tests at the responsible boundary: `C([a], r) = C([a, 0], r)` is pinned as
+  the documented zero-padding behaviour; the typed API rejects `add`/`subtract` across schemas
+  that differ in identifier, version, dimension or per-index meaning; and a circuit built for
+  one schema rejects a commitment typed for another at definition time.
 - **D7 (M5/M6):** RFC 9380 vectors for `hash_to_curve`; CFRG -03 vectors for the relation
   algebra where the ciphersuite allows; off-chain vs on-chain base bytes via `hashToGroup`;
   pure Java vs blst parity; tamper tests on every response, commitment, challenge, session id
   and statement element.
 - **Module gates:** `:zeroj-circuit-lib:test`, `:zeroj-integration-tests:test`, and from M5
   `:zeroj-onchain-julc:test`; DevKit E2E for M4 and M6.
+
+## Performance gates
+
+The optimisation strategy is retained: fixed public tables, constrained window selection,
+decomposition ownership, and narrow value legs with full-width blindings. I12 applies: no
+booleanity, canonicality, point-validity, ownership or required subgroup check is removed to
+meet a budget.
+
+- **Pin the complete safe-API cost, not just the gadget.** Each milestone adds regression pins
+  for R1CS rows **and** sparse nonzeros of the full `ZkPedersen`-level operation, as a user
+  would call it, including canonical checks and public-input binding. Baselines for r2 are the
+  review measurements in Context (64/252: 2,918 rows / 13,460 nonzeros; 252/252: 4,042 rows /
+  19,338 nonzeros). The 3,020-row low-level figure stays labelled as gadget-only.
+- **New pins per milestone:** the M1 commit and opening with the full-width blinding; the M2
+  subgroup assertion (with and without already-established well-formedness), `witnessInSubgroup`
+  and the balance helper; the M3 vector commitment at representative dimensions (`n` = 1, 4
+  and 16) and value widths.
+- **End-to-end measurements.** Constraint reductions alone do not establish speedups. For M3
+  and M4, record the padded evaluation domain, witness-generation time, proving time and peak
+  memory for the representative vector sizes, using the project's standalone benchmark harness
+  rather than a Gradle test run.
 
 ## Production / audit gates
 
@@ -428,8 +602,11 @@ Each milestone is its own PR with a review gate. M3, M5 and M6 have entry gates.
   bases that still look valid. The Zcash known answers exist to catch exactly that.
 - **D7 stays blocked.** If neither the CFRG drafts nor Plutus change, on-chain sigma proofs
   depend on a ZeroJ-specific transcript and its external review.
-- **Wrap misuse.** Homomorphic sums that skip I6 can balance mod `l` while the integers do not.
-  This is an application error the gadget cannot see; the spec and guide must make it hard to
-  miss.
+- **Wrap misuse outside the helper.** The D3a helper enforces I6 inside a circuit. A verifier
+  that combines commitments itself (off-chain or on G1) must apply the same bounds by hand, and
+  nothing stops it from forgetting. The spec, guide and counterexample test exist to make that
+  hard to miss.
+- **Schema confusion.** Raw points carry no schema. Code that strips the typed wrapper can
+  still reinterpret a commitment; I11 and the typed API reduce, but cannot remove, that risk.
 - **CIP-0133 timing.** Vector verification costs on-chain depend on whether the MSM builtin is
   enacted on the target network.
