@@ -28,12 +28,18 @@ off-circuit secret-bearing generation stays offline/isolated only (ADR-0038).
     authenticated application statement and a typed schema.
   - New "Performance gates" section: complete safe-API cost pins, and end-to-end measurements
     rather than constraint counts alone.
-- **r3** — responds to round 2 (completion of finding 3): a schema held at definition time is
-  not a binding. D5/I11 now require a constrained public schema digest, checked against a
-  verifier registry, plus authenticated issuance provenance for received commitments.
-  Schema-separated bases become mandatory where provenance cannot be supplied. M3 and the
-  tests now require cross-schema rejection at the real serialised verifier boundary, including
-  width-only differences.
+- **r3** (`fae2bfd`) — responds to round 2 (completion of finding 3): a schema held at
+  definition time is not a binding. D5/I11 now require a constrained public schema digest,
+  checked against a verifier registry, plus authenticated issuance provenance for received
+  commitments. Schema-separated bases were made mandatory where provenance cannot be supplied
+  (superseded in r4: consumers fail closed instead). M3 and the tests now require cross-schema
+  rejection at the real serialised verifier boundary, including width-only differences.
+- **r4** — responds to round 3: a valid proof is not provenance. The trust anchor is an
+  authenticated application record or authorised issuance event binding the exact commitment
+  coordinates to `σ` (on-chain: an exact reference to policy-guarded state). Consumers fail
+  closed without it. Schema-separated bases are now a separate future profile, not a fallback.
+  New adversarial relabelling test: a fresh valid proof under B for a commitment issued under A
+  must be rejected by provenance.
 
 ## Risk classification
 - **R2:** D1 (normative spec of the existing profile), D2 (hiding-safe API), D3 (homomorphic
@@ -367,18 +373,33 @@ C(v_0..v_{n-1}, r) = Σ_{i<n} [v_i]·G_i + [r]·H_V,      1 ≤ n ≤ N_MAX
     entry gate. Cost: one public input and one linear constraint per proof, plus one extra
     public-input term in the Groth16 verifier, on-chain included.
   - **Provenance binding for received commitments (required).** A proof that a raw point opens
-    under schema B does not prove that the point was *issued* under schema B. Anyone who knows
-    an opening can relabel it to another same-shape schema, because the bases are shared. A
-    commitment received from outside therefore inherits its schema only from authenticated
-    issuance provenance: the public statement of the proof that created it, which contains both
-    the commitment coordinates and `σ`, or authenticated state written by a verifier of that
-    proof (for example, a datum holding `(commitment, σ)` guarded by the validator that
-    checked the issuing proof). A consumer accepts an external commitment only with that
-    provenance and checks that its `σ` matches the expected schema. A schema label that travels
-    with the point is never trusted.
-  - **Schema-separated bases** would bind the schema at the commitment level instead, so that
-    no opening can be relabelled. They remain deferred (see alternatives below) and become
-    **required** for any application that cannot supply the authenticated provenance above.
+    under schema B does not prove that the point was *issued* under schema B. **A valid proof is
+    not provenance.** Anyone who knows an opening can produce a fresh, fully valid proof under
+    a same-shape schema B for a commitment originally issued under A. B's digest, key and
+    circuit all agree, so neither proof verification nor the digest check reveals the original
+    A context.
+
+    The trust anchor is therefore an **authenticated application record or authorised issuance
+    event**. It binds the exact commitment coordinates to the schema digest `σ` (and any other
+    issuance context the application needs), and the consumer obtains the commitment's expected
+    original context from that record, not from anything presented alongside the point:
+    - **On-chain:** a referenced output or state guarded by the issuance policy, for example a
+      reference input whose datum holds `(commitment, σ)` and which only the issuing validator
+      or minting policy can create. The consuming validator checks that **exact** reference and
+      that the commitment and `σ` it is given match the referenced record.
+    - **Off-chain:** a trusted registry or an authorised issuer's signed record with the same
+      binding, checked by the consumer.
+
+    A proof can be evidence inside that trusted issuance flow, for example the issuing
+    validator verifies the issuance proof before writing the record. Possession of a newly
+    generated valid proof never authorises creating, replacing or reinterpreting the schema of
+    an existing commitment. This is a requirement on applications using the profile. This ADR
+    does not provide a generic authorisation implementation.
+  - **Fail closed.** In this shared-base profile, a consumer that cannot obtain authenticated
+    provenance for a received commitment rejects it. There is no fallback.
+  - **Schema-separated bases** would bind the schema at the commitment level instead. They are a
+    deferred, **separate profile** that requires its own reviewed specification. They are not a
+    fallback for missing provenance in this profile.
   - Off-circuit, vector commitments are a typed value carrying their schema, and `add` and
     `subtract` require identical schemas. This is a convenience for cooperative callers, not
     the security boundary: the two required bindings above are.
@@ -387,8 +408,9 @@ C(v_0..v_{n-1}, r) = Σ_{i<n} [v_i]·G_i + [r]·H_V,      1 ≤ n ≤ N_MAX
     an attribute vector as an asset amount), is outside the profile.
   - Alternatives considered: per-schema domain-separated bases would bind the schema
     cryptographically, but need per-schema derivation (a runtime hash, or one pinned table per
-    schema) and give up the shared table. They are deferred, and become required for any
-    application that cannot supply authenticated issuance provenance. A schema-tag term (`[tag]·G_tag`) is rejected because it does
+    schema) and give up the shared table. They are deferred to a separate profile with its own
+    reviewed specification. Applications of this profile that cannot supply authenticated
+    issuance provenance fail closed rather than falling back. A schema-tag term (`[tag]·G_tag`) is rejected because it does
     not compose: a sum of `m` commitments carries `m·tag`.
 - The two-base v1 profile is untouched. `pedersen-jubjub-vector-v1` with `n = 1` is a
   different profile with different bases, by design.
@@ -497,9 +519,12 @@ choose an option and, for (b), an external reviewer accepts the transcript spec.
   point itself; D5). The schema (identifier, version, dimension, per-index meaning and width)
   is bound by (a) a canonical schema digest that is a constrained public input of every proof
   creating, opening or consuming the commitment, checked by the verifier against an expected
-  digest from trusted configuration, and (b) authenticated issuance provenance for every
-  externally received commitment. Neither prover-supplied labels nor typed host wrappers are a
-  binding. Homomorphic operations combine only commitments with the same schema digest.
+  digest from trusted configuration, and (b) for every externally received commitment, an
+  authenticated application record or authorised issuance event that binds the exact
+  commitment coordinates to `σ`, from which the consumer obtains the expected original context.
+  Neither prover-supplied labels, typed host wrappers nor a freshly generated valid proof is a
+  binding. Without provenance, the consumer fails closed. Homomorphic operations combine only
+  commitments with the same schema digest.
 - **I12 — No soundness for budget.** Booleanity, canonicality, point validity, decomposition
   ownership and required subgroup checks are never removed to meet a cost target.
 
@@ -605,6 +630,15 @@ Performance gates.
     received commitment. Repeat with the prover supplying B's digest as the public input to A's
     circuit; the in-circuit constraint must make the proof fail. M4 repeats the scenario end to
     end against the on-chain verifier.
+  - **Adversarial relabelling (the provenance gate).** Create and register `C` under schema A
+    through the trusted issuance flow, then give the adversary `C`'s opening. The adversary
+    generates a fresh, mathematically valid proof under B with B's correct digest and key for
+    the same `C`, and every B cryptographic check passes. The consumer of the original A
+    artifact must still reject the reinterpretation, and the rejection must come from its
+    trusted provenance record or reference. A consumer with no provenance record for `C` must
+    also reject (fail closed). M4 repeats this on-chain: the consuming validator must reject a
+    transaction that presents the valid B proof without, or with a mismatching, issuance
+    reference.
   - Schemas that differ **only in a value width** are incompatible and are rejected the same
     way.
   - The typed host API also rejects cross-schema `add`/`subtract`. This is kept as a usability
@@ -660,9 +694,10 @@ meet a budget.
   that combines commitments itself (off-chain or on G1) must apply the same bounds by hand, and
   nothing stops it from forgetting. The spec, guide and counterexample test exist to make that
   hard to miss.
-- **Schema confusion.** Raw points carry no schema. I11 places the binding in the proof
-  statement and in authenticated provenance. An application that accepts external commitments
-  without that provenance can still be relabelled across same-shape schemas; such an
-  application needs schema-separated bases, which are deferred.
+- **Schema confusion.** Raw points carry no schema, and a holder of an opening can always
+  produce a valid proof under another same-shape schema. I11 places the binding in the proof
+  statement and in authenticated issuance provenance, and requires consumers to fail closed
+  without provenance. An application that skips the provenance check is open to relabelling;
+  the profile cannot detect that omission.
 - **CIP-0133 timing.** Vector verification costs on-chain depend on whether the MSM builtin is
   enacted on the target network.
