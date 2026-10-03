@@ -1,11 +1,15 @@
 # ADR-0051: Pedersen commitment profiles — Jubjub hardening, vector commitments and a G1 on-chain track
 
 ## Status
-Proposed — design only. No implementation exists for any decision below. Awaiting
-maintainer review. Two decisions are R3 and carry their own gates before their milestones
-can start: D5 (vector-profile generator derivation) needs its normative spec reviewed, and
-D7 (G1 sigma-proof track) has an **escalated conflict between the pinned references and the
-Cardano execution environment** that this ADR does not resolve.
+Accepted (design) — 2026-10-03. The reviewer recommended acceptance at `a7ce174` (r4) with no
+outstanding findings, and the maintainer accepted the design. Implementation of M0–M4 is in
+progress on PR #73, one reviewed step at a time; the "Implementation status" section at the
+end tracks it. Acceptance is design acceptance only.
+
+Two decisions are R3 and keep their own gates: D5 (vector-profile generator derivation) needs
+its normative spec reviewed before M3 code, and D7 (G1 sigma-proof track) has an **escalated
+conflict between the pinned references and the Cardano execution environment** that this ADR
+does not resolve. M5 and M6 stay blocked until D7 is decided.
 
 This ADR changes no maturity claim. The ADR-0037 production-readiness table remains
 authoritative: the in-circuit Pedersen gadgets stay "Ready\*, pending external review" and
@@ -701,3 +705,14 @@ meet a budget.
   the profile cannot detect that omission.
 - **CIP-0133 timing.** Vector verification costs on-chain depend on whether the MSM builtin is
   enacted on the target network.
+
+## Implementation status
+
+| Milestone | State | Notes |
+|---|---|---|
+| M0 | Done, in review | `docs/specs/pedersen-jubjub-v1.md`. An independent standard-library Python reproduction, written from the spec and the ADR-0015 Sage Poseidon reference without reading ZeroJ Java code, is in `zeroj-circuit-lib/src/test/resources/pedersen-reference/`. It matched every spec pin; `PedersenReferenceVectorsTest` checks the library against its output (bases, 10 commitments, the wrap example, 12 negative decodes). |
+| M1 | In progress | |
+| M2 | Not started | |
+| M3 | Not started | Entry gate: vector spec reviewed |
+| M4 | Not started | |
+| M5, M6 | Blocked | D7 undecided |
