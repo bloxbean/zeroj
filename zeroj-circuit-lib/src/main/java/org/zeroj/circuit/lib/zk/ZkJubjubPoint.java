@@ -6,6 +6,7 @@ import org.zeroj.circuit.annotation.ZkContext;
 import org.zeroj.circuit.annotation.ZkField;
 import org.zeroj.circuit.annotation.ZkValue;
 import org.zeroj.circuit.lib.jubjub.InCircuitJubjub;
+import org.zeroj.circuit.lib.jubjub.JubjubCurve;
 import org.zeroj.circuit.lib.jubjub.JubjubPoint;
 import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
@@ -32,12 +33,15 @@ import java.util.Objects;
  *   <li>{@link #fromTrustedAffine} — deprecated alias, delegates to the above.</li>
  *   <li>{@link #constant(ZkContext, JubjubPoint)} — a compile-time point, already validated
  *       on-curve by {@link JubjubPoint} itself. Marked well-formed.</li>
- *   <li>The arithmetic here — {@link #add}, {@link #doubled}, {@link #select} — and the
+ *   <li>The arithmetic here — {@link #add}, {@link #doubled}, {@link #select},
+ *       {@link #subtract} — and the
  *       <b>public</b> {@code ZkPedersen.commit}/{@code commitBits}, all of which go through
  *       the package-private {@code wrap}. These are projective results, well-formed by
  *       construction given well-formed inputs, and are <em>not</em> marked: calling
  *       {@link #assertWellFormed()} on one emits the projective invariants
  *       ({@code V² − U² == Z² + d·T²}, {@code T·Z == U·V}, {@code Z != 0}) once.</li>
+ *   <li>{@link #negate} — carries this point's established flag, since negation preserves
+ *       every invariant.</li>
  * </ul>
  *
  * <p>Repeated {@link #assertWellFormed()} calls are free.
@@ -51,8 +55,8 @@ import java.util.Objects;
  *
  * <h2>What this type does not establish</h2>
  * Prime-order subgroup membership. That is a separate and much more expensive check — a full
- * {@code [l]·P} multiplication — applied only where the threat model needs it; see
- * {@code InCircuitEdDSAJubjub.verifyStrict}.
+ * {@code [l]·P} multiplication — applied only where the threat model needs it, through
+ * {@link #assertInPrimeOrderSubgroup}, which validates the point itself first (ADR-0051 D3).
  *
  * <h2>Withdrawn model</h2>
  * Before ADR-0038 this type emitted <b>no point constraints at all</b>:
@@ -194,6 +198,47 @@ public final class ZkJubjubPoint implements ZkValue {
         requireSameContext(zk);
         requireBls12381(zk);
         return wrap(zk, InCircuitJubjub.doubled(zk.builder().api(), asPoint()));
+    }
+
+    /**
+     * {@code −P} (ADR-0051 D3). Zero constraints. Negation preserves every well-formedness
+     * invariant, so an established point stays established.
+     */
+    public ZkJubjubPoint negate(ZkContext zk) {
+        requireSameContext(zk);
+        requireBls12381(zk);
+        return wrap(zk, InCircuitJubjub.negate(zk.builder().api(), asPoint()), wellFormed);
+    }
+
+    /** {@code this − other} (ADR-0051 D3). Costs one point addition. */
+    public ZkJubjubPoint subtract(ZkContext zk, ZkJubjubPoint other) {
+        Objects.requireNonNull(other, "other");
+        other.requireSameContext(zk);
+        return add(zk, other.negate(zk));
+    }
+
+    /**
+     * Asserts that this point lies in the prime-order subgroup (ADR-0051 D3).
+     *
+     * <p>Establishes the point's own preconditions first: {@link #assertWellFormed()} emits the
+     * projective curve equation, {@code T·Z = U·V} and {@code Z ≠ 0} unless they are already
+     * established (a {@link #witnessAffine} or {@link #constant} point pays nothing extra). Only
+     * then does it assert {@code [l]·P = O}. Without the first step the all-zero tuple would
+     * pass, because its multiple is all-zero and the identity predicate reads {@code 0 = 0}.
+     *
+     * <p>A well-formed identity is in the subgroup and passes. Excluding it is a separate
+     * protocol decision ({@link #assertNotIdentity}).
+     */
+    public void assertInPrimeOrderSubgroup(ZkContext zk) {
+        requireSameContext(zk);
+        requireBls12381(zk);
+        assertWellFormed();
+        var api = zk.builder().api();
+        ZkJubjubPoint lP = wrap(zk, InCircuitJubjub.scalarMulVariableBase(
+                api, asPoint(), api.constant(JubjubCurve.SUBGROUP_ORDER), JubjubCurve.SCALAR_BITS));
+        // [l]·P of a well-formed P is well-formed (complete addition), and isIdentity
+        // re-establishes Z ≠ 0 locally before reading U = 0 ∧ V = Z.
+        lP.isIdentity(zk).assertTrue();
     }
 
     public static ZkJubjubPoint select(

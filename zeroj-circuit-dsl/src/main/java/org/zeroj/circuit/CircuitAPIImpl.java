@@ -105,6 +105,32 @@ class CircuitAPIImpl implements CircuitAPI {
                         + "(ADR-0037 Decision 4).");
     }
 
+    @Override
+    public void requireNotPublicOrConstant(Variable v) {
+        Objects.requireNonNull(v, "v");
+        // Same wire-id resolution as requirePublicOrConstant: a name can be fabricated, an
+        // id cannot be reassigned to a different wire.
+        if (v.id() < 0 || v.id() >= nextId) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " is not a wire of this circuit (wire id " + v.id()
+                            + " was never allocated here).");
+        }
+        if (constantWireValues.containsKey(v.id())) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " is a circuit constant. A gadget that relies on this "
+                            + "value being unknown to the verifier cannot accept a constant "
+                            + "(ADR-0051 D2).");
+        }
+        for (Variable pub : publicInputs) {
+            if (pub.id() == v.id()) {
+                throw new IllegalArgumentException(
+                        "Variable " + v + " is a public input. A gadget that relies on this "
+                                + "value being unknown to the verifier cannot accept a public "
+                                + "input (ADR-0051 D2).");
+            }
+        }
+    }
+
     private Variable newIntermediate() {
         // Every gate this class emits either allocates an intermediate output or is an
         // AssertEq, so guarding these two points covers all of them.

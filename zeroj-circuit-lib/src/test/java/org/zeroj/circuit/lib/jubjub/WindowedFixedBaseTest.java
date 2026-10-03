@@ -202,7 +202,7 @@ class WindowedFixedBaseTest {
         var circuit = CircuitBuilder.create("ped_win")
                 .publicVar("outU").publicVar("outV").secretVar("v").secretVar("r")
                 .define(api -> {
-                    var c = InCircuitPedersen.commit(api, api.var("v"), api.var("r"), 252);
+                    var c = InCircuitPedersen.commit(api, api.var("v"), 252, api.var("r"));
                     api.assertEqual(api.mul(api.var("outU"), c.z()), c.u());
                     api.assertEqual(api.mul(api.var("outV"), c.z()), c.v());
                 });

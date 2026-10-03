@@ -244,14 +244,17 @@ constrained to 8 bits. Generated input builders accept indexed values and
 gadgets:
 
 ```java
-var commitment = ZkPedersen.commit(zk, value, blinding, 64);
+// value: @Secret @UInt(bits = 64) ZkUInt; blinding: @Secret @UInt(bits = 252) ZkUInt
+var commitment = ZkPedersen.commit(zk, value, blinding);
 commitment.assertAffineEquals(zk, expectedU, expectedV);
 ```
 
 `ZkPedersen.commitBits(...)` accepts LSB-first `ZkBits` scalar inputs.
 Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
-`< l`; range-limit any application amount separately when it has a smaller
-business-domain bound.
+`< l`. The value keeps its declared width, which is also its range proof. The
+blinding must be declared at exactly 252 bits and must not be a public input or
+a constant: a narrower blinding makes the commitment brute-forceable from public
+data (ADR-0051 D2). Sample it with `PedersenCommitment.randomBlinding(SecureRandom)`.
 Jubjub adapters use BLS12-381.
 
 Bind every prover-supplied point with `ZkJubjubPoint.witnessAffine(zk, u, v)`. It asserts the

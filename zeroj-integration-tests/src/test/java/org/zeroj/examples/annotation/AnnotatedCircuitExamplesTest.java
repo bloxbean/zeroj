@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -465,7 +466,7 @@ class AnnotatedCircuitExamplesTest {
     void pedersenCommitmentUsesAdvancedSymbolicAdapter() {
         var circuit = AnnotatedPedersenCommitmentCircuit.build();
         var value = BigInteger.valueOf(42);
-        var blinding = BigInteger.valueOf(12345);
+        var blinding = PedersenCommitment.randomBlinding(new SecureRandom());
         var commitment = PedersenCommitment.commit(value, blinding);
 
         var inputs = AnnotatedPedersenCommitmentCircuit.inputs()

@@ -147,14 +147,17 @@ class JubjubBitDecompositionOwnershipTest {
                 CircuitBuilder.create("victim")
                         .publicVar("out").secretVar("r")
                         .define(api -> {
-                            var blinding = api.decompose(api.var("r"), 64);
+                            // Full-width blinding, so ownership — not the D2 width rule —
+                            // is what rejects this.
+                            var blinding = api.decompose(api.var("r"), 252);
                             InCircuitPedersen.commit(api, foreign, blinding);
                         }));
     }
 
     @Test
     void pedersenCommit_foreignBlinding_rejectedAtDefinitionTime() {
-        BitDecomposition foreign = mintForeign(64);
+        // Full width, so ownership — not the D2 width rule — is what rejects it.
+        BitDecomposition foreign = mintForeign(252);
 
         assertThrows(IllegalArgumentException.class, () ->
                 CircuitBuilder.create("victim")
@@ -187,7 +190,7 @@ class JubjubBitDecompositionOwnershipTest {
      */
     @Test
     void pedersenCommit_foreignBlinding_rejectsBeforeValueLegEmits() {
-        BitDecomposition foreign = mintForeign(64);
+        BitDecomposition foreign = mintForeign(252);
         var ownershipChecks = new AtomicInteger();
         var callBetweenChecks = new AtomicBoolean();
 
@@ -239,7 +242,7 @@ class JubjubBitDecompositionOwnershipTest {
                 .publicVar("outU").publicVar("outV").secretVar("v").secretVar("r")
                 .define(api -> {
                     var vBits = api.decompose(api.var("v"), 64);
-                    var rBits = api.decompose(api.var("r"), 64);
+                    var rBits = api.decompose(api.var("r"), 252);
                     var c = InCircuitPedersen.commit(api, vBits, rBits);
                     api.assertEqual(api.mul(api.var("outU"), c.z()), c.u());
                     api.assertEqual(api.mul(api.var("outV"), c.z()), c.v());

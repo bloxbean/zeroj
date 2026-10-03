@@ -5,9 +5,13 @@ import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Objects;
 
 /**
- * Off-circuit Pedersen commitment over Jubjub:
+ * Off-circuit Pedersen commitment over Jubjub ({@code pedersen-jubjub-v1}, normatively
+ * specified in {@code docs/specs/pedersen-jubjub-v1.md}):
  * {@code C(v, r) = [v]·G + [r]·H}
  *
  * <p>G is {@link JubjubPoint#SUBGROUP_GENERATOR}. H is the first Jubjub
@@ -113,6 +117,63 @@ public final class PedersenCommitment {
         return vG.add(rH).normalized();
     }
 
+    /** Bytes drawn per blinding by {@link #randomBlinding(SecureRandom)}. */
+    static final int BLINDING_SAMPLE_BYTES = 64;
+
+    /**
+     * Samples a blinding scalar for {@link #commit(BigInteger, BigInteger)} that is
+     * statistically uniform on {@code [0, l)}.
+     *
+     * <p>Draws {@value #BLINDING_SAMPLE_BYTES} bytes from {@code random}, reads them as an
+     * unsigned big-endian integer and reduces mod {@code l}. The statistical distance from
+     * uniform is at most {@code l / 2^512 < 2^-259} — the same width Zcash's {@code ToScalar}
+     * uses ({@code docs/specs/pedersen-jubjub-v1.md} §3.1, ADR-0051 D2).
+     *
+     * <p><b>Same execution restriction as {@link #commit}.</b> The reduction is variable-time
+     * {@link BigInteger} arithmetic on a secret. Sample offline or inside an isolated process,
+     * exactly as for commitment generation (ADR-0038). The intermediate byte array is wiped;
+     * {@code BigInteger} copies cannot be.
+     *
+     * @param random a cryptographically secure source; the caller owns its seeding
+     * @return a blinding scalar in {@code [0, l)}
+     */
+    public static BigInteger randomBlinding(SecureRandom random) {
+        Objects.requireNonNull(random, "random");
+        byte[] sample = new byte[BLINDING_SAMPLE_BYTES];
+        try {
+            random.nextBytes(sample);
+            return new BigInteger(1, sample).mod(JubjubCurve.SUBGROUP_ORDER);
+        } finally {
+            Arrays.fill(sample, (byte) 0);
+        }
+    }
+
+    /**
+     * Decodes a commitment received from another party ({@code pedersen-jubjub-v1} §4.1,
+     * ADR-0051 D3).
+     *
+     * <p>Accepts exactly one encoding per point — {@link JubjubPoint#fromBytes} rejects a wrong
+     * length, {@code v ≥ p}, a non-square {@code u²}, and {@code u = 0} with the sign bit set
+     * (ZIP 216) — and additionally requires prime-order subgroup membership, which decoding
+     * alone does not establish. The identity is a valid commitment (to {@code (0, 0)}) and is
+     * accepted; a protocol that must exclude it checks {@link JubjubPoint#isIdentity()}.
+     *
+     * <p>A verifier that accepts a proof using
+     * {@code ZkPedersenCommitment.fromVerifierCheckedPublic} discharges that constructor's
+     * subgroup obligation with this method.
+     *
+     * @throws IllegalArgumentException if the bytes are not a canonical encoding of a point in
+     *         the prime-order subgroup
+     */
+    public static JubjubPoint decode(byte[] encoded) {
+        JubjubPoint point = JubjubPoint.fromBytes(encoded);
+        if (!point.isInSubgroup()) {
+            throw new IllegalArgumentException(
+                    "Pedersen commitment is not in the prime-order subgroup");
+        }
+        return point;
+    }
+
     /**
      * Verifies an opening: returns {@code true} iff {@code C == [v]·G + [r]·H}.
      *
@@ -131,8 +192,8 @@ public final class PedersenCommitment {
     }
 
     private static BigInteger[] canonicalScalars(BigInteger value, BigInteger blinding) {
-        java.util.Objects.requireNonNull(value, "value");
-        java.util.Objects.requireNonNull(blinding, "blinding");
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(blinding, "blinding");
         // Binding is to residues mod l. Canonicalisation also establishes the range required by
         // the fixed secret schedule used by commit().
         return new BigInteger[]{

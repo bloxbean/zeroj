@@ -220,6 +220,29 @@ public interface CircuitAPI {
     }
 
     /**
+     * Asserts, at circuit-definition time, that {@code v} is <b>neither</b> a declared public
+     * input <b>nor</b> a constant created by this circuit — the inverse of
+     * {@link #requirePublicOrConstant(Variable)}, with the same wire-id resolution.
+     *
+     * <p>Gadgets whose security argument needs a value the verifier does not already know —
+     * a commitment's blinding, for instance — call this to refuse the two structurally
+     * broken wirings. It is a guard rail, not a secrecy proof: a secret or intermediate wire
+     * passes even when the prover derived it from public data, and nothing here can tell.
+     *
+     * <p>The default throws, so an implementation that cannot classify wires fails closed.
+     *
+     * @throws IllegalArgumentException if {@code v} is a public input, a circuit constant, or
+     *         not a wire of this circuit at all
+     * @see <a href="../../../../../../../../docs/adr/0051-pedersen-commitment-profiles.md">ADR-0051 D2</a>
+     */
+    default void requireNotPublicOrConstant(Variable v) {
+        throw new UnsupportedOperationException(
+                "requireNotPublicOrConstant is not supported by this CircuitAPI implementation; "
+                        + "a gadget that depends on a value the verifier must not see cannot be "
+                        + "used here");
+    }
+
+    /**
      * Asserts, at circuit-definition time, that {@code decomposition} was minted by
      * <b>this</b> circuit — that the booleanity and recomposition constraints it stands for
      * were emitted into the constraint system now being built.

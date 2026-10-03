@@ -16,10 +16,11 @@ public class AnnotatedPedersenCommitment {
     void prove(
             ZkContext zk,
             @Secret @UInt(bits = 16) ZkUInt value,
-            @Secret @UInt(bits = 16) ZkUInt blinding,
+            // ADR-0051 D2: the blinding is always full width; only the value is narrow.
+            @Secret @UInt(bits = 252) ZkUInt blinding,
             @Public ZkField expectedU,
             @Public ZkField expectedV) {
-        ZkPedersen.commit(zk, value, blinding, 16)
+        ZkPedersen.commit(zk, value, blinding)
                 .assertAffineEquals(zk, expectedU, expectedV);
     }
 }
