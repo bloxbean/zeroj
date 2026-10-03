@@ -332,7 +332,8 @@ public final class JubjubPoint {
      *
      * <p>Package-private by design: the identity {@code [k + m·l]P = [k]P} is false for an
      * arbitrary mixed-order Jubjub point. Current callers use only
-     * {@link #SUBGROUP_GENERATOR} and Pedersen's cofactor-cleared {@code H}.
+     * {@link #SUBGROUP_GENERATOR}, Pedersen's cofactor-cleared {@code H}, and the
+     * {@link PedersenVectorBases}, each checked to be a subgroup point.
      * Development/test environments can additionally set
      * {@code -Dzeroj.jubjub.debugSecretSubgroupChecks=true} to verify the precondition at
      * runtime. That check performs a full subgroup multiplication and is intentionally off by

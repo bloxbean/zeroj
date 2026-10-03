@@ -182,6 +182,29 @@ The bound is computed from declared widths, `Σ coefficient·(2^width − 1)` on
 stay below `l` (about `2^251.9`). Committing 252-bit amounts and balancing them is refused. This
 example costs 8,808 constraints.
 
+**Committing to several values at once.** `pedersen-jubjub-vector-v1` commits to up to 16
+values in one point, using bases derived with Zcash's Sapling group hash. A vector commitment
+does **not** record what its indices mean or how many there are: `C([a], r)` equals
+`C([a, 0], r)`. So the meaning lives in a `PedersenVectorSchema` (an id, a version, and a label
+and bit width per index), and every proof binds the schema's digest as a public input:
+
+```java
+var schema = PedersenVectorSchema.of("acme.balance", 1,
+        List.of(new Entry("amount", 64), new Entry("asset", 32)));
+var binding = ZkPedersenVector.bindSchema(zk, schema, schemaDigest);   // public input
+var c = ZkPedersenVector.commit(zk, binding, List.of(amount, asset), blinding);
+c.assertAffineEquals(zk, u, v);
+```
+
+The verifier checks the public `schemaDigest` against the digest it expects for that
+verification key, using `PedersenSchemaRegistry`, never a value supplied with the proof. A
+commitment you receive from someone else is only meaningful together with an authenticated
+issuance record that binds its exact bytes to its schema digest. Anyone who knows an opening can
+produce a valid proof for the same point under another schema of the same shape, so a valid
+proof alone proves nothing about the original schema. Without such a record, reject the
+commitment. A 16-value commitment costs 8,261 constraints; see
+`docs/benchmarks/pedersen-vector-2026-10-03.md` for proving times.
+
 **EdDSA-Jubjub verification** comes in two named entry points, because whether the public key
 needs an in-circuit subgroup check depends on your protocol:
 

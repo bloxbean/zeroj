@@ -106,6 +106,18 @@ class CircuitAPIImpl implements CircuitAPI {
     }
 
     @Override
+    public void requirePublicInput(Variable v) {
+        Objects.requireNonNull(v, "v");
+        for (Variable pub : publicInputs) {
+            if (pub.id() == v.id()) return;
+        }
+        throw new IllegalArgumentException(
+                "Variable " + v + " must be a declared public input, but wire " + v.id()
+                        + " is not. A value the verifier compares with its own expected value "
+                        + "must be in the public statement (ADR-0051 D5).");
+    }
+
+    @Override
     public void requireNotPublicOrConstant(Variable v) {
         Objects.requireNonNull(v, "v");
         // Same wire-id resolution as requirePublicOrConstant: a name can be fabricated, an

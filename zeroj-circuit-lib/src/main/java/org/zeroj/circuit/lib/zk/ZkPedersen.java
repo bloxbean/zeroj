@@ -253,7 +253,7 @@ public final class ZkPedersen {
         }
     }
 
-    private static void requireBlindingWidth(int bits) {
+    static void requireBlindingWidth(int bits) {
         if (bits != BLINDING_BITS) {
             throw new IllegalArgumentException(
                     "blinding must be declared at exactly " + BLINDING_BITS + " bits, got " + bits
@@ -263,7 +263,7 @@ public final class ZkPedersen {
         }
     }
 
-    private static void assertCanonicalScalar(ZkContext zk, Variable scalar) {
+    static void assertCanonicalScalar(ZkContext zk, Variable scalar) {
         var api = zk.builder().api();
         api.assertEqual(
                 api.lessThan(scalar, api.constant(JubjubCurve.SUBGROUP_ORDER), MAX_SCALAR_BITS),

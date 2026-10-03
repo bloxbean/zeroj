@@ -243,6 +243,25 @@ public interface CircuitAPI {
     }
 
     /**
+     * Asserts, at circuit-definition time, that {@code v} is a <b>declared public input</b> — not
+     * a constant, a secret input, or a derived wire — with the same wire-id resolution as
+     * {@link #requirePublicOrConstant(Variable)}.
+     *
+     * <p>Used where a value must appear in the proof's public statement so the verifier can
+     * compare it with an expected value from its own configuration, for example a vector
+     * schema digest (ADR-0051 D5). A circuit constant is in the verification key but not in the
+     * public inputs, so the verifier cannot check it against its registry.
+     *
+     * <p>The default throws, so an implementation that cannot classify wires fails closed.
+     *
+     * @throws IllegalArgumentException if {@code v} is not a declared public input of this circuit
+     */
+    default void requirePublicInput(Variable v) {
+        throw new UnsupportedOperationException(
+                "requirePublicInput is not supported by this CircuitAPI implementation");
+    }
+
+    /**
      * Asserts, at circuit-definition time, that {@code decomposition} was minted by
      * <b>this</b> circuit — that the booleanity and recomposition constraints it stands for
      * were emitted into the constraint system now being built.
