@@ -283,6 +283,27 @@ public interface CircuitAPI {
     }
 
     /**
+     * The bit-vector form of {@link #requireHidingRange}: requires that the circuit never forces
+     * any of {@code bits} to zero through a range it records — checked now and again when the
+     * circuit is frozen.
+     *
+     * <p>Two kinds of recorded provenance are followed. A bit minted by {@link #decompose} keeps
+     * its source wire, which must then keep a {@code minBits}-bit range. A bit that appears in a
+     * {@link #fromBinary} recomposition whose result is range-confined to {@code b} bits is forced
+     * to zero when it sits at position {@code b} or above, which is rejected. Constraints of other
+     * kinds (an equality with a narrow wire, for example) are not followed; bits with no recorded
+     * provenance are the caller's responsibility.
+     *
+     * <p>The default throws, so an implementation that does not track provenance fails closed.
+     *
+     * @throws IllegalArgumentException if a recorded range already confines one of the bits
+     */
+    default void requireHidingBits(Variable[] bits, int minBits) {
+        throw new UnsupportedOperationException(
+                "requireHidingBits is not supported by this CircuitAPI implementation");
+    }
+
+    /**
      * Asserts, at circuit-definition time, that {@code decomposition} was minted by
      * <b>this</b> circuit — that the booleanity and recomposition constraints it stands for
      * were emitted into the constraint system now being built.

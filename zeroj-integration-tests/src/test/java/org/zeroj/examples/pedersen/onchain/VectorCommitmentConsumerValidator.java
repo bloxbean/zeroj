@@ -36,9 +36,13 @@ import java.math.BigInteger;
  *       inline datum is {@code IssuanceRecord(u, v, σ)}. Because the token name commits to the
  *       record, holding one record's token cannot vouch for another commitment or schema. No such
  *       record, no spend (fail closed).</li>
- *   <li><b>Authorization and replay:</b> the claim's beneficiary must sign; a claim is an unspent
- *       output and is redeemed once; exactly one input may come from this script address, so one
- *       presentation cannot satisfy several claims.</li>
+ *   <li><b>Authorization and one claim per transaction:</b> the claim's beneficiary must sign; a
+ *       claim is an unspent output and is redeemed once; exactly one input in the transaction may
+ *       be locked by this script's payment credential (whatever its staking credential), so one
+ *       presentation cannot satisfy several claims in the same transaction. This is not global
+ *       proof non-reuse: a valid proof for {@code (u, v)} can redeem another claim on the same
+ *       commitment and beneficiary in a later transaction. Preventing that needs an application
+ *       rule such as a nullifier or a one-time issuance record.</li>
  *   <li><b>Canonical inputs:</b> {@code σ}, {@code u} and {@code v} must be field elements.</li>
  * </ul>
  * The issuing policy is assumed to mint a record token only after its own checks (in the E2E
@@ -75,9 +79,12 @@ public class VectorCommitmentConsumerValidator {
         var ownInputOptional = ContextsLib.findOwnInput(ctx);
         if (ownInputOptional.isEmpty()) return false;
         TxInInfo ownInput = ownInputOptional.get();
+        // Count by payment credential, not full address: the same script under another staking
+        // credential is still this script, and must not let a second claim share the proof.
         int scriptInputs = 0;
         for (TxInInfo input : ctx.txInfo().inputs()) {
-            if (Builtins.equalsData(input.resolved().address(), ownInput.resolved().address())) {
+            if (Builtins.equalsData(input.resolved().address().credential(),
+                    ownInput.resolved().address().credential())) {
                 scriptInputs = scriptInputs + 1;
             } else {
                 scriptInputs = scriptInputs;

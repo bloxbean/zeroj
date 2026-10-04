@@ -7,7 +7,9 @@ import org.julclang.ledger.Address;
 import org.julclang.ledger.Credential;
 import org.julclang.ledger.OutputDatum;
 import org.julclang.ledger.PolicyId;
+import org.julclang.ledger.PubKeyHash;
 import org.julclang.ledger.ScriptHash;
+import org.julclang.ledger.StakingCredential;
 import org.julclang.ledger.TokenName;
 import org.julclang.ledger.TxInInfo;
 import org.julclang.ledger.TxOut;
@@ -74,7 +76,7 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
 
     /** What a spend presents: the claim datum fields, the proof, and the context around them. */
     record Spend(BigInteger claimU, BigInteger claimV, Presentation proof, byte[] piAOverride,
-                 boolean signed, boolean extraScriptInput, TxOut... references) {}
+                 boolean signed, boolean extraScriptInput, boolean extraStakedInput, TxOut... references) {}
 
     @BeforeAll
     static void setup() throws Exception {
@@ -137,17 +139,19 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
     void contextBindingRejected() {
         var otherClaim = PedersenVectorCommitment.commit(A, opening.values(), opening.blinding().add(BigInteger.TWO));
         rejected(consumerA, context(new Spend(otherClaim.point().affineU(), otherClaim.point().affineV(),
-                honestA, null, true, false, record(otherClaim, A))), "proof replayed against another claim");
-        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, false, false, record(issued, A))),
+                honestA, null, true, false, false, record(otherClaim, A))), "proof replayed against another claim");
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, false, false, false, record(issued, A))),
                 "missing beneficiary signature");
-        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, true, true, record(issued, A))),
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, true, true, false, record(issued, A))),
                 "a second input from the script address");
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, true, false, true, record(issued, A))),
+                "a second claim under the same script with a different staking credential");
         BigInteger nonCanonicalU = u(issued).add(JubjubCurve.BASE_FIELD_PRIME);
-        rejected(consumerA, context(new Spend(nonCanonicalU, v(issued), honestA, null, true, false, record(issued, A))),
+        rejected(consumerA, context(new Spend(nonCanonicalU, v(issued), honestA, null, true, false, false, record(issued, A))),
                 "non-canonical claim coordinate");
         byte[] tampered = ProverToCardano.compressProof(honestA.proof()).piA().clone();
         tampered[tampered.length - 1] ^= 1;
-        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, tampered, true, false, record(issued, A))),
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, tampered, true, false, false, record(issued, A))),
                 "tampered proof");
     }
 
@@ -187,7 +191,7 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
     }
 
     private static Spend spend(Presentation p, TxOut... references) {
-        return new Spend(u(issued), v(issued), p, null, true, false, references);
+        return new Spend(u(issued), v(issued), p, null, true, false, false, references);
     }
 
     private static TxOut record(PedersenVectorCommitment c, PedersenVectorSchema schema) {
@@ -219,6 +223,13 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
         if (s.signed()) builder.signer(BENEFICIARY);
         if (s.extraScriptInput()) {
             builder.input(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(), own));
+        }
+        if (s.extraStakedInput()) {
+            // Same script payment credential, different staking credential, same claim datum.
+            Address staked = new Address(CONSUMER.credential(), Optional.of(new StakingCredential.StakingHash(
+                    new Credential.PubKeyCredential(PubKeyHash.of(filled(28, (byte) 0x5a))))));
+            builder.input(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(),
+                    new TxOut(staked, own.value(), own.datum(), Optional.empty())));
         }
         for (TxOut reference : s.references()) {
             builder.referenceInput(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(), reference));

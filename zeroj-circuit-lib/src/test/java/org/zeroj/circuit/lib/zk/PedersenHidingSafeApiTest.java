@@ -165,6 +165,61 @@ class PedersenHidingSafeApiTest {
                 }));
     }
 
+    /**
+     * Review finding (PR #73, implementation round 1): converting an owned decomposition to its
+     * bit array lost the source's range. The reviewer's probe — a 16-bit decomposition of r next to
+     * {@code toBinary(r, 252)} — produced a valid witness for a brute-forceable commitment.
+     */
+    @Test
+    @DisplayName("Raw bits: a range-confined decomposition source is rejected, before or after the commit")
+    void rawBitsFollowDecompositionSource() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("raw-before")
+                .secretVar("amount").secretVar("r")
+                .define(api -> {
+                    api.decompose(api.var("r"), 16);
+                    InCircuitPedersen.commit(api,
+                            api.toBinary(api.var("amount"), 8), api.toBinary(api.var("r"), FULL));
+                }), "narrowed before the commit");
+        IllegalArgumentException after = assertThrows(IllegalArgumentException.class,
+                () -> CircuitBuilder.create("raw-after")
+                        .secretVar("amount").secretVar("r")
+                        .define(api -> {
+                            InCircuitPedersen.commit(api,
+                                    api.toBinary(api.var("amount"), 8), api.toBinary(api.var("r"), FULL));
+                            api.decompose(api.var("r"), 16);
+                        }), "narrowed after the commit, caught at freeze");
+        assertTrue(after.getMessage().contains("hiding"), after.getMessage());
+        assertDoesNotThrow(() -> CircuitBuilder.create("raw-ok")
+                .secretVar("amount").secretVar("r")
+                .define(api -> InCircuitPedersen.commit(api,
+                        api.toBinary(api.var("amount"), 8), api.toBinary(api.var("r"), FULL))));
+    }
+
+    @Test
+    @DisplayName("commitBits: a range-confined recomposition of the blinding bits is rejected, before or after")
+    void commitBitsFollowRecomposition() {
+        assertThrows(IllegalArgumentException.class, () -> bitsCircuit(true, false), "narrowed before");
+        assertThrows(IllegalArgumentException.class, () -> bitsCircuit(false, true), "narrowed after, at freeze");
+        assertDoesNotThrow(() -> bitsCircuit(false, false));
+    }
+
+    /** commitBits over 4 value bits and 252 secret blinding bits, optionally confining Σ bits to 16 bits. */
+    private static void bitsCircuit(boolean narrowBefore, boolean narrowAfter) {
+        var builder = CircuitBuilder.create("bits-narrow-" + narrowBefore + narrowAfter);
+        for (int i = 0; i < 4; i++) builder.secretVar("vb_" + i);
+        for (int i = 0; i < FULL; i++) builder.secretVar("rb_" + i);
+        builder.defineSignals(c -> {
+            var zk = new ZkContext(c);
+            var value = ZkBits.secret(c, "vb", 4);
+            var blinding = ZkBits.secret(c, "rb", FULL);
+            Variable[] blindingVars = new Variable[FULL];
+            for (int i = 0; i < FULL; i++) blindingVars[i] = blinding.get(i).signal().variable();
+            if (narrowBefore) c.api().decompose(c.api().fromBinary(blindingVars), 16);
+            ZkPedersen.commitBits(zk, value, blinding);
+            if (narrowAfter) c.api().decompose(c.api().fromBinary(blindingVars), 16);
+        });
+    }
+
     @Test
     @DisplayName("A raw blinding vector may not repeat a wire or share one with the value")
     void repeatedOrSharedBlindingBitsRejected() {

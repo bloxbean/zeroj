@@ -29,10 +29,14 @@ import java.util.Set;
  * blinding and a {@code j}-bit value are recovered from the public commitment by enumerating
  * {@code 2^(j+k)} candidates. The blinding wire must also not be range-confined below 252 bits
  * anywhere in the circuit ({@code CircuitAPI.requireHidingRange}, re-checked when the circuit is
- * frozen), and a raw blinding vector may not repeat a wire or share one with the value. These
- * checks are guard rails, not a secrecy proof: a secret wire the prover derived from public data
- * still passes. Only the value keeps a caller-chosen width, which is where the cost savings
- * belong.
+ * frozen). For a raw blinding bit vector the same holds through its recorded provenance
+ * ({@code CircuitAPI.requireHidingBits}): each bit's decomposition source must keep a 252-bit
+ * range, and no range-confined recomposition may force one of the bits to zero; the vector may not
+ * repeat a wire or share one with the value. These checks are guard rails, not a secrecy proof:
+ * a secret wire the prover derived from public data still passes, and bits constrained by other
+ * kinds of constraint (for example an equality with a narrow wire) are the caller's
+ * responsibility. Prefer the scalar or decomposition overloads. Only the value keeps a
+ * caller-chosen width, which is where the cost savings belong.
  *
  * <h2>Use cases</h2>
  * <ul>
@@ -85,6 +89,9 @@ public final class InCircuitPedersen {
         for (Variable bit : blindBits) {
             api.requireNotPublicOrConstant(bit);
         }
+        // Converting a decomposition to its bit array must not drop the range check: follow each
+        // bit back to its decomposition source, and to any range-confined recomposition of it.
+        api.requireHidingBits(blindBits, BLINDING_BITS);
         InCircuitJubjub.Point vG = InCircuitJubjub.scalarMulFixedBase(
                 api, JubjubPoint.SUBGROUP_GENERATOR, valueBits);
         InCircuitJubjub.Point rH = InCircuitJubjub.scalarMulFixedBase(

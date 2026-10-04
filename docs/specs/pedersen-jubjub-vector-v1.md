@@ -1,8 +1,9 @@
 # ZeroJ Pedersen-Jubjub Vector v1 — Normative Specification
 
 **Profile identifier:** `pedersen-jubjub-vector-v1`
-**Status:** Candidate, implemented. This is the ADR-0051 M3 entry gate. The implementation is on
-PR #73 with the spec, and both await review; the spec governs if they disagree.
+**Status:** Normative for `pedersen-jubjub-vector-v1`. The ADR-0051 M3 entry-gate review on PR #73
+(at `b5b486b`) raised no outstanding objection to this specification. That is design review, not a
+security certification; the spec governs if it and the implementation disagree.
 **Date:** 2026-10-03
 
 This document defines a Pedersen commitment to up to 16 values at once on Jubjub, together with

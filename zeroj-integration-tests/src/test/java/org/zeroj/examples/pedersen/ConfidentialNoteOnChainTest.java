@@ -6,7 +6,9 @@ import org.julclang.ledger.Address;
 import org.julclang.ledger.Credential;
 import org.julclang.ledger.DatumHash;
 import org.julclang.ledger.OutputDatum;
+import org.julclang.ledger.PubKeyHash;
 import org.julclang.ledger.ScriptHash;
+import org.julclang.ledger.StakingCredential;
 import org.julclang.ledger.TxInInfo;
 import org.julclang.ledger.TxOut;
 import org.julclang.ledger.TxOutRef;
@@ -126,8 +128,8 @@ class ConfidentialNoteOnChainTest extends ContractTest {
 
     enum Mutation {
         NONE, MISSING_SIGNER, TAMPERED_PROOF, SWAPPED_OUTPUTS, OUTPUT_COMMITMENT, CONSUMED_DATUM,
-        EXTRA_SCRIPT_INPUT, THREE_OUTPUTS, ONE_OUTPUT, OUTPUT_DATUM_HASH, NON_CANONICAL_INPUT,
-        NON_CANONICAL_OUTPUT
+        EXTRA_SCRIPT_INPUT, EXTRA_STAKED_SCRIPT_INPUT, THREE_OUTPUTS, ONE_OUTPUT, OUTPUT_DATUM_HASH,
+        NON_CANONICAL_INPUT, NON_CANONICAL_OUTPUT
     }
 
     @Test
@@ -266,6 +268,13 @@ class ConfidentialNoteOnChainTest extends ContractTest {
         if (mutation == Mutation.EXTRA_SCRIPT_INPUT) {
             Note other = Note.of(OWNER, 1_000);
             builder.input(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(), txOut(noteDatumOutput(other))));
+        }
+        if (mutation == Mutation.EXTRA_STAKED_SCRIPT_INPUT) {
+            // Same script payment credential, different staking credential.
+            Address staked = new Address(SCRIPT_ADDRESS.credential(), Optional.of(new StakingCredential.StakingHash(
+                    new Credential.PubKeyCredential(PubKeyHash.of(filled(28, (byte) 0x5a))))));
+            builder.input(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(),
+                    new TxOut(staked, NOTE_VALUE, noteDatumOutput(Note.of(OWNER, 1_000)), Optional.empty())));
         }
         return builder.buildPlutusData();
     }

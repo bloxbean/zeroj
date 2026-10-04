@@ -32,8 +32,8 @@ import java.math.BigInteger;
  *   <li><b>Authorization:</b> the consumed note's owner must sign.</li>
  *   <li><b>State binding:</b> the input commitment comes from the consumed datum; the output
  *       commitments from the continuing outputs. A proof for other commitments fails.</li>
- *   <li><b>Double satisfaction:</b> exactly one input from this script address, so two notes
- *       cannot share one pair of outputs.</li>
+ *   <li><b>Double satisfaction:</b> exactly one input locked by this script's payment credential
+ *       (whatever its staking credential), so two notes cannot be spent in one transaction.</li>
  *   <li><b>Spend once:</b> a note is an unspent output and can be consumed once.</li>
  *   <li><b>Canonical inputs:</b> every public input is checked to be a field element.</li>
  * </ul>
@@ -80,9 +80,12 @@ public class ConfidentialNoteValidator {
         TxInInfo ownInput = ownInputOptional.get();
         if (!hasNoteDatum(ownInput.resolved(), datum.owner(), datum.u(), datum.v())) return false;
 
+        // Count by payment credential, not full address, so notes held under different staking
+        // credentials cannot be spent side by side.
         int scriptInputs = 0;
         for (TxInInfo input : ctx.txInfo().inputs()) {
-            if (Builtins.equalsData(input.resolved().address(), ownInput.resolved().address())) {
+            if (Builtins.equalsData(input.resolved().address().credential(),
+                    ownInput.resolved().address().credential())) {
                 scriptInputs = scriptInputs + 1;
             } else {
                 scriptInputs = scriptInputs;

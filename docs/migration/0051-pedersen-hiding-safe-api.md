@@ -21,7 +21,7 @@ value. At 16 bits this takes seconds (see `PedersenHidingSafeApiTest`).
 | any blinding width | the blinding must be exactly **252** bits (`ZkPedersen.BLINDING_BITS`) |
 | any blinding wire | a blinding that is directly a public input or a circuit constant is rejected |
 | declared width only | a blinding wire the circuit range-confines below 252 bits anywhere — including a narrower `ZkUInt` re-wrapped at 252, or a decomposition added after `commit` — is rejected (checked again when the circuit is frozen) |
-| any raw blinding vector | a raw blinding bit vector may not repeat a wire or share one with the value |
+| any raw blinding vector | a raw blinding bit vector may not repeat a wire or share one with the value, and its recorded provenance is followed: a bit whose decomposition source is range-confined below 252 bits, or that a range-confined recomposition forces to zero, is rejected (now and when the circuit is frozen) |
 | — | new `PedersenCommitment.randomBlinding(SecureRandom)` |
 
 The value keeps its own declared width (1–252), which is also its range proof.
