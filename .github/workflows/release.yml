@@ -304,13 +304,22 @@ jobs:
           ./gradlew :zeroj-tools:nativeDistZip -Pplatform="$PLATFORM" --no-daemon
           "zeroj-tools/build/native/zeroj-ceremony${EXT}" --version
 
-      - name: Upload ceremony CLI distributables
+      - name: Upload the native zip
         uses: actions/upload-artifact@v4
         with:
           name: ceremony-cli-${{ matrix.os }}
-          path: |
-            ${{ matrix.fatjar == true && 'zeroj-tools/build/libs/zeroj-ceremony-*-all.jar' || '' }}
-            zeroj-tools/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+          path: zeroj-tools/build/distributions/zeroj-ceremony-*-${{ matrix.os }}.zip
+          if-no-files-found: error
+
+      # Its own artifact. Uploaded together with the zip, both files would keep their paths below the common
+      # parent (libs/, distributions/), and `files: dist/*` in the github-release job skips directories:
+      # 0.1.0-pre12 shipped without the fat jar and the linux-x86_64 zip that way.
+      - name: Upload the fat jar
+        if: matrix.fatjar
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceremony-cli-jar
+          path: zeroj-tools/build/libs/zeroj-ceremony-*-all.jar
           if-no-files-found: error
 
   # ================================================================
