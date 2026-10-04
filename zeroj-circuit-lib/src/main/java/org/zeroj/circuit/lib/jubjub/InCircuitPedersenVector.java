@@ -60,6 +60,7 @@ public final class InCircuitPedersenVector {
                     + InCircuitPedersen.BLINDING_BITS + ", got " + blinding.width() + " (ADR-0051 D2)");
         }
         api.requireNotPublicOrConstant(blinding.source());
+        api.requireHidingRange(blinding.source(), InCircuitPedersen.BLINDING_BITS);
 
         InCircuitJubjub.Point acc = null;
         for (int i = 0; i < values.size(); i++) {

@@ -4,7 +4,9 @@ import org.zeroj.circuit.BitDecomposition;
 import org.zeroj.circuit.CircuitAPI;
 import org.zeroj.circuit.Variable;
 
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * In-circuit Pedersen commitment gadgets ({@code pedersen-jubjub-v1}, see
@@ -25,9 +27,12 @@ import java.util.Objects;
  * width — exactly {@value #BLINDING_BITS} bits — and refuses a blinding wired directly to a
  * public input or a circuit constant. A narrower blinding cannot hide anything: a {@code k}-bit
  * blinding and a {@code j}-bit value are recovered from the public commitment by enumerating
- * {@code 2^(j+k)} candidates. The provenance check is a guard rail, not a secrecy proof: a
- * secret wire the prover derived from public data still passes. Only the value keeps a
- * caller-chosen width, which is where the cost savings belong.
+ * {@code 2^(j+k)} candidates. The blinding wire must also not be range-confined below 252 bits
+ * anywhere in the circuit ({@code CircuitAPI.requireHidingRange}, re-checked when the circuit is
+ * frozen), and a raw blinding vector may not repeat a wire or share one with the value. These
+ * checks are guard rails, not a secrecy proof: a secret wire the prover derived from public data
+ * still passes. Only the value keeps a caller-chosen width, which is where the cost savings
+ * belong.
  *
  * <h2>Use cases</h2>
  * <ul>
@@ -76,6 +81,7 @@ public final class InCircuitPedersen {
         validateScalarBits(blindBits, "blindBits");
         validateValueWidth(valueBits.length);
         validateBlindingWidth(blindBits.length);
+        requireDistinctBlindingBits(valueBits, blindBits);
         for (Variable bit : blindBits) {
             api.requireNotPublicOrConstant(bit);
         }
@@ -116,6 +122,7 @@ public final class InCircuitPedersen {
         validateValueWidth(value.width());
         validateBlindingWidth(blinding.width());
         api.requireNotPublicOrConstant(blinding.source());
+        api.requireHidingRange(blinding.source(), BLINDING_BITS);
         InCircuitJubjub.Point vG = InCircuitJubjub.scalarMulFixedBase(
                 api, JubjubPoint.SUBGROUP_GENERATOR, value.bits());
         InCircuitJubjub.Point rH = InCircuitJubjub.scalarMulFixedBase(
@@ -142,9 +149,31 @@ public final class InCircuitPedersen {
         Objects.requireNonNull(blinding, "blinding");
         validateValueWidth(valueBits);
         api.requireNotPublicOrConstant(blinding);
+        api.requireHidingRange(blinding, BLINDING_BITS);
         Variable[] valueBitVector = api.toBinary(value, valueBits);
         Variable[] blindBitVector = api.toBinary(blinding, BLINDING_BITS);
         return commit(api, valueBitVector, blindBitVector);
+    }
+
+    /**
+     * A raw blinding vector has no source wire whose range could be checked, so at least refuse
+     * the structural ways of collapsing its entropy: the same wire at two positions, or a wire
+     * shared with the value.
+     */
+    private static void requireDistinctBlindingBits(Variable[] valueBits, Variable[] blindBits) {
+        Set<Integer> seen = new HashSet<>();
+        for (Variable bit : blindBits) {
+            if (!seen.add(bit.id())) {
+                throw new IllegalArgumentException("blinding bit wire " + bit.id()
+                        + " appears more than once; a blinding with repeated bits cannot hide (ADR-0051 D2)");
+            }
+        }
+        for (Variable bit : valueBits) {
+            if (seen.contains(bit.id())) {
+                throw new IllegalArgumentException("wire " + bit.id()
+                        + " is used in both the value and the blinding (ADR-0051 D2)");
+            }
+        }
     }
 
     private static void validateScalarBits(Variable[] bits, String name) {

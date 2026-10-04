@@ -1,5 +1,6 @@
 package org.zeroj.examples.pedersen;
 
+import com.bloxbean.cardano.client.crypto.Blake2bUtil;
 import org.julclang.core.PlutusData;
 import org.julclang.core.Program;
 import org.julclang.ledger.Address;
@@ -19,6 +20,7 @@ import org.julclang.vm.EvalResult;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.zeroj.circuit.lib.jubjub.JubjubCurve;
 import org.zeroj.circuit.lib.jubjub.PedersenVectorCommitment;
 import org.zeroj.circuit.lib.jubjub.PedersenVectorSchema;
 import org.zeroj.circuit.lib.jubjub.PedersenVectorSchema.Entry;
@@ -39,17 +41,17 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * ADR-0051 M4: the {@code pedersen-jubjub-vector-v1} cross-schema and relabelling scenarios,
- * repeated against the on-chain consumer {@link VectorCommitmentConsumerValidator} in the Julc VM.
+ * ADR-0051 M4: the {@code pedersen-jubjub-vector-v1} statement, provenance and context bindings,
+ * against the on-chain consumer {@link VectorCommitmentConsumerValidator} in the Julc VM.
  *
- * <p>One applied validator per schema plays the verifier's registry entry (verification key and
- * expected digest are script parameters). Issuance records are reference inputs holding the
- * issuance token with inline datum {@code (u, v, σ)}.
+ * <p>One applied validator per schema plays the verifier's registry entry. Claims are locked with
+ * datum {@code Claim(beneficiary, u, v)}. Issuance records are reference inputs holding the
+ * issuer-minted token named {@code blake2b_256(u ‖ v ‖ σ)} with inline datum {@code (u, v, σ)}.
  */
 class VectorCommitmentConsumerOnChainTest extends ContractTest {
 
     private static final byte[] POLICY = filled(28, (byte) 0x1e);
-    private static final byte[] TOKEN = "pedersen-issuance".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] BENEFICIARY = filled(28, (byte) 0x0b);
     private static final Address REGISTRY = new Address(
             new Credential.ScriptCredential(ScriptHash.of(filled(28, (byte) 0x2e))), Optional.empty());
     private static final Address CONSUMER = new Address(
@@ -66,9 +68,13 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
     private static Program consumerA;
     private static Program consumerB;
     private static Opening opening;
-    private static PedersenVectorCommitment issuedUnderA;
+    private static PedersenVectorCommitment issued;
     private static Presentation honestA;
     private static Presentation adversaryB;
+
+    /** What a spend presents: the claim datum fields, the proof, and the context around them. */
+    record Spend(BigInteger claimU, BigInteger claimV, Presentation proof, byte[] piAOverride,
+                 boolean signed, boolean extraScriptInput, TxOut... references) {}
 
     @BeforeAll
     static void setup() throws Exception {
@@ -79,67 +85,96 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
         consumerB = self.consumer(B, deployB);
 
         opening = PedersenVectorSchemaBindingTest.opening();
-        issuedUnderA = PedersenVectorCommitment.commit(A, opening.values(), opening.blinding());
-        honestA = PedersenVectorSchemaBindingTest.prove(deployA, A.digest(), issuedUnderA, opening);
+        issued = PedersenVectorCommitment.commit(A, opening.values(), opening.blinding());
+        honestA = PedersenVectorSchemaBindingTest.prove(deployA, A.digest(), issued, opening);
         var relabelled = PedersenVectorCommitment.commit(B, opening.values(), opening.blinding());
         adversaryB = PedersenVectorSchemaBindingTest.prove(deployB, B.digest(), relabelled, opening);
     }
 
     @Test
-    @DisplayName("Honest: a commitment issued under A, presented to A's consumer with its record, is accepted")
+    @DisplayName("Honest: a claim on a commitment issued under A, redeemed at A's consumer with its record, is accepted")
     void honestAccepted() {
-        var result = evaluate(consumerA, context(honestA, record(issuedUnderA, A, true)));
+        var result = evaluate(consumerA, context(honest(record(issued, A))));
         assertSuccess(result);
         System.out.println("[VectorCommitmentConsumerValidator] budget consumed: " + result.budgetConsumed());
     }
 
     @Test
-    @DisplayName("Cross-schema: a proof made under B is rejected by A's consumer, record or not")
+    @DisplayName("Cross-schema: a proof made under B is rejected by A's consumer")
     void crossSchemaRejected() {
-        rejected(consumerA, context(adversaryB, record(issuedUnderA, A, true)), "B proof at A's consumer");
-        rejected(consumerA, context(adversaryB, record(issuedUnderA, B, true)), "B proof with a B record at A's consumer");
+        rejected(consumerA, spend(adversaryB, record(issued, A)), "B proof at A's consumer");
+        rejected(consumerA, spend(adversaryB, record(issued, B)), "B proof with a B record at A's consumer");
     }
 
     @Test
     @DisplayName("Relabelling: a fresh valid B proof for a commitment issued under A is rejected by B's consumer")
     void relabellingRejected() {
-        rejected(consumerB, context(adversaryB, record(issuedUnderA, A, true)), "record binds the commitment to A");
-        rejected(consumerB, context(adversaryB, null), "no record: fail closed");
-        rejected(consumerB, context(adversaryB, record(issuedUnderA, B, false)),
-                "a B-labelled record without the issuance token");
+        rejected(consumerB, spend(adversaryB, record(issued, A)), "the only record binds the commitment to A");
+        rejected(consumerB, spend(adversaryB), "no record: fail closed");
     }
 
     @Test
     @DisplayName("Control: the same commitment genuinely issued under B is accepted by B's consumer")
     void genuineBIssuanceAccepted() {
-        assertSuccess(evaluate(consumerB, context(adversaryB, record(issuedUnderA, B, true))));
+        assertSuccess(evaluate(consumerB, context(spend(adversaryB, record(issued, B)))));
     }
 
     @Test
-    @DisplayName("A record for a different commitment, or a tampered proof, is rejected")
-    void otherMismatchesRejected() {
-        var other = PedersenVectorCommitment.commit(A, opening.values(),
-                opening.blinding().add(BigInteger.ONE));
-        rejected(consumerA, context(honestA, record(other, A, true)), "record for another commitment");
-        byte[] proofBytesTampered = ProverToCardano.compressProof(honestA.proof()).piA().clone();
-        proofBytesTampered[proofBytesTampered.length - 1] ^= 1;
-        rejected(consumerA, context(honestA, record(issuedUnderA, A, true), proofBytesTampered), "tampered proof");
+    @DisplayName("Forged or moved records are rejected: fungible token name, token for another record, altered datum")
+    void forgedRecordsRejected() {
+        byte[] genericName = "pedersen-issuance".getBytes(StandardCharsets.US_ASCII);
+        rejected(consumerA, spend(honestA, recordWith(genericName, issued, A)), "generic token name");
+        var other = PedersenVectorCommitment.commit(A, opening.values(), opening.blinding().add(BigInteger.ONE));
+        // The other record's token, moved to an output whose datum names this commitment.
+        rejected(consumerA, spend(honestA, recordWith(tokenName(other, A), issued, A)), "token of another record");
+        // This record's token, but a datum altered to another commitment.
+        rejected(consumerA, spend(honestA, recordWith(tokenName(issued, A), other, A)), "altered datum");
+        rejected(consumerA, spend(honestA, record(other, A)), "record for another commitment only");
+    }
+
+    @Test
+    @DisplayName("Context binding: replay against another claim, missing signer, extra script input, non-canonical datum")
+    void contextBindingRejected() {
+        var otherClaim = PedersenVectorCommitment.commit(A, opening.values(), opening.blinding().add(BigInteger.TWO));
+        rejected(consumerA, context(new Spend(otherClaim.point().affineU(), otherClaim.point().affineV(),
+                honestA, null, true, false, record(otherClaim, A))), "proof replayed against another claim");
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, false, false, record(issued, A))),
+                "missing beneficiary signature");
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, null, true, true, record(issued, A))),
+                "a second input from the script address");
+        BigInteger nonCanonicalU = u(issued).add(JubjubCurve.BASE_FIELD_PRIME);
+        rejected(consumerA, context(new Spend(nonCanonicalU, v(issued), honestA, null, true, false, record(issued, A))),
+                "non-canonical claim coordinate");
+        byte[] tampered = ProverToCardano.compressProof(honestA.proof()).piA().clone();
+        tampered[tampered.length - 1] ^= 1;
+        rejected(consumerA, context(new Spend(u(issued), v(issued), honestA, tampered, true, false, record(issued, A))),
+                "tampered proof");
     }
 
     // ------------------------------------------------------------------
     //  Harness
     // ------------------------------------------------------------------
 
+    /** {@code blake2b_256(I2OSP32(u) ‖ I2OSP32(v) ‖ I2OSP32(σ))}, as the validator computes it. */
+    static byte[] tokenName(PedersenVectorCommitment c, PedersenVectorSchema schema) {
+        byte[] preimage = new byte[96];
+        put32(preimage, 0, c.point().affineU());
+        put32(preimage, 32, c.point().affineV());
+        put32(preimage, 64, schema.digest());
+        return Blake2bUtil.blake2bHash256(preimage);
+    }
+
     private Program consumer(PedersenVectorSchema schema, Deployment d) {
         SnarkjsToCardano.VkCompressed vk = ProverToCardano.compressVk(d.keys());
         PlutusData[] ic = new PlutusData[vk.ic().size()];
         for (int i = 0; i < ic.length; i++) ic[i] = PlutusData.bytes(vk.ic().get(i));
+        byte[] digest = new byte[32];
+        put32(digest, 0, schema.digest());
         return compileValidator(VectorCommitmentConsumerValidator.class, Path.of("src/test/java"))
                 .program()
                 .applyParams(
-                        PlutusData.bytes(digestBytes(schema)),
+                        PlutusData.bytes(digest),
                         PlutusData.bytes(POLICY),
-                        PlutusData.bytes(TOKEN),
                         PlutusData.bytes(vk.alpha()),
                         PlutusData.bytes(vk.beta()),
                         PlutusData.bytes(vk.gamma()),
@@ -147,42 +182,52 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
                         PlutusData.list(ic));
     }
 
-    /** An issuance record output: optionally holding the issuance token, datum (u, v, σ). */
-    private static TxOut record(PedersenVectorCommitment c, PedersenVectorSchema recordedSchema, boolean withToken) {
-        Value value = Value.lovelace(BigInteger.valueOf(2_000_000));
-        if (withToken) {
-            value = value.merge(Value.singleton(PolicyId.of(POLICY), TokenName.of(TOKEN), BigInteger.ONE));
-        }
+    private static Spend honest(TxOut... references) {
+        return spend(honestA, references);
+    }
+
+    private static Spend spend(Presentation p, TxOut... references) {
+        return new Spend(u(issued), v(issued), p, null, true, false, references);
+    }
+
+    private static TxOut record(PedersenVectorCommitment c, PedersenVectorSchema schema) {
+        return recordWith(tokenName(c, schema), c, schema);
+    }
+
+    private static TxOut recordWith(byte[] tokenName, PedersenVectorCommitment c, PedersenVectorSchema schema) {
+        Value value = Value.lovelace(BigInteger.valueOf(2_000_000))
+                .merge(Value.singleton(PolicyId.of(POLICY), TokenName.of(tokenName), BigInteger.ONE));
         PlutusData datum = PlutusData.constr(0,
-                PlutusData.integer(c.point().affineU()),
-                PlutusData.integer(c.point().affineV()),
-                PlutusData.integer(recordedSchema.digest()));
+                PlutusData.integer(u(c)), PlutusData.integer(v(c)), PlutusData.integer(schema.digest()));
         return new TxOut(REGISTRY, value, new OutputDatum.OutputDatumInline(datum), Optional.empty());
     }
 
-    private PlutusData context(Presentation p, TxOut recordOutput) {
-        return context(p, recordOutput, null);
-    }
-
-    private PlutusData context(Presentation p, TxOut recordOutput, byte[] piAOverride) {
-        var compressed = ProverToCardano.compressProof(p.proof());
+    private PlutusData context(Spend s) {
+        var compressed = ProverToCardano.compressProof(s.proof().proof());
         PlutusData redeemer = PlutusData.constr(0,
-                PlutusData.integer(p.publicInputs()[1]),
-                PlutusData.integer(p.publicInputs()[2]),
-                PlutusData.bytes(piAOverride != null ? piAOverride : compressed.piA()),
+                PlutusData.bytes(s.piAOverride() != null ? s.piAOverride() : compressed.piA()),
                 PlutusData.bytes(compressed.piB()),
                 PlutusData.bytes(compressed.piC()));
+        PlutusData claim = PlutusData.constr(0,
+                PlutusData.bytes(BENEFICIARY), PlutusData.integer(s.claimU()), PlutusData.integer(s.claimV()));
         TxOutRef ownRef = TestDataBuilder.randomTxOutRef_typed();
-        PlutusData unit = PlutusData.constr(0);
         TxOut own = new TxOut(CONSUMER, Value.lovelace(BigInteger.valueOf(2_000_000)),
-                new OutputDatum.OutputDatumInline(unit), Optional.empty());
-        ScriptContextTestBuilder builder = spendingContext(ownRef, unit)
+                new OutputDatum.OutputDatumInline(claim), Optional.empty());
+        ScriptContextTestBuilder builder = spendingContext(ownRef, claim)
                 .input(new TxInInfo(ownRef, own))
                 .redeemer(redeemer);
-        if (recordOutput != null) {
-            builder.referenceInput(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(), recordOutput));
+        if (s.signed()) builder.signer(BENEFICIARY);
+        if (s.extraScriptInput()) {
+            builder.input(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(), own));
+        }
+        for (TxOut reference : s.references()) {
+            builder.referenceInput(new TxInInfo(TestDataBuilder.randomTxOutRef_typed(), reference));
         }
         return builder.buildPlutusData();
+    }
+
+    private void rejected(Program program, Spend s, String scenario) {
+        rejected(program, context(s), scenario);
     }
 
     private void rejected(Program program, PlutusData context, String scenario) {
@@ -190,12 +235,18 @@ class VectorCommitmentConsumerOnChainTest extends ContractTest {
         assertFalse(result instanceof EvalResult.Success, scenario + " must be rejected");
     }
 
-    private static byte[] digestBytes(PedersenVectorSchema schema) {
-        byte[] raw = schema.digest().toByteArray();
-        byte[] out = new byte[32];
+    private static BigInteger u(PedersenVectorCommitment c) {
+        return c.point().affineU();
+    }
+
+    private static BigInteger v(PedersenVectorCommitment c) {
+        return c.point().affineV();
+    }
+
+    private static void put32(byte[] out, int offset, BigInteger value) {
+        byte[] raw = value.toByteArray();
         int copy = Math.min(raw.length, 32);
-        System.arraycopy(raw, raw.length - copy, out, 32 - copy, copy);
-        return out;
+        System.arraycopy(raw, raw.length - copy, out, offset + 32 - copy, copy);
     }
 
     private static byte[] filled(int length, byte value) {

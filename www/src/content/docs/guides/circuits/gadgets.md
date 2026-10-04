@@ -172,15 +172,19 @@ reach `l`, then asserts the integer relation on the committed values:
 var in1 = ZkPedersenCommitment.commit(zk, amount1, blinding1);   // 64-bit amounts,
 var in2 = ZkPedersenCommitment.commit(zk, amount2, blinding2);   // 252-bit blindings
 var out = ZkPedersenCommitment.commit(zk, amountOut, blindingOut);
-out.assertAffineEquals(zk, outU, outV);                          // published output
+in1.assertAffineEquals(zk, in1U, in1V);                          // the existing commitments
+in2.assertAffineEquals(zk, in2U, in2V);                          // being spent (public)
+out.assertAffineEquals(zk, outU, outV);                          // the new one (public)
 ZkPedersen.assertBalanced(zk,
         List.of(ZkPedersen.Term.of(in1), ZkPedersen.Term.of(in2)),
         List.of(ZkPedersen.Term.of(out), ZkPedersen.Term.amount(fee))); // fee: public 32-bit
 ```
 
-The bound is computed from declared widths, `Σ coefficient·(2^width − 1)` on each side, and must
-stay below `l` (about `2^251.9`). Committing 252-bit amounts and balancing them is refused. This
-example costs 8,808 constraints.
+Bind every commitment in the relation to the public statement, as above. An input commitment
+that is not bound to anything public lets the prover choose its amount freely, and the balance
+then proves nothing about the coins being spent. The bound is computed from declared widths,
+`Σ coefficient·(2^width − 1)` on each side, and must stay below `l` (about `2^251.9`). Committing
+252-bit amounts and balancing them is refused.
 
 **Committing to several values at once.** `pedersen-jubjub-vector-v1` commits to up to 16
 values in one point, using bases derived with Zcash's Sapling group hash. A vector commitment

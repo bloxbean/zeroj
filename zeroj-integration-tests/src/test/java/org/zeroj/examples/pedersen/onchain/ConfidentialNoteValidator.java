@@ -34,12 +34,26 @@ import java.math.BigInteger;
  *       commitments from the continuing outputs. A proof for other commitments fails.</li>
  *   <li><b>Double satisfaction:</b> exactly one input from this script address, so two notes
  *       cannot share one pair of outputs.</li>
- *   <li><b>Replay:</b> a note is an unspent output and can be consumed once; the proof is bound
- *       to its exact commitments.</li>
+ *   <li><b>Spend once:</b> a note is an unspent output and can be consumed once.</li>
  *   <li><b>Canonical inputs:</b> every public input is checked to be a field element.</li>
  * </ul>
- * Asset custody (what the notes are worth outside the commitments) is application-specific and
- * out of scope for this reference.
+ *
+ * <p><b>What it does not provide</b> — this is a reference for statement and context binding, not
+ * a complete asset system:
+ * <ul>
+ *   <li><b>No issuance control.</b> Anyone can pay to this address with any {@code Note} datum, so
+ *       conservation holds per spend ({@code in = out1 + out2}) but there is no supply guarantee:
+ *       nothing limits which input commitments exist. A real system mints notes under a policy or
+ *       state token that enforces its own rules.</li>
+ *   <li><b>The proof is bound to commitments, not to an output or an owner.</b> A proof for
+ *       {@code (in, out1, out2)} also verifies for any other note carrying the same input
+ *       commitment. Copying a victim's commitment into one's own note lets that proof split it into
+ *       the victim's output commitments — which the copier cannot open, so nothing is stolen, but
+ *       proofs are not unique to a UTxO. Bind the consumed output reference or the owner into the
+ *       statement if an application needs that.</li>
+ *   <li>Asset custody — what the notes are worth outside the commitments — is application-specific
+ *       and out of scope.</li>
+ * </ul>
  */
 @SpendingValidator
 public class ConfidentialNoteValidator {

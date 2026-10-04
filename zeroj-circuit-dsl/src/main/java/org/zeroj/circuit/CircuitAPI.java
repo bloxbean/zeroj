@@ -262,6 +262,27 @@ public interface CircuitAPI {
     }
 
     /**
+     * Requires that this circuit never proves a range for {@code v} narrower than
+     * {@code 2^minBits} — checked now, and again when the circuit is frozen, because a narrowing
+     * decomposition can be emitted after the call.
+     *
+     * <p>Used for values whose security needs their full width, such as a commitment blinding: a
+     * blinding the circuit itself confines to {@code k} bits can be brute-forced in {@code 2^k}
+     * steps from public data (ADR-0051 D2). The check covers ranges this API records (bit
+     * decompositions, including those behind {@code assertInRange} and {@code lessThan}). It is a
+     * guard rail, not a proof: other constraints, such as an equality with a narrow wire, can still
+     * restrict {@code v}.
+     *
+     * <p>The default throws, so an implementation that does not track ranges fails closed.
+     *
+     * @throws IllegalArgumentException if a narrower range is already recorded for {@code v}
+     */
+    default void requireHidingRange(Variable v, int minBits) {
+        throw new UnsupportedOperationException(
+                "requireHidingRange is not supported by this CircuitAPI implementation");
+    }
+
+    /**
      * Asserts, at circuit-definition time, that {@code decomposition} was minted by
      * <b>this</b> circuit — that the booleanity and recomposition constraints it stands for
      * were emitted into the constraint system now being built.

@@ -95,6 +95,7 @@ public final class ZkPedersenVector {
         zk.requireSignal(blinding.signal());
         ZkPedersen.requireBlindingWidth(blinding.bits());
         zk.builder().api().requireNotPublicOrConstant(blinding.signal().variable());
+        zk.builder().api().requireHidingRange(blinding.signal().variable(), ZkPedersen.BLINDING_BITS);
 
         List<BitDecomposition> valueBits = new ArrayList<>(values.size());
         for (ZkUInt value : values) {
@@ -129,7 +130,7 @@ public final class ZkPedersenVector {
     }
 
     /**
-     * Binds an unopened vector commitment with public or constant coordinates; the verifier must
+     * Binds an unopened vector commitment with public-input coordinates; the verifier must
      * check subgroup membership with {@code PedersenVectorCommitment.decode} (I4 case c).
      */
     public static ZkPedersenVectorCommitment fromVerifierCheckedPublic(ZkContext zk, SchemaBinding binding,

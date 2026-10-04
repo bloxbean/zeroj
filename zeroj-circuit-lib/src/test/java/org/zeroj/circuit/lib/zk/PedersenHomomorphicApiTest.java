@@ -136,6 +136,13 @@ class PedersenHomomorphicApiTest {
                     ZkPedersenCommitment.fromVerifierCheckedPublic(
                             zk, u.add(zk.constant(0)), ZkField.publicInput(c, "v"));
                 }));
+        JubjubPoint h = PedersenCommitment.H;
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("constant-coords")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    ZkPedersenCommitment.fromVerifierCheckedPublic(
+                            zk, zk.constant(h.affineU()), zk.constant(h.affineV()));
+                }), "a constant is not in the public statement, so no verifier can check its subgroup");
     }
 
     /**

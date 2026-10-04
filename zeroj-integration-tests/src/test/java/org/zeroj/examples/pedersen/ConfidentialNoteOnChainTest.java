@@ -126,7 +126,8 @@ class ConfidentialNoteOnChainTest extends ContractTest {
 
     enum Mutation {
         NONE, MISSING_SIGNER, TAMPERED_PROOF, SWAPPED_OUTPUTS, OUTPUT_COMMITMENT, CONSUMED_DATUM,
-        EXTRA_SCRIPT_INPUT, THREE_OUTPUTS, ONE_OUTPUT, OUTPUT_DATUM_HASH
+        EXTRA_SCRIPT_INPUT, THREE_OUTPUTS, ONE_OUTPUT, OUTPUT_DATUM_HASH, NON_CANONICAL_INPUT,
+        NON_CANONICAL_OUTPUT
     }
 
     @Test
@@ -227,10 +228,13 @@ class ConfidentialNoteOnChainTest extends ContractTest {
     private PlutusData context(Mutation mutation) {
         TxOutRef ownRef = TestDataBuilder.randomTxOutRef_typed();
         Note consumed = input;
-        PlutusData argumentDatum = noteDatum(consumed);
-        TxOut ownOutput = txOut(noteDatumOutput(mutation == Mutation.CONSUMED_DATUM
-                ? new Note(consumed.owner(), consumed.amount(), consumed.blinding(), out2.commitment())
-                : consumed));
+        PlutusData argumentDatum = mutation == Mutation.NON_CANONICAL_INPUT
+                ? nonCanonicalNoteDatum(consumed) : noteDatum(consumed);
+        TxOut ownOutput = mutation == Mutation.NON_CANONICAL_INPUT
+                ? txOut(new OutputDatum.OutputDatumInline(argumentDatum))
+                : txOut(noteDatumOutput(mutation == Mutation.CONSUMED_DATUM
+                        ? new Note(consumed.owner(), consumed.amount(), consumed.blinding(), out2.commitment())
+                        : consumed));
 
         byte[] piA = mutation == Mutation.TAMPERED_PROOF ? flipped(proof.piA()) : proof.piA();
         PlutusData redeemer = PlutusData.constr(0,
@@ -253,7 +257,11 @@ class ConfidentialNoteOnChainTest extends ContractTest {
         } else {
             builder.output(txOut(noteDatumOutput(first)));
         }
-        if (mutation != Mutation.ONE_OUTPUT) builder.output(txOut(noteDatumOutput(second)));
+        if (mutation == Mutation.NON_CANONICAL_OUTPUT) {
+            builder.output(txOut(new OutputDatum.OutputDatumInline(nonCanonicalNoteDatum(second))));
+        } else if (mutation != Mutation.ONE_OUTPUT) {
+            builder.output(txOut(noteDatumOutput(second)));
+        }
         if (mutation == Mutation.THREE_OUTPUTS) builder.output(txOut(noteDatumOutput(Note.of(OWNER, 0))));
         if (mutation == Mutation.EXTRA_SCRIPT_INPUT) {
             Note other = Note.of(OWNER, 1_000);
@@ -266,6 +274,14 @@ class ConfidentialNoteOnChainTest extends ContractTest {
         return PlutusData.constr(0,
                 PlutusData.bytes(n.owner()),
                 PlutusData.integer(n.commitment().affineU()),
+                PlutusData.integer(n.commitment().affineV()));
+    }
+
+    /** The same point with {@code u + p}: equal mod p, but not a canonical field element. */
+    private static PlutusData nonCanonicalNoteDatum(Note n) {
+        return PlutusData.constr(0,
+                PlutusData.bytes(n.owner()),
+                PlutusData.integer(n.commitment().affineU().add(JubjubCurve.BASE_FIELD_PRIME)),
                 PlutusData.integer(n.commitment().affineV()));
     }
 

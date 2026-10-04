@@ -129,6 +129,24 @@ class PedersenVectorSchemaBindingTest {
         }
     }
 
+    /**
+     * The verifier-boundary form of "a prover cannot put B's digest into A's statement": A's real
+     * proof with its digest public input replaced by B's must fail A's own pairing check.
+     */
+    @Test
+    @DisplayName("A's real proof with the digest public input swapped to B's is rejected under A's key")
+    void digestSwapRejectedUnderOwnKey() {
+        var opening = opening();
+        var c = PedersenVectorCommitment.commit(A, opening.values(), opening.blinding());
+        var proof = prove(deployA, A.digest(), c, opening);
+        for (var b : List.of(B_VERSION, B_ID, B_MEANING)) {
+            BigInteger[] swapped = proof.publicInputs().clone();
+            swapped[0] = b.digest();
+            var forged = new Presentation(proof.proofJson(), SnarkjsGroth16Json.publicJson(swapped), swapped, proof.proof());
+            assertFalse(groth16Valid(deployA, forged), b + ": digest swap must break A's proof");
+        }
+    }
+
     @Test
     @DisplayName("A width-only difference is an incompatible schema and is rejected the same way")
     void widthOnlyDifferenceRejected() {

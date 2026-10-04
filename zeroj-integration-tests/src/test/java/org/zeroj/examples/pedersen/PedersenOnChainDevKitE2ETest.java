@@ -48,7 +48,6 @@ import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import org.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,10 +61,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * <ul>
  *   <li>A confidential note is locked at {@link ConfidentialNoteValidator} and split into two
  *       notes with a pure-Java Groth16 proof; a tampered proof is rejected by the node.</li>
- *   <li>A vector commitment issued under schema A gets an issuance record (a token minted under
- *       the issuer's native-script policy, inline datum {@code (u, v, σ_A)}). A's consumer accepts
- *       the honest presentation; B's consumer rejects a fresh, valid same-shape B proof for the
- *       same commitment because the referenced record binds it to A.</li>
+ *   <li>A vector commitment issued under schema A gets an issuance record: a token named
+ *       {@code blake2b_256(u ‖ v ‖ σ_A)}, minted under the issuer's native-script policy, with
+ *       inline datum {@code (u, v, σ_A)}. Claims on that commitment are locked at A's and B's
+ *       consumers. A's consumer accepts the honest presentation; B's consumer rejects a fresh,
+ *       valid same-shape B proof for the same commitment, because no record binds it to B.</li>
  * </ul>
  *
  * <p>Tagged {@code e2e}; skips when DevKit is not reachable. Run with
@@ -146,10 +146,10 @@ class PedersenOnChainDevKitE2ETest {
         // Issuer's native-script policy: only the issuer's key can mint issuance tokens.
         ScriptPubkey issuerPolicy = ScriptPubkey.create(VerificationKey.create(owner.publicKeyBytes()));
         byte[] policyId = HexUtil.decodeHexString(issuerPolicy.getPolicyId());
-        byte[] tokenName = "pedersen-issuance".getBytes(StandardCharsets.US_ASCII);
+        byte[] ownerPkh = owner.hdKeyPair().getPublicKey().getKeyHash();
 
-        PlutusScript consumerA = consumer(a, deployA, policyId, tokenName);
-        PlutusScript consumerB = consumer(b, deployB, policyId, tokenName);
+        PlutusScript consumerA = consumer(a, deployA, policyId);
+        PlutusScript consumerB = consumer(b, deployB, policyId);
         String consumerAAddress = AddressProvider.getEntAddress(consumerA, Networks.testnet()).toBech32();
         String consumerBAddress = AddressProvider.getEntAddress(consumerB, Networks.testnet()).toBech32();
 
@@ -160,15 +160,17 @@ class PedersenOnChainDevKitE2ETest {
         Presentation adversary = PedersenVectorSchemaBindingTest.prove(deployB, b.digest(), relabelled, opening);
 
         var quickTx = new QuickTxBuilder(backend);
-        // Issuance record: token + inline datum (u, v, σ_A) at the issuer's address.
+        // Issuance record: the token named blake2b_256(u ‖ v ‖ σ_A) + inline datum (u, v, σ_A).
+        // Claims at both consumers name the same commitment and the owner as beneficiary.
+        byte[] tokenName = VectorCommitmentConsumerOnChainTest.tokenName(issued, a);
         String tokenUnit = HexUtil.encodeHexString(policyId) + HexUtil.encodeHexString(tokenName);
         var issue = new Tx()
                 .mintAssets(issuerPolicy, new Asset("0x" + HexUtil.encodeHexString(tokenName), BigInteger.ONE))
                 .payToContract(owner.baseAddress(),
                         List.of(Amount.ada(2), new Amount(tokenUnit, BigInteger.ONE)),
                         recordDatum(issued, a))
-                .payToContract(consumerAAddress, Amount.ada(3), unitDatum())
-                .payToContract(consumerBAddress, Amount.ada(3), unitDatum())
+                .payToContract(consumerAAddress, Amount.ada(3), claimDatum(ownerPkh, issued))
+                .payToContract(consumerBAddress, Amount.ada(3), claimDatum(ownerPkh, issued))
                 .from(owner.baseAddress());
         Result<String> issuedTx = quickTx.compose(issue).withSigner(SignerProviders.signerFrom(owner)).complete();
         assertTrue(issuedTx.isSuccessful(), "issuance failed: " + issuedTx.getResponse());
@@ -180,10 +182,10 @@ class PedersenOnChainDevKitE2ETest {
         Utxo lockedA = YaciHelper.findUtxo(backend, consumerAAddress, issuedTx.getValue());
         Utxo lockedB = YaciHelper.findUtxo(backend, consumerBAddress, issuedTx.getValue());
 
-        Result<String> relabel = present(quickTx, consumerB, lockedB, record, adversary);
+        Result<String> relabel = present(quickTx, consumerB, lockedB, record, adversary, ownerPkh);
         assertFalse(relabel.isSuccessful(), "B's consumer must reject a commitment issued under A");
 
-        Result<String> accepted = present(quickTx, consumerA, lockedA, record, honest);
+        Result<String> accepted = present(quickTx, consumerA, lockedA, record, honest, ownerPkh);
         assertTrue(accepted.isSuccessful(), "A's consumer must accept: " + accepted.getResponse());
         YaciHelper.waitForConfirmation(backend, accepted.getValue());
         System.out.println("Vector commitment presentation accepted on DevKit: " + accepted.getValue());
@@ -218,11 +220,9 @@ class PedersenOnChainDevKitE2ETest {
     }
 
     private static Result<String> present(QuickTxBuilder quickTx, PlutusScript consumer, Utxo locked,
-                                          Utxo record, Presentation p) {
+                                          Utxo record, Presentation p, byte[] beneficiaryPkh) {
         var compressed = ProverToCardano.compressProof(p.proof());
         var redeemer = ConstrPlutusData.builder().alternative(0).data(ListPlutusData.of(
-                BigIntPlutusData.of(p.publicInputs()[1]),
-                BigIntPlutusData.of(p.publicInputs()[2]),
                 new BytesPlutusData(compressed.piA()),
                 new BytesPlutusData(compressed.piB()),
                 new BytesPlutusData(compressed.piC()))).build();
@@ -235,6 +235,7 @@ class PedersenOnChainDevKitE2ETest {
             return quickTx.compose(tx)
                     .withTxEvaluator(localEvaluator())
                     .withSigner(SignerProviders.signerFrom(owner))
+                    .withRequiredSigners(beneficiaryPkh)
                     .feePayer(owner.baseAddress())
                     .collateralPayer(owner.baseAddress())
                     .complete();
@@ -256,12 +257,11 @@ class PedersenOnChainDevKitE2ETest {
                 new DefaultScriptSupplier(backend.getScriptService()));
     }
 
-    private static PlutusScript consumer(PedersenVectorSchema schema, Deployment d, byte[] policyId, byte[] tokenName) {
+    private static PlutusScript consumer(PedersenVectorSchema schema, Deployment d, byte[] policyId) {
         SnarkjsToCardano.VkCompressed vk = ProverToCardano.compressVk(d.keys());
         return JulcScriptLoader.load(VectorCommitmentConsumerValidator.class,
                 new BytesPlutusData(digestBytes(schema)),
                 new BytesPlutusData(policyId),
-                new BytesPlutusData(tokenName),
                 new BytesPlutusData(vk.alpha()), new BytesPlutusData(vk.beta()),
                 new BytesPlutusData(vk.gamma()), new BytesPlutusData(vk.delta()), icData(vk.ic()));
     }
@@ -280,8 +280,11 @@ class PedersenOnChainDevKitE2ETest {
                 BigIntPlutusData.of(schema.digest()))).build();
     }
 
-    private static PlutusData unitDatum() {
-        return ConstrPlutusData.builder().alternative(0).data(ListPlutusData.of()).build();
+    private static PlutusData claimDatum(byte[] beneficiaryPkh, PedersenVectorCommitment c) {
+        return ConstrPlutusData.builder().alternative(0).data(ListPlutusData.of(
+                new BytesPlutusData(beneficiaryPkh),
+                BigIntPlutusData.of(c.point().affineU()),
+                BigIntPlutusData.of(c.point().affineV()))).build();
     }
 
     private static ListPlutusData icData(List<byte[]> ic) {

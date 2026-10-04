@@ -234,6 +234,9 @@ public final class ZkPedersen {
         }
         requireBlindingWidth(blinding.bits());
         zk.builder().api().requireNotPublicOrConstant(blinding.signal().variable());
+        // The declared width is not enough: the same wire may carry a narrower decomposition
+        // (for example a 16-bit ZkUInt re-wrapped as 252 bits).
+        zk.builder().api().requireHidingRange(blinding.signal().variable(), BLINDING_BITS);
     }
 
     private static void validateBitInputs(ZkContext zk, ZkBits valueBits, ZkBits blindingBits) {

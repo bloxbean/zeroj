@@ -20,6 +20,8 @@ value. At 16 bits this takes seconds (see `PedersenHidingSafeApiTest`).
 | `InCircuitPedersen.commit(api, value, blinding, numBits)` | replaced by `InCircuitPedersen.commit(api, value, valueBits, blinding)` |
 | any blinding width | the blinding must be exactly **252** bits (`ZkPedersen.BLINDING_BITS`) |
 | any blinding wire | a blinding that is directly a public input or a circuit constant is rejected |
+| declared width only | a blinding wire the circuit range-confines below 252 bits anywhere — including a narrower `ZkUInt` re-wrapped at 252, or a decomposition added after `commit` — is rejected (checked again when the circuit is frozen) |
+| any raw blinding vector | a raw blinding bit vector may not repeat a wire or share one with the value |
 | — | new `PedersenCommitment.randomBlinding(SecureRandom)` |
 
 The value keeps its own declared width (1–252), which is also its range proof.
@@ -47,6 +49,7 @@ All new checks run at circuit-definition time and throw `IllegalArgumentExceptio
 
 ## What the provenance check does not do
 
-It rejects only a blinding wired *directly* to a public input or a constant. A secret or
-intermediate wire derived from public data passes. Hiding still depends on the committer
-sampling a fresh, uniform blinding.
+It rejects a blinding wired *directly* to a public input or a constant, and one whose recorded
+range is narrower than 252 bits. A secret or intermediate wire derived from public data passes,
+and so does a wire restricted by other kinds of constraint (for example an equality with a narrow
+wire). Hiding still depends on the committer sampling a fresh, uniform blinding.

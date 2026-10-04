@@ -36,6 +36,8 @@ class CircuitAPIImpl implements CircuitAPI {
      * a request for a strictly tighter {@code m < n} must still emit.
      */
     private final Map<Integer, Integer> rangeBounds = new HashMap<>();
+    /** Wires that must keep at least this many bits of range (ADR-0051 D2); checked at freeze. */
+    private final Map<Integer, Integer> hidingRanges = new HashMap<>();
 
     /**
      * Wire ids already proven boolean by an emitted {@code a·(a−1) == 0} constraint.
@@ -118,6 +120,23 @@ class CircuitAPIImpl implements CircuitAPI {
     }
 
     @Override
+    public void requireHidingRange(Variable v, int minBits) {
+        Objects.requireNonNull(v, "v");
+        if (v.id() < 0 || v.id() >= nextId) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " is not a wire of this circuit (wire id " + v.id()
+                            + " was never allocated here).");
+        }
+        Integer bound = rangeBounds.get(v.id());
+        if (bound != null && bound < minBits) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " must keep a " + minBits + "-bit range for hiding, but the "
+                            + "circuit already proves it is below 2^" + bound + " (ADR-0051 D2)");
+        }
+        hidingRanges.merge(v.id(), minBits, Math::max);
+    }
+
+    @Override
     public void requireNotPublicOrConstant(Variable v) {
         Objects.requireNonNull(v, "v");
         // Same wire-id resolution as requirePublicOrConstant: a name can be fabricated, an
@@ -164,6 +183,16 @@ class CircuitAPIImpl implements CircuitAPI {
     }
 
     ConstraintGraph buildGraph(String name) {
+        // A hiding-required wire may have been narrowed after the gadget that registered it ran.
+        for (var entry : hidingRanges.entrySet()) {
+            Integer bound = rangeBounds.get(entry.getKey());
+            if (bound != null && bound < entry.getValue()) {
+                throw new IllegalArgumentException(
+                        "wire " + entry.getKey() + " must keep a " + entry.getValue() + "-bit range "
+                                + "for hiding, but the circuit proves it is below 2^" + bound
+                                + " (ADR-0051 D2)");
+            }
+        }
         // The graph copies the gate list, so anything emitted after this point is silently
         // dropped. Freeze instead, so a symbolic value that escaped its define() block and is
         // later asked to add constraints fails loudly rather than appearing to succeed while

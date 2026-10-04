@@ -171,6 +171,79 @@ class PedersenVectorApiTest {
     }
 
     @Test
+    @DisplayName("A value above its schema width cannot be witnessed")
+    void valueAboveSchemaWidthRejected() {
+        var circuit = balanceCircuit(BALANCE);
+        BigInteger r = blinding();
+        var c = PedersenVectorCommitment.commit(BALANCE, List.of(BigInteger.ONE, BigInteger.ONE), r);
+        Map<String, List<BigInteger>> w = witness(BALANCE.digest(), c, BigInteger.ONE, BigInteger.ONE, r);
+        w.put("amount", List.of(BigInteger.ONE.shiftLeft(64)));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(w, CurveId.BLS12_381));
+        w.put("amount", List.of(BigInteger.ONE));
+        w.put("asset", List.of(BigInteger.ONE.shiftLeft(32)));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(w, CurveId.BLS12_381));
+    }
+
+    /**
+     * Width 252 is asserted canonical; width 251 is canonical by its bound (2^251 < l) and skips
+     * the comparator. Both boundaries, in-circuit and off-circuit.
+     */
+    @Test
+    @DisplayName("Canonicity boundary: width 252 rejects [l, 2^252), width 251 accepts its maximum")
+    void canonicityBoundary() {
+        var schema = PedersenVectorSchema.of("zeroj.example.edges", 1,
+                List.of(new Entry("full", 252), new Entry("edge", 251)));
+        BigInteger maxEdge = BigInteger.ONE.shiftLeft(251).subtract(BigInteger.ONE);
+        assertTrue(maxEdge.compareTo(L) < 0, "2^251 - 1 < l");
+        BigInteger r = blinding();
+        var c = PedersenVectorCommitment.commit(schema, List.of(L.subtract(BigInteger.ONE), maxEdge), r);
+        assertThrows(IllegalArgumentException.class,
+                () -> PedersenVectorCommitment.commit(schema, List.of(L, maxEdge), r), "l is not canonical");
+
+        var circuit = CircuitBuilder.create("edges")
+                .publicVar("schemaDigest").publicVar("u").publicVar("v")
+                .secretVar("full").secretVar("edge").secretVar("r")
+                .defineSignals(cs -> {
+                    var zk = new ZkContext(cs);
+                    var binding = ZkPedersenVector.bindSchema(zk, schema, ZkField.publicInput(cs, "schemaDigest"));
+                    ZkPedersenVector.commit(zk, binding,
+                                    List.of(ZkUInt.secret(cs, "full", 252), ZkUInt.secret(cs, "edge", 251)),
+                                    ZkUInt.secret(cs, "r", 252))
+                            .assertAffineEquals(zk, ZkField.publicInput(cs, "u"), ZkField.publicInput(cs, "v"));
+                });
+        Map<String, List<BigInteger>> w = new HashMap<>(Map.of(
+                "schemaDigest", List.of(schema.digest()),
+                "u", List.of(c.point().affineU()), "v", List.of(c.point().affineV()),
+                "full", List.of(L.subtract(BigInteger.ONE)), "edge", List.of(maxEdge), "r", List.of(r)));
+        assertDoesNotThrow(() -> circuit.calculateWitness(w, CurveId.BLS12_381));
+
+        // l at width 252 reduces to the residue 0: give the circuit that residue's correct point,
+        // so only the canonicity assertion can reject it.
+        var residue = PedersenVectorCommitment.commit(schema, List.of(BigInteger.ZERO, maxEdge), r);
+        w.put("u", List.of(residue.point().affineU()));
+        w.put("v", List.of(residue.point().affineV()));
+        w.put("full", List.of(L));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(w, CurveId.BLS12_381));
+        w.put("full", List.of(BigInteger.ONE.shiftLeft(252).subtract(BigInteger.ONE)));
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(w, CurveId.BLS12_381));
+    }
+
+    @Test
+    @DisplayName("A narrowed vector blinding is rejected, as for the scalar profile")
+    void narrowedVectorBlindingRejected() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("vector-rewrap")
+                .publicVar("schemaDigest").secretVar("amount").secretVar("asset").secretVar("r")
+                .defineSignals(cs -> {
+                    var zk = new ZkContext(cs);
+                    var binding = ZkPedersenVector.bindSchema(zk, BALANCE, ZkField.publicInput(cs, "schemaDigest"));
+                    var narrow = ZkUInt.secret(cs, "r", 16);
+                    ZkPedersenVector.commit(zk, binding,
+                            List.of(ZkUInt.secret(cs, "amount", 64), ZkUInt.secret(cs, "asset", 32)),
+                            ZkUInt.wrap(zk, narrow.signal(), 252));
+                }));
+    }
+
+    @Test
     @DisplayName("All 16 bases: a full-dimension commitment matches off-circuit")
     void fullDimension() {
         List<Entry> entries = new ArrayList<>();

@@ -27,7 +27,7 @@ import java.util.Objects;
  *       the curve equation and proved in the prime-order subgroup in-circuit (case b, about
  *       5,500 rows).</li>
  *   <li>{@link #fromVerifierCheckedPublic} — an unopened commitment whose coordinates are
- *       public inputs or constants (enforced by the DSL). The curve equation is asserted;
+ *       declared public inputs (enforced by the DSL). The curve equation is asserted;
  *       subgroup membership is the <b>verifier's</b> documented obligation, checked before
  *       the proof is accepted (case c). An on-chain verifier cannot discharge it for Jubjub at
  *       practical cost, so on-chain consumers must use case a or b.</li>
@@ -87,7 +87,7 @@ public final class ZkPedersenCommitment implements ZkValue {
 
     /**
      * Binds an unopened commitment whose coordinates the verifier sees (case c). Both
-     * coordinates must be public inputs or circuit constants — a secret or derived wire is
+     * coordinates must be declared public inputs — a constant, secret or derived wire is
      * rejected at circuit-definition time — and the curve equation is asserted.
      *
      * <p><b>Subgroup membership is not proved here.</b> The verifier must decode the public
@@ -102,8 +102,10 @@ public final class ZkPedersenCommitment implements ZkValue {
         zk.requireSignal(u.signal());
         zk.requireSignal(v.signal());
         var api = zk.builder().api();
-        api.requirePublicOrConstant(u.signal().variable());
-        api.requirePublicOrConstant(v.signal().variable());
+        // Public inputs only: a circuit constant is not in the public statement, so no verifier
+        // could ever discharge the subgroup obligation for it.
+        api.requirePublicInput(u.signal().variable());
+        api.requirePublicInput(v.signal().variable());
         ZkJubjubPoint point = ZkJubjubPoint.witnessAffine(zk, u, v);
         return new ZkPedersenCommitment(zk, point, null, Origin.VERIFIER_CHECKED_PUBLIC);
     }

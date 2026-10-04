@@ -6,6 +6,7 @@ import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.Variable;
 import org.zeroj.circuit.annotation.ZkBits;
+import org.zeroj.circuit.annotation.ZkBool;
 import org.zeroj.circuit.annotation.ZkContext;
 import org.zeroj.circuit.annotation.ZkField;
 import org.zeroj.circuit.annotation.ZkUInt;
@@ -17,6 +18,8 @@ import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +109,93 @@ class PedersenHidingSafeApiTest {
             for (int i = 0; i < FULL; i++) builder.publicVar("rb_" + i);
             builder.defineSignals(c -> ZkPedersen.commitBits(new ZkContext(c),
                     ZkBits.secret(c, "vb", 4), ZkBits.publicInput(c, "rb", FULL)));
+        });
+    }
+
+    // ------------------------------------------------------------------
+    //  Declared width is not enough: the wire's proven range counts
+    // ------------------------------------------------------------------
+
+    /**
+     * Review finding (D2 bypass): a 16-bit secret re-wrapped as a 252-bit {@code ZkUInt} declares
+     * full width while the circuit still proves {@code r < 2^16}. The recorded range is what counts.
+     */
+    @Test
+    @DisplayName("A narrow blinding re-wrapped at 252 bits is rejected")
+    void rewrappedNarrowBlindingRejected() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("rewrap")
+                .secretVar("value").secretVar("blinding")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    var narrow = ZkUInt.secret(c, "blinding", 16);
+                    var rewrapped = ZkUInt.wrap(zk, narrow.signal(), FULL);
+                    ZkPedersen.commit(zk, ZkUInt.secret(c, "value", 16), rewrapped);
+                }));
+    }
+
+    @Test
+    @DisplayName("Narrowing the blinding after commit is caught when the circuit is frozen")
+    void narrowingAfterCommitRejectedAtFreeze() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("late")
+                .secretVar("value").secretVar("blinding")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    var blinding = ZkUInt.secret(c, "blinding", FULL);
+                    ZkPedersen.commit(zk, ZkUInt.secret(c, "value", 16), blinding);
+                    c.api().decompose(blinding.signal().variable(), 16);
+                }));
+        assertTrue(e.getMessage().contains("hiding"), e.getMessage());
+    }
+
+    @Test
+    @DisplayName("Low-level overloads check the blinding source's proven range too")
+    void lowLevelNarrowSourceRejected() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("low-narrow")
+                .secretVar("v").secretVar("r")
+                .define(api -> {
+                    api.decompose(api.var("r"), 16);
+                    InCircuitPedersen.commit(api,
+                            api.decompose(api.var("v"), 16), api.decompose(api.var("r"), FULL));
+                }));
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("low-narrow-scalar")
+                .secretVar("v").secretVar("r")
+                .define(api -> {
+                    api.decompose(api.var("r"), 32);
+                    InCircuitPedersen.commit(api, api.var("v"), 16, api.var("r"));
+                }));
+    }
+
+    @Test
+    @DisplayName("A raw blinding vector may not repeat a wire or share one with the value")
+    void repeatedOrSharedBlindingBitsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("repeat")
+                .secretVar("v").secretVar("b")
+                .define(api -> {
+                    Variable[] valueBits = api.toBinary(api.var("v"), 16);
+                    Variable bit = api.toBinary(api.var("b"), 1)[0];
+                    Variable[] blindBits = new Variable[FULL];
+                    Arrays.fill(blindBits, bit);
+                    InCircuitPedersen.commit(api, valueBits, blindBits);
+                }));
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("shared")
+                .secretVar("v").secretVar("r")
+                .define(api -> {
+                    Variable[] valueBits = api.toBinary(api.var("v"), 16);
+                    Variable[] blindBits = api.toBinary(api.var("r"), FULL);
+                    blindBits[100] = valueBits[3];
+                    InCircuitPedersen.commit(api, valueBits, blindBits);
+                }));
+        assertThrows(IllegalArgumentException.class, () -> {
+            var builder = CircuitBuilder.create("bits-repeat");
+            for (int i = 0; i < 4; i++) builder.secretVar("vb_" + i);
+            builder.secretVar("rb");
+            builder.defineSignals(c -> {
+                var bit = ZkBits.secret(c, "vb", 4);
+                var one = ZkBool.secret(c, "rb");
+                List<ZkBool> repeated = new ArrayList<>();
+                for (int i = 0; i < FULL; i++) repeated.add(one);
+                ZkPedersen.commitBits(new ZkContext(c), bit, new ZkBits(repeated));
+            });
         });
     }
 
