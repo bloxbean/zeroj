@@ -255,6 +255,12 @@ Pedersen scalar inputs are constrained to canonical Jubjub subgroup scalars
 blinding must be declared at exactly 252 bits and must not be a public input or
 a constant: a narrower blinding makes the commitment brute-forceable from public
 data (ADR-0051 D2). Sample it with `PedersenCommitment.randomBlinding(SecureRandom)`.
+
+The homomorphic and vector APIs work in annotated circuits too (both are experimental). See
+`AnnotatedConfidentialTransfer` (`ZkPedersenCommitment` and `ZkPedersen.assertBalanced`, with a
+`@Public @UInt` fee) and `AnnotatedVectorCommitment` (`ZkPedersenVector` with the schema digest as
+a `@Public ZkField`) in `zeroj-integration-tests`. Each is proved with Groth16 and verified in
+`AnnotatedPedersenProfilesTest`.
 Jubjub adapters use BLS12-381.
 
 Bind every prover-supplied point with `ZkJubjubPoint.witnessAffine(zk, u, v)`. It asserts the
