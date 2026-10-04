@@ -6,6 +6,9 @@ import com.bloxbean.cardano.client.api.model.Amount;
 import com.bloxbean.cardano.client.api.model.Result;
 import com.bloxbean.cardano.client.api.model.Utxo;
 import com.bloxbean.cardano.client.backend.api.BackendService;
+import com.bloxbean.cardano.client.backend.api.DefaultProtocolParamsSupplier;
+import com.bloxbean.cardano.client.backend.api.DefaultScriptSupplier;
+import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 import com.bloxbean.cardano.client.common.model.Networks;
 import com.bloxbean.cardano.client.crypto.VerificationKey;
 import com.bloxbean.cardano.client.function.helper.SignerProviders;
@@ -22,6 +25,7 @@ import com.bloxbean.cardano.client.transaction.spec.Asset;
 import com.bloxbean.cardano.client.transaction.spec.script.ScriptPubkey;
 import com.bloxbean.cardano.client.util.HexUtil;
 import org.julclang.clientlib.JulcScriptLoader;
+import org.julclang.clientlib.eval.JulcTransactionEvaluator;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -65,7 +69,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * </ul>
  *
  * <p>Tagged {@code e2e}; skips when DevKit is not reachable. Run with
- * {@code ./gradlew :zeroj-integration-tests:e2eTest --tests "*PedersenOnChainDevKitE2ETest"}.
+ * {@code ./gradlew :zeroj-integration-tests:e2eTest --tests "*PedersenOnChainDevKitE2ETest"}; set
+ * {@code ZEROJ_YACI_STORE_URL} / {@code ZEROJ_YACI_ADMIN_URL} if DevKit uses non-default ports.
  */
 @Tag("e2e")
 class PedersenOnChainDevKitE2ETest {
@@ -200,6 +205,7 @@ class PedersenOnChainDevKitE2ETest {
                 .attachSpendingValidator(script);
         try {
             return quickTx.compose(tx)
+                    .withTxEvaluator(localEvaluator())
                     .withSigner(SignerProviders.signerFrom(owner))
                     .withRequiredSigners(ownerPkh)
                     .feePayer(owner.baseAddress())
@@ -227,6 +233,7 @@ class PedersenOnChainDevKitE2ETest {
                 .attachSpendingValidator(consumer);
         try {
             return quickTx.compose(tx)
+                    .withTxEvaluator(localEvaluator())
                     .withSigner(SignerProviders.signerFrom(owner))
                     .feePayer(owner.baseAddress())
                     .collateralPayer(owner.baseAddress())
@@ -235,6 +242,18 @@ class PedersenOnChainDevKitE2ETest {
             YaciHelper.assumeNoBlsCostingFailure(e);
             return Result.error(e.getMessage());
         }
+    }
+
+    /**
+     * Script costs are evaluated locally with Julc rather than by DevKit's {@code /evaluate}
+     * endpoint, which fails to initialise blst in the aarch64 container. The node still validates
+     * every submitted transaction.
+     */
+    private static JulcTransactionEvaluator localEvaluator() {
+        return new JulcTransactionEvaluator(
+                new DefaultUtxoSupplier(backend.getUtxoService()),
+                new DefaultProtocolParamsSupplier(backend.getEpochService()),
+                new DefaultScriptSupplier(backend.getScriptService()));
     }
 
     private static PlutusScript consumer(PedersenVectorSchema schema, Deployment d, byte[] policyId, byte[] tokenName) {

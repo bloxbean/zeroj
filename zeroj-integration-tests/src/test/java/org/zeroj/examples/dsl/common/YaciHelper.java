@@ -27,8 +27,19 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 public final class YaciHelper {
 
-    public static final String YACI_BASE_URL = "http://localhost:8080/api/v1/";
-    public static final String YACI_ADMIN_URL = "http://localhost:10000";
+    /**
+     * Yaci Store API base URL. Override with {@code ZEROJ_YACI_STORE_URL} when DevKit's store is
+     * mapped to another host port (its {@code HOST_STORE_API_PORT}).
+     */
+    public static final String YACI_BASE_URL =
+            envOr("ZEROJ_YACI_STORE_URL", "http://localhost:8080/api/v1/");
+    /** Cluster admin URL. Override with {@code ZEROJ_YACI_ADMIN_URL}. */
+    public static final String YACI_ADMIN_URL = envOr("ZEROJ_YACI_ADMIN_URL", "http://localhost:10000");
+
+    private static String envOr(String name, String fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : value;
+    }
 
     private YaciHelper() {}
 
