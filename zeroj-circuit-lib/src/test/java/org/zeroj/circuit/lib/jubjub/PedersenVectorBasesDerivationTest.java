@@ -72,6 +72,30 @@ class PedersenVectorBasesDerivationTest {
                     "2400c2e2e3362644db56b6db8d8075ede81cee09a561229e2ce33921888d30db",
                     "61369d5440bf84a5fc9e8a15a096ba8fe155b8e8ffff2e42a3f7fa36c72b0065"));
 
+    /**
+     * The test-side hash itself, against published vectors (ADR-0051 verification strategy): RFC
+     * 7693 Appendix B (BLAKE2s-256 of "abc", no key, no personalisation). The personalised form is
+     * covered by the Zcash known answers below, whose derivation it drives.
+     */
+    @Test
+    @DisplayName("Test-side BLAKE2s matches RFC 7693 Appendix B")
+    void blake2sRfc7693() {
+        var blake2s = new Blake2sDigest(256);
+        byte[] abc = ascii("abc");
+        blake2s.update(abc, 0, abc.length);
+        byte[] out = new byte[32];
+        blake2s.doFinal(out, 0);
+        assertEquals("508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982",
+                HexFormat.of().formatHex(out));
+
+        // The empty-input digest, cross-checked against CPython's hashlib.blake2s.
+        var empty = new Blake2sDigest(256);
+        byte[] emptyOut = new byte[32];
+        empty.doFinal(emptyOut, 0);
+        assertEquals("69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9",
+                HexFormat.of().formatHex(emptyOut));
+    }
+
     @Test
     @DisplayName("FindGroupHash reproduces all twelve Zcash Sapling generators (sapling-crypto 0.9.0)")
     void zcashKnownAnswers() {

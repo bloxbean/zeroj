@@ -116,6 +116,10 @@ class PedersenHomomorphicApiTest {
                 affineWitness("u", "v", c.add(T8)), CurveId.BLS12_381));
         assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
                 "u", List.of(BigInteger.ONE), "v", List.of(BigInteger.ONE)), CurveId.BLS12_381));
+        // The affine binder pins Z = 1 and T = u·v, so the all-zero projective tuple cannot even be
+        // expressed; its affine shadow (0, 0) is off-curve and rejected.
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "u", List.of(BigInteger.ZERO), "v", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
     }
 
     @Test

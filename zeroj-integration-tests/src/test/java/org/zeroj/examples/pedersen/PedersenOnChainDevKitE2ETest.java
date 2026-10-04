@@ -65,7 +65,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *       {@code blake2b_256(u ‖ v ‖ σ_A)}, minted under the issuer's native-script policy, with
  *       inline datum {@code (u, v, σ_A)}. Claims on that commitment are locked at A's and B's
  *       consumers. A's consumer accepts the honest presentation; B's consumer rejects a fresh,
- *       valid same-shape B proof for the same commitment, because no record binds it to B.</li>
+ *       valid same-shape B proof for the same commitment, because no record binds it to B; A's
+ *       consumer rejects that B proof (cross-schema) and rejects the honest proof when the record
+ *       is not referenced (fail closed).</li>
  * </ul>
  *
  * <p>Tagged {@code e2e}; skips when DevKit is not reachable. Run with
@@ -184,6 +186,10 @@ class PedersenOnChainDevKitE2ETest {
 
         Result<String> relabel = present(quickTx, consumerB, lockedB, record, adversary, ownerPkh);
         assertFalse(relabel.isSuccessful(), "B's consumer must reject a commitment issued under A");
+        Result<String> crossSchema = present(quickTx, consumerA, lockedA, record, adversary, ownerPkh);
+        assertFalse(crossSchema.isSuccessful(), "A's consumer must reject a proof made under B");
+        Result<String> noRecord = present(quickTx, consumerA, lockedA, null, honest, ownerPkh);
+        assertFalse(noRecord.isSuccessful(), "without the issuance record the claim must not be redeemable");
 
         Result<String> accepted = present(quickTx, consumerA, lockedA, record, honest, ownerPkh);
         assertTrue(accepted.isSuccessful(), "A's consumer must accept: " + accepted.getResponse());
@@ -226,10 +232,11 @@ class PedersenOnChainDevKitE2ETest {
                 new BytesPlutusData(compressed.piA()),
                 new BytesPlutusData(compressed.piB()),
                 new BytesPlutusData(compressed.piC()))).build();
-        var tx = new ScriptTx()
-                .collectFrom(locked, redeemer)
-                .readFrom(record)
-                .payToAddress(owner.baseAddress(), Amount.ada(2))
+        var tx = new ScriptTx().collectFrom(locked, redeemer);
+        if (record != null) {
+            tx = tx.readFrom(record);
+        }
+        tx = tx.payToAddress(owner.baseAddress(), Amount.ada(2))
                 .attachSpendingValidator(consumer);
         try {
             return quickTx.compose(tx)

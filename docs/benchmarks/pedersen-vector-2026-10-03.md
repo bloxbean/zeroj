@@ -1,21 +1,27 @@
-# Pedersen vector commitments — end-to-end measurements (ADR-0051 M3)
+# Pedersen commitments — end-to-end measurements (ADR-0051 M3 and M4)
 
 **Date:** 2026-10-03
 **Harness:** `PedersenVectorBenchmark`, run in its own JVM with
 `./gradlew :zeroj-integration-tests:pedersenVectorBenchmark` (dev trusted setup).
 **Machine:** Apple M4 Max (arm64, 16 processors), macOS, Java HotSpot 25.0.2, 2 GB max heap.
 
-Each circuit commits to `n` values of 64 bits under a bound schema: the schema-digest public
-input, decompositions, canonical blinding, the multi-scalar sum and the affine `(u, v)` public
-binding. Times are medians of 7 runs after 3 warm-up runs; proving is the pure-Java Groth16
+Each vector circuit commits to `n` values of 64 bits under a bound schema: the schema-digest
+public input, decompositions, canonical blinding, the multi-scalar sum and the affine `(u, v)`
+public binding. The confidential-note circuit is the M4 reference application: three
+`pedersen-jubjub-v1` commitments (one input, two outputs; 64-bit amounts, 252-bit blindings) bound
+to six public inputs, plus `assertBalanced`. Times are medians of 7 runs after 3 warm-up runs; proving is the pure-Java Groth16
 prover. The heap columns show the live heap after an explicit collection just before proving,
 and how far the heap peak rose above that during proving.
 
-| n | rows | nonzeros | domain | witness median (ms) | prove median (ms) | live heap before prove (MB) | peak heap growth during prove (MB) |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 2,411 | 11,686 | 4,096 | 0.9 | 1,181.5 | 9 | 634 |
-| 4 | 3,581 | 17,755 | 4,096 | 0.8 | 1,248.3 | 13 | 640 |
-| 16 | 8,261 | 42,031 | 16,384 | 1.7 | 1,573.2 | 26 | 675 |
+| circuit | rows | nonzeros | domain | witness median (ms) | prove median (ms) | live heap before prove (MB) | peak heap growth during prove (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| vector n = 1 | 2,411 | 11,686 | 4,096 | 1.0 | 1,160.0 | 9 | 634 |
+| vector n = 4 | 3,581 | 17,755 | 4,096 | 0.9 | 1,225.0 | 13 | 640 |
+| vector n = 16 | 8,261 | 42,031 | 16,384 | 1.7 | 1,530.0 | 26 | 675 |
+| confidential note (1 in, 2 out) | 8,755 | 40,384 | 16,384 | 1.6 | 2,039.7 | 21 | 657 |
+
+(Re-run 2026-10-04 with the M4 circuit added; the vector rows agree with the first run within a
+few percent.)
 
 ## Reading
 
@@ -25,6 +31,10 @@ and how far the heap peak rose above that during proving.
   not translate proportionally into end-to-end time, which is the point of this gate.
 - Each additional 64-bit value costs about 390 rows. The `n = 16` circuit crosses into a
   16,384 domain.
+- The confidential note has about the same rows as `n = 16` but proves about 0.5 s slower: it
+  carries three full-width blindings and three commitments' worth of witness wires.
+- On-chain verification costs are separate and measured in the Julc VM: 3.66×10⁹ CPU / 0.56M mem
+  for the confidential-note validator and 3.07×10⁹ CPU / 0.40M mem for the vector consumer.
 - The fixed prover overhead is a property of the pure-Java prover, not of this profile. It is
   recorded here as an observation for the prover work (ADR-0029/0033), not addressed by ADR-0051.
 

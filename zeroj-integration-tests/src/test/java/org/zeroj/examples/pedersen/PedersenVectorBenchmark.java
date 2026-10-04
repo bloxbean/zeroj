@@ -25,8 +25,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ADR-0051 performance gate for M3: end-to-end cost of {@code pedersen-jubjub-vector-v1}
- * commitments at representative dimensions, beyond constraint counts.
+ * ADR-0051 performance gate for M3 and M4: end-to-end cost of {@code pedersen-jubjub-vector-v1}
+ * commitments at representative dimensions and of the M4 confidential-note reference circuit,
+ * beyond constraint counts.
  *
  * <p>For each dimension it records R1CS rows and nonzeros, the padded evaluation domain, and the
  * median witness-generation and pure-Java Groth16 proving times over several runs after warm-up,
@@ -47,18 +48,19 @@ public final class PedersenVectorBenchmark {
         int[] dimensions = args.length > 0
                 ? Arrays.stream(args[0].split(",")).mapToInt(Integer::parseInt).toArray()
                 : new int[]{1, 4, 16};
-        System.out.println("| n | rows | nonzeros | domain | witness median (ms) | prove median (ms) | live heap before prove (MB) | peak heap growth during prove (MB) |");
-        System.out.println("|---:|---:|---:|---:|---:|---:|---:|---:|");
+        System.out.println("| circuit | rows | nonzeros | domain | witness median (ms) | prove median (ms) | live heap before prove (MB) | peak heap growth during prove (MB) |");
+        System.out.println("|---|---:|---:|---:|---:|---:|---:|---:|");
         for (int n : dimensions) {
-            measure(n);
+            measureVector(n);
         }
+        measureConfidentialNote();
         System.out.println();
         System.out.println("JVM: " + System.getProperty("java.vm.name") + " " + System.getProperty("java.version")
                 + ", processors: " + Runtime.getRuntime().availableProcessors()
                 + ", max heap: " + Runtime.getRuntime().maxMemory() / (1024 * 1024) + " MB");
     }
 
-    private static void measure(int n) {
+    private static void measureVector(int n) {
         List<Entry> entries = new ArrayList<>();
         for (int i = 0; i < n; i++) entries.add(new Entry("v" + i, 64));
         var schema = PedersenVectorSchema.of("zeroj.bench.n" + n, 1, entries);
@@ -73,12 +75,6 @@ public final class PedersenVectorBenchmark {
             ZkPedersenVector.commit(zk, binding, xs, ZkUInt.secret(cs, "r", 252))
                     .assertAffineEquals(zk, ZkField.publicInput(cs, "u"), ZkField.publicInput(cs, "v"));
         });
-        R1CSConstraintSystem r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        long nnz = r1cs.constraints().stream()
-                .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum();
-        var keys = Groth16Keys.setupInMemory(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(),
-                BigInteger.valueOf(0xbe0c4L + n));
-
         var random = new SecureRandom();
         List<BigInteger> values = new ArrayList<>();
         for (int i = 0; i < n; i++) values.add(new BigInteger(64, random));
@@ -90,6 +86,25 @@ public final class PedersenVectorBenchmark {
         inputs.put("v", List.of(c.point().affineV()));
         for (int i = 0; i < n; i++) inputs.put("x" + i, List.of(values.get(i)));
         inputs.put("r", List.of(r));
+        measure("vector n=" + n, circuit, inputs, 0xbe0c4L + n);
+    }
+
+    /** ADR-0051 M4 reference circuit: one input note split into two, 64-bit amounts. */
+    private static void measureConfidentialNote() {
+        var in = ConfidentialNoteOnChainTest.Note.of(new byte[28], 1_000);
+        var out1 = ConfidentialNoteOnChainTest.Note.of(new byte[28], 700);
+        var out2 = ConfidentialNoteOnChainTest.Note.of(new byte[28], 300);
+        measure("confidential note (1 in, 2 out)", ConfidentialNoteOnChainTest.transferCircuit(64),
+                ConfidentialNoteOnChainTest.witness(in, out1, out2), 0x4e07e5L);
+    }
+
+    private static void measure(String label, CircuitBuilder circuit, Map<String, List<BigInteger>> inputs,
+                                long seed) {
+        R1CSConstraintSystem r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+        long nnz = r1cs.constraints().stream()
+                .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum();
+        var keys = Groth16Keys.setupInMemory(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(),
+                BigInteger.valueOf(seed));
 
         long[] witnessNanos = new long[RUNS];
         long[] proveNanos = new long[RUNS];
@@ -115,8 +130,8 @@ public final class PedersenVectorBenchmark {
                 liveBefore = Math.max(liveBefore, baseline);
             }
         }
-        System.out.printf("| %d | %,d | %,d | %,d | %.1f | %.1f | %d | %d |%n",
-                n, r1cs.constraints().size(), nnz, keys.domain(),
+        System.out.printf("| %s | %,d | %,d | %,d | %.1f | %.1f | %d | %d |%n",
+                label, r1cs.constraints().size(), nnz, keys.domain(),
                 median(witnessNanos) / 1e6, median(proveNanos) / 1e6,
                 liveBefore / (1024 * 1024), peakGrowth / (1024 * 1024));
     }

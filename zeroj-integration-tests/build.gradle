@@ -92,7 +92,7 @@ tasks.register('e2eTest', Test) {
 // Records, does not assert. Dev trusted setup only.
 //   ./gradlew :zeroj-integration-tests:pedersenVectorBenchmark [-PbenchDimensions=1,4,16]
 tasks.register('pedersenVectorBenchmark', JavaExec) {
-    description = 'ADR-0051 M3 Pedersen vector commitment benchmark (records, does not assert).'
+    description = 'ADR-0051 M3/M4 Pedersen commitment benchmark (records, does not assert).'
     group = 'verification'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'org.zeroj.examples.pedersen.PedersenVectorBenchmark'
