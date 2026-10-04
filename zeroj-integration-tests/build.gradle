@@ -19,6 +19,13 @@ repositories {
             snapshotsOnly()
         }
     }
+    // BloxBean Maven repository: development snapshots of BloxBean projects (release-ops docs/12).
+    maven {
+        url = uri("https://repo.bloxbean.org/maven/snapshots")
+        content {
+            snapshotsOnly()
+        }
+    }
 }
 
 dependencies {

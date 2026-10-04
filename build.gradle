@@ -17,6 +17,13 @@ allprojects {
                 snapshotsOnly()
             }
         }
+        // BloxBean Maven repository: development snapshots of BloxBean projects (release-ops docs/12).
+        maven {
+            url = uri("https://repo.bloxbean.org/maven/snapshots")
+            content {
+                snapshotsOnly()
+            }
+        }
     }
 }
 
@@ -151,8 +158,9 @@ subprojects {
 
         afterEvaluate {
             publishing {
-                // No `repositories` block: releases and snapshots both leave through the Central
-                // Portal aggregation at the root (nmcpAggregation), not a per-project OSSRH URL.
+                // No `repositories` block: releases and snapshots leave through the Central Portal
+                // aggregation at the root (nmcpAggregation), not a per-project OSSRH URL, and through
+                // the root `stagingRepository` hook for the BloxBean Maven repository.
                 publications {
                     mavenJava(MavenPublication) {
                         from components.java
@@ -185,6 +193,26 @@ subprojects {
         ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
         if (isReleaseVersion && !project.hasProperty("skipSigning")) {
             configureReleaseSigning(project)
+        }
+    }
+}
+
+// === BloxBean Maven repository: the `stagingRepository` hook ====================================
+// Publishes the same MavenPublications as the Central deployment to an isolated directory, with no
+// second publication definition. Gradle stays provider-neutral: the bloxbean-snapshot.yml and
+// release.yml workflows own the transfer to the bucket (release-ops docs/12-bloxbean-maven-repository.md).
+// CI passes an absolute path, because uri() resolves against each project's own directory:
+//   ./gradlew publishAllPublicationsToStagingRepository -PstagingRepository=$PWD/build/bloxbean-maven
+def stagingRepository = providers.gradleProperty('stagingRepository')
+allprojects { candidate ->
+    candidate.pluginManager.withPlugin('maven-publish') {
+        if (stagingRepository.isPresent()) {
+            candidate.publishing.repositories {
+                maven {
+                    name = 'staging'
+                    url = candidate.uri(stagingRepository.get())
+                }
+            }
         }
     }
 }
@@ -228,7 +256,9 @@ tasks.register('verifyMavenReleasePublicationScope') {
                             "Publishing but not deployed: ${missing.sort()}; " +
                             "deployed but publishes nothing: ${extra.sort()}")
         }
-        logger.lifecycle("Central deployment scope check passed (${expected.size()} coordinates).")
+        // The BloxBean repository workflows read this line (.github/scripts/bloxbean-maven.sh discover):
+        // the artifactIds they stage must number exactly this many.
+        logger.lifecycle("Central deployment scope: ${expected.size()} projects")
     }
 }
 

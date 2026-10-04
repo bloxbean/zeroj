@@ -4,6 +4,8 @@
 
 # ZeroJ
 
+[![snapshot](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo.bloxbean.org%2Fmaven%2Fsnapshots%2Forg%2Fzeroj%2Fzeroj-crypto%2Fmaven-metadata.xml&strategy=latestProperty&label=snapshot)](#development-snapshots)
+
 > [!WARNING]
 > **Status: Experimental — Research & Learning Project**
 >
@@ -302,6 +304,9 @@ Outside the default build and never published. See
 
 ## Dependency (Gradle)
 
+ZeroJ releases are on Maven Central under the group `org.zeroj`. Releases are also in the BloxBean Maven
+repository (`https://repo.bloxbean.org/maven/releases`), with the same files as on Maven Central.
+
 ```gradle
 dependencies {
     implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
@@ -323,6 +328,24 @@ dependencies {
     // On-chain verification (Cardano Plutus V3)
     implementation 'org.zeroj:zeroj-onchain-julc'
 
+}
+```
+
+### Development snapshots
+
+Development snapshots are in the BloxBean Maven repository, one version per commit:
+`<next-version>-<short-commit>-SNAPSHOT`, for example `0.1.0-pre13-1a2b3c4-SNAPSHOT`. They are published on
+demand, not for every commit. The snapshot badge above shows the newest one, and
+[`maven-metadata.xml`](https://repo.bloxbean.org/maven/snapshots/org/zeroj/zeroj-crypto/maven-metadata.xml) lists
+them all. Use the exact version, and prefer a release for anything you share with others.
+
+```gradle
+repositories {
+    mavenCentral()
+    maven {
+        url = uri('https://repo.bloxbean.org/maven/snapshots')
+        mavenContent { snapshotsOnly() }
+    }
 }
 ```
 
