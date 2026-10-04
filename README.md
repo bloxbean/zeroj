@@ -349,6 +349,11 @@ repositories {
 }
 ```
 
+Snapshot builds of the `zeroj-ceremony` CLI (the fat jar and the native zips a release attaches) are kept for 30
+days under `https://repo.bloxbean.org/dist/snapshots/zeroj/`;
+[`latest.json`](https://repo.bloxbean.org/dist/snapshots/zeroj/latest.json) lists the newest build's files with
+their SHA-256.
+
 ## Documentation
 
 **Full index: [`docs/README.md`](docs/README.md).** Highlights:
