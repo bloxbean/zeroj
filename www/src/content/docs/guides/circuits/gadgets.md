@@ -145,8 +145,9 @@ are constrained to canonical values below the subgroup order. The value keeps it
 width, which is also its range proof. The blinding must be declared at exactly 252 bits and
 must not be a public input or a constant, because a narrower blinding can be brute-forced from
 the public commitment. Sample it with `PedersenCommitment.randomBlinding(SecureRandom)`. A
-complete commitment with both coordinates bound as public inputs costs 2,918 constraints for a
-64-bit value and 4,042 for a 252-bit value. The profile is specified in
+complete commitment with both coordinates bound as public inputs costs 2,410 constraints for a
+64-bit value and 4,042 for a 252-bit value. A value narrower than 252 bits is canonical by its own
+range, so only full-width values pay for the comparator. The profile is specified in
 `docs/specs/pedersen-jubjub-v1.md`.
 
 **Commitments the circuit did not compute.** `ZkPedersenCommitment` is a typed commitment

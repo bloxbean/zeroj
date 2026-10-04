@@ -19,9 +19,12 @@ and how far the heap peak rose above that during proving.
 | vector n = 4 | 3,581 | 17,755 | 4,096 | 0.9 | 1,225.0 | 13 | 640 |
 | vector n = 16 | 8,261 | 42,031 | 16,384 | 1.7 | 1,530.0 | 26 | 675 |
 | confidential note (1 in, 2 out) | 8,755 | 40,384 | 16,384 | 1.6 | 2,039.7 | 21 | 657 |
+| confidential note, after the value-canonicality optimization | 7,231 | 35,053 | 8,192 | 1.6 | 1,781.5 | 19 | 650 |
 
 (Re-run 2026-10-04 with the M4 circuit added; the vector rows agree with the first run within a
-few percent.)
+few percent. The last row is from a later run of the same harness after `ZkPedersen` stopped
+emitting the 252-bit comparator for values narrower than 252 bits; vector rows in that run were
+within 1% of those above.)
 
 ## Reading
 
@@ -31,8 +34,11 @@ few percent.)
   not translate proportionally into end-to-end time, which is the point of this gate.
 - Each additional 64-bit value costs about 390 rows. The `n = 16` circuit crosses into a
   16,384 domain.
-- The confidential note has about the same rows as `n = 16` but proves about 0.5 s slower: it
+- The confidential note had about the same rows as `n = 16` but proved about 0.5 s slower: it
   carries three full-width blindings and three commitments' worth of witness wires.
+- Dropping the redundant value comparator (about 508 rows per commitment) took the confidential
+  note under the 8,192 domain boundary: 8,755 → 7,231 rows, and 2.04 s → 1.78 s to prove (about
+  13% in this harness). Most of the remaining time is the fixed prover overhead noted above.
 - On-chain verification costs are separate and measured in the Julc VM: 3.66×10⁹ CPU / 0.56M mem
   for the confidential-note validator and 3.07×10⁹ CPU / 0.40M mem for the vector consumer.
 - The fixed prover overhead is a property of the pure-Java prover, not of this profile. It is

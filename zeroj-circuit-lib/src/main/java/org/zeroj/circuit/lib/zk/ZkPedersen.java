@@ -16,9 +16,10 @@ import java.util.Objects;
  * Symbolic Pedersen commitment adapter for annotation-based circuits
  * ({@code pedersen-jubjub-v1}, see {@code docs/specs/pedersen-jubjub-v1.md}).
  *
- * <p>Both scalars are asserted canonical ({@code < l}). The value keeps its declared width;
- * the blinding must be declared at exactly {@value #BLINDING_BITS} bits and must not be a
- * public input or a circuit constant (ADR-0051 D2). Sample it with
+ * <p>Both scalars are canonical ({@code < l}): the blinding and any full-width value by an explicit
+ * comparator, a value narrower than 252 bits by its own range proof ({@code 2^251 < l}). The value
+ * keeps its declared width; the blinding must be declared at exactly {@value #BLINDING_BITS} bits
+ * and must not be a public input or a circuit constant (ADR-0051 D2). Sample it with
  * {@link org.zeroj.circuit.lib.jubjub.PedersenCommitment#randomBlinding}.
  */
 public final class ZkPedersen {
@@ -52,7 +53,7 @@ public final class ZkPedersen {
         // second, wider decomposition.
         BitDecomposition valueBits = value.decomposition();
         BitDecomposition blindingBits = blinding.decomposition();
-        assertCanonicalScalar(zk, value.signal().variable());
+        assertValueCanonical(zk, value.bits(), value.signal().variable());
         assertCanonicalScalar(zk, blinding.signal().variable());
         return ZkJubjubPoint.wrap(zk, InCircuitPedersen.commit(
                 zk.builder().api(), valueBits, blindingBits));
@@ -70,7 +71,9 @@ public final class ZkPedersen {
         for (Variable bit : blindingVariables) {
             api.requireNotPublicOrConstant(bit);
         }
-        assertCanonicalScalar(zk, api.fromBinary(valueVariables));
+        if (valueVariables.length == MAX_SCALAR_BITS) {
+            assertCanonicalScalar(zk, api.fromBinary(valueVariables));
+        }
         assertCanonicalScalar(zk, api.fromBinary(blindingVariables));
         return ZkJubjubPoint.wrap(zk, InCircuitPedersen.commit(
                 api,
@@ -263,6 +266,19 @@ public final class ZkPedersen {
                             + ". A narrower blinding cannot hide the committed value: a k-bit "
                             + "blinding is recovered from the public commitment by enumerating "
                             + "2^k candidates per value (ADR-0051 D2).");
+        }
+    }
+
+    /**
+     * Makes a value canonical ({@code < l}) as cheaply as soundness allows. A value declared
+     * narrower than {@value #MAX_SCALAR_BITS} bits is range-proved by its own owned decomposition
+     * to be below {@code 2^251}, and {@code 2^251 < l}, so it is canonical already and the 252-bit
+     * comparator would only cost rows (about 508 per commitment). Only a full-width value needs
+     * the explicit check. This is the rule the vector profile uses.
+     */
+    private static void assertValueCanonical(ZkContext zk, int declaredBits, Variable value) {
+        if (declaredBits == MAX_SCALAR_BITS) {
+            assertCanonicalScalar(zk, value);
         }
     }
 

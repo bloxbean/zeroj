@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -337,6 +338,30 @@ class PedersenHidingSafeApiTest {
         }
     }
 
+    /**
+     * Value canonicality without the comparator below width 252: a 251-bit value's maximum
+     * {@code 2^251 − 1} is below {@code l} and must be accepted, a value above its width cannot be
+     * witnessed, and a 252-bit value still has the explicit check, so {@code l} is rejected.
+     */
+    @Test
+    @DisplayName("Value canonicality: width 251 by range (max accepted), width 252 by comparator (l rejected)")
+    void valueCanonicalityBoundary() {
+        BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom());
+        BigInteger max251 = BigInteger.ONE.shiftLeft(251).subtract(BigInteger.ONE);
+        assertTrue(max251.compareTo(L) < 0);
+        var circuit251 = zkCommitCircuit(251);
+        assertDoesNotThrow(() -> circuit251.calculateWitness(
+                witness(max251, r, PedersenCommitment.commit(max251, r)), CurveId.BLS12_381));
+        BigInteger tooWide = BigInteger.ONE.shiftLeft(251);
+        assertThrows(ArithmeticException.class, () -> circuit251.calculateWitness(
+                witness(tooWide, r, PedersenCommitment.commit(tooWide, r)), CurveId.BLS12_381));
+
+        var circuit252 = zkCommitCircuit(252);
+        assertThrows(ArithmeticException.class, () -> circuit252.calculateWitness(
+                witness(L, r, PedersenCommitment.commit(L, r)), CurveId.BLS12_381),
+                "a full-width value must still be asserted canonical");
+    }
+
     @Test
     @DisplayName("A random full-width blinding round-trips through the circuit")
     void randomBlindingRoundTrips() {
@@ -431,10 +456,14 @@ class PedersenHidingSafeApiTest {
     // ------------------------------------------------------------------
 
     /**
-     * The complete user-facing operation — both canonicality checks and both affine public
-     * coordinates bound — not the 3,020-row gadget alone. The 64/252 and 252/252 figures equal
-     * the measurements taken during review of ADR-0051 r1, before this milestone, so M1 left
-     * the constraint system of every full-width circuit unchanged.
+     * The complete user-facing operation — canonicality checks and both affine public
+     * coordinates bound — not the 3,020-row gadget alone.
+     *
+     * <p>History: at M1 these were 2,918 / 13,460 (64/252) and 4,042 / 19,338 (252/252), equal to
+     * the ADR-0051 r1 review measurements. The later value-canonicality optimization drops the
+     * redundant 252-bit comparator for values narrower than 252 bits (canonical by their own range,
+     * {@code 2^251 < l}), so 64/252 fell to 2,410 / 11,683; 252/252 still needs the comparator and is
+     * unchanged.
      */
     @Test
     @DisplayName("Complete ZkPedersen commit cost is pinned (rows and nonzeros)")
@@ -442,10 +471,11 @@ class PedersenHidingSafeApiTest {
         R1CSConstraintSystem narrowValue = zkCommitCircuit(64).compileR1CS(CurveId.BLS12_381);
         R1CSConstraintSystem fullValue = zkCommitCircuit(252).compileR1CS(CurveId.BLS12_381);
 
-        assertEquals(2_918, narrowValue.constraints().size(), "64/252 rows");
-        assertEquals(13_460, nnz(narrowValue), "64/252 nonzeros");
-        assertEquals(4_042, fullValue.constraints().size(), "252/252 rows");
-        assertEquals(19_338, nnz(fullValue), "252/252 nonzeros");
+        assertAll(
+                () -> assertEquals(2_410, narrowValue.constraints().size(), "64/252 rows"),
+                () -> assertEquals(11_683, nnz(narrowValue), "64/252 nonzeros"),
+                () -> assertEquals(4_042, fullValue.constraints().size(), "252/252 rows"),
+                () -> assertEquals(19_338, nnz(fullValue), "252/252 nonzeros"));
     }
 
     // ------------------------------------------------------------------

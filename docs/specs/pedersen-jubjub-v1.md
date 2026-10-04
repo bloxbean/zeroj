@@ -190,8 +190,10 @@ input.
 - `InCircuitPedersen` (low level) computes `[Σ bᵢ·2ⁱ]·G + [Σ cᵢ·2ⁱ]·H` for boolean bit
   vectors of width 1–252. It proves the residues those bit vectors represent and does **not**
   assert canonicity (`< l`).
-- `ZkPedersen` (symbolic) additionally asserts that both scalars are `< l` and consumes each
-  scalar's owned decomposition at its declared width.
+- `ZkPedersen` (symbolic) additionally makes both scalars canonical (`< l`) and consumes each
+  scalar's owned decomposition at its declared width. The blinding and any 252-bit value are
+  checked by an explicit comparator; a value declared narrower than 252 bits is canonical by its
+  own range proof, because `2^251 < l`, and carries no comparator.
 - *(enforced from M1)* The blinding is full width: declared width exactly 252 bits, with the
   `< l` assertion. A blinding wire that is directly a public input or a circuit constant is
   rejected at circuit-definition time. The value keeps its own declared width (1–252).

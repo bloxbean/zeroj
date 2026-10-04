@@ -43,9 +43,12 @@ All new checks run at circuit-definition time and throw `IllegalArgumentExceptio
    Like `PedersenCommitment.commit`, it uses variable-time `BigInteger` arithmetic on a secret,
    so run it offline or in an isolated process (ADR-0038).
 
-3. Regenerate keys for any circuit whose blinding width changed: its constraint system is
-   different. A circuit that already used a 252-bit blinding through the two-argument `commit`
-   keeps an identical constraint system (pinned in `PedersenHidingSafeApiTest`).
+3. Regenerate keys for every `ZkPedersen` circuit whose blinding width changed, **and** for every
+   `ZkPedersen` circuit with a value narrower than 252 bits. The second group changes because a
+   redundant canonicality comparator was removed: such a value is already canonical by its own
+   range (`2^251 < l`). A 64-bit-value commitment fell from 2,918 to 2,410 rows. Only circuits with
+   a full 252-bit value and a full-width blinding keep an identical constraint system (pinned in
+   `PedersenHidingSafeApiTest`).
 
 ## What the provenance check does not do
 

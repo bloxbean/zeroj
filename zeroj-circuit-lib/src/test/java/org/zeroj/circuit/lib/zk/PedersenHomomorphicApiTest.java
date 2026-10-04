@@ -376,8 +376,8 @@ class PedersenHomomorphicApiTest {
                 () -> assertEquals(5_547, subgroupOnEstablished.constraints().size(), "subgroup assertion rows"),
                 () -> assertEquals(341_190, nnz(subgroupOnEstablished), "subgroup assertion nonzeros"),
                 () -> assertEquals(5_547, witnessed.constraints().size(), "witnessInSubgroup rows"),
-                () -> assertEquals(8_808, transfer.constraints().size(), "2-in/1-out + fee transfer rows"),
-                () -> assertEquals(40_575, nnz(transfer), "2-in/1-out + fee transfer nonzeros"));
+                () -> assertEquals(7_284, transfer.constraints().size(), "2-in/1-out + fee transfer rows"),
+                () -> assertEquals(35_244, nnz(transfer), "2-in/1-out + fee transfer nonzeros"));
     }
 
     // ------------------------------------------------------------------
