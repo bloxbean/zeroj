@@ -9,6 +9,7 @@ import org.zeroj.api.VerificationMaterial;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.lib.jubjub.JubjubPoint;
 import org.zeroj.circuit.lib.jubjub.PedersenCommitment;
+import org.zeroj.circuit.lib.jubjub.PedersenVectorBases;
 import org.zeroj.circuit.lib.jubjub.PedersenVectorCommitment;
 import org.zeroj.codec.SnarkjsJsonCodec;
 import org.zeroj.crypto.groth16.Groth16Keys;
@@ -62,6 +63,13 @@ class AnnotatedPedersenProfilesTest {
         assertThrows(ArithmeticException.class,
                 () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BLS12_381));
 
+        // Isolate the fee's range: in = out + 2^32 balances and both commitments are correct, so
+        // only the public fee's 32-bit constraint can reject it.
+        var oversizedFee = transfer(BigInteger.ONE.shiftLeft(32).add(BigInteger.valueOf(990)).longValueExact(),
+                990, 0).fee(BigInteger.ONE.shiftLeft(32));
+        assertThrows(ArithmeticException.class,
+                () -> circuit.calculateWitness(oversizedFee.toWitnessMap(), CurveId.BLS12_381));
+
         assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
     }
 
@@ -84,7 +92,7 @@ class AnnotatedPedersenProfilesTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Annotated vector commitment: honest witness accepted; wrong digest or out-of-width value rejected")
+    @DisplayName("Annotated vector commitment: honest witness accepted; wrong digest or out-of-width value rejected; BN254 refused")
     void vectorCommitmentWitness() {
         var circuit = AnnotatedVectorCommitmentCircuit.build();
         assertDoesNotThrow(() -> circuit.calculateWitness(vector(1_000_000, 7).toWitnessMap(), CurveId.BLS12_381));
@@ -93,15 +101,23 @@ class AnnotatedPedersenProfilesTest {
         assertThrows(ArithmeticException.class,
                 () -> circuit.calculateWitness(wrongDigest.toWitnessMap(), CurveId.BLS12_381));
 
+        // Isolate the range check: the commitment is the mathematically correct one for asset
+        // 2^32, built from the pinned bases (the typed host API refuses out-of-width values), so
+        // only the asset's 32-bit decomposition can reject it.
         BigInteger r = blinding();
-        var c = PedersenVectorCommitment.commit(AnnotatedVectorCommitment.SCHEMA,
-                List.of(BigInteger.ONE, BigInteger.ONE), r);
+        BigInteger oversizedAsset = BigInteger.ONE.shiftLeft(32);
+        JubjubPoint matching = PedersenVectorBases.valueBase(0).scalarMul(BigInteger.ONE)
+                .add(PedersenVectorBases.valueBase(1).scalarMul(oversizedAsset))
+                .add(PedersenVectorBases.blindingBase().scalarMul(r))
+                .normalized();
         var tooWide = AnnotatedVectorCommitmentCircuit.inputs()
-                .amount(1).asset(BigInteger.ONE.shiftLeft(32)).blinding(r)
+                .amount(1).asset(oversizedAsset).blinding(r)
                 .schemaDigest(AnnotatedVectorCommitment.SCHEMA.digest())
-                .u(c.point().affineU()).v(c.point().affineV());
+                .u(matching.affineU()).v(matching.affineV());
         assertThrows(ArithmeticException.class,
                 () -> circuit.calculateWitness(tooWide.toWitnessMap(), CurveId.BLS12_381));
+
+        assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
     }
 
     @Test
