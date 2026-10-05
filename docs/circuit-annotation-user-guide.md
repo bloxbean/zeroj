@@ -261,6 +261,17 @@ The homomorphic and vector APIs work in annotated circuits too (both are experim
 `@Public @UInt` fee) and `AnnotatedVectorCommitment` (`ZkPedersenVector` with the schema digest as
 a `@Public ZkField`) in `zeroj-integration-tests`. Each is proved with Groth16 and verified in
 `AnnotatedPedersenProfilesTest`.
+
+ElGamal encryption (`elgamal-jubjub-v1`, experimental) has typed adapters too:
+- `ZkElGamalPublicKey.fromVerifierFixedPublic` or `witnessInSubgroup` for the key;
+- `ZkElGamal.encrypt(zk, message, randomness, key)`, with the message declared 1–64 bits and the
+  randomness exactly 252 bits;
+- `ZkElGamal.assertDiscreteLogEquality` for trustee proofs, whose six coordinates must be
+  `@Public`.
+
+See `AnnotatedElGamalBallot` and `AnnotatedElGamalDleq`, proved and verified in
+`AnnotatedElGamalTest`. The test also runs the full flow: verified admission of ballots,
+possession proofs, threshold key generation, and verified decryption shares.
 Jubjub adapters use BLS12-381.
 
 Bind every prover-supplied point with `ZkJubjubPoint.witnessAffine(zk, u, v)`. It asserts the
