@@ -1,8 +1,13 @@
 # ADR-0052: Exponential ElGamal on Jubjub — additively homomorphic encryption for circuits and tallies
 
 ## Status
-Proposed — 2026-10-05. Design only. Acceptance would be design acceptance; it would certify no
-implementation, test or security property.
+Accepted (design) — 2026-10-05.
+- The reviewer approved r3 at `092cf6b` with no outstanding findings, and the maintainer
+  accepted the design.
+- Acceptance is design acceptance only. It certifies no implementation, test or security
+  property.
+- Implementation starts at M0, the normative spec, and proceeds milestone by milestone.
+- Q1–Q5 remain maintainer decisions. Each is decided before the milestone that needs it.
 
 This ADR changes no maturity claim. The ADR-0037 production-readiness table and the ADR-0039
 assurance classes remain authoritative. Every secret-bearing host operation proposed here stays
@@ -26,6 +31,8 @@ in the **compatibility/offline** class (ADR-0039 §3.1).
   now requires a validated `ElGamalSecretKey` whose public key equals the ciphertext's joint
   key, and `decryptionShare` requires the share's public key to be registered in the
   ciphertext's context. I13 and the M1 negatives are extended.
+- **Accepted** (2026-10-05): approved at r3 (`092cf6b`); status flipped without changing the
+  design text.
 
 ## Risk classification
 - **R3:** D1 (the `elgamal-jubjub-v1` profile: the ciphertext, the message encoding and the
