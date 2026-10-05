@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre12
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: ead202892cbd4b9721797f7a6a2505bb3e103f3a
+Source revision: 279aa4bc7da8b27fc1c0a2574831475498bcba58
 
 ## Key facts
 
