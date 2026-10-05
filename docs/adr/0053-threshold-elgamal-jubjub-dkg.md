@@ -11,14 +11,27 @@ classes apply: every secret-bearing operation here is **compatibility/offline** 
 2026-10-05
 
 ## Revision history
-- **r1** — initial proposal.
+- **r1** (`7f7a0d8`) — initial proposal.
+- **r2** (2026-10-05; responds to the review of `7f7a0d8`):
+  - F5 → new D1a (round-by-round transitions, omissions, retention of contributions, abort
+    semantics); I3 and I5 rewritten; new I13; M2 omission tests.
+  - F6 → new D4a (admitting a run, kept separate from recomputing it from the transcript):
+    roster, configuration, per-attempt session, authenticated messages, round closure, and
+    confirmations from at least `t + 1` trustees. I7 rewritten; new I14 and I16; new Q6;
+    rejection tests.
+  - F7 → new D5a (threshold-context and share rules, keyed by identifier). ADR-0052's n-of-n
+    share invariants are scoped to n-of-n contexts. Zero and equal shares are supported.
+    New I15; the fixtures go into M1–M3.
+  - F8 → Verification uses admitted parameter sets and an independent fixture oracle.
 
 ## Risk classification
 - **R3:** D1 (the distributed key generation protocol), D2 (the adversary and threshold model)
   and D5 (threshold decryption and its combination rule). These decide who can learn the key
   and whether a tally is correct.
-- **R2:** D3 (transport requirements), D4 (library structure and transcript verification),
-  D6 (session binding and encodings) and D7 (maturity and assurance labelling).
+- **R2:** D3 (transport requirements), D4 (library structure and transcript recomputation),
+  D4a (admitting a run), D5a (threshold contexts and share rules), D6 (session binding and
+  encodings) and D7 (maturity and assurance labelling).
+- D1a (round transitions, omissions and aborts) is R3, as part of D1.
 
 ## Context
 
@@ -59,8 +72,13 @@ All of this follows [GJKR07] §2.1.
   - rounds are synchronized, with known delivery bounds (partial synchrony).
 
   The application provides all of these (D3).
-- **Untrusted:** every message from another trustee; every claimed share, commitment, complaint
-  and complaint answer; claimed transcripts; claimed decryption shares.
+- **Untrusted:**
+  - every message from another trustee;
+  - every claimed share, commitment, complaint and complaint answer;
+  - claimed decryption shares;
+  - every claimed transcript. A transcript is untrusted until it is admitted with authenticated
+    evidence (D4a). Algebraic consistency alone proves nothing about a run: a single party can
+    write a perfectly consistent record whose key it knows.
 - **Secret:** each trustee's polynomial coefficients and the shares it receives, and its final
   share `x_j`. Host arithmetic on these is variable-time `BigInteger` Java, which is the
   compatibility/offline class (ADR-0039 §3.1). Each trustee runs on its own isolated host.
@@ -146,7 +164,8 @@ The protocol, as in Fig. 2, written additively:
    Each `P_j` checks equation (4), `[s_ij]·G + [s'_ij]·H = Σ_k [j^k]·C_ik`, and broadcasts a
    **complaint** against `P_i` if it fails. A dealer who receives a complaint broadcasts the
    pair for the complainer. A dealer is **disqualified** if it received more than `t`
-   complaints, or answered one with a pair that fails (4).
+   complaints, left one unanswered, or answered one with a pair that fails (4). D1a gives the
+   complete round-by-round rules.
 2. **`QUAL`** is the set of non-disqualified trustees. It is a function of the broadcast
    transcript only.
 3. Each `P_j` sets `x_j = Σ_{i∈QUAL} s_ij` and `x'_j = Σ_{i∈QUAL} s'_ij`. The key
@@ -155,8 +174,9 @@ The protocol, as in Fig. 2, written additively:
    checks equation (5), `[s_ij]·G = Σ_k [j^k]·A_ik`.
    - On failure, `P_j` broadcasts the pair `(s_ij, s'_ij)`. That pair satisfies (4) but not
      (5), which makes it a **valid complaint**.
-   - For every `P_i` with a valid complaint, the others run Pedersen-VSS reconstruction. They
-     publish shares that satisfy (4), and recover `z_i`, `f_i` and `A_ik` in the clear.
+   - For every `P_i` with a valid complaint, or with a missing or malformed extraction vector
+     (D1a), the others run Pedersen-VSS reconstruction. They publish shares that satisfy (4),
+     and recover `z_i`, `f_i` and `A_ik` in the clear.
    - Finally `y = Σ_{i∈QUAL} A_i0`.
 
 **Why New-DKG and not JF-DKG.** [GJKR07] §3 shows that JF-DKG lets the adversary bias `x`.
@@ -164,6 +184,38 @@ The protocol, as in Fig. 2, written additively:
 problem alone. ElGamal's IND-CPA security rests on **DDH**, which §5 does not cover.
 `elgamal-jubjub-v1` therefore needs a DKG that meets (C3) and the secrecy requirement, which
 Theorem 1 gives New-DKG.
+
+### D1a — Round transitions, omissions and aborts (R3; responds to F5)
+
+The protocol runs in fixed rounds, each closed by a deadline under the broadcast mechanism of D3.
+A message that arrives after its round closes counts as **absent**. Every rule below depends
+only on what the broadcast shows, so all honest trustees apply it identically.
+
+| Round | Content | Failure, and what happens |
+|---|---|---|
+| R1 deal | Each dealer broadcasts `C_i` (exactly `t + 1` canonical subgroup points) and privately sends `(s_ij, s'_ij)`. | A missing, malformed or **conflicting** `C_i` (two different vectors from the same dealer) disqualifies the dealer. A missing pair, or one that fails (4), makes the recipient complain in R2. |
+| R2 complaints | Each trustee broadcasts its complaints, at most one per dealer. | Repeated complaints from the same trustee against the same dealer count once. |
+| R3 answers | For every complaint, the accused dealer broadcasts a pair that satisfies (4) for the complainer, and the complainer adopts it. | The dealer is **disqualified** if it received more than `t` complaints, left **any complaint unanswered** when R3 closed, gave any answer that fails (4), or gave conflicting answers. |
+| QUAL | `QUAL` is the set of dealers not disqualified, fixed once R3 closes. | Under the assumptions, no honest dealer is ever disqualified: it answers every complaint correctly, and at most `t` complaints come from corrupt trustees. |
+| R4 extract | Each dealer in `QUAL` broadcasts `A_i` (`t + 1` points). | A missing, malformed or conflicting `A_i` marks the dealer for **reconstruction**. |
+| R5 complaints | Any trustee holding a pair that satisfies (4) but fails (5) broadcasts it. | Each such valid complaint marks the dealer for reconstruction. |
+| R6 reconstruction | For every marked dealer, each trustee broadcasts its pair `(s_ij, s'_ij)`. Any `t + 1` pairs that satisfy (4) determine `f_i` and `f'_i`, and so `z_i` and `A_i`. | The dealer's contribution is **kept**. |
+
+**After `QUAL` is fixed, no contribution is ever dropped.** A dealer who withholds or falsifies
+its extraction vector is reconstructed instead. [GJKR07] §4.2: "if a party `P_i` misbehaves at
+this point (for example by refusing to carry on the Feldman-VSS …), the honest parties can
+recover the polynomial `f_i` … Pi's contribution to the secret key x will still be included (if
+we did not include it, we would allow the adversary to bias the distribution of x)."
+
+**Aborts.** Some situations cannot arise under the assumptions (more than `t` faults, or
+broadcast without agreement):
+- an honest trustee's own dealing is disqualified, as seen from its own view;
+- fewer than `t + 1` valid pairs exist to reconstruct a marked dealer;
+- the broadcast shows disagreement.
+
+In any of these the participant **aborts**, with an explicit "fault assumption violated"
+result. It never silently excludes a dealer or restarts within the same session. A new attempt
+needs a new session (D4a).
 
 ### D2 — Threshold model and parameters (R3)
 
@@ -174,8 +226,8 @@ Theorem 1 gives New-DKG.
 - `n ≤ N_MAX` (lean 64, Q4).
 - Identifiers are `1 … n` and are pairwise distinct. As scalars in `ℤ_l` they are non-zero,
   because `n < l`.
-- If `y = O` the run is aborted and restarted (probability negligible). ADR-0052 refuses an
-  identity key.
+- If `y = O` the run aborts (probability negligible). ADR-0052 refuses an identity key. A new
+  attempt needs a new session (D4a, I13).
 
 ### D3 — Transport: the application provides it, with stated requirements (R2)
 
@@ -187,7 +239,8 @@ application must provide the [GJKR07] §2.1 model:
   datum per message, or an authenticated off-chain board that all trustees read.
 - **Private, authenticated point-to-point channels** for the `(s_ij, s'_ij)` pairs.
 - **Rounds with deadlines.** A message that misses its round counts as absent. A share that is
-  not delivered leads to a complaint.
+  not delivered leads to a complaint. The mechanism must also give **evidence that each round
+  is closed and complete**, for admission (D4a).
 
 **How the private channels are built is not specified here** (Q1). Per the [GJKR07] appendix,
 encrypting shares onto the broadcast channel does not make JF-DKG variants secure. Any
@@ -207,15 +260,47 @@ illustrative.
   - It consumes the round's messages and produces that trustee's broadcast and private
     messages, following Fig. 2 exactly.
   - It holds its secrets only in memory, in the compatibility/offline class.
-- **`DkgTranscript`.** The ordered public record of all broadcast messages. Verifying it
-  **deterministically** yields `QUAL`, `y` and every verification key
-  `Y_j = Σ_{i∈QUAL} Σ_k [j^k]·A_ik`. This is [GJKR07] (C1′): `g^{x_j}` "can be computed from
-  publicly available information". The private messages are not needed for this.
-- **`ThresholdKeyContext`.** Produced only from a verified transcript. It contains `(t, n,
-  QUAL, y, {Y_j})`. It plays the key-context role of ADR-0052 D2c, so encryption, admission and
-  key binding are unchanged.
-- **Decryption shares.** ADR-0052's `decryptionShare` and `VerifiedDecryptionShare` are reused,
-  with `P = Y_j` taken from the context (D5).
+- **`DkgTranscript`.** The ordered public record of all broadcast messages, in rounds R1–R6
+  (D1a).
+- **`DkgTranscript.recompute()`.** Pure, deterministic algebra over a run's round contents. It
+  yields `QUAL`, `y` and every verification key `Y_j = Σ_{i∈QUAL} Σ_k [j^k]·A_ik`. This is
+  [GJKR07] (C1′): `g^{x_j}` "can be computed from publicly available information". The private
+  messages are not needed for this. Recomputation is **not** evidence that the run happened
+  (D4a).
+- **`ThresholdKeyContext`.** Created only by admission (D4a). It contains the configuration,
+  `QUAL`, `y` and `{j → Y_j}`. It is a distinct key-context type with its own share rules
+  (D5a). Encryption and ciphertext admission work with it as ADR-0052 specifies.
+- **Decryption shares.** These are ADR-0052's DLEQ statement and verified-share type,
+  specialised to threshold contexts (D5a), with `P = Y_j` taken from the context by identifier.
+
+### D4a — Admitting a DKG run (R2; responds to F6)
+
+Recomputing a transcript and admitting a run are separate steps. A
+`ThresholdKeyContext.admit(config, roundContents, evidence, verifier)` requires all of the
+following:
+
+1. **An immutable configuration:**
+   - the profile id `elgamal-jubjub-threshold-v1`;
+   - `t` and `n`;
+   - a **roster** mapping each identifier `1 … n` to that trustee's authentication key;
+   - a **session id** that is unique **per attempt**: for example
+     `blake2b_256(application context ‖ attempt number ‖ roster ‖ t ‖ n)`. An election-id hash
+     alone cannot tell retries apart, and the application must never reuse an attempt.
+2. **Authenticated messages.** Every broadcast message and every complaint answer verifies
+   under its sender's roster key, through the application-supplied verifier: for example
+   Cardano transactions signed by trustee keys on an on-chain board. Every message is bound to
+   the session, sender, round and target (D6).
+3. **Round closure.** Evidence, under the agreed broadcast mechanism, that every round's
+   contents are final and complete: nothing omitted or truncated. For an on-chain board, that
+   means the chain's finality.
+4. **Confirmations.** At least `t + 1` trustees in `QUAL` broadcast an authenticated
+   confirmation of `(session, transcript digest, y)`. With at most `t` corrupt trustees, at
+   least one honest trustee then vouches that this record is the run it took part in (Q6).
+
+A participant may also create its context directly from its own run, since it saw the
+authenticated rounds itself. The **honest-participation and transport assumptions stay
+assumptions.** Admission checks the evidence those assumptions rely on; the public algebra does
+not prove them.
 
 ### D5 — Threshold decryption (R3)
 
@@ -234,17 +319,44 @@ For an admitted ciphertext `(A, B)` under a `ThresholdKeyContext`:
 3. If more than `t + 1` verified shares are present, the result must be the same for every
    `(t + 1)`-subset that is checked. A mismatch is an error, not a choice. This cannot happen
    with verified shares, so it is a defensive check.
-4. Malformed share sets are refused: duplicates, foreign identifiers, shares for another
-   ciphertext, or fewer than `t + 1`.
+4. Malformed share sets are refused: duplicate identifiers, foreign identifiers, shares for
+   another ciphertext, or fewer than `t + 1`.
 
-ADR-0052's n-of-n contexts keep its I14 rule (exactly one share per registered trustee). This
-ADR adds the threshold rule for threshold contexts only.
+### D5a — Threshold contexts and share rules (R2; responds to F7)
+
+Shamir verification keys `Y_j = [x_j]·G` are values of one polynomial, not additive
+contributions. In general their sum is not `y`, one of them can be the identity, and two
+identifiers can share the same value. Both cases occur in valid runs:
+- a 2-of-3 run with aggregate polynomial `F(z) = 3 − 3z` has `x_1 = 0`, so `Y_1 = O`;
+- a run whose slopes cancel has `F(z) = 3`, so `Y_1 = Y_2 = Y_3 = [3]·G`.
+
+In both, every 2-of-3 subset decrypts correctly. The rules are therefore:
+
+- **Scope of ADR-0052's rules.** ADR-0052's I1 (non-identity, pairwise-distinct key shares), I2
+  (proof-of-possession admission) and I14 (exactly one share per registered trustee) govern
+  **n-of-n contexts only**. Threshold contexts follow this section.
+- **Joint key.** The joint key `y` must not be the identity (ADR-0052's rule for the joint key
+  is kept).
+- **Verification keys.** Each `Y_j` may be any subgroup point, **including `O`**, and may equal
+  another trustee's. Shares are keyed and deduplicated **by identifier**, never by point value.
+- **Supported, not rejected.** A zero share gives `D_j = O`, and the DLEQ statement with
+  `P = O` and `D = O` is valid. A verification key therefore enters the trustee relation as a
+  DLEQ statement point (`P` in ADR-0052 D3's `assertDiscreteLogEquality`), never through a
+  key-entry path that asserts non-identity, such as `fromVerifierFixedPublic` (ADR-0052 I8,
+  which governs encryption keys). No run is rejected or retried because of these values, and no
+  share is discarded. Both events have negligible probability in honest runs, but correctness
+  does not depend on that.
+- **Secrets and keys** (ADR-0052 I13, specialised):
+  - `decryptionShare` requires `[x_j]·G = Y_j` for the trustee's own identifier;
+  - `decryptWithSecret` is refused for threshold contexts, because no full secret exists.
+- **Proof of possession.** None is used. The VSS checks and admission (D4a) take its place.
 
 ### D6 — Session binding and encodings (R2)
 
-- **Session binding.** Every DKG message carries a 32-byte session identifier, chosen by the
-  application (for example a hash of the election id), together with the sender's identifier,
-  the round, and the target identifier for private messages. Participants refuse messages for
+- **Session binding.** Every DKG message carries a 32-byte session identifier, together with
+  the sender's identifier, the round, and the target identifier for private messages. The
+  session is unique **per attempt** and commits to the configuration (D4a, Q5); an election id
+  alone is not enough, because it cannot tell retries apart. Participants refuse messages for
   another session, round or target. This is engineering binding over the authenticated
   channels of D3. It does not change the cryptography.
 - **Encodings.** Scalars are `I2OSP32` of a canonical value `< l`. Points are `repr_J` (ZIP 216,
@@ -285,23 +397,27 @@ Each of these needs its own decision:
 |---|---|---|
 | I1 | Parameters satisfy `1 ≤ t`, `2t + 1 ≤ n ≤ N_MAX`. Identifiers are `1 … n`, distinct and non-zero mod `l`. | D2 |
 | I2 | The two bases are `G` and `H` from `pedersen-jubjub-v1`, so nobody knows `log_G H`. No other second base is accepted. | D1 |
-| I3 | Share checks are exactly equations (4) and (5) of Fig. 2. A dealer is disqualified if and only if it received more than `t` complaints, or answered one with a pair that fails (4). | D1 |
+| I3 | Share checks are exactly equations (4) and (5) of Fig. 2. A dealer is disqualified if and only if one of these holds: its commitment vector is missing, malformed or conflicting; it received more than `t` complaints; it left a complaint unanswered when R3 closed; or it answered with a pair that fails (4), or with conflicting pairs. | D1, D1a |
 | I4 | `QUAL`, `y` and every `Y_j` are deterministic functions of the broadcast transcript alone. Every honest verifier of the same transcript computes the same values. | D1, D4 |
-| I5 | A phase-2 complaint is valid only if its pair satisfies (4) and fails (5). Reconstruction of `z_i` uses at least `t + 1` published pairs that satisfy (4). | D1 |
+| I5 | After `QUAL` is fixed, a missing, malformed or conflicting extraction vector, or a valid phase-2 complaint (a pair that satisfies (4) and fails (5)), triggers reconstruction from at least `t + 1` pairs that satisfy (4). The dealer's contribution is **kept**, so the final key equals that of a run without withholding. | D1, D1a |
 | I6 | `y = Σ_{i∈QUAL} A_i0`, with reconstructed values where needed. `y ≠ O`, otherwise the run aborts. | D1, D2 |
-| I7 | A `ThresholdKeyContext` is constructible only from a verified transcript. | D4 |
+| I7 | A `ThresholdKeyContext` is constructible only by admission (D4a), or by a participant from its own run. Recomputation from a transcript alone never creates one. | D4, D4a |
 | I8 | Threshold decryption uses at least `t + 1` verified shares from distinct `QUAL` members, each verified against `Y_j` and this exact ciphertext. Lagrange coefficients are computed for the exact subset used, and malformed share sets are refused. | D5 |
 | I9 | When more than `t + 1` verified shares exist, every checked subset gives the same result, or decryption fails. | D5 |
 | I10 | Every message is bound to its session, sender, round and (for private messages) target. Messages for anything else are refused. | D6 |
 | I11 | Scalars and points are canonical on decode, and points are in the subgroup. The transcript encoding is canonical. | D6 |
 | I12 | Secret-bearing operations are documented as compatibility/offline-class, with no online or constant-time claim. | D7 |
+| I13 | A situation that cannot arise under the assumptions aborts with an explicit "fault assumption violated" result. Dealers are never silently excluded, and runs never restart within the same session. | D1a |
+| I14 | Admission requires all of: the immutable configuration (profile, `t`, `n`, roster, session); authenticated messages bound to session, sender, round and target; evidence of round closure and completeness; and authenticated confirmations from at least `t + 1` trustees in `QUAL`. | D4a |
+| I15 | In threshold contexts, shares are keyed by identifier; each `Y_j` may be any subgroup point, including `O`; the joint key `y ≠ O`; `decryptionShare` requires `[x_j]·G = Y_j` for its own identifier; `decryptWithSecret` is refused. A `Y_j` enters the trustee relation only as a DLEQ statement point. ADR-0052's I1, I2 and I14 apply to n-of-n contexts only. | D5a |
+| I16 | The session id is unique per attempt, and messages or contexts from another attempt are refused. | D4a, D6 |
 
 ## Consequences
 
 - Applications can choose liveness (t-of-n) or maximal privacy (n-of-n) with the same ballots
   and the same APIs for encryption and admission.
-- Anyone can verify a key generation from its public transcript, and recompute every trustee's
-  verification key.
+- Anyone holding the admission evidence can verify a key generation (D4a). Anyone can recompute
+  every trustee's verification key from the transcript.
 - Applications take on real protocol work: a broadcast board, private channels and round
   deadlines. The library cannot supply the network.
 - The added cost is host-side only. Each trustee performs about `2(t + 1)` commitments when
@@ -310,7 +426,9 @@ Each of these needs its own decision:
 
 ## Compatibility
 
-- **New API only.** ADR-0052's ciphertexts, encodings and n-of-n contexts are unchanged.
+- **New API only.** ADR-0052's ciphertexts, encodings and n-of-n contexts are unchanged. Its
+  share invariants I1, I2 and I14 are scoped to n-of-n contexts (D5a). Threshold contexts are a
+  separate type with their own rules.
 - **Ballots are unchanged.** Ballots encrypted to a `y` from a DKG are ordinary
   `elgamal-jubjub-v1` ciphertexts.
 - **The ballot circuit and its proofs are unaffected**, because the key enters the ballot
@@ -323,9 +441,9 @@ Each of these needs its own decision:
 | Milestone | Scope | Entry gate | Exit criteria |
 |---|---|---|---|
 | M0 | Normative spec `docs/specs/elgamal-jubjub-threshold-v1.md`: parameters, message formats, transcript encoding, verification algorithm, threshold combine, and test vectors | ADR accepted | Spec reviewed. Its vectors come from an independent Python reference of Fig. 2, not from the Java code. |
-| M1 | VSS primitives and Lagrange (D4) | M0 | Equations (4) and (5) and reconstruction match the spec vectors. Property tests: any `t + 1` shares reconstruct the same value, and `t` shares do not determine it (the simulation check of [GJKR07] §2.2, on small parameters). |
-| M2 | `DkgParticipant` and `DkgTranscript` (D1, D4, D6) | M1 | **Honest runs:** every `(t, n)` up to small bounds; all participants agree on `QUAL`, `y` and `Y_j` (I4). **Adversarial simulations**, one test each: <br>• a bad share; <br>• a false complaint; <br>• more than `t` complaints; <br>• a bad complaint answer; <br>• a phase-2 Feldman cheat, with reconstruction; <br>• a missing message; <br>• a message replayed from another session, round or target; <br>• a non-canonical or non-subgroup point; <br>• a rushing-order run. |
-| M3 | Threshold decryption (D5) on ADR-0052's safe API | M2 and ADR-0052 M1 | I8 and I9. Negatives: fewer than `t + 1` shares, duplicates, a foreign identifier, the wrong ciphertext, an invalid proof, an inconsistent subset. Every `(t + 1)`-subset decrypts identically. |
+| M1 | VSS primitives and Lagrange (D4) | M0 | Equations (4) and (5) and reconstruction match the spec vectors. Property tests: any `t + 1` shares reconstruct the same value, and `t` shares do not determine it (the simulation check of [GJKR07] §2.2, on small parameters). The F7 fixtures (`F(z) = 3 − 3z` and `F(z) = 3`) reconstruct correctly from every subset. |
+| M2 | `DkgParticipant` and `DkgTranscript` (D1, D4, D6) | M1 | **Honest runs:** every `(t, n)` up to small bounds; all participants agree on `QUAL`, `y` and `Y_j` (I4). **Adversarial simulations**, one test each: <br>• a bad share; <br>• a false complaint; <br>• more than `t` complaints; <br>• a bad complaint answer; <br>• a phase-2 Feldman cheat, with reconstruction; <br>• a missing message; <br>• a message replayed from another session, round or target; <br>• a non-canonical or non-subgroup point; <br>• a rushing-order run. <br>**Omissions**, one test per round: <br>• a missing commitment vector; <br>• a single unanswered complaint (`n = 3`, `t = 1`), after which the dealer is disqualified; <br>• conflicting messages; <br>• a withheld extraction vector, after which the final key **equals the run without withholding**; <br>• too few reconstruction pairs, which aborts with "fault assumption violated". <br>**Admission (D4a)**, each rejected: <br>• a fabricated record without authentication; <br>• an omitted complaint or answer; <br>• a truncated round; <br>• a conflicting roster or configuration; <br>• a replay from another attempt; <br>• fewer than `t + 1` confirmations. |
+| M3 | Threshold decryption (D5, D5a) on ADR-0052's safe API | M2 and ADR-0052 M1 | I8, I9 and I15. Negatives: fewer than `t + 1` shares, duplicates by identifier, a foreign identifier, the wrong ciphertext, an invalid proof, an inconsistent subset, `decryptWithSecret` on a threshold context. The F7 fixtures decrypt through the safe context, including identity-valued shares and equal `Y_j`. Every `(t + 1)`-subset decrypts identically. |
 | M4 | Docs: support matrix (Experimental) and a guide | M3 | Docs reviewed. |
 
 The user has asked for ADR-0053's implementation to follow in this PR. Because M3 needs
@@ -339,8 +457,13 @@ ADR-0052's host API, ADR-0052's own M0 and M1 come first (see the PR description
 - **Spec cross-checks.** `G` and `H` must equal the bases pinned in `pedersen-jubjub-v1`.
 - **Adversarial simulation.** The M2 list, with each corrupted behaviour scripted against
   honest participants.
-- **Differential.** Java participants and transcript verification against the Python reference.
-  Threshold decryption against ADR-0052's n-of-n path on the same message, where `t + 1 = n`.
+- **Differential.** Java participants and transcript recomputation against the Python reference.
+  - Threshold decryption uses admitted parameter sets only: 2-of-3, 3-of-5 and 4-of-7.
+  - Results are compared with an independent fixture oracle, and with the Lagrange-weighted
+    additive shares of the chosen subset (`Σ_{j∈S} λ_j·x_j = x`).
+  - Small fixtures exercise every `(t + 1)`-subset.
+  - Arithmetic-only tests are kept separate from safe-context integration tests.
+  - (`t + 1 = n` is not an admitted setting: with `n ≥ 2t + 1` it would need `t ≤ 0`.)
 - **Not evidence of security:** passing tests and benchmarks. Theorem 1 is the argument; the
   tests check that the implementation follows Fig. 2.
 
@@ -380,8 +503,15 @@ ADR-0052's host API, ADR-0052's own M0 and M1 come first (see the PR description
      public API.
 4. **Q4 (D2): `N_MAX`, and round deadlines.**
    - Lean: `N_MAX = 64`. Deadlines are application configuration.
-5. **Q5 (D6): the session identifier.**
-   - Lean: 32 bytes chosen by the application, for example `blake2b_256` of the election id.
+5. **Q5 (D4a, D6): the session identifier.**
+   - It must be unique **per attempt**.
+   - Lean: `blake2b_256(application context ‖ attempt number ‖ roster ‖ t ‖ n)`, with the
+     attempt never reused.
+6. **Q6 (D4a): confirmations.**
+   - Options: (a) require authenticated confirmations of the transcript from at least `t + 1`
+     trustees in `QUAL`; (b) rely on round-closure evidence alone.
+   - Lean: (a). With at most `t` corrupt trustees, it guarantees an honest trustee vouched for
+     the record.
 
 ## Related findings (out of scope)
 
