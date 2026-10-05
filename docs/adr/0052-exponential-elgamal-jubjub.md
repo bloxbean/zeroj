@@ -12,15 +12,29 @@ in the **compatibility/offline** class (ADR-0039 §3.1).
 2026-10-05
 
 ## Revision history
-- **r1** — initial proposal.
+- **r1** (`9fe1c11`) — initial proposal.
+- **r2** (2026-10-05; responds to the review of `9fe1c11`):
+  - F1 → new D2a (admission and plaintext bounds); message width capped at 64 bits in D1 and
+    D3; I6, I7 and I10 rewritten; new I16; M1 and M2 negatives.
+  - F2 → new D2b (verified decryption shares); D5 gains a registered key context; new I14
+    and I15; M1 negatives.
+  - F3 → new D2c (key context on every ciphertext); D7 states that the encoding carries
+    neither key nor bound; new I13.
+  - F4 → Compatibility rewritten to separate ciphertext compatibility from proof and
+    verification-key compatibility; M3 gains a compiled-system gate.
 
 ## Risk classification
 - **R3:** D1 (the `elgamal-jubjub-v1` profile: the ciphertext, the message encoding and the
   homomorphic semantics), D3 (the in-circuit relations, whose soundness the tally depends on)
   and D4 (the trustee relation and its proof system). These define the scheme's cryptographic
   behaviour, even though the Jubjub arithmetic underneath is not new.
-- **R2:** D2 (the host API and its validation), D5 (key aggregation and proof of possession),
-  D6 (maturity and assurance labelling) and D7 (encodings and the order of public inputs).
+- **R2:**
+  - D2 (the host API and its validation);
+  - D2a, D2b and D2c (ciphertext admission and bounds, verified decryption shares, key context:
+    the trust boundaries of the host API);
+  - D5 (key aggregation and proof of possession);
+  - D6 (maturity and assurance labelling);
+  - D7 (encodings and the order of public inputs).
 
 ## Context
 
@@ -80,7 +94,10 @@ These results are evidence for the design, not for its security. They were measu
   - provers and every witness value;
   - ciphertexts and public keys received as bytes or as public inputs;
   - claimed decryption shares;
-  - claimed tallies.
+  - claimed tallies;
+  - any **plaintext bound** or **key association** claimed for a ciphertext received from
+    elsewhere. Points that decode correctly prove nothing about the range of the message, nor
+    about which key encrypted it.
 - **Secret:**
   - the encryption randomness `k` and the message `m` (for example, a vote);
   - each trustee's key share `sk_j`.
@@ -162,17 +179,23 @@ form of [CGS97] §2.5, written additively.
 - **Generator:** `G = JubjubPoint.SUBGROUP_GENERATOR`, the `pedersen-jubjub-v1` value base. It
   serves as both the key base and the message base (see Q3).
 - **Keys:** a secret `sk ∈ [1, l)` and its public key `PK = [sk]·G`.
-- **Encryption** of an integer `m ∈ [0, 2^w)`, at a width `w` the caller declares:
+- **Encryption** of an integer `m ∈ [0, 2^w)`, at a width the caller declares, with
+  `1 ≤ w ≤ 64` (`MAX_MESSAGE_BITS`). Since `2^64 − 1 < l`, every admitted message is
+  canonical, so no two in-range messages share a ciphertext. At `w = 252` they could: `m` and
+  `m + l` both fit in 252 bits, and `[m]·G = [m + l]·G` (F1). Decryption by search is
+  practical only for small totals anyway (D2).
   ```
   k ← uniform in [0, l)        (64 random bytes reduced mod l, as pedersen-jubjub-v1 §3.1)
   A = [k]·G                    decryption handle
   B = [m]·G + [k]·PK           blinded message
   ```
-- **Homomorphism:**
+- **Homomorphism** (only between ciphertexts under the **same key**, D2c):
   - `Enc(m1) + Enc(m2) = Enc(m1 + m2)`, by component-wise addition.
   - `[c]·Enc(m) = Enc(c·m)` for a public integer `c ≥ 1`.
-  - Plaintexts live mod `l`, so the integer reading of a result requires its bound to stay
-    below `l` (I7).
+  - Plaintexts live mod `l`, so reading a result as an integer requires every input's bound to
+    be **established**, not merely claimed (D2a), and the result's bound to stay below `l` (I7).
+    A successful small discrete log does not detect an earlier wraparound: for example,
+    `Enc(l − 1) + Enc(1)` decrypts to `0`.
 - **Decryption:** `M = B − [sk]·A = [m]·G`. Then `m` is the unique `t ∈ [0, bound]` with
   `[t]·G = M`, found by a bounded search: linear, or baby-step giant-step, as in [CGS97] §3,
   footnote 3. If no `t` matches, decryption fails closed.
@@ -180,7 +203,9 @@ form of [CGS97] §2.5, written additively.
   - each trustee computes `D_j = [sk_j]·A`;
   - `M = B − Σ_j D_j`.
 
-  This is [CGS97] §2.3 with additive shares; Lagrange coefficients are all 1.
+  This is [CGS97] §2.3 with additive shares; Lagrange coefficients are all 1. Each `D_j` is
+  used only after its DLEQ proof is verified against the registered `PK_j` and this exact `A`
+  (D2b).
 
 `elgamal-jubjub-v1` is versioned like the Pedersen profiles. Any change to the generator, the
 encodings or the randomness derivation is a new profile.
@@ -188,23 +213,92 @@ encodings or the randomness derivation is a new profile.
 ### D2 — Host API in `zeroj-circuit-lib` (R2)
 
 Package `org.zeroj.circuit.lib.jubjub`, next to `PedersenCommitment`. The names are
-illustrative.
+illustrative. The API has a **raw layer** and a **safe layer**, and only the safe layer gives
+the guarantees of this ADR.
 
 - **`ElGamalPublicKey`:** a validated non-identity subgroup point. It is produced only by the
-  validating constructors described in D5, or by `fromSecret`.
-- **`ElGamalCiphertext`:** a record of `(A, B)` and a **plaintext bound**. Decoding rejects
-  non-canonical, off-curve and non-subgroup points.
-- **`encrypt(key, m, width, SecureRandom)`:** refuses `m ≥ 2^width`. The resulting bound is
-  `2^width − 1`.
-- **`add`, `scale`:** these combine bounds. They refuse a result whose bound reaches `l`.
-- **`decryptionShare(secretShare, handle)`.**
-- **`combine(ciphertext, shares)`** and **`decrypt(…, maxPlaintext)`:** the bounded search, with
-  an explicit maximum. They fail closed.
+  validating constructors in D5, or by `fromSecret`.
+- **`ElGamalKeyContext`** (D5, D2c): a joint key together with the registered set of trustee
+  key shares that produced it.
+- **`RawElGamalCiphertext`:** the result of decoding 64 bytes (D7). Its points are canonical,
+  on-curve and in the subgroup. It carries **no key and no plaintext bound**, so it cannot be
+  added or decrypted on the safe path.
+- **`ElGamalCiphertext`:** the safe-path type. It carries `(A, B)`, its key context and an
+  **established** plaintext bound. It can be created only by admission (D2a).
+- **`encrypt(context, m, width, SecureRandom)`:** local encryption. It is one of the two ways to
+  admit a ciphertext.
+- **`add`, `scale`:** these require the same key context (D2c), combine bounds, and refuse a
+  result whose bound reaches `l` (I7).
+- **`decryptionShare(secretShare, ciphertext)`:** the input is an `ElGamalCiphertext`, so its
+  handle is already a validated subgroup point before any secret multiplication (I15).
+- **`decrypt(ciphertext, verifiedShares, maxPlaintext)`:** distributed decryption (D2b).
+  `decryptWithSecret(ciphertext, secretKey, maxPlaintext)` is the single-key path. Both use a
+  bounded search with an explicit maximum, and both fail closed.
 
 The API makes no "constant-time" claim. Its secret-bearing methods are named and documented as
 compatibility/offline-class (D6). It does not branch on the message: `[m]·G` is computed by
 scalar multiplication for every `m`. That removes the most obvious leak of the message, a
 different path for `m = 0`, but the operation is still variable-time.
+
+### D2a — Ciphertext admission and plaintext bounds (R2; responds to F1)
+
+A plaintext bound is established only when a ciphertext enters the safe layer. There are
+exactly two ways in:
+
+1. **Local encryption**, `encrypt(context, m, width, rng)`. The library checks `m < 2^width` and
+   `width ≤ 64`, so the bound is `2^width − 1`.
+2. **Verified admission**, `admit(raw, context, width, verifier)`. The caller supplies a
+   verifier that checks the D3 encryption statement for **exactly** this ciphertext
+   `(A.u, A.v, B.u, B.v)`, this key `(PK.u, PK.v)` and this width. The bound is then
+   `2^width − 1`.
+
+   This is a **delegated verifier obligation**, and the Javadoc says so. One legitimate
+   delegation is an on-chain validator that already verified that statement before the
+   ciphertext reached the ledger, for example the usecase's ballot policy. The caller must
+   then establish, from chain data, that the ciphertext is one such validator accepted.
+
+There is no constructor from a claimed bound or a claimed key: relabelling a ciphertext after
+serialization is impossible on the safe path. No out-of-circuit range proof is invented; a
+range is established only by local encryption or by a verified in-circuit statement.
+
+### D2b — Verified decryption shares (R2; responds to F2)
+
+A claimed share is untrusted. Without verification, a trustee who has seen the other shares
+can publish `D_bad = B − [t]·G − Σ D_honest` and make the result any in-range `t` it likes.
+The bounded search cannot detect this, because the forged result is in range. [CGS97] §2.3
+verifies each authority's proof before combining its share.
+
+- **`VerifiedDecryptionShare.verify(ciphertext, trusteeShare, D, proof, verifier)`** is the
+  only constructor. The verifier checks the D3 DLEQ statement with:
+  - `X` = this ciphertext's handle `A`, taken from the admitted ciphertext and never from the
+    share's sender;
+  - `P` = the trustee's **registered** key share from the key context;
+  - `D` = the claimed share.
+
+  The resulting object is bound to that ciphertext and that trustee.
+- **`decrypt(ciphertext, verifiedShares, maxPlaintext)`** requires all of the following, and
+  otherwise refuses:
+  - every share is bound to this exact ciphertext;
+  - every share belongs to a trustee registered in the ciphertext's key context;
+  - there is exactly one share per registered trustee: no share missing, none repeated, none
+    foreign;
+  - the ciphertext's established bound is at most `maxPlaintext`.
+- **Raw layer.** An unchecked `unmask(B, shares)` exists only on the raw layer, documented as
+  giving no guarantee against a malicious trustee.
+
+### D2c — Key context on every ciphertext (R2; responds to F3)
+
+The homomorphic identities hold only between ciphertexts under the same key. Adding ciphertexts
+under different keys need not fail the search; it can return a wrong in-range value. For
+example, `Enc(1; k=1, PK=3G) + Enc(1; k=1, PK=2G)` decrypts to `1` under secret 3.
+
+- Every `ElGamalCiphertext` carries its `ElGamalKeyContext`.
+- `add`, `scale` and `decrypt` refuse ciphertexts with different contexts. Contexts compare by
+  the joint key and the registered share set.
+- The 64-byte encoding carries no key (D7). A decoded ciphertext gets its context only through
+  admission (D2a), and the verified D3 statement includes the key as public inputs. A bare key
+  label is therefore never trusted.
+- Raw-layer point arithmetic carries a stated precondition (one key) and no guarantee.
 
 ### D3 — In-circuit relations (R3)
 
@@ -215,6 +309,8 @@ with `ZkElGamalPublicKey` and `ZkElGamalCiphertext`, mirroring `ZkPedersenCommit
   a ciphertext. `assertAffineEquals(A.u, A.v, B.u, B.v)` binds it to public inputs.
   - `[m]·G` is a fixed-base multiplication over the message's own decomposition, at its declared
     width. One-bit messages may use a selection.
+  - The width is `1 ≤ w ≤ 64`, and a wider declaration is refused when the circuit is defined.
+    At width 252 a witness with `m = l` satisfies the same constraints as `m = 0` (F1).
   - `randomness` must be declared 252 bits wide. It is decomposed **once**, and that one
     decomposition drives both `[k]·G` (fixed base) and `[k]·PK` (variable base) (I5).
   - It carries ADR-0051 D2's guard rails: `requireNotPublicOrConstant` and
@@ -276,6 +372,9 @@ AGENTS.md, a new transcript is escalated, not invented in code.
   - This blocks the rogue-key attack: a party that publishes `PK_n = [x]·G − Σ_{j<n} PK_j`
     cannot prove knowledge of its discrete log. That is the same principle as [RY07], applied
     to encryption-key aggregation.
+- **Key context.** Aggregation returns an `ElGamalKeyContext`: the joint key together with the
+  registered `VerifiedKeyShare`s. The context is the reference point for share verification
+  (D2b) and for the same-key rule (D2c).
 - **Ordering, as guidance.** Trustees should publish commitments to their keys before
   revealing them, so that no trustee chooses its key after seeing the others. This limits bias
   of the joint key. It is a protocol obligation, documented but not enforced by the library.
@@ -299,6 +398,10 @@ AGENTS.md, a new transcript is escalated, not invented in code.
 
 - **Bytes:** a ciphertext is `repr_J(A) ‖ repr_J(B)`, 64 bytes (ZIP 216), and a public key is
   `repr_J(PK)`, 32 bytes. Decoding is canonical-only.
+  - The ciphertext encoding carries **neither a key nor a bound**. Decoding yields a
+    `RawElGamalCiphertext`.
+  - The key and the bound are restored only through admission (D2a, D2c). Serializing an
+    admitted ciphertext and decoding it again yields a raw one, which must be admitted again.
 - **Public inputs:** a ciphertext is `A.u, A.v, B.u, B.v`, in that order. A key is
   `PK.u, PK.v`. A DLEQ statement is `X.u, X.v, P.u, P.v, D.u, D.v`. This matches ADR-0051 D4's
   affine `(u, v)` convention.
@@ -335,13 +438,17 @@ AGENTS.md, a new transcript is escalated, not invented in code.
 | I3 | Ciphertext decoding is canonical (ZIP 216), on-curve and in the subgroup. | D2, D7 |
 | I4 | Host randomness is uniform in `[0, l)`: 64 bytes reduced mod `l`. In-circuit randomness is declared 252 bits, is never public or constant, and is never range-confined below 252 bits. | D1, D2, D3 |
 | I5 | Within one relation, every scalar multiplication by the same secret (`k` in encryption, `x` in DLEQ) consumes one bit decomposition. | D3 |
-| I6 | Messages are integers of a declared width: refused above it on the host, and proved below it in-circuit. | D1, D2, D3 |
-| I7 | Every homomorphic result carries a plaintext bound. Operations refuse a bound `≥ l`, and decryption requires the bound to be within the caller's search limit. | D1, D2 |
+| I6 | Messages are integers of a declared width `1 ≤ w ≤ 64`. They are refused above it on the host, proved below it in-circuit, and a wider declaration is refused when the circuit is defined. In particular `m = l` is never admitted. | D1, D2a, D3 |
+| I7 | Every safe-layer ciphertext carries a bound established at admission. Homomorphic operations combine bounds and refuse a bound `≥ l`. Decryption requires the bound to be at most the caller's search limit. | D1, D2, D2a |
 | I8 | A key enters a circuit only as a verifier-fixed public input (curve equation and non-identity asserted, subgroup checked by the verifier), or as a witness proved to be in the subgroup. | D3 |
 | I9 | In a DLEQ statement, the base `X` is chosen by the verifier and enters as public inputs. A possession proof uses `X = G`. A share proof uses the verifier's own recomputed aggregate. | D3, D4 |
-| I10 | Decryption returns the unique `t ∈ [0, bound]` with `[t]·G = M`, or fails. | D1, D2 |
+| I10 | Decryption runs only on an admitted ciphertext. Distributed decryption runs only with a complete, unique set of verified shares (I14). It returns the unique `t ∈ [0, bound]` with `[t]·G = M`, or fails. | D1, D2, D2b |
 | I11 | Public-input orders and byte encodings are exactly those in D7. | D7 |
 | I12 | Secret-bearing host operations are documented as compatibility/offline-class, and make no constant-time or online claim. | D6 |
+| I13 | Homomorphic operations and decryption act only on ciphertexts with the same key context, and refuse mixed contexts. A key association comes only from local encryption or verified admission. | D2c, D2a |
+| I14 | A decryption share is used only as a `VerifiedDecryptionShare`. That means a verified DLEQ statement with `X` = the admitted ciphertext's handle and `P` = a key share registered in its context. Distributed decryption needs exactly one such share per registered trustee: none missing, repeated or foreign. | D2b, D5 |
+| I15 | A secret scalar multiplies only a validated subgroup point. A decryption share is computed only on an admitted ciphertext's handle, so a small-order component cannot leak `sk_j mod 8`. | D2, D2b |
+| I16 | A plaintext bound is established only by local encryption or by verifying the D3 encryption statement for the exact ciphertext, key and width. No API accepts a claimed bound, and decoding yields an unbounded raw ciphertext. | D2a, D7 |
 
 ## Consequences
 
@@ -355,18 +462,36 @@ AGENTS.md, a new transcript is escalated, not invented in code.
 
 ## Compatibility
 
-All of it is new API, and nothing existing changes. The usecase's ciphertexts and proofs remain
-valid after M3, provided the encodings and public-input orders in D7 match those the usecase
-already uses. The usecase uses exactly these. A differential check is part of M3.
+All of it is new API, and nothing existing changes.
+
+**Ciphertext compatibility (promised).** The usecase's ciphertexts, keys and encodings are
+`elgamal-jubjub-v1`: the same generator, the same `(A, B)` and the same affine public-input
+order. After M3 the library admits and decrypts them. A differential test checks this, with
+the same `(m, k)` in, the same points out.
+
+**Proof and verification-key compatibility (not promised).** Groth16 keys and proofs are tied
+to the exact compiled constraint system: its rows, its matrices and its wire assignment. Equal
+encodings or public-input orders do not make an old proof verify under keys from a re-compiled
+circuit. Neither do equal row counts. Moving the usecase onto the library's typed gadgets may
+change the system even though the relation is unchanged. Therefore:
+
+- Old proofs are accepted under a new verifier **only** with two pieces of evidence: the
+  compiled system is identical (an R1CS digest that covers every row's terms, as the usecase's
+  key cache already computes), and archived proofs verify at the real verifier boundary. A
+  fresh prove-and-verify round-trip is not evidence that old proofs remain valid.
+- Otherwise the migration is a **new circuit version**, with new setup artifacts and a new
+  verification key. On-chain, that is a new script and a new policy hash. State that already
+  exists, such as an election under way, keeps its old circuit, keys and scripts until it ends.
+  Only new deployments use the new circuit.
 
 ## Implementation milestones
 
 | Milestone | Scope | Entry gate | Exit criteria |
 |---|---|---|---|
 | M0 | This ADR. Normative spec `docs/specs/elgamal-jubjub-v1.md`: profile, encodings, relations, public-input orders, and test vectors. | ADR accepted | Spec reviewed. Its vectors come from the independent Python reference, not from the Java code. |
-| M1 | Host API (D2, D5, D7) | M0 | I1–I4, I6, I7, I10, I11 tested, including negative decoding (non-canonical, off-curve, small-order). Vectors match the spec. Property tests for homomorphism and bounds. |
-| M2 | `InCircuitElGamal` and the `ZkElGamal` adapter (D3) | M1 | Negatives: mismatched scalars, a message above its width, an identity or off-curve key, a wrong share, a wrong base, a public or narrow randomness. Constraint counts pinned. Groth16 prove and verify, with every public input shown to be bound. |
-| M3 | Migrate `zeroj-usecases` private-voting onto the library | M2, and a ZeroJ release containing it | Identical ciphertext and proof behaviour (differential). Usecase VM and DevKit end-to-end tests pass. The usecase's private gadget and host class are deleted. |
+| M1 | Host API (D2, D2a–D2c, D5, D7) | M0 | I1–I4, I6, I7, I10, I11 and I13–I16 tested. Vectors match the spec. Property tests for homomorphism and bounds. Negatives: <br>• decoding: non-canonical, off-curve, small-order; <br>• bounds: `m = l` and widths above 64 refused; a serialized and re-decoded ciphertext is raw and cannot be added or decrypted; the wrapped terms `Enc(l−1) + Enc(1)` cannot be admitted with false bounds; <br>• shares: the forged in-range share (`D2 = 36G` for `35G`, trustee keys `3G` and `5G`, `m = 1`, `k = 7`) refused; missing, repeated, foreign-key, wrong-handle and invalid-proof shares refused; <br>• keys: mixed-key `add` refused (`Enc(1;1,3G) + Enc(1;1,2G)`). |
+| M2 | `InCircuitElGamal` and the `ZkElGamal` adapter (D3) | M1 | Negatives: <br>• mismatched scalars; <br>• a message above its width; <br>• a message width above 64, refused at definition (the `m = 0` / `m = l` alias at width 252); <br>• an identity or off-curve key; <br>• a wrong share or a wrong base; <br>• a public or narrow randomness. <br>Constraint counts pinned. Groth16 prove and verify, with every public input shown to be bound. |
+| M3 | Migrate `zeroj-usecases` private-voting onto the library | M2, and a ZeroJ release containing it | Ciphertext compatibility shown by a differential test. Compiled-system decision recorded: either identical R1CS digests and archived proofs verifying at the verifier boundary, or a new circuit version with new setup artifacts and scripts, with existing elections kept on the old ones. Usecase VM and DevKit end-to-end tests pass. The usecase's private gadget and host class are deleted. |
 | M4 | Docs: support matrix (Experimental), gadget guide, annotation guide | M2 | Docs reviewed. |
 
 ## Verification and test-vector strategy
@@ -381,9 +506,14 @@ already uses. The usecase uses exactly these. A differential check is part of M3
   - Decoding: non-canonical, off-curve and small-order inputs.
   - Bounds: overflow of the plaintext bound.
   - Aggregation: identity, duplicate and cancelling shares.
+  - Admission and bounds: the M1 cases (`m = l`, relabelling after serialization, wrapped
+    imported terms).
+  - Shares: the forged in-range share and every malformed share set.
+  - Keys: mixed-key arithmetic.
   - Circuits: no witness for every D3 misuse; a proof fails against each changed public input.
-- **Differential.** Host encryption against an in-circuit encryption of the same `(m, k)`. The
-  usecase before and after M3.
+- **Differential.** Host encryption against an in-circuit encryption of the same `(m, k)`.
+  Usecase ciphertexts before and after M3. Proof compatibility is shown only as the
+  Compatibility section requires.
 - **Not evidence of security:** passing tests, test counts and benchmarks.
 
 ## Production / audit gates
@@ -399,9 +529,15 @@ already uses. The usecase uses exactly these. A differential check is part of M3
 - **Misuse of "decrypt once".** An application that decrypts running totals leaks individual
   messages by differencing. Mitigation: documentation and examples. The library cannot enforce
   it.
-- **Bound mistakes.** An application that decrypts with too small a search limit gets a
-  fail-closed error, not a wrong answer. One that disables bound checks could misread a sum.
-  Mitigation: I7, enforced in types.
+- **Bound and admission mistakes.**
+  - An application that decrypts with too small a search limit gets a fail-closed error, not a
+    wrong answer.
+  - An application that bypasses admission through the raw layer, or writes a verifier that
+    checks the wrong statement, can misread a wrapped or mislabelled sum.
+  - Mitigation: I7 and I16, enforced in types, with the delegated verifier obligation
+    documented.
+- **Malicious trustees.** A trustee that publishes an unverified share chooses the result.
+  Mitigation: I14. The safe decryption path cannot run without verified shares.
 - **Setup trust.** A subverted setup forges ballots and shares (D4). Mitigation: production
   gates; resolve D4 for setup-free shares.
 - **Two schemes on shared guard rails.** A regression in ADR-0051's D2 or D3 machinery now
@@ -413,7 +549,8 @@ already uses. The usecase uses exactly these. A differential check is part of M3
    - Options: (a) the SNARK relation only, (b) a ZeroJ-specified Jubjub `ChaumPedersen`
      ciphersuite, (c) wait for upstream.
    - Lean: (a) now, (c) later; do not do (b) without external review. **Escalated.**
-2. **Q2 (D5): proof of possession enforced by type, or by documentation.**
+2. **Q2 (D5, D2a, D2b): verification enforced by type, or by documentation.** r2 applies the
+   same choice to key shares, to admitted ciphertexts and to decryption shares.
    - Option (a) is the `VerifiedKeyShare` type, constructed only through a caller-supplied
      check. Option (b) documents the requirement and accepts raw keys.
    - Lean: (a). It is more ceremony, but a forgotten possession check is exactly the rogue-key
@@ -422,8 +559,12 @@ already uses. The usecase uses exactly these. A differential check is part of M3
    base `g` (§2.2, §2.5). This ADR uses one generator for both, as lifted ElGamal commonly does.
    - IND-CPA does not depend on independent bases.
    - The SNARK relation fixes the bases, so soundness does not either.
-   - Lean: one generator. **Reviewer to confirm.** The alternative is a second NUMS base derived
-     like `pedersen-jubjub-v1`'s `H`.
+   - Lean: one generator. The alternative is a second NUMS base derived like
+     `pedersen-jubjub-v1`'s `H`.
+   - Review r1 assessed one generator as acceptable for IND-CPA under DDH: in the DDH hybrid,
+     `[k]·PK` is replaced by a uniform subgroup point, which hides `[m]·G` whatever the message
+     base. This is not the two-independent-bases requirement of a binding Pedersen commitment.
+     It remains a maintainer decision.
 4. **Q4 (D1, D2): the search algorithm and its limit.**
    - Options: (a) linear search only, (b) baby-step giant-step with a caller-supplied maximum
      and a memory cap.
