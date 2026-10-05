@@ -1,8 +1,14 @@
 # ADR-0053: Threshold key generation and decryption for `elgamal-jubjub-v1` (t-of-n)
 
 ## Status
-Proposed — 2026-10-05. Design only. Acceptance would be design acceptance; it would certify no
-implementation, test or security property.
+Accepted (design) — 2026-10-05.
+- The reviewer approved r2 at `e3fbb4e` with no outstanding findings, and the maintainer
+  accepted the design.
+- Acceptance is design acceptance only. It certifies no implementation, test or security
+  property.
+- Implementation starts at M0, the normative spec, after ADR-0052 M0 and M1, and proceeds
+  milestone by milestone.
+- Q1–Q6 remain maintainer decisions. Each is decided before the milestone that needs it.
 
 This ADR builds on ADR-0052 (Accepted). It changes no maturity claim. ADR-0039's assurance
 classes apply: every secret-bearing operation here is **compatibility/offline** class.
@@ -23,6 +29,8 @@ classes apply: every secret-bearing operation here is **compatibility/offline** 
     share invariants are scoped to n-of-n contexts. Zero and equal shares are supported.
     New I15; the fixtures go into M1–M3.
   - F8 → Verification uses admitted parameter sets and an independent fixture oracle.
+- **Accepted** (2026-10-05): approved at r2 (`e3fbb4e`); status flipped without changing the
+  design text.
 
 ## Risk classification
 - **R3:** D1 (the distributed key generation protocol), D2 (the adversary and threshold model)
