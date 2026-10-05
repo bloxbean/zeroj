@@ -17,7 +17,7 @@ host operation here is **compatibility/offline** class.
 
 ## Revision history
 - **r1** (`eb8ddd6`, 2026-10-05): initial proposal.
-- **r2** (2026-10-05; responds to the review of `eb8ddd6`):
+- **r2** (`9a2f7ab`, 2026-10-05; responds to the review of `eb8ddd6`):
   - F1 → new D6a (a processing barrier: a window is final, retrieved and fully processed before
     a participant seals or closes round 1); D7 rewritten as an explicit contract P1–P3; new D7a
     (a dealer's `COMMITMENTS` only after its envelopes are final, or atomically); new transport
@@ -30,6 +30,13 @@ host operation here is **compatibility/offline** class.
     D5 and Risks updated.
   - Review note on key import → D8 and M1: the 32-byte-to-key adapter decodes explicitly and does
     not rely on provider masking.
+- **r3** (2026-10-05; responds to the review of `9a2f7ab`): F3 → the disclosure guarantee is
+  scoped. D7 now says what answers can still reveal: corrupted trustees may complain, and dealers
+  answer before their own-qualification check, at corrupted indices only. D7a and I13 no longer
+  claim "no answer"; a dealer without `COMMITMENTS` is excluded from `QUAL` and draws no honest
+  complaint. New I15 (answer scope). M2 and the timing harness include both adversarial-complaint
+  traces. The threat model's public-answer example is scoped to honest indices. No change to
+  Fig. 2's rules.
 
 ## Risk classification
 - **R3:** D1 (the ciphersuite and mode), D2 (the composition that replaces [GJKR07]'s ideal
@@ -136,7 +143,9 @@ This extends ADR-0053's threat model, which still applies in full.
   - **With the static adversary's `t` corrupted trustees:** one leaked honest key does not expose
     `x`; two always do.
   - **Public answers add points and lower these numbers:** `t` corrupted trustees, one leaked key
-    and one answer against that trustee's dealing exposed `x` at `n = 5`, `t = 2`.
+    and one answer at an honest index against that trustee's dealing exposed `x` at `n = 5`,
+    `t = 2`. Under the delivery contract, an honest qualified dealer never answers at an honest
+    index (D7, I15).
 
   This is **not** a stronger guarantee. Deployments must assume that a few leaked recipient keys,
   together with corruptions and disclosures, can expose the key and every ballot encrypted to it.
@@ -378,9 +387,24 @@ the recipient has processed it. The §5.2 argument needs an explicit **delivery 
 - **(P3) The processing barrier** of D6a.
 
 Under P1–P3, an honest recipient holds its key, so T1 never fires for it. It receives every honest
-dealer's envelope in the final round-1 set, and processes it before closing round 1. So it never
-complains about an honest dealer, and no honest dealer's answer publishes a share. The §5.2
-precondition then **reduces to P1–P3**.
+dealer's envelope in the final round-1 set, and processes it before closing round 1. It never
+complains about a dealer whose `COMMITMENTS` is absent: `closeDeal` skips such a dealer, which
+R1 disqualifies regardless. So an honest active recipient never makes a false absence complaint
+about an honest qualified dealer.
+
+**What answers can still reveal (r3, F3).** Fig. 2 is unchanged, so corrupted trustees may still
+complain about any dealer. A dealer answers every delivered complaint in round 3 (`closeComplaints`)
+before it checks its own qualification (`closeAnswers`). Such an answer publishes the pair at the
+**complainer's** index. That is a corrupted index, already inside the corruption budget of the
+threat model's counting rule, so it adds no new evaluation index.
+
+The guarantee is therefore scoped:
+- for every honest dealer in `QUAL`, every answer it publishes is addressed to a corrupted
+  complainer (I15);
+- so the known indices of its polynomial stay within the corrupted set.
+
+It is **not** that honest dealers publish no answers. The §5.2 precondition, in this scoped form,
+then **reduces to P1–P3**.
 
 Closure evidence alone is not enough. It proves what a window contains (part of P2). It proves
 neither that honest posts made the cutoff (P1) nor that they were processed in time (P3).
@@ -395,7 +419,10 @@ the recipient's complaint makes it publish a point on its own polynomial.
 
 With T1 and D7a, **secrecy no longer depends on P1**:
 - An honest dealer whose envelopes miss the cutoff never posts `COMMITMENTS`. R1 disqualifies it,
-  and it is never asked to answer.
+  so its contribution is not part of the joint key. Honest participants do not complain about it,
+  because `closeDeal` skips a dealer without `COMMITMENTS`. Corrupted trustees still may: under the
+  unchanged Fig. 2 rule it answers them in round 3, and only then aborts with A2 (`closeAnswers`).
+  Those answers concern a polynomial excluded from `QUAL`, at corrupted indices.
 - An honest trustee whose announcement misses round 0 aborts (T1) and never complains.
 
 P1 then matters only for liveness, through ADR-0053's A1 bound on `|QUAL|`. Without D7a, an
@@ -476,11 +503,16 @@ not meet P2, P3, T1 and D7a.
   round-0 set aborts before round 1 and never deals or complains.
 - **I13 (D7a) Commitments last.** An honest dealer's `COMMITMENTS` is released for posting only
   after all its envelopes are final in the round-1 window, or together with them atomically.
-  Envelopes excluded by the cutoff therefore leave the dealer disqualified, with no answer
-  published.
+  Envelopes excluded by the cutoff therefore leave the dealer disqualified, with its contribution
+  outside the joint key and no complaint from any honest participant. It may still answer
+  complaints from corrupted trustees before its A2 abort (r3, F3).
 - **I14 (threat model, F2) No self-envelope.** A dealer never seals an envelope to itself, so a
   leaked recipient key reveals only the pairs `(s_ij, s'_ij)`, `i ≠ j`. Exposure follows the
   counting rule of the threat model.
+- **I15 (D7; r3, F3) Answer scope.** Under P1–P3, T1 and D7a, every answer that an honest dealer
+  in `QUAL` publishes is addressed to a corrupted complainer. Answers therefore add no evaluation
+  index beyond the corruption budget. Honest active recipients make no false absence complaint
+  about an honest qualified dealer. Fig. 2's complaint and answer rules are unchanged.
 
 ## Consequences
 
@@ -515,7 +547,7 @@ not meet P2, P3, T1 and D7a.
 |---|---|---|---|
 | M0 | Normative spec `docs/specs/dkg-share-delivery-hpke-v1.md`: tags, announcement and envelope formats, `info`, the suite, canonicality and explicit decoding, absence rules, abort T1, the processing barrier, the delivery contract P1–P3 and the posting order of D7a, key lifecycle, exposure accounting, Assumption A1, test vectors. An independent Python reference written from the spec and RFC 9180 on pyca `cryptography` primitives (X25519, HKDF, ChaCha20Poly1305) with no Java read. It reproduces RFC 9180 A.2.1, models the barrier and the exposure counting rule, and emits replayable vectors | ADR accepted | Spec reviewed. The reference passes A.2.1 and its own vectors. |
 | M1 | Package-private HPKE (Base, single-shot, the D1 suite) on JDK primitives, with a deterministic-ephemeral test seam and the explicit byte-to-key adapter (D8) | M0 | Every RFC 9180 A.2.1 Base encryption matches. Differential against BouncyCastle 1.83's HPKE on random inputs. Negatives: small-order and all-zero inputs; non-canonical `enc`, both bit 255 set and `u ≥ p`; tampered `enc`/`ct`; wrong `info`/key. A GraalVM native-image probe produces identical results (I10). |
-| M2 | Delivery layer: key generation per session, round-0 announcement and T1, the processing barrier, seal/open with the D7a posting order, wiring to `DkgParticipant` | M1, and ADR-0053 M2 (merged with PR #76) | ADR-0053's honest and adversarial DKG suites rerun with encrypted delivery and identical transcripts (I3). Negatives for I2, I4–I7: wrong session, sender or recipient; cross-attempt replay; conflicting or missing announcements; copied keys; opening after destroy. **Timing (I11–I13):** envelopes posted before the cutoff but opened later draw no complaint; delayed announcements are processed before sealing; an own announcement missing triggers T1 with no complaint; envelopes excluded by the cutoff leave the dealer's `COMMITMENTS` unposted and the dealer disqualified, with no answer. The review's late-processing scenario (`n = 3`, `t = 1`) is reproduced as a negative control without the barrier and refused with it. **Exposure (I14):** no envelope is addressed to its sender; leaked-key exposure matches the counting rule. The Python reference replays. |
+| M2 | Delivery layer: key generation per session, round-0 announcement and T1, the processing barrier, seal/open with the D7a posting order, wiring to `DkgParticipant` | M1, and ADR-0053 M2 (merged with PR #76) | ADR-0053's honest and adversarial DKG suites rerun with encrypted delivery and identical transcripts (I3). Negatives for I2, I4–I7: wrong session, sender or recipient; cross-attempt replay; conflicting or missing announcements; copied keys; opening after destroy. **Timing (I11–I13):** envelopes posted before the cutoff but opened later draw no complaint; delayed announcements are processed before sealing; an own announcement missing triggers T1 with no complaint; envelopes excluded by the cutoff leave the dealer's `COMMITMENTS` unposted and the dealer disqualified, with no complaint from any honest participant. The review's late-processing scenario (`n = 3`, `t = 1`) is reproduced as a negative control without the barrier and refused with it. **Adversarial complaints (I15):** (i) with timely delivery, a corrupted trustee's complaint against an honest dealer draws one answer at the corrupted index, `QUAL` is unchanged, and the exposure count is unchanged; (ii) under D7a, a corrupted trustee's complaint against an honest dealer whose `COMMITMENTS` was withheld draws an answer at the corrupted index, after which the dealer aborts with A2 and is excluded from `QUAL`. **Exposure (I14):** no envelope is addressed to its sender; leaked-key exposure matches the counting rule. The Python reference replays. |
 | M3 | Docs: support matrix and guide; ADR-0053 Q1/Q7 notes pointing here | M2 | Docs reviewed. |
 
 ## Verification and test-vector strategy
@@ -529,8 +561,11 @@ not meet P2, P3, T1 and D7a.
 - **Adversarial and negative cases:** every invariant's failure mode, run through the real
   `DkgParticipant` state machine.
 - **Timing harness:** a board model with window cutoffs, finality and delayed processing. It
-  drives the barrier (I11), T1 (I12) and the posting order (I13). It includes the review's
-  late-processing counterexample as a negative control.
+  drives the barrier (I11), T1 (I12), the posting order (I13) and the answer scope (I15). It
+  includes:
+  - the review's late-processing counterexample, as a negative control;
+  - both adversarial-complaint traces of review round 2. Every answer by an honest qualified
+    dealer must be at a corrupted index.
 - **Exposure accounting:** vectors that leak chosen recipient keys, with and without corruptions
   and public answers. Reconstruction must succeed exactly when the counting rule says it does.
 - **Expected values never come from the code under test.**
