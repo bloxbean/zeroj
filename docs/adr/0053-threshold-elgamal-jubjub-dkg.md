@@ -6,9 +6,11 @@ Accepted (design) — 2026-10-05.
   accepted the design.
 - Acceptance is design acceptance only. It certifies no implementation, test or security
   property.
-- Implementation starts at M0, the normative spec, after ADR-0052 M0 and M1, and proceeds
-  milestone by milestone.
-- Q1–Q6 remain maintainer decisions. Each is decided before the milestone that needs it.
+- Implementation of M0–M4 is in progress on PR #76, one reviewed step at a time. The
+  "Implementation status" section at the end tracks it.
+- Q2–Q6 were decided by the maintainer on 2026-10-05: each recorded lean is adopted. Q1 (the
+  private channels) stays escalated and does not block the library, whose transport is
+  pluggable (#77).
 
 This ADR builds on ADR-0052 (Accepted). It changes no maturity claim. ADR-0039's assurance
 classes apply: every secret-bearing operation here is **compatibility/offline** class.
@@ -31,6 +33,8 @@ classes apply: every secret-bearing operation here is **compatibility/offline** 
   - F8 → Verification uses admitted parameter sets and an independent fixture oracle.
 - **Accepted** (2026-10-05): approved at r2 (`e3fbb4e`); status flipped without changing the
   design text.
+- **Decisions recorded** (2026-10-05): the maintainer adopted the leans of Q2–Q6. Q1 stays
+  escalated. No design text changes.
 
 ## Risk classification
 - **R3:** D1 (the distributed key generation protocol), D2 (the adversary and threshold model)
@@ -247,7 +251,8 @@ application must provide the [GJKR07] §2.1 model:
   datum per message, or an authenticated off-chain board that all trustees read.
 - **Private, authenticated point-to-point channels** for the `(s_ij, s'_ij)` pairs.
 - **Rounds with deadlines.** A message that misses its round counts as absent. A share that is
-  not delivered leads to a complaint. The mechanism must also give **evidence that each round
+  not delivered leads to a complaint. Because the answer then publishes that share, timely
+  private delivery is a secrecy precondition (implementation note 4; spec §5.2; Q7). The mechanism must also give **evidence that each round
   is closed and complete**, for admission (D4a).
 
 **How the private channels are built is not specified here** (Q1). Per the [GJKR07] appendix,
@@ -503,24 +508,107 @@ ADR-0052's host API, ADR-0052's own M0 and M1 come first (see the PR description
        requirements;
      - (b) ZeroJ specifies an encrypted-channel construction, which is new cryptography and
        would need its own pinned references and review.
-   - Lean: (a). **Escalated.**
+   - Lean: (a). **Escalated**, and still open; tracked in #77. The library takes no position:
+     the transport is the application's.
 2. **Q2 (D2): thresholds above a majority**, such as 4-of-5.
    - Lean: unsupported. Theorem 1 covers only `t < n/2`.
+   - **Decided 2026-10-05 (maintainer): lean adopted.**
 3. **Q3 (D8): a dealer-based fixture for tests.**
    - Lean: test fixtures only, behind the same insecure opt-in as dev trusted setups. Never a
      public API.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** Fixed polynomials exist only as
+     package-private test seams.
 4. **Q4 (D2): `N_MAX`, and round deadlines.**
    - Lean: `N_MAX = 64`. Deadlines are application configuration.
+   - **Decided 2026-10-05 (maintainer): lean adopted.**
 5. **Q5 (D4a, D6): the session identifier.**
    - It must be unique **per attempt**.
    - Lean: `blake2b_256(application context ‖ attempt number ‖ roster ‖ t ‖ n)`, with the
      attempt never reused.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** The spec adds a domain tag and length
+     prefixes to the encoding (spec §2).
 6. **Q6 (D4a): confirmations.**
    - Options: (a) require authenticated confirmations of the transcript from at least `t + 1`
      trustees in `QUAL`; (b) rely on round-closure evidence alone.
    - Lean: (a). With at most `t` corrupt trustees, it guarantees an honest trustee vouched for
      the record.
+   - **Decided 2026-10-05 (maintainer): lean adopted.**
+7. **Q7 (D1, D3; raised in implementation review): honest dealers and late shares.**
+   - Under partial synchrony, a complaint against an honest dealer can come from a late
+     `SHARE`, and Fig. 2's answer then publishes the pair (spec §5.2).
+   - Options:
+     - (a) keep Fig. 2 and make timely private delivery an explicit transport requirement
+       (current);
+     - (b) let an honest dealer that can prove delivery decline to answer and accept
+       disqualification. This changes `QUAL` semantics and needs analysis;
+     - (c) use a construction from the asynchronous-DKG literature (out of scope, D8).
+   - Lean: (a), with the transport review gate covering deadlines. **Escalated.**
 
 ## Related findings (out of scope)
 
 - ADR-0052's open Q1 (the trustee proof system) applies equally to threshold decryption shares.
+
+## Implementation notes (refinements recorded during implementation)
+
+These refine the accepted design and are recorded for maintainer acknowledgement, as AGENTS.md
+requires. Each is stated normatively in `docs/specs/elgamal-jubjub-threshold-v1.md`. They came
+from the independent reference of M0 and the implementation reviews.
+
+1. **Abort A8: own dealing marked** (spec §5.1). D1a lists aborts for situations the
+   assumptions exclude. An honest dealer is never *marked* any more than it is disqualified (A2).
+   Outside [GJKR07]'s synchronous model, a merely late `EXTRACTION` would otherwise cause R6 to
+   publish an honest dealer's polynomial. If that hit every honest dealer, the key would be
+   public, with no abort. Under A8 those dealers abort and withhold their confirmations, so
+   admission (at least `t + 1` confirmations) fails. This is invariant I13 applied to marking.
+2. **A7 and admission need `t + 1` differing confirmations** (spec §5.1, §8 step 6). D1a
+   lists "the broadcast shows disagreement" as an abort; this makes it mechanical without
+   breaking I13. A single differing confirmation may be a faulty participant's lie, which the
+   assumptions allow, so it must not abort the run. If it did, any one faulty member could veto
+   every attempt. With `t + 1` or more differing, an honest participant saw another board, so
+   participants abort and admission refuses. Malformed or other-session confirmations are
+   ignored, not treated as a veto. The independent reference raised this (finding N2).
+   Admission also requires round-closure evidence for round 7, the confirmation set, so a
+   submitter cannot leave out differing confirmations (N6). A member that equivocates counts as
+   differing only (N7).
+3. **R5 evaluates every extraction complaint**, conflicting ones included. A valid complaint is
+   evidence against the dealer, whoever sent it. The independent reference and the Java
+   implementation first differed here; the rule is now pinned.
+4. **Timely private delivery is a secrecy precondition** (spec §5.2; review finding R1).
+   - D3 says an undelivered share "leads to a complaint". The review showed the consequence:
+     an honest dealer then publishes the pair, and with the `t` faulty shares that determines
+     its polynomial. Missed delivery for every honest dealer reveals the key without any abort.
+   - The code follows Fig. 2 exactly; the synchronous model excludes the case. The spec now
+     states the precondition normatively, and A8's rationale is limited to late extractions.
+   - Any behavioural mitigation is escalated as Q7, not invented here.
+5. **Abort hygiene and channels** (review findings R2–R5):
+   - an abort is final for the participant;
+   - A9, "own complaint missing from the round-2 view";
+   - broadcast and private delivery are separate entry points;
+   - A7 also fires when fewer than `t + 1` qualified participants confirmed the participant's
+     own view, so a participant on a minority view cannot finish with an unadmittable context.
+6. **Shares only from `QUAL`** (D5) is kept. Participants outside `QUAL` hold an `x_j` they cannot
+   use; they are faulty under the assumptions, so this costs no liveness (spec §9).
+7. **Misplaced transcript messages are refused** (spec §8 step 2; reference finding N10). A
+   well-formed `SHARE` or `CONFIRMATION` submitted among the transcript messages refuses
+   admission, like a malformed one: the submitter builds the transcript from delivered sets, which
+   never hold either kind. Byte-identical duplicates count once and are not refused.
+8. **Roster keys are pairwise distinct** (spec §1; review finding R10). A key that authenticates
+   for two identifiers lets one party act as two participants, outside the `t` faulty
+   participants the protocol tolerates. `DkgConfig` already refused such a roster; the spec and
+   the reference now require it too. Distinctness is on bytes, so an application whose key format
+   has several encodings must canonicalize its keys (reference finding N11).
+9. **Delivery windows** (spec §5, §8 step 4; reference finding N12). Round `r`'s delivered set
+   holds only messages of round `r` that arrived while round `r` was open. An early message is
+   dropped, not carried forward. [GJKR07]'s synchronous model has no early messages; honest
+   participants never send one, so dropping it affects only the faulty sender. `DkgParticipant`
+   already refused a message of a round other than the open one.
+
+## Implementation status
+
+| Milestone | State | Notes |
+|---|---|---|
+| M0 | Done, reviewed (round 2: approve; rounds 3–5 on the vector replay, R7–R17: approve) | Spec `docs/specs/elgamal-jubjub-threshold-v1.md`. An independent Python reference of [GJKR07] Fig. 2, written from the paper and the spec (`zeroj-circuit-lib/src/test/resources/elgamal-threshold-reference/`, 514 checks), went through seven revisions. It found A8, the A7 veto, the R5 divergence, the admission completeness gaps, N10, N11 and N12, all resolved in the spec. The Java replay of every fixture and `case.*` vector, `ThresholdReferenceVectorsTest`, lands with M3. |
+| M1 | Not started | |
+| M2 | Not started | |
+| M3 | Not started | |
+| M4 | Not started | |
