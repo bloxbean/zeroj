@@ -6,8 +6,10 @@ Accepted (design) — 2026-10-05.
   accepted the design.
 - Acceptance is design acceptance only. It certifies no implementation, test or security
   property.
-- Implementation starts at M0, the normative spec, and proceeds milestone by milestone.
-- Q1–Q5 remain maintainer decisions. Each is decided before the milestone that needs it.
+- Implementation of M0–M4 is in progress on PR #76, one reviewed step at a time. The
+  "Implementation status" section at the end tracks it.
+- Q1–Q5 were decided by the maintainer on 2026-10-05: each recorded lean is adopted (see
+  "Open questions").
 
 This ADR changes no maturity claim. The ADR-0037 production-readiness table and the ADR-0039
 assurance classes remain authoritative. Every secret-bearing host operation proposed here stays
@@ -33,6 +35,8 @@ in the **compatibility/offline** class (ADR-0039 §3.1).
   ciphertext's context. I13 and the M1 negatives are extended.
 - **Accepted** (2026-10-05): approved at r3 (`092cf6b`); status flipped without changing the
   design text.
+- **Decisions recorded** (2026-10-05): the maintainer adopted the lean of every open question
+  (Q1–Q5). No design text changes; each question is marked decided.
 
 ## Risk classification
 - **R3:** D1 (the `elgamal-jubjub-v1` profile: the ciphertext, the message encoding and the
@@ -571,13 +575,16 @@ change the system even though the relation is unchanged. Therefore:
 1. **Q1 (D4): the trustee proof system.**
    - Options: (a) the SNARK relation only, (b) a ZeroJ-specified Jubjub `ChaumPedersen`
      ciphersuite, (c) wait for upstream.
-   - Lean: (a) now, (c) later; do not do (b) without external review. **Escalated.**
+   - Lean: (a) now, (c) later; do not do (b) without external review.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** The SNARK relation only; no
+     Σ-protocol in ZeroJ.
 2. **Q2 (D5, D2a, D2b): verification enforced by type, or by documentation.** r2 applies the
    same choice to key shares, to admitted ciphertexts and to decryption shares.
    - Option (a) is the `VerifiedKeyShare` type, constructed only through a caller-supplied
      check. Option (b) documents the requirement and accepts raw keys.
    - Lean: (a). It is more ceremony, but a forgotten possession check is exactly the rogue-key
      bug.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** Verification is enforced by types.
 3. **Q3 (D1): the message base.** [CGS97] uses an independent message base `G` alongside the key
    base `g` (§2.2, §2.5). This ADR uses one generator for both, as lifted ElGamal commonly does.
    - IND-CPA does not depend on independent bases.
@@ -588,12 +595,16 @@ change the system even though the relation is unchanged. Therefore:
      `[k]·PK` is replaced by a uniform subgroup point, which hides `[m]·G` whatever the message
      base. This is not the two-independent-bases requirement of a binding Pedersen commitment.
      It remains a maintainer decision.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** One generator.
 4. **Q4 (D1, D2): the search algorithm and its limit.**
    - Options: (a) linear search only, (b) baby-step giant-step with a caller-supplied maximum
      and a memory cap.
    - Lean: (b), with the maximum always explicit, defaulting to failure when it is omitted.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** Baby-step giant-step, with an explicit
+     maximum and memory and time caps.
 5. **Q5 (D3): a general scalar multiplication on `ZkJubjubPoint`.** Lean: no, for the reason in
    the alternatives table. Revisit if a third scheme needs it.
+   - **Decided 2026-10-05 (maintainer): lean adopted.** No general scalar multiplication.
 
 ## Related findings (out of scope)
 
@@ -601,3 +612,13 @@ change the system even though the relation is unchanged. Therefore:
   `InCircuitJubjub` and hand-written affine checks. Q5 records the decision not to widen it here.
 - Julc's local evaluator needs a `SlotConfig` for time-dependent scripts. Without one it passes
   raw slot numbers. Found in the usecase; it concerns usecase tooling, not this ADR.
+
+## Implementation status
+
+| Milestone | State | Notes |
+|---|---|---|
+| M0 | Done, reviewed (round 1: approve) | Spec `docs/specs/elgamal-jubjub-v1.md`. The independent Python reference in `zeroj-circuit-lib/src/test/resources/elgamal-reference/` was written from the specs alone and recorded 13 findings, each resolved in the spec. It also cross-checks the usecase prototype's vectors (21 points and the tally). |
+| M1 | In progress | Host API (D2, D2a–D2c, D5, D7). |
+| M2 | Not started | |
+| M3 | Not started | Runs in zeroj-usecases PR #8 against a local ZeroJ snapshot (maintainer decision, 2026-10-05). This deviates from the entry gate "a ZeroJ release containing it". |
+| M4 | Not started | |
