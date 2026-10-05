@@ -159,10 +159,10 @@ When there is no natural boolean result, declare `void` and assert explicitly:
 @Prove
 void prove(ZkContext zk,
            @Secret @UInt(bits = 16) ZkUInt value,
-           @Secret @UInt(bits = 16) ZkUInt blinding,
+           @Secret @UInt(bits = 252) ZkUInt blinding,   // blindings are always full width
            @Public ZkField expectedU,
            @Public ZkField expectedV) {
-    ZkPedersen.commit(zk, value, blinding, 16)
+    ZkPedersen.commit(zk, value, blinding)
             .assertAffineEquals(zk, expectedU, expectedV);
 }
 ```

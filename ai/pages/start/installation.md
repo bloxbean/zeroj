@@ -400,11 +400,14 @@ export ZEROJ_ALLOW_INSECURE_TRUSTED_SETUP=true
 
 ## Snapshots
 
-Snapshot builds are published on demand to the Maven Central snapshot repository. Their
-versions embed the short Git commit they were built from, in the form
-`<next-version>-<short-commit>-SNAPSHOT`. Snapshots aren't published for every commit, so check
-the repository for the exact version you want. Snapshots are development builds, so prefer a
-release for anything you share with others.
+Snapshot builds are published on demand to the BloxBean Maven repository,
+`https://repo.bloxbean.org/maven/snapshots`. Their versions embed the short Git commit they were
+built from, in the form `<next-version>-<short-commit>-SNAPSHOT`. Snapshots aren't published for
+every commit, so check
+[`maven-metadata.xml`](https://repo.bloxbean.org/maven/snapshots/org/zeroj/zeroj-crypto/maven-metadata.xml)
+for the exact version you want. Snapshots are development builds, so prefer a release for anything
+you share with others. From the next release on, releases are also in the BloxBean Maven repository
+(`https://repo.bloxbean.org/maven/releases`), with the same files as on Maven Central.
 
 **Gradle (Groovy)**
 
@@ -412,7 +415,7 @@ release for anything you share with others.
 repositories {
     mavenCentral()
     maven {
-        url = uri('https://central.sonatype.com/repository/maven-snapshots')
+        url = uri('https://repo.bloxbean.org/maven/snapshots')
         mavenContent { snapshotsOnly() }
     }
 }
@@ -424,7 +427,7 @@ repositories {
 repositories {
     mavenCentral()
     maven {
-        url = uri("https://central.sonatype.com/repository/maven-snapshots")
+        url = uri("https://repo.bloxbean.org/maven/snapshots")
         mavenContent { snapshotsOnly() }
     }
 }
@@ -435,8 +438,8 @@ repositories {
 ```xml
 <repositories>
   <repository>
-    <id>central-snapshots</id>
-    <url>https://central.sonatype.com/repository/maven-snapshots</url>
+    <id>bloxbean-snapshots</id>
+    <url>https://repo.bloxbean.org/maven/snapshots</url>
     <releases><enabled>false</enabled></releases>
     <snapshots><enabled>true</enabled></snapshots>
   </repository>

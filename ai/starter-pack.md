@@ -560,13 +560,12 @@ _(marker annotation — no elements)_
 
 #### ZkPedersen
 
-*Symbolic Pedersen commitment adapter for annotation-based circuits.*
+*Symbolic Pedersen commitment adapter for annotation-based circuits (pedersen-jubjub-v1, see docs/specs/pedersen-jubjub-v1.md).*
 
-- `static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding)`
-- `static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding, int scalarBits)` — Commits to value with blinding.
+- `static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding)` — Commits to value with blinding.
 - `static ZkJubjubPoint commitBits(ZkContext zk, ZkBits valueBits, ZkBits blindingBits)` — Commits using LSB-first scalar bit vectors.
-- `static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding, int scalarBits)`
-- `static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding)`
+- `static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding)` — Asserts that (value, blinding) opens commitment.
+- `static void assertBalanced(ZkContext zk, List<Term> left, List<Term> right)` — Asserts Σ left = Σ right as an integer equation over committed and uncommitted amounts (ADR-0051 D3a, invariant I6).
 
 #### ZkJubjubPoint
 
@@ -581,6 +580,9 @@ _(marker annotation — no elements)_
 - `ZkField t()`
 - `ZkJubjubPoint add(ZkContext zk, ZkJubjubPoint other)`
 - `ZkJubjubPoint doubled(ZkContext zk)`
+- `ZkJubjubPoint negate(ZkContext zk)` — −P (ADR-0051 D3).
+- `ZkJubjubPoint subtract(ZkContext zk, ZkJubjubPoint other)` — this − other (ADR-0051 D3).
+- `void assertInPrimeOrderSubgroup(ZkContext zk)` — Asserts that this point lies in the prime-order subgroup (ADR-0051 D3).
 - `static ZkJubjubPoint select(ZkContext zk, ZkBool condition, ZkJubjubPoint ifTrue, ZkJubjubPoint ifFalse)`
 - `void assertEqual(ZkContext zk, ZkJubjubPoint other)`
 - `ZkBool isEqual(ZkContext zk, ZkJubjubPoint other)`

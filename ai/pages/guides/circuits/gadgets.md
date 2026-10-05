@@ -138,10 +138,76 @@ equation and fixes the extended coordinates (5 constraints). Without it, a prove
 off-curve point such as `(1, 1)`. Neither `witnessAffine` nor `assertWellFormed()` proves
 prime-order subgroup membership; that is a separate, much more expensive check.
 
-**Pedersen commitments.** `ZkPedersen.commit(zk, value, blinding, scalarBits)` commits two
-`ZkUInt` scalars and returns a `ZkJubjubPoint`, and `verifyOpening(...)` checks an opening. Both
-scalars are constrained to canonical values below the subgroup order. Two 252-bit scalars cost
-3,020 constraints. Range-limit business amounts separately.
+**Pedersen commitments.** `ZkPedersen.commit(zk, value, blinding)` commits two `ZkUInt`
+scalars and returns a `ZkJubjubPoint`, and `verifyOpening(...)` checks an opening. Both scalars
+are constrained to canonical values below the subgroup order. The value keeps its declared
+width, which is also its range proof. The blinding must be declared at exactly 252 bits and
+must not be a public input or a constant, because a narrower blinding can be brute-forced from
+the public commitment. Sample it with `PedersenCommitment.randomBlinding(SecureRandom)`. A
+complete commitment with both coordinates bound as public inputs costs 2,410 constraints for a
+64-bit value and 4,042 for a 252-bit value. A value narrower than 252 bits is canonical by its own
+range, so only full-width values pay for the comparator. The profile is specified in
+`docs/specs/pedersen-jubjub-v1.md`.
+
+**Commitments the circuit did not compute.** `ZkPedersenCommitment` is a typed commitment
+that records where a point came from. Use `ZkPedersenCommitment.commit(...)` for commitments
+you open in the circuit. To bind one someone else published, commit to its opening and call
+`assertAffineEquals` with the published `(u, v)`. An *unopened* commitment comes in through one
+of two named constructors:
+
+- `witnessInSubgroup(zk, u, v)` proves prime-order subgroup membership in-circuit (about 5,550
+  constraints).
+- `fromVerifierCheckedPublic(zk, u, v)` requires public or constant coordinates, and leaves the
+  subgroup check to the verifier. The verifier runs `PedersenCommitment.decode(bytes)` before
+  accepting the proof. An on-chain verifier cannot do that for Jubjub, so on-chain consumers use
+  the first constructor.
+
+**Homomorphic sums only hold mod `l`.** With valid openings,
+`C(l − 1, 17) + C(1, 23) = C(0, 40)`: two commitments that "add up" to a commitment to zero.
+Never read a commitment sum as conservation of money on its own. Use
+`ZkPedersen.assertBalanced`, which checks at circuit-definition time that neither side can
+reach `l`, then asserts the integer relation on the committed values:
+
+```java
+var in1 = ZkPedersenCommitment.commit(zk, amount1, blinding1);   // 64-bit amounts,
+var in2 = ZkPedersenCommitment.commit(zk, amount2, blinding2);   // 252-bit blindings
+var out = ZkPedersenCommitment.commit(zk, amountOut, blindingOut);
+in1.assertAffineEquals(zk, in1U, in1V);                          // the existing commitments
+in2.assertAffineEquals(zk, in2U, in2V);                          // being spent (public)
+out.assertAffineEquals(zk, outU, outV);                          // the new one (public)
+ZkPedersen.assertBalanced(zk,
+        List.of(ZkPedersen.Term.of(in1), ZkPedersen.Term.of(in2)),
+        List.of(ZkPedersen.Term.of(out), ZkPedersen.Term.amount(fee))); // fee: public 32-bit
+```
+
+Bind every commitment in the relation to the public statement, as above. An input commitment
+that is not bound to anything public lets the prover choose its amount freely, and the balance
+then proves nothing about the coins being spent. The bound is computed from declared widths,
+`Σ coefficient·(2^width − 1)` on each side, and must stay below `l` (about `2^251.9`). Committing
+252-bit amounts and balancing them is refused.
+
+**Committing to several values at once.** `pedersen-jubjub-vector-v1` commits to up to 16
+values in one point, using bases derived with Zcash's Sapling group hash. A vector commitment
+does **not** record what its indices mean or how many there are: `C([a], r)` equals
+`C([a, 0], r)`. So the meaning lives in a `PedersenVectorSchema` (an id, a version, and a label
+and bit width per index), and every proof binds the schema's digest as a public input:
+
+```java
+var schema = PedersenVectorSchema.of("acme.balance", 1,
+        List.of(new Entry("amount", 64), new Entry("asset", 32)));
+var binding = ZkPedersenVector.bindSchema(zk, schema, schemaDigest);   // public input
+var c = ZkPedersenVector.commit(zk, binding, List.of(amount, asset), blinding);
+c.assertAffineEquals(zk, u, v);
+```
+
+The verifier checks the public `schemaDigest` against the digest it expects for that
+verification key, using `PedersenSchemaRegistry`, never a value supplied with the proof. A
+commitment you receive from someone else is only meaningful together with an authenticated
+issuance record that binds its exact bytes to its schema digest. Anyone who knows an opening can
+produce a valid proof for the same point under another schema of the same shape, so a valid
+proof alone proves nothing about the original schema. Without such a record, reject the
+commitment. A 16-value commitment costs 8,261 constraints; see
+`docs/benchmarks/pedersen-vector-2026-10-03.md` for proving times.
 
 **EdDSA-Jubjub verification** comes in two named entry points, because whether the public key
 needs an in-circuit subgroup check depends on your protocol:

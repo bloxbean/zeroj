@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "6547da9b3ecbebf31559ce6c7dd7b8c1cf4497fd",
+  "sourceRevision": "ead202892cbd4b9721797f7a6a2505bb3e103f3a",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -22,7 +22,7 @@
       "description": "Add ZeroJ to a Gradle or Maven project with the BOM, wire up the annotation processor, and enable the dev-only trusted setup for local runs.",
       "url": "https://zeroj.dev/start/installation/",
       "markdown": "https://zeroj.dev/ai/pages/start/installation.md",
-      "sha256": "03c3f15aa8dacfb2f5644f9ad6e9047b40c83ea51e34972d0aa144435a1b59c9"
+      "sha256": "b5cfbeff0ab3ad49e8cf69d89539bd230e0ca735915f0abd802d53f6fb886b04"
     },
     {
       "title": "Quickstart: your first proof",
@@ -113,7 +113,7 @@
       "description": "Author ZeroJ circuits as annotated Java classes, and use the generated companion to build, fill inputs, compute witnesses, and wire proofs.",
       "url": "https://zeroj.dev/guides/circuits/annotations/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/annotations.md",
-      "sha256": "3345cb026e860ec37e4ba07aa5e9a376bb815f14490dee89ff2a8648f48ed845"
+      "sha256": "697cef05d042f4a10157ac46703703abea46c32d9c2f0a329de29c62baaac82f"
     },
     {
       "title": "CircuitSpec & the Signal DSL",
@@ -127,7 +127,7 @@
       "description": "The circuit building blocks in zeroj-circuit-lib (hashes, Merkle proofs, ranges, Jubjub, and Cardano key derivation), with status and cost.",
       "url": "https://zeroj.dev/guides/circuits/gadgets/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/gadgets.md",
-      "sha256": "952613bebe6d81e7ac347bf740ca1d2af4767d8ef8183a6b74cb2fb15ecc4b08"
+      "sha256": "b893a201d0306f97b17ca89a6e9a61a5b3fa6c0f1376c56f6dd877957d0b92ef"
     },
     {
       "title": "Test your circuits for soundness",
@@ -288,7 +288,7 @@
       "description": "Every ZeroJ system property, environment variable, native-library requirement, external tool and contributor Gradle flag, and which ones are dev-only.",
       "url": "https://zeroj.dev/reference/configuration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/configuration.md",
-      "sha256": "febbd2827dbb74bcb9102e1245be51d4aca78d97a24cf7da8971b244d696bd1d"
+      "sha256": "9f007aae8aa6b411d3568b87b8821b75be1ad8905131594f83077f13dd166031"
     },
     {
       "title": "FAQ & troubleshooting",
@@ -316,7 +316,7 @@
       "description": "Everything an AI coding agent needs to write correct ZeroJ code on the first try. Ingest it before generating circuits, proofs or validators.",
       "url": "https://zeroj.dev/ai/starter-pack/",
       "markdown": "https://zeroj.dev/ai/pages/ai/starter-pack.md",
-      "sha256": "d2e369e0188215a85834931512755a7980d2cf81102f183138c53a56f4ec981c"
+      "sha256": "1cd6fa76121c072625aadf8e2f85d6f634ec48413a36f5de904031b246cb4696"
     }
   ],
   "artifacts": [
@@ -326,11 +326,11 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "93e77edefb9c656860a711dc58813b47df5ea21864d8c3cfc6d9dc5ec3671a56"
+      "sha256": "7dbd86e61bc0122570fd41f648f4d241d60b38447d877378aacb96f67a5a642d"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
-      "sha256": "3de1b6c9f5fb7d972f3b5fd87fa7c6b618021947b52a96848d46297b76953701"
+      "sha256": "0be3cceb34b23580c938d2058c67d205078fd5a8f71560f17f8ac20994b75a98"
     },
     {
       "url": "https://zeroj.dev/ai/index.md",
@@ -338,7 +338,7 @@
     },
     {
       "url": "https://zeroj.dev/ai/catalog.json",
-      "sha256": "5d60721eb74d81dc4129524c0dd1b7b9034d4dc66f6b8d91610638f47e077539"
+      "sha256": "051f273eb34175710d24feccab662c9cf3facede8866b2eb344998d821b83838"
     }
   ]
 }

@@ -982,19 +982,13 @@
         {
           "name": "ZkPedersen",
           "qualifiedName": "org.zeroj.circuit.lib.zk.ZkPedersen",
-          "doc": "Symbolic Pedersen commitment adapter for annotation-based circuits.",
+          "doc": "Symbolic Pedersen commitment adapter for annotation-based circuits (pedersen-jubjub-v1, see docs/specs/pedersen-jubjub-v1.md).",
           "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkPedersen.java",
           "members": [
             {
               "name": "commit",
               "static": true,
               "signature": "static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding)",
-              "doc": ""
-            },
-            {
-              "name": "commit",
-              "static": true,
-              "signature": "static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding, int scalarBits)",
               "doc": "Commits to value with blinding."
             },
             {
@@ -1006,14 +1000,14 @@
             {
               "name": "verifyOpening",
               "static": true,
-              "signature": "static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding, int scalarBits)",
-              "doc": ""
+              "signature": "static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding)",
+              "doc": "Asserts that (value, blinding) opens commitment."
             },
             {
-              "name": "verifyOpening",
+              "name": "assertBalanced",
               "static": true,
-              "signature": "static void verifyOpening(ZkContext zk, ZkJubjubPoint commitment, ZkUInt value, ZkUInt blinding)",
-              "doc": ""
+              "signature": "static void assertBalanced(ZkContext zk, List<Term> left, List<Term> right)",
+              "doc": "Asserts Σ left = Σ right as an integer equation over committed and uncommitted amounts (ADR-0051 D3a, invariant I6)."
             }
           ]
         },
@@ -1076,6 +1070,24 @@
               "static": false,
               "signature": "ZkJubjubPoint doubled(ZkContext zk)",
               "doc": ""
+            },
+            {
+              "name": "negate",
+              "static": false,
+              "signature": "ZkJubjubPoint negate(ZkContext zk)",
+              "doc": "−P (ADR-0051 D3)."
+            },
+            {
+              "name": "subtract",
+              "static": false,
+              "signature": "ZkJubjubPoint subtract(ZkContext zk, ZkJubjubPoint other)",
+              "doc": "this − other (ADR-0051 D3)."
+            },
+            {
+              "name": "assertInPrimeOrderSubgroup",
+              "static": false,
+              "signature": "void assertInPrimeOrderSubgroup(ZkContext zk)",
+              "doc": "Asserts that this point lies in the prime-order subgroup (ADR-0051 D3)."
             },
             {
               "name": "select",
