@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.TreeMap;
 
 import static org.zeroj.circuit.lib.jubjub.JubjubCurve.SUBGROUP_ORDER;
 
@@ -166,11 +167,44 @@ public final class ElGamal {
     }
 
     /**
+     * Computes a threshold participant's decryption share {@code D_j = [x_j]·A}
+     * ({@code elgamal-jubjub-threshold-v1} §9). The share is verified by construction: the
+     * secret is checked against the identifier's verification key {@code Y_j} in the
+     * ciphertext's context, which may be the identity (D5a).
+     *
+     * @throws IllegalArgumentException if the ciphertext is not under this share's threshold
+     *         context, the participant is not in {@code QUAL}, or {@code [x_j]·G ≠ Y_j}
+     */
+    public static VerifiedDecryptionShare decryptionShare(ThresholdKeyShare share, ElGamalCiphertext ciphertext) {
+        Objects.requireNonNull(share, "share");
+        Objects.requireNonNull(ciphertext, "ciphertext");
+        if (!(ciphertext.context() instanceof ThresholdKeyContext context) || !context.equals(share.context())) {
+            throw new IllegalArgumentException("the ciphertext is not under this share's threshold context");
+        }
+        int id = share.id();
+        if (!context.qual().contains(id)) {
+            throw new IllegalArgumentException("participant " + id + " is not qualified");
+        }
+        JubjubPoint yj = context.verificationKey(id);
+        if (!JubjubPoint.SUBGROUP_GENERATOR.scalarMulSecretBlindedBestEffort(share.secret()).projectiveEquals(yj)) {
+            throw new IllegalArgumentException("the secret does not match participant " + id + "'s verification key");
+        }
+        JubjubPoint d = ciphertext.handle().scalarMulSecretBlindedBestEffort(share.secret()).normalized();
+        return new VerifiedDecryptionShare(ciphertext, id, d, DleqStatement.decryptionShare(ciphertext.handle(), yj, d));
+    }
+
+    /**
      * Distributed decryption with exactly one verified share per registered trustee (spec §6.2).
+     *
+     * <p>For a threshold context ({@code elgamal-jubjub-threshold-v1} §9), at least {@code t + 1}
+     * verified shares from distinct qualified participants are required instead. Any extra
+     * shares are checked against the interpolation of the first {@code t + 1}.
      *
      * @param maxPlaintext the caller's search limit; the ciphertext's bound must not exceed it
      * @throws IllegalArgumentException if a share is for another ciphertext, the share set is
      *         incomplete or repeated, or the bound exceeds {@code maxPlaintext}
+     * @throws IllegalStateException if an extra threshold share disagrees with the
+     *         interpolation, which cannot happen with honestly verified shares
      * @throws ElGamalDecryptionException if no plaintext in {@code [0, bound]} matches
      */
     public static long decrypt(
@@ -186,6 +220,9 @@ public final class ElGamal {
         Objects.requireNonNull(shares, "shares");
         long bound = requireSearchable(ciphertext, maxPlaintext);
         JubjubDiscreteLog solver = solver(bound, table);
+        if (ciphertext.context() instanceof ThresholdKeyContext threshold) {
+            return search(thresholdUnmask(ciphertext, threshold, shares), bound, solver);
+        }
         if (!(ciphertext.context() instanceof NOfNKeyContext context)) {
             throw new IllegalArgumentException("unsupported key context: " + ciphertext.context());
         }
@@ -284,6 +321,56 @@ public final class ElGamal {
                     + " exceeds the search limit " + maxPlaintext);
         }
         return ciphertext.bound().longValueExact();
+    }
+
+    /**
+     * {@code B − Σ_{j∈S} [λ_j]·D_j} over the {@code t + 1} smallest identifiers {@code S}, after
+     * checking every extra share against the interpolation of {@code S}
+     * ({@code elgamal-jubjub-threshold-v1} §9). All inputs are public.
+     */
+    private static JubjubPoint thresholdUnmask(ElGamalCiphertext ciphertext, ThresholdKeyContext context,
+                                               Collection<VerifiedDecryptionShare> shares) {
+        TreeMap<Integer, JubjubPoint> byId = new TreeMap<>();
+        for (VerifiedDecryptionShare share : shares) {
+            Objects.requireNonNull(share, "share");
+            if (!share.ciphertext().sameCiphertext(ciphertext)) {
+                throw new IllegalArgumentException("a decryption share is bound to a different ciphertext");
+            }
+            if (byId.put(share.trustee(), share.share()) != null) {
+                throw new IllegalArgumentException("more than one share from participant " + share.trustee());
+            }
+        }
+        int threshold = context.threshold();
+        if (byId.size() < threshold + 1) {
+            throw new IllegalArgumentException("threshold decryption needs at least t + 1 = " + (threshold + 1)
+                    + " verified shares, got " + byId.size());
+        }
+        int[] subset = new int[threshold + 1];
+        FastJubjubPoint[] chosen = new FastJubjubPoint[threshold + 1];
+        int index = 0;
+        for (var entry : byId.entrySet()) {
+            if (index == threshold + 1) break;
+            subset[index] = entry.getKey();
+            chosen[index] = FastJubjubPoint.of(entry.getValue());
+            index++;
+        }
+        BigInteger[] lambda = ThresholdMath.lagrangeAt(subset, 0);
+        FastJubjubPoint combined = FastJubjubPoint.IDENTITY;
+        for (int i = 0; i <= threshold; i++) {
+            combined = combined.add(chosen[i].scalarMulPublic(lambda[i]));
+        }
+        for (var entry : byId.tailMap(subset[threshold], false).entrySet()) {
+            BigInteger[] at = ThresholdMath.lagrangeAt(subset, entry.getKey());
+            FastJubjubPoint expected = FastJubjubPoint.IDENTITY;
+            for (int i = 0; i <= threshold; i++) {
+                expected = expected.add(chosen[i].scalarMulPublic(at[i]));
+            }
+            if (!expected.projectiveEquals(FastJubjubPoint.of(entry.getValue()))) {
+                throw new IllegalStateException("share of participant " + entry.getKey()
+                        + " disagrees with the interpolation of the first t + 1 shares");
+            }
+        }
+        return FastJubjubPoint.of(ciphertext.blinded()).subtract(combined).toJubjubPoint();
     }
 
     /** The search table, validated before any secret multiplication happens. */

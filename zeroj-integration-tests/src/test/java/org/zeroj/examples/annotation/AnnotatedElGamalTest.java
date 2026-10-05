@@ -8,6 +8,9 @@ import org.zeroj.api.CurveId;
 import org.zeroj.api.ProofSystemId;
 import org.zeroj.api.VerificationMaterial;
 import org.zeroj.circuit.CircuitBuilder;
+import org.zeroj.circuit.lib.jubjub.DkgConfig;
+import org.zeroj.circuit.lib.jubjub.DkgMessage;
+import org.zeroj.circuit.lib.jubjub.DkgParticipant;
 import org.zeroj.circuit.lib.jubjub.DleqStatement;
 import org.zeroj.circuit.lib.jubjub.ElGamal;
 import org.zeroj.circuit.lib.jubjub.ElGamalCiphertext;
@@ -18,6 +21,8 @@ import org.zeroj.circuit.lib.jubjub.EncryptionStatement;
 import org.zeroj.circuit.lib.jubjub.JubjubPoint;
 import org.zeroj.circuit.lib.jubjub.NOfNKeyContext;
 import org.zeroj.circuit.lib.jubjub.RawElGamalCiphertext;
+import org.zeroj.circuit.lib.jubjub.ThresholdKeyContext;
+import org.zeroj.circuit.lib.jubjub.ThresholdKeyShare;
 import org.zeroj.circuit.lib.jubjub.VerifiedDecryptionShare;
 import org.zeroj.circuit.lib.jubjub.VerifiedKeyShare;
 import org.zeroj.codec.SnarkjsJsonCodec;
@@ -29,11 +34,13 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -191,5 +198,56 @@ class AnnotatedElGamalTest {
         String zeroProof = prove(dleqKeys, w);
         assertTrue(verify(dleqKeys, zeroProof,
                 List.of(base.u(), base.v(), BigInteger.ZERO, BigInteger.ONE, BigInteger.ZERO, BigInteger.ONE)));
+    }
+
+    @Test
+    @DisplayName("Threshold E2E (ADR-0053): 2-of-3 DKG → proved ballots admitted → two proved shares decrypt")
+    void thresholdEndToEnd() {
+        List<byte[]> roster = new ArrayList<>();
+        for (int j = 1; j <= 3; j++) {
+            byte[] key = new byte[32];
+            Arrays.fill(key, (byte) j);
+            roster.add(key);
+        }
+        DkgConfig config = DkgConfig.create(1, 3, roster, "e2e".getBytes(StandardCharsets.UTF_8), 1);
+        List<DkgParticipant> participants = new ArrayList<>();
+        for (int j = 1; j <= 3; j++) participants.add(DkgParticipant.create(config, j, RANDOM));
+        List<DkgMessage> outgoing = new ArrayList<>();
+        for (DkgParticipant p : participants) outgoing.addAll(p.start());
+        for (int round = 1; round <= 7; round++) {
+            for (DkgMessage m : outgoing) {
+                for (DkgParticipant p : participants) {
+                    if (m.kind() == DkgMessage.Kind.SHARE) {
+                        if (m.subject() == p.id()) p.receivePrivate(m.sender(), m.encode());
+                    } else {
+                        p.receiveBroadcast(m.sender(), m.encode());
+                    }
+                }
+            }
+            outgoing = new ArrayList<>();
+            for (DkgParticipant p : participants) outgoing.addAll(p.closeRound());
+        }
+        List<ThresholdKeyShare> keys = new ArrayList<>();
+        for (DkgParticipant p : participants) keys.add(p.result());
+        ThresholdKeyContext context = keys.get(0).context();
+        assertNotNull(context);
+
+        int[] votes = {1, 1, 0};
+        List<ElGamalCiphertext> admitted = new ArrayList<>();
+        for (int vote : votes) {
+            ElGamalEncryption ballot = ElGamal.encryptWithOpening(context, BigInteger.valueOf(vote), 1, RANDOM);
+            String proof = prove(ballotKeys, ballotWitness(ballot.statement(), ballot));
+            admitted.add(ElGamal.admit(RawElGamalCiphertext.decode(ballot.ciphertext().encode()), context, 1,
+                    s -> s.width() == 1 && verify(ballotKeys, proof, s.publicInputs())));
+        }
+        ElGamalCiphertext total = ElGamalCiphertext.sum(admitted);
+        List<VerifiedDecryptionShare> verified = new ArrayList<>();
+        for (ThresholdKeyShare k : List.of(keys.get(0), keys.get(2))) {
+            VerifiedDecryptionShare own = ElGamal.decryptionShare(k, total);
+            String proof = prove(dleqKeys, dleqWitness(own.statement(), k.secretScalar()));
+            verified.add(VerifiedDecryptionShare.verify(total, k.id(), own.encode(),
+                    s -> verify(dleqKeys, proof, s.publicInputs())));
+        }
+        assertEquals(2, ElGamal.decrypt(total, verified, total.bound().longValueExact()));
     }
 }

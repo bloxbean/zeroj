@@ -73,6 +73,39 @@ public final class VerifiedDecryptionShare {
         return new VerifiedDecryptionShare(ciphertext, index, d, statement);
     }
 
+    /**
+     * Verifies a claimed share from threshold participant {@code id} (spec §9). {@code P} is the
+     * identifier's verification key {@code Y_j} from the ciphertext's context, which may be the
+     * identity; so may {@code D}.
+     *
+     * @throws IllegalArgumentException if the ciphertext is not under a threshold context, the
+     *         participant is not in {@code QUAL}, the share does not decode to a subgroup point,
+     *         or the verifier rejects the statement
+     */
+    public static VerifiedDecryptionShare verify(ElGamalCiphertext ciphertext, int id, byte[] share,
+                                                 DleqStatementVerifier verifier) {
+        return verify(ciphertext, id, ElGamalEncodings.decodeSubgroupPoint(share, "decryption share"), verifier);
+    }
+
+    /** As {@link #verify(ElGamalCiphertext, int, byte[], DleqStatementVerifier)}. */
+    public static VerifiedDecryptionShare verify(ElGamalCiphertext ciphertext, int id, JubjubPoint share,
+                                                 DleqStatementVerifier verifier) {
+        Objects.requireNonNull(ciphertext, "ciphertext");
+        Objects.requireNonNull(verifier, "verifier");
+        if (!(ciphertext.context() instanceof ThresholdKeyContext context)) {
+            throw new IllegalArgumentException("a participant identifier cannot verify a share for this context");
+        }
+        if (!context.qual().contains(id)) {
+            throw new IllegalArgumentException("participant " + id + " is not qualified");
+        }
+        JubjubPoint d = ElGamalEncodings.requireSubgroup(share, "decryption share");
+        DleqStatement statement = DleqStatement.decryptionShare(ciphertext.handle(), context.verificationKey(id), d);
+        if (!verifier.verify(statement)) {
+            throw new IllegalArgumentException("decryption-share proof rejected");
+        }
+        return new VerifiedDecryptionShare(ciphertext, id, d, statement);
+    }
+
     /** {@code D_j}. */
     public JubjubPoint share() {
         return share;
@@ -95,6 +128,7 @@ public final class VerifiedDecryptionShare {
         return ciphertext;
     }
 
+    /** The trustee: an index into the n-of-n registry, or a threshold participant identifier. */
     int trustee() {
         return trustee;
     }
