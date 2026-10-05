@@ -22,6 +22,10 @@ in the **compatibility/offline** class (ADR-0039 §3.1).
     neither key nor bound; new I13.
   - F4 → Compatibility rewritten to separate ciphertext compatibility from proof and
     verification-key compatibility; M3 gains a compiled-system gate.
+- **r3** (2026-10-05; responds to the review of `f1007ff`): F3 completed. Single-key decryption
+  now requires a validated `ElGamalSecretKey` whose public key equals the ciphertext's joint
+  key, and `decryptionShare` requires the share's public key to be registered in the
+  ciphertext's context. I13 and the M1 negatives are extended.
 
 ## Risk classification
 - **R3:** D1 (the `elgamal-jubjub-v1` profile: the ciphertext, the message encoding and the
@@ -229,11 +233,20 @@ the guarantees of this ADR.
   admit a ciphertext.
 - **`add`, `scale`:** these require the same key context (D2c), combine bounds, and refuse a
   result whose bound reaches `l` (I7).
-- **`decryptionShare(secretShare, ciphertext)`:** the input is an `ElGamalCiphertext`, so its
-  handle is already a validated subgroup point before any secret multiplication (I15).
+- **`decryptionShare(secretShare, ciphertext)`:**
+  - The input is an `ElGamalCiphertext`, so its handle is already a validated subgroup point
+    before any secret multiplication (I15).
+  - The method refuses a share whose public key `[sk_j]·G` is not registered in the
+    ciphertext's key context (I13).
 - **`decrypt(ciphertext, verifiedShares, maxPlaintext)`:** distributed decryption (D2b).
-  `decryptWithSecret(ciphertext, secretKey, maxPlaintext)` is the single-key path. Both use a
-  bounded search with an explicit maximum, and both fail closed.
+- **`decryptWithSecret(ciphertext, secretKey, maxPlaintext)`:** the single-key path.
+  - It takes an `ElGamalSecretKey`: a canonical, non-zero secret `sk ∈ [1, l)`, validated
+    together with its public key.
+  - It refuses unless `[sk]·G` equals the ciphertext's **joint** key. A trustee's individual
+    share is not the full secret and is refused; trustees use `decryptionShare`.
+  - Without the check, a wrong secret can return a wrong in-range value. For example, `(G, 4G)`
+    is `Enc(1; k=1, PK=3G)`, and secret 4 yields `4G − [4]·G = O`, which decrypts to `0`.
+- Both decryption paths use a bounded search with an explicit maximum, and both fail closed.
 
 The API makes no "constant-time" claim. Its secret-bearing methods are named and documented as
 compatibility/offline-class (D6). It does not branch on the message: `[m]·G` is computed by
@@ -295,6 +308,9 @@ example, `Enc(1; k=1, PK=3G) + Enc(1; k=1, PK=2G)` decrypts to `1` under secret 
 - Every `ElGamalCiphertext` carries its `ElGamalKeyContext`.
 - `add`, `scale` and `decrypt` refuse ciphertexts with different contexts. Contexts compare by
   the joint key and the registered share set.
+- A secret is tied to the context as well:
+  - `decryptWithSecret` requires the secret's public key to equal the context's joint key;
+  - `decryptionShare` requires the share's public key to be registered in the context.
 - The 64-byte encoding carries no key (D7). A decoded ciphertext gets its context only through
   admission (D2a), and the verified D3 statement includes the key as public inputs. A bare key
   label is therefore never trusted.
@@ -445,7 +461,7 @@ AGENTS.md, a new transcript is escalated, not invented in code.
 | I10 | Decryption runs only on an admitted ciphertext. Distributed decryption runs only with a complete, unique set of verified shares (I14). It returns the unique `t ∈ [0, bound]` with `[t]·G = M`, or fails. | D1, D2, D2b |
 | I11 | Public-input orders and byte encodings are exactly those in D7. | D7 |
 | I12 | Secret-bearing host operations are documented as compatibility/offline-class, and make no constant-time or online claim. | D6 |
-| I13 | Homomorphic operations and decryption act only on ciphertexts with the same key context, and refuse mixed contexts. A key association comes only from local encryption or verified admission. | D2c, D2a |
+| I13 | Homomorphic operations and decryption act only on ciphertexts with the same key context, and refuse mixed contexts. A key association comes only from local encryption or verified admission. A supplied secret must match the context: the full secret's public key equals the joint key for `decryptWithSecret`, and a share's public key is registered in the context for `decryptionShare`. | D2, D2c, D2a |
 | I14 | A decryption share is used only as a `VerifiedDecryptionShare`. That means a verified DLEQ statement with `X` = the admitted ciphertext's handle and `P` = a key share registered in its context. Distributed decryption needs exactly one such share per registered trustee: none missing, repeated or foreign. | D2b, D5 |
 | I15 | A secret scalar multiplies only a validated subgroup point. A decryption share is computed only on an admitted ciphertext's handle, so a small-order component cannot leak `sk_j mod 8`. | D2, D2b |
 | I16 | A plaintext bound is established only by local encryption or by verifying the D3 encryption statement for the exact ciphertext, key and width. No API accepts a claimed bound, and decoding yields an unbounded raw ciphertext. | D2a, D7 |
@@ -489,7 +505,7 @@ change the system even though the relation is unchanged. Therefore:
 | Milestone | Scope | Entry gate | Exit criteria |
 |---|---|---|---|
 | M0 | This ADR. Normative spec `docs/specs/elgamal-jubjub-v1.md`: profile, encodings, relations, public-input orders, and test vectors. | ADR accepted | Spec reviewed. Its vectors come from the independent Python reference, not from the Java code. |
-| M1 | Host API (D2, D2a–D2c, D5, D7) | M0 | I1–I4, I6, I7, I10, I11 and I13–I16 tested. Vectors match the spec. Property tests for homomorphism and bounds. Negatives: <br>• decoding: non-canonical, off-curve, small-order; <br>• bounds: `m = l` and widths above 64 refused; a serialized and re-decoded ciphertext is raw and cannot be added or decrypted; the wrapped terms `Enc(l−1) + Enc(1)` cannot be admitted with false bounds; <br>• shares: the forged in-range share (`D2 = 36G` for `35G`, trustee keys `3G` and `5G`, `m = 1`, `k = 7`) refused; missing, repeated, foreign-key, wrong-handle and invalid-proof shares refused; <br>• keys: mixed-key `add` refused (`Enc(1;1,3G) + Enc(1;1,2G)`). |
+| M1 | Host API (D2, D2a–D2c, D5, D7) | M0 | I1–I4, I6, I7, I10, I11 and I13–I16 tested. Vectors match the spec. Property tests for homomorphism and bounds. Negatives: <br>• decoding: non-canonical, off-curve, small-order; <br>• bounds: `m = l` and widths above 64 refused; a serialized and re-decoded ciphertext is raw and cannot be added or decrypted; the wrapped terms `Enc(l−1) + Enc(1)` cannot be admitted with false bounds; <br>• shares: the forged in-range share (`D2 = 36G` for `35G`, trustee keys `3G` and `5G`, `m = 1`, `k = 7`) refused; missing, repeated, foreign-key, wrong-handle and invalid-proof shares refused; <br>• keys: mixed-key `add` refused (`Enc(1;1,3G) + Enc(1;1,2G)`); `decryptWithSecret` refuses secret 4 for `(G, 4G)` under `PK = 3G`; a trustee share passed as the full secret is refused; `decryptionShare` refuses a secret whose public key is not registered. |
 | M2 | `InCircuitElGamal` and the `ZkElGamal` adapter (D3) | M1 | Negatives: <br>• mismatched scalars; <br>• a message above its width; <br>• a message width above 64, refused at definition (the `m = 0` / `m = l` alias at width 252); <br>• an identity or off-curve key; <br>• a wrong share or a wrong base; <br>• a public or narrow randomness. <br>Constraint counts pinned. Groth16 prove and verify, with every public input shown to be bound. |
 | M3 | Migrate `zeroj-usecases` private-voting onto the library | M2, and a ZeroJ release containing it | Ciphertext compatibility shown by a differential test. Compiled-system decision recorded: either identical R1CS digests and archived proofs verifying at the verifier boundary, or a new circuit version with new setup artifacts and scripts, with existing elections kept on the old ones. Usecase VM and DevKit end-to-end tests pass. The usecase's private gadget and host class are deleted. |
 | M4 | Docs: support matrix (Experimental), gadget guide, annotation guide | M2 | Docs reviewed. |
