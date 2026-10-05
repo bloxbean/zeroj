@@ -87,3 +87,16 @@ tasks.register('e2eTest', Test) {
         showStandardStreams = true
     }
 }
+
+// ADR-0051 performance gate (M3): end-to-end vector-commitment measurements in a standalone JVM.
+// Records, does not assert. Dev trusted setup only.
+//   ./gradlew :zeroj-integration-tests:pedersenVectorBenchmark [-PbenchDimensions=1,4,16]
+tasks.register('pedersenVectorBenchmark', JavaExec) {
+    description = 'ADR-0051 M3/M4 Pedersen commitment benchmark (records, does not assert).'
+    group = 'verification'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.examples.pedersen.PedersenVectorBenchmark'
+    args = [project.findProperty('benchDimensions') ?: '1,4,16']
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    maxHeapSize = '2g'
+}

@@ -220,6 +220,90 @@ public interface CircuitAPI {
     }
 
     /**
+     * Asserts, at circuit-definition time, that {@code v} is <b>neither</b> a declared public
+     * input <b>nor</b> a constant created by this circuit — the inverse of
+     * {@link #requirePublicOrConstant(Variable)}, with the same wire-id resolution.
+     *
+     * <p>Gadgets whose security argument needs a value the verifier does not already know —
+     * a commitment's blinding, for instance — call this to refuse the two structurally
+     * broken wirings. It is a guard rail, not a secrecy proof: a secret or intermediate wire
+     * passes even when the prover derived it from public data, and nothing here can tell.
+     *
+     * <p>The default throws, so an implementation that cannot classify wires fails closed.
+     *
+     * @throws IllegalArgumentException if {@code v} is a public input, a circuit constant, or
+     *         not a wire of this circuit at all
+     * @see <a href="../../../../../../../../docs/adr/0051-pedersen-commitment-profiles.md">ADR-0051 D2</a>
+     */
+    default void requireNotPublicOrConstant(Variable v) {
+        throw new UnsupportedOperationException(
+                "requireNotPublicOrConstant is not supported by this CircuitAPI implementation; "
+                        + "a gadget that depends on a value the verifier must not see cannot be "
+                        + "used here");
+    }
+
+    /**
+     * Asserts, at circuit-definition time, that {@code v} is a <b>declared public input</b> — not
+     * a constant, a secret input, or a derived wire — with the same wire-id resolution as
+     * {@link #requirePublicOrConstant(Variable)}.
+     *
+     * <p>Used where a value must appear in the proof's public statement so the verifier can
+     * compare it with an expected value from its own configuration, for example a vector
+     * schema digest (ADR-0051 D5). A circuit constant is in the verification key but not in the
+     * public inputs, so the verifier cannot check it against its registry.
+     *
+     * <p>The default throws, so an implementation that cannot classify wires fails closed.
+     *
+     * @throws IllegalArgumentException if {@code v} is not a declared public input of this circuit
+     */
+    default void requirePublicInput(Variable v) {
+        throw new UnsupportedOperationException(
+                "requirePublicInput is not supported by this CircuitAPI implementation");
+    }
+
+    /**
+     * Requires that this circuit never proves a range for {@code v} narrower than
+     * {@code 2^minBits} — checked now, and again when the circuit is frozen, because a narrowing
+     * decomposition can be emitted after the call.
+     *
+     * <p>Used for values whose security needs their full width, such as a commitment blinding: a
+     * blinding the circuit itself confines to {@code k} bits can be brute-forced in {@code 2^k}
+     * steps from public data (ADR-0051 D2). The check covers ranges this API records (bit
+     * decompositions, including those behind {@code assertInRange} and {@code lessThan}). It is a
+     * guard rail, not a proof: other constraints, such as an equality with a narrow wire, can still
+     * restrict {@code v}.
+     *
+     * <p>The default throws, so an implementation that does not track ranges fails closed.
+     *
+     * @throws IllegalArgumentException if a narrower range is already recorded for {@code v}
+     */
+    default void requireHidingRange(Variable v, int minBits) {
+        throw new UnsupportedOperationException(
+                "requireHidingRange is not supported by this CircuitAPI implementation");
+    }
+
+    /**
+     * The bit-vector form of {@link #requireHidingRange}: requires that the circuit never forces
+     * any of {@code bits} to zero through a range it records — checked now and again when the
+     * circuit is frozen.
+     *
+     * <p>Two kinds of recorded provenance are followed. A bit minted by {@link #decompose} keeps
+     * its source wire, which must then keep a {@code minBits}-bit range. A bit that appears in a
+     * {@link #fromBinary} recomposition whose result is range-confined to {@code b} bits is forced
+     * to zero when it sits at position {@code b} or above, which is rejected. Constraints of other
+     * kinds (an equality with a narrow wire, for example) are not followed; bits with no recorded
+     * provenance are the caller's responsibility.
+     *
+     * <p>The default throws, so an implementation that does not track provenance fails closed.
+     *
+     * @throws IllegalArgumentException if a recorded range already confines one of the bits
+     */
+    default void requireHidingBits(Variable[] bits, int minBits) {
+        throw new UnsupportedOperationException(
+                "requireHidingBits is not supported by this CircuitAPI implementation");
+    }
+
+    /**
      * Asserts, at circuit-definition time, that {@code decomposition} was minted by
      * <b>this</b> circuit — that the booleanity and recomposition constraints it stands for
      * were emitted into the constraint system now being built.

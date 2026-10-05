@@ -170,14 +170,15 @@ public final class InCircuitEdDSAJubjub {
      * <p>The cofactor multiple is applied as repeated doubling wherever one is needed in this
      * codebase, never folded into a scalar: {@code 8·l} would be 255 bits, which exceeds both
      * the 252-bit width used here and the DSL's 253-bit decomposition ceiling.
+     *
+     * <p>Relies on {@code pk} already being well-formed — established by
+     * {@link InCircuitJubjub#witnessAffine} in {@code verifyCore} — and therefore delegates to
+     * the unchecked core rather than to the public
+     * {@link InCircuitJubjub#assertInPrimeOrderSubgroup}, which would re-emit the invariants.
+     * The emitted constraints are identical to the pre-ADR-0051 inline body.
      */
     static void assertInPrimeOrderSubgroup(CircuitAPI api, InCircuitJubjub.Point pk) {
-        InCircuitJubjub.Point lPk = InCircuitJubjub.scalarMulVariableBase(
-                api, pk, api.constant(JubjubCurve.SUBGROUP_ORDER), SCALAR_BITS);
-        Variable isIdentity = api.and(
-                api.isZero(lPk.u()),
-                api.isEqual(lPk.v(), lPk.z()));
-        api.assertEqual(isIdentity, api.constant(1));
+        InCircuitJubjub.assertLTimesIsIdentity(api, pk);
     }
 
     /**

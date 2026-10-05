@@ -75,7 +75,7 @@ The constants are `LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY` / `ALLOW_LEGAC
 ### `zeroj.jubjub.debugSecretSubgroupChecks`
 
 A diagnostic for the off-circuit Jubjub helpers in `zeroj-circuit-lib` (`EdDSAJubjub`,
-`PedersenCommitment`). When set, their blinded secret-scalar multiplication first asserts that the
+`PedersenCommitment`, `PedersenVectorCommitment`). When set, their blinded secret-scalar multiplication first asserts that the
 point is in the prime-order subgroup and throws `IllegalStateException` otherwise. Leave it unset
 unless you are debugging those helpers.
 

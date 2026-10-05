@@ -151,7 +151,7 @@ class PedersenTest {
                 .publicVar("outU").publicVar("outV")
                 .secretVar("v").secretVar("r")
                 .define(api -> {
-                    var c = InCircuitPedersen.commit(api, api.var("v"), api.var("r"), 32);
+                    var c = InCircuitPedersen.commit(api, api.var("v"), 32, api.var("r"));
                     api.assertEqual(api.mul(api.var("outU"), c.z()), c.u());
                     api.assertEqual(api.mul(api.var("outV"), c.z()), c.v());
                 });
@@ -193,7 +193,7 @@ class PedersenTest {
                 .publicVar("outU").publicVar("outV")
                 .secretVar("v").secretVar("r")
                 .define(api -> {
-                    var c = InCircuitPedersen.commit(api, api.var("v"), api.var("r"), 252);
+                    var c = InCircuitPedersen.commit(api, api.var("v"), 252, api.var("r"));
                     api.assertEqual(api.mul(api.var("outU"), c.z()), c.u());
                     api.assertEqual(api.mul(api.var("outV"), c.z()), c.v());
                 });
@@ -206,11 +206,11 @@ class PedersenTest {
     }
 
     @Test
-    @DisplayName("InCircuitPedersen rejects numBits > 252")
+    @DisplayName("InCircuitPedersen rejects a value width > 252")
     void inCircuit_rejectsLargeNumBits() {
         var b = CircuitBuilder.create("bad").secretVar("v").secretVar("r");
         assertThrows(IllegalArgumentException.class, () -> b.define(api ->
-                InCircuitPedersen.commit(api, api.var("v"), api.var("r"), 300)));
+                InCircuitPedersen.commit(api, api.var("v"), 300, api.var("r"))));
     }
 
     @Test
@@ -220,7 +220,7 @@ class PedersenTest {
                 .publicVar("outU").publicVar("outV")
                 .secretVar("v").secretVar("r")
                 .define(api -> {
-                    var c = InCircuitPedersen.commit(api, api.var("v"), api.var("r"), 16);
+                    var c = InCircuitPedersen.commit(api, api.var("v"), 16, api.var("r"));
                     api.assertEqual(api.mul(api.var("outU"), c.z()), c.u());
                     api.assertEqual(api.mul(api.var("outV"), c.z()), c.v());
                 });

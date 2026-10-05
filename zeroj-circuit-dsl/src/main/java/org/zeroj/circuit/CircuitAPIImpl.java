@@ -36,6 +36,14 @@ class CircuitAPIImpl implements CircuitAPI {
      * a request for a strictly tighter {@code m < n} must still emit.
      */
     private final Map<Integer, Integer> rangeBounds = new HashMap<>();
+    /** Wires that must keep at least this many bits of range (ADR-0051 D2); checked at freeze. */
+    private final Map<Integer, Integer> hidingRanges = new HashMap<>();
+    /** Decomposition bit wire id -> the source wire it was minted from. */
+    private final Map<Integer, Integer> decompositionSource = new HashMap<>();
+    /** fromBinary result wire id -> its bit wire ids, LSB first. */
+    private final Map<Integer, int[]> recompositions = new HashMap<>();
+    /** Bit wires that must not be forced to zero by a recorded range (ADR-0051 D2). */
+    private final Set<Integer> hidingBits = new HashSet<>();
 
     /**
      * Wire ids already proven boolean by an emitted {@code a·(a−1) == 0} constraint.
@@ -105,6 +113,103 @@ class CircuitAPIImpl implements CircuitAPI {
                         + "(ADR-0037 Decision 4).");
     }
 
+    @Override
+    public void requirePublicInput(Variable v) {
+        Objects.requireNonNull(v, "v");
+        for (Variable pub : publicInputs) {
+            if (pub.id() == v.id()) return;
+        }
+        throw new IllegalArgumentException(
+                "Variable " + v + " must be a declared public input, but wire " + v.id()
+                        + " is not. A value the verifier compares with its own expected value "
+                        + "must be in the public statement (ADR-0051 D5).");
+    }
+
+    @Override
+    public void requireHidingRange(Variable v, int minBits) {
+        Objects.requireNonNull(v, "v");
+        if (v.id() < 0 || v.id() >= nextId) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " is not a wire of this circuit (wire id " + v.id()
+                            + " was never allocated here).");
+        }
+        Integer bound = rangeBounds.get(v.id());
+        if (bound != null && bound < minBits) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " must keep a " + minBits + "-bit range for hiding, but the "
+                            + "circuit already proves it is below 2^" + bound + " (ADR-0051 D2)");
+        }
+        hidingRanges.merge(v.id(), minBits, Math::max);
+    }
+
+    @Override
+    public void requireHidingBits(Variable[] bits, int minBits) {
+        Objects.requireNonNull(bits, "bits");
+        for (Variable bit : bits) {
+            Objects.requireNonNull(bit, "bit");
+            if (bit.id() < 0 || bit.id() >= nextId) {
+                throw new IllegalArgumentException(
+                        "Variable " + bit + " is not a wire of this circuit (wire id " + bit.id()
+                                + " was never allocated here).");
+            }
+        }
+        for (Variable bit : bits) {
+            Integer source = decompositionSource.get(bit.id());
+            if (source != null) {
+                requireHidingRange(new Variable(source, "decomposition-source"), minBits);
+            }
+            hidingBits.add(bit.id());
+        }
+        requireNoForcedHidingBit();
+    }
+
+    /**
+     * A recomposition {@code w = Σ bitᵢ·2^i} with a recorded bound {@code w < 2^b} forces every
+     * bit at position {@code ≥ b} to zero. None of those may be a hiding bit.
+     */
+    private void requireNoForcedHidingBit() {
+        if (hidingBits.isEmpty()) return;
+        for (var entry : recompositions.entrySet()) {
+            Integer bound = rangeBounds.get(entry.getKey());
+            int[] ids = entry.getValue();
+            if (bound == null || bound >= ids.length) continue;
+            for (int k = bound; k < ids.length; k++) {
+                if (hidingBits.contains(ids[k])) {
+                    throw new IllegalArgumentException(
+                            "bit wire " + ids[k] + " must not be forced to zero for hiding, but it "
+                                    + "is bit " + k + " of a value the circuit proves is below 2^"
+                                    + bound + " (ADR-0051 D2)");
+                }
+            }
+        }
+    }
+
+    @Override
+    public void requireNotPublicOrConstant(Variable v) {
+        Objects.requireNonNull(v, "v");
+        // Same wire-id resolution as requirePublicOrConstant: a name can be fabricated, an
+        // id cannot be reassigned to a different wire.
+        if (v.id() < 0 || v.id() >= nextId) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " is not a wire of this circuit (wire id " + v.id()
+                            + " was never allocated here).");
+        }
+        if (constantWireValues.containsKey(v.id())) {
+            throw new IllegalArgumentException(
+                    "Variable " + v + " is a circuit constant. A gadget that relies on this "
+                            + "value being unknown to the verifier cannot accept a constant "
+                            + "(ADR-0051 D2).");
+        }
+        for (Variable pub : publicInputs) {
+            if (pub.id() == v.id()) {
+                throw new IllegalArgumentException(
+                        "Variable " + v + " is a public input. A gadget that relies on this "
+                                + "value being unknown to the verifier cannot accept a public "
+                                + "input (ADR-0051 D2).");
+            }
+        }
+    }
+
     private Variable newIntermediate() {
         // Every gate this class emits either allocates an intermediate output or is an
         // AssertEq, so guarding these two points covers all of them.
@@ -126,6 +231,18 @@ class CircuitAPIImpl implements CircuitAPI {
     }
 
     ConstraintGraph buildGraph(String name) {
+        // A hiding-required wire or bit may have been narrowed after the gadget that registered
+        // it ran.
+        requireNoForcedHidingBit();
+        for (var entry : hidingRanges.entrySet()) {
+            Integer bound = rangeBounds.get(entry.getKey());
+            if (bound != null && bound < entry.getValue()) {
+                throw new IllegalArgumentException(
+                        "wire " + entry.getKey() + " must keep a " + entry.getValue() + "-bit range "
+                                + "for hiding, but the circuit proves it is below 2^" + bound
+                                + " (ADR-0051 D2)");
+            }
+        }
         // The graph copies the gate list, so anything emitted after this point is silently
         // dropped. Freeze instead, so a symbolic value that escaped its define() block and is
         // later asked to add constraints fails loudly rather than appearing to succeed while
@@ -272,6 +389,7 @@ class CircuitAPIImpl implements CircuitAPI {
         var bits = new Variable[nBits];
         for (int i = 0; i < nBits; i++) {
             bits[i] = newIntermediate();
+            decompositionSource.put(bits[i].id(), a.id());
         }
         // Hint: tell witness calculator how to compute bit values from a
         gates.add(new Gate.BitDecompose(bits, a, nBits));
@@ -353,6 +471,9 @@ class CircuitAPIImpl implements CircuitAPI {
         }
         var out = newIntermediate();
         gates.add(new Gate.LinComb(out, terms));
+        int[] ids = new int[bits.length];
+        for (int i = 0; i < bits.length; i++) ids[i] = bits[i].id();
+        recompositions.put(out.id(), ids);
         return out;
     }
 
