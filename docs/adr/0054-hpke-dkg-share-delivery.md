@@ -16,14 +16,27 @@ host operation here is **compatibility/offline** class.
 2026-10-05
 
 ## Revision history
-- **r1** (2026-10-05): initial proposal.
+- **r1** (`eb8ddd6`, 2026-10-05): initial proposal.
+- **r2** (2026-10-05; responds to the review of `eb8ddd6`):
+  - F1 → new D6a (a processing barrier: a window is final, retrieved and fully processed before
+    a participant seals or closes round 1); D7 rewritten as an explicit contract P1–P3; new D7a
+    (a dealer's `COMMITMENTS` only after its envelopes are final, or atomically); new transport
+    abort T1 in D4 (own announcement missing); a timing bullet in the threat model; new I11–I13;
+    M0/M2 tests for late-processed envelopes, delayed announcements and envelopes excluded by the
+    cutoff; Q6 rescoped; new Q8.
+  - F2 → the threat model's key-compromise bullet is replaced by exposure accounting that
+    separates leaked recipient keys, full trustee state and public disclosures, with per-dealer
+    evaluation-index counting (no dealer sends itself an envelope). New I14; M0/M2 exposure tests;
+    D5 and Risks updated.
+  - Review note on key import → D8 and M1: the 32-byte-to-key adapter decodes explicitly and does
+    not rely on provider masking.
 
 ## Risk classification
 - **R3:** D1 (the ciphersuite and mode), D2 (the composition that replaces [GJKR07]'s ideal
   private channels) and D5 (recipient key lifecycle). These decide whether a share stays secret.
-- **R2:** D3 (the envelope and its binding), D4 (key announcement), D6 (failure handling and the
-  interface to `DkgParticipant`), D7 (relation to ADR-0053's delivery precondition) and D8
-  (encodings and canonicality).
+- **R2:** D3 (the envelope and its binding), D4 (key announcement and abort T1), D6 (failure
+  handling and the interface to `DkgParticipant`), D6a (the processing barrier), D7 and D7a
+  (the delivery contract and the dealer's posting order) and D8 (encodings and canonicality).
 
 ## Context
 
@@ -49,8 +62,9 @@ and round closure (ADR-0053 D3, D4a), for example transactions. If each dealer *
 share to its recipient's key and posts the ciphertext on that board**, then:
 - delivery is provable: everyone sees whether, and when, an encrypted share was posted;
 - trustees need not be online together or reach each other;
-- a share is delivered exactly when the board delivers the dealer's post, which the broadcast
-  model already requires to be timely and agreed.
+- the board decides which shares were delivered. With a processing barrier, a commitments-last
+  posting order and an abort for a missing own announcement (D6a, D7, D7a, D4), secrecy no longer
+  depends on private-delivery timing.
 
 The scheme must be a pinned standard used exactly as specified. HPKE (RFC 9180) is the standard
 construction for encrypting one message to a public key, and Java 25 provides every building
@@ -89,9 +103,44 @@ This extends ADR-0053's threat model, which still applies in full.
     key skR is not compromised at any point in time."
   - §9.7.5: with bad encapsulation randomness, Base mode can lose confidentiality completely.
   - §9.1.3: the analyses are classical; X25519 is not post-quantum.
-- **Consequence of recipient-key compromise.** A leaked `skR_j` exposes every share ever sent to
-  trustee `j` under that key. Leaked keys of `t + 1` or more trustees expose the joint key, and
-  with it every ballot ever encrypted to it. D5 limits the window to one attempt.
+- **Timing and processing (r2, F1).** Secrecy also needs bounded publication, finality,
+  retrieval and local processing of the round-0 and round-1 board posts before each participant
+  advances: the contract P1–P3 of D7, with the barrier of D6a. Closure evidence (ADR-0053 D4a)
+  proves which posts a window contains. It does not prove that a participant processed them before
+  it closed its round.
+- **Exposure accounting (r2, F2).** Three kinds of compromise must be kept apart:
+  - **(a) a leaked HPKE private key `skR_j`.** It reveals what was sent to `j` in envelopes: the
+    pairs `(s_ij, s'_ij)` for dealers `i ≠ j`. A dealer keeps its own evaluation `f_j(j)` and
+    never sends itself an envelope (threshold spec §3; `DkgParticipant.start()`), so `skR_j`
+    alone does not reveal `j`'s final share `x_j`;
+  - **(b) a trustee's complete state:** its polynomials, received shares and `x_j`. That is a
+    corruption, counted in `t`;
+  - **(c) public disclosures:** complaint answers (round 3), and the pairs published to
+    reconstruct marked dealers (rounds 5–6).
+
+  **Counting rule.** Dealer `i`'s contribution `z_i` is exposed when the distinct evaluation
+  indices known for `f_i` reach `t + 1`. The known indices are:
+  - the leaked recipient keys other than `i`;
+  - the corrupted trustees;
+  - the public answers for `i`;
+  - all of them, if `i` itself is corrupted.
+
+  The joint key `x = Σ z_i` is exposed when every `z_i`, `i ∈ QUAL`, is exposed. For example
+  (`n = 3`, `t = 1`, no corruption), leaking `skR_1` and `skR_2` exposes `z_3` but not `z_1` or
+  `z_2`, since only `f_1(2)` and `f_2(1)` are in envelopes.
+
+  An enumeration over `(n, t) ∈ {(3, 1), (5, 2), (7, 3)}` (2026-10-05) gives, **in this counting
+  model** (not a security proof):
+  - **Recipient keys alone:** `t + 1` leaked keys never expose `x`, because each leaked trustee's
+    own dealing has only `t` known points. `t + 2` always do.
+  - **With the static adversary's `t` corrupted trustees:** one leaked honest key does not expose
+    `x`; two always do.
+  - **Public answers add points and lower these numbers:** `t` corrupted trustees, one leaked key
+    and one answer against that trustee's dealing exposed `x` at `n = 5`, `t = 2`.
+
+  This is **not** a stronger guarantee. Deployments must assume that a few leaked recipient keys,
+  together with corruptions and disclosures, can expose the key and every ballot encrypted to it.
+  D5 limits the window to one attempt.
 - **Post-quantum.** A quantum adversary could decrypt the envelopes. It could equally compute
   discrete logarithms on Jubjub and decrypt the `elgamal-jubjub-v1` ballots directly, so X25519
   adds no weaker link than the one the election already has. A post-quantum design is out of
@@ -232,9 +281,19 @@ Before round 1, a transport round 0 publishes the attempt's encryption keys:
   in round 0, under the per-window delivery rule of spec §5.
 - Two different announcements from `j` are a conflict, and `j` then has **no key**. So does a
   trustee that posts no announcement.
-- A dealer posts no envelope to a recipient without a key. That recipient complains or stays
-  silent, and either way only a faulty trustee's own shares can become public.
-- Round 1 opens when round 0 closes. The DKG's round numbering and rules (spec §5) are unchanged.
+- A dealer posts no envelope to a recipient without a key.
+- **Transport abort T1 (r2).** A trustee whose own announcement is absent from the final round-0
+  set, or conflicts there, aborts the attempt before round 1. It stays silent: it neither deals
+  nor complains.
+
+  Without T1, an honest trustee whose announcement missed the cutoff would complain against
+  every dealer. The answers would then publish its shares, which is the §5.2 exposure in another
+  form. T1 mirrors A9, under which a participant's own broadcasts are delivered to itself.
+
+  A recipient without a key that does complain is therefore faulty. The answers give it only the
+  shares a corrupted trustee holds in [GJKR07]'s model anyway.
+- Round 1's window opens on schedule after round 0's. A dealer seals only after processing the
+  final round-0 set (D6a). The DKG's round numbering and rules (spec §5) are unchanged.
 
 No proof of possession is required for these keys. Copying another trustee's public key only
 makes the copier's own shares unreadable to itself. HPKE binds `pkR` in its key schedule, so the
@@ -258,7 +317,8 @@ Alternative (Q2): put the encryption keys in the trusted configuration instead.
   (RFC 9180 §9.2.3, §9.7.5).
 - **Harvest now, decrypt later.** Per-attempt keys deleted after round 1 bound the exposure to
   the DKG window. Long-lived encryption keys would expose every past attempt to one later
-  compromise.
+  compromise. How many leaked keys suffice depends on corruptions and disclosures; the threat
+  model's exposure accounting gives the count.
 
 ### D6 — Failure handling and the `DkgParticipant` interface (R2)
 
@@ -281,18 +341,71 @@ The interface is a thin layer over the existing participant:
 
 `DkgParticipant`, `DkgRules`, `DkgTranscript` and `ThresholdKeyContext.admit` are unchanged.
 
-### D7 — Relation to ADR-0053's delivery precondition (R2; Q6)
+### D6a — Processing barrier (R2; r2, responds to F1)
 
-With this transport, a `SHARE` is delivered when the board delivers its envelope in round 1, by
-the same mechanism and deadline as the dealer's `COMMITMENTS`. The board assumption of
-ADR-0053 D3 (agreement, closure, partial synchrony) already makes that timely for every honest
-dealer. An honest recipient that reads the board and holds its key then never complains about an
-honest dealer. So the §5.2 precondition, "timely private delivery", **reduces to the broadcast
-assumption the protocol already needs**.
+A participant advances past round 0 or round 1 only when all three hold:
+1. **The window is final.** Its cutoff has passed, and the set of posts up to the cutoff is final
+   and complete, on the same closure evidence admission uses (ADR-0053 D4a).
+2. **Every post is retrieved.** It has every post in that window.
+3. **Every post is processed.**
+   - Round 0: the announcements are applied to the key directory (D4, including T1).
+   - Round 1: every envelope is opened and validated, and each accepted plaintext is submitted
+     through `receivePrivate` (D6).
+
+Only then does it seal its envelopes (after round 0) or call `DkgParticipant.closeRound()` (for
+round 1).
+
+- **The cutoff decides delivery, not processing time.** Slow processing delays the participant,
+  a liveness cost. It never turns a delivered share into an absent one.
+- **Never close round 1 on a timer while envelopes in the final window are unprocessed.** That is
+  the failure the review demonstrated with the unchanged state machine (`n = 3`, `t = 1`).
+  Envelopes `1→2` and `2→1` were processed after round 1 closed. That drew two complaints and two
+  public answers, and corrupted participant 3 recovered `x` from its own shares plus the answers.
+- **The API enforces the order.** The delivery layer takes a final window's posts and returns
+  only after every accepted plaintext has been submitted. It offers no close after partial
+  processing.
+
+### D7 — Relation to ADR-0053's delivery precondition (R2; Q6; rewritten in r2 for F1)
+
+With this transport, a `SHARE` is delivered when the final round-1 set contains its envelope and
+the recipient has processed it. The §5.2 argument needs an explicit **delivery contract**:
+- **(P1) Bounded publication.** An honest trustee's round-0 announcement and round-1 posts are
+  included on the board before their window's cutoff. This is [GJKR07] §2.1's "received by their
+  recipients within some specified time bound", applied to board inclusion. Its budget must
+  include processing the previous window, sealing and posting.
+- **(P2) Agreement and finality.** Every honest participant obtains the same final set of posts
+  for each window (ADR-0053 D3, D4a).
+- **(P3) The processing barrier** of D6a.
+
+Under P1–P3, an honest recipient holds its key, so T1 never fires for it. It receives every honest
+dealer's envelope in the final round-1 set, and processes it before closing round 1. So it never
+complains about an honest dealer, and no honest dealer's answer publishes a share. The §5.2
+precondition then **reduces to P1–P3**.
+
+Closure evidence alone is not enough. It proves what a window contains (part of P2). It proves
+neither that honest posts made the cutoff (P1) nor that they were processed in time (P3).
+
+#### D7a — A dealer's `COMMITMENTS` only after its envelopes (R2; r2; Q8)
+
+An honest dealer posts its round-1 `COMMITMENTS` **only after all its envelopes are final on the
+board within the round-1 window**. Posting them all atomically in one post, for example one
+transaction, satisfies the same rule. Recipients need no new check: this constrains honest
+dealers only. A dealer whose `COMMITMENTS` arrives without a recipient's envelope is faulty, and
+the recipient's complaint makes it publish a point on its own polynomial.
+
+With T1 and D7a, **secrecy no longer depends on P1**:
+- An honest dealer whose envelopes miss the cutoff never posts `COMMITMENTS`. R1 disqualifies it,
+  and it is never asked to answer.
+- An honest trustee whose announcement misses round 0 aborts (T1) and never complains.
+
+P1 then matters only for liveness, through ADR-0053's A1 bound on `|QUAL|`. Without D7a, an
+envelope that misses the cutoff while its `COMMITMENTS` makes it reproduces the §5.2 exposure for
+that dealer. Hence Q8.
 
 This is an argument, not a theorem, and it is flagged for review. It does not cover an honest
 recipient that loses its key during the run, which is a local fault like losing its share.
-ADR-0053's Q7 note stays in force for application-provided channels.
+ADR-0053's Q7 note stays in force for application-provided channels, and for deployments that do
+not meet P2, P3, T1 and D7a.
 
 ### D8 — Encodings and canonicality (R2; Q4)
 
@@ -304,6 +417,11 @@ ADR-0053's Q7 note stays in force for application-provided channels.
   before any X25519 call. It keeps one accepted encoding per message, as AGENTS.md requires.
   Because RFC 7748 §5 says implementations "MUST accept non-canonical values", Q4 asks the
   maintainer to confirm that a protocol message format may refuse them.
+- **Explicit decoding (r2, from the review).** The adapter from 32 bytes to a provider key
+  implements RFC 7748 §5's decoding itself: little-endian, then the Q4 policy (refuse, under the
+  lean) for bit 255 and for `u ≥ 2^255 − 19`. It does not rely on a provider API to decide. The
+  review observed that SunEC's encoded-key import masks bit 255, while building an
+  `XECPublicKeySpec` from the unmasked integer did not give the same result.
 
 ### D9 — Out of scope
 
@@ -349,8 +467,20 @@ ADR-0053's Q7 note stays in force for application-provided channels.
 - **I8 (D5) Randomness.** Encapsulation uses fresh `SecureRandom` output per envelope. Determinism
   exists only in a test seam for RFC known-answer tests.
 - **I9 (D1) Single suite.** Only `(0x0020, 0x0001, 0x0003)` in Base mode is produced or accepted.
-- **I10 (D1) Provider.** Main code uses JDK primitives only, with identical results on the JVM and
-  in a GraalVM native image.
+- **I10 (D1, D8) Provider.** Main code uses JDK primitives only, with identical results on the JVM
+  and in a GraalVM native image. The byte-to-key adapter decodes explicitly (D8).
+- **I11 (D6a) Processing barrier.** A participant seals only after the final round-0 window is
+  processed, and closes round 1 only after every envelope in the final round-1 window is processed
+  and submitted. An envelope inside the cutoff but opened late draws no complaint.
+- **I12 (D4) Abort T1.** A trustee whose own announcement is absent or conflicting in the final
+  round-0 set aborts before round 1 and never deals or complains.
+- **I13 (D7a) Commitments last.** An honest dealer's `COMMITMENTS` is released for posting only
+  after all its envelopes are final in the round-1 window, or together with them atomically.
+  Envelopes excluded by the cutoff therefore leave the dealer disqualified, with no answer
+  published.
+- **I14 (threat model, F2) No self-envelope.** A dealer never seals an envelope to itself, so a
+  leaked recipient key reveals only the pairs `(s_ij, s'_ij)`, `i ≠ j`. Exposure follows the
+  counting rule of the threat model.
 
 ## Consequences
 
@@ -362,7 +492,10 @@ ADR-0053's Q7 note stays in force for application-provided channels.
   tag each (34-byte header, 32-byte `enc`, 116-byte `ct` in D3's illustrative layout; the spec
   fixes the length). That is `n(n − 1)` envelopes per attempt,
   4,032 at `n = 64`. Board cost scales quadratically, as the `SHARE` count already does.
-- Secrecy now rests computationally on HPKE and Assumption A1, not on ideal channels.
+- Round 1 includes one finality wait: envelopes first, then `COMMITMENTS` (D7a), unless both are
+  posted atomically.
+- Secrecy now rests computationally on HPKE and Assumption A1, not on ideal channels, and
+  operationally on the contract of D7.
 - Recipient key compromise during the window exposes that recipient's shares (no forward secrecy,
   RFC 9180 §9.7.4).
 
@@ -380,9 +513,9 @@ ADR-0053's Q7 note stays in force for application-provided channels.
 
 | ID | Scope | Entry gate | Exit criteria |
 |---|---|---|---|
-| M0 | Normative spec `docs/specs/dkg-share-delivery-hpke-v1.md`: tags, announcement and envelope formats, `info`, the suite, canonicality, absence rules, key lifecycle, Assumption A1, test vectors. An independent Python reference written from the spec and RFC 9180 on pyca `cryptography` primitives (X25519, HKDF, ChaCha20Poly1305) with no Java read; it reproduces RFC 9180 A.2.1 and emits replayable vectors | ADR accepted | Spec reviewed. The reference passes A.2.1 and its own vectors. |
-| M1 | Package-private HPKE (Base, single-shot, the D1 suite) on JDK primitives, with a deterministic-ephemeral test seam | M0 | Every RFC 9180 A.2.1 Base encryption matches. Differential against BouncyCastle 1.83's HPKE on random inputs. Negatives: small-order and all-zero inputs, non-canonical `enc`, tampered `enc`/`ct`, wrong `info`/key. A GraalVM native-image probe produces identical results (I10). |
-| M2 | Delivery layer: key generation per session, round-0 announcement, seal/open, wiring to `DkgParticipant` | M1, and ADR-0053 M2 (merged with PR #76) | ADR-0053's honest and adversarial DKG suites rerun with encrypted delivery and identical transcripts (I3). Negatives for I2, I4–I7: wrong session, sender or recipient; cross-attempt replay; conflicting or missing announcements; copied keys; opening after destroy. The §5.2 late-share scenario does not arise under board closure (D7). The Python reference replays. |
+| M0 | Normative spec `docs/specs/dkg-share-delivery-hpke-v1.md`: tags, announcement and envelope formats, `info`, the suite, canonicality and explicit decoding, absence rules, abort T1, the processing barrier, the delivery contract P1–P3 and the posting order of D7a, key lifecycle, exposure accounting, Assumption A1, test vectors. An independent Python reference written from the spec and RFC 9180 on pyca `cryptography` primitives (X25519, HKDF, ChaCha20Poly1305) with no Java read. It reproduces RFC 9180 A.2.1, models the barrier and the exposure counting rule, and emits replayable vectors | ADR accepted | Spec reviewed. The reference passes A.2.1 and its own vectors. |
+| M1 | Package-private HPKE (Base, single-shot, the D1 suite) on JDK primitives, with a deterministic-ephemeral test seam and the explicit byte-to-key adapter (D8) | M0 | Every RFC 9180 A.2.1 Base encryption matches. Differential against BouncyCastle 1.83's HPKE on random inputs. Negatives: small-order and all-zero inputs; non-canonical `enc`, both bit 255 set and `u ≥ p`; tampered `enc`/`ct`; wrong `info`/key. A GraalVM native-image probe produces identical results (I10). |
+| M2 | Delivery layer: key generation per session, round-0 announcement and T1, the processing barrier, seal/open with the D7a posting order, wiring to `DkgParticipant` | M1, and ADR-0053 M2 (merged with PR #76) | ADR-0053's honest and adversarial DKG suites rerun with encrypted delivery and identical transcripts (I3). Negatives for I2, I4–I7: wrong session, sender or recipient; cross-attempt replay; conflicting or missing announcements; copied keys; opening after destroy. **Timing (I11–I13):** envelopes posted before the cutoff but opened later draw no complaint; delayed announcements are processed before sealing; an own announcement missing triggers T1 with no complaint; envelopes excluded by the cutoff leave the dealer's `COMMITMENTS` unposted and the dealer disqualified, with no answer. The review's late-processing scenario (`n = 3`, `t = 1`) is reproduced as a negative control without the barrier and refused with it. **Exposure (I14):** no envelope is addressed to its sender; leaked-key exposure matches the counting rule. The Python reference replays. |
 | M3 | Docs: support matrix and guide; ADR-0053 Q1/Q7 notes pointing here | M2 | Docs reviewed. |
 
 ## Verification and test-vector strategy
@@ -395,11 +528,17 @@ ADR-0053's Q7 note stays in force for application-provided channels.
     checked before Java exists.
 - **Adversarial and negative cases:** every invariant's failure mode, run through the real
   `DkgParticipant` state machine.
+- **Timing harness:** a board model with window cutoffs, finality and delayed processing. It
+  drives the barrier (I11), T1 (I12) and the posting order (I13). It includes the review's
+  late-processing counterexample as a negative control.
+- **Exposure accounting:** vectors that leak chosen recipient keys, with and without corruptions
+  and public answers. Reconstruction must succeed exactly when the counting rule says it does.
 - **Expected values never come from the code under test.**
 
 ## Production / audit gates
 
-- External review of Assumption A1 and D7, together with ADR-0053's DKG review.
+- External review of Assumption A1, D7 and D7a (the contract P1–P3, T1 and the posting order),
+  together with ADR-0053's DKG review.
 - External review of key storage, deletion and `SecureRandom` use on the deployment platform.
 - Native-image verification on each released platform.
 - Not production-ready until those gates pass; experimental, like ADR-0053.
@@ -408,8 +547,13 @@ ADR-0053's Q7 note stays in force for application-provided channels.
 
 - **The composition argument is wrong or incomplete.** Mitigation: it is stated as an
   assumption, with an external-review gate.
-- **Recipient key compromise** while a key exists exposes that trustee's shares. Mitigation:
-  per-attempt keys and deletion (D5).
+- **Recipient key compromise** while a key exists exposes that trustee's received shares; with
+  corruptions and public answers, a few leaked keys can expose the joint key (threat model).
+  Mitigation: per-attempt keys and deletion (D5).
+- **An application closes rounds on a timer**, before processing finishes. Mitigation: the API's
+  order (D6a), documentation, and the negative control in M2.
+- **Board finality is slow** relative to the window, so honest dealers miss the cutoff under D7a.
+  This costs liveness (A1 aborts), not secrecy. Mitigation: size the windows for finality.
 - **Assembly errors in HPKE.** Mitigation: RFC known-answer tests, a BouncyCastle differential
   and an independent Python reference.
 - **Provider differences** between the JVM and native image. Mitigation: I10, tested in M1.
@@ -449,10 +593,19 @@ ADR-0053's Q7 note stays in force for application-provided channels.
      - (a) keep [GJKR07] Fig. 2's public answers only;
      - (b) add recipient proofs of what an envelope decrypts to.
    - Lean: (a). It is sufficient for disputes, and (b) would be new cryptography.
-6. **Q6 (D7): ADR-0053's Q7.** Should ADR-0053 record Q7 as resolved, for deployments using this
-   transport, once ADR-0054 is accepted? Lean: yes, as a note in ADR-0053, keeping the
-   precondition for application-provided channels.
+6. **Q6 (D7): ADR-0053's Q7.** Should ADR-0053 record Q7 as resolved once ADR-0054 is accepted?
+   Lean: yes, but **only for deployments that use this transport and meet P2, P3, T1 and D7a**.
+   ADR-0053 keeps the precondition, and the documented limitation, for application-provided
+   channels and for deployments without that contract.
 7. **Q7 (Compatibility): PR #76's release gate.** If Q1's lean is adopted, lift it. Lean: yes.
+8. **Q8 (D7a): must a dealer's `COMMITMENTS` follow its final envelopes?**
+   - Options:
+     - (a) a MUST of the profile, either commitments after the envelopes are final, or one atomic
+       post;
+     - (b) optional, with the §5.2 exposure documented for dealers whose envelopes miss the
+       cutoff.
+   - Lean: (a). It removes secrecy's dependence on publication timing, at the cost of one
+     finality wait in round 1. Recipients need no new check.
 
 ## Related findings (out of scope)
 
