@@ -3,12 +3,16 @@ package org.zeroj.circuit.lib.jubjub;
 import com.bloxbean.cardano.client.crypto.Blake2bUtil;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -48,6 +52,39 @@ class Blake2bDigestTest {
         assertThrows(IllegalArgumentException.class, () -> Blake2bDigest.digest(new byte[0], 65));
         assertArrayEquals(Blake2bUtil.blake2bHash224("x".getBytes(StandardCharsets.US_ASCII)),
                 Blake2bDigest.digest("x".getBytes(StandardCharsets.US_ASCII), 28));
+    }
+
+    @Test
+    @DisplayName("Block count is ⌈length / 128⌉ (one for empty input) up to Integer.MAX_VALUE, without overflow (review F9)")
+    void blockCountBoundaries() {
+        assertEquals(1, Blake2bDigest.blockCount(0));
+        assertEquals(1, Blake2bDigest.blockCount(1));
+        assertEquals(1, Blake2bDigest.blockCount(128));
+        assertEquals(2, Blake2bDigest.blockCount(129));
+        assertEquals(16_777_215, Blake2bDigest.blockCount(2_147_483_520));
+        // From 2^31 − 127 on, the old int sum (length + 127) overflowed and gave one block.
+        assertEquals(16_777_216, Blake2bDigest.blockCount(2_147_483_521));
+        assertEquals(16_777_216, Blake2bDigest.blockCount(Integer.MAX_VALUE - 126));
+        assertEquals(16_777_216, Blake2bDigest.blockCount(Integer.MAX_VALUE));
+        assertThrows(IllegalArgumentException.class, () -> Blake2bDigest.blockCount(-1));
+    }
+
+    /**
+     * Review F9's counterexample, end to end: a 2^31 − 127-byte input, against BouncyCastle, and
+     * a change in its last byte changes the digest. About 2 GiB; run with
+     * {@code ./gradlew :zeroj-circuit-lib:heavyGadgetTest --tests '*Blake2bDigestTest*'}.
+     */
+    @Test
+    @EnabledIfSystemProperty(named = "zeroj.heavy", matches = "true")
+    @DisplayName("Heavy: a 2^31 − 127-byte input is hashed in full and agrees with BouncyCastle (review F9)")
+    void largeInput() {
+        byte[] input = new byte[Integer.MAX_VALUE - 126];
+        byte[] zero = Blake2bDigest.blake2b256(input);
+        assertArrayEquals(bouncyCastle(input, 256), zero);
+        input[input.length - 1] = 1;
+        byte[] one = Blake2bDigest.blake2b256(input);
+        assertArrayEquals(bouncyCastle(input, 256), one);
+        assertFalse(Arrays.equals(zero, one), "the last byte must affect the digest");
     }
 
     private static byte[] bouncyCastle(byte[] input, int bits) {

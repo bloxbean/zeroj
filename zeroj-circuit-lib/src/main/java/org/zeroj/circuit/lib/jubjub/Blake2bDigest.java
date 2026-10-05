@@ -53,7 +53,8 @@ final class Blake2bDigest {
         h[0] ^= 0x01010000L ^ outLength; // key length 0
         long[] m = new long[16];
         long[] v = new long[16];
-        int blocks = Math.max(1, (input.length + BLOCK - 1) / BLOCK);
+        int blocks = blockCount(input.length);
+        // The last block starts at (blocks − 1)·128 ≤ 2^31 − 129, so offset + 127 ≤ Integer.MAX_VALUE.
         for (int b = 0; b < blocks; b++) {
             boolean last = b == blocks - 1;
             int offset = b * BLOCK;
@@ -74,6 +75,17 @@ final class Blake2bDigest {
             out[i] = (byte) (h[i >>> 3] >>> (8 * (i & 7)));
         }
         return out;
+    }
+
+    /**
+     * The number of 128-byte blocks for {@code length} input bytes: {@code ⌈length / 128⌉}, and
+     * one for the empty input (RFC 7693 §3.3). Widened, so it is exact for every array length.
+     */
+    static int blockCount(int length) {
+        if (length < 0) {
+            throw new IllegalArgumentException("length must be non-negative");
+        }
+        return length == 0 ? 1 : (int) ((length + (long) BLOCK - 1) / BLOCK);
     }
 
     private static void compress(long[] h, long[] m, long[] v, long counter, boolean last) {

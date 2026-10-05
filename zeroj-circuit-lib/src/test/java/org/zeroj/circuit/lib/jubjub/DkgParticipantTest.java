@@ -477,6 +477,33 @@ class DkgParticipantTest {
         }
 
         @Test
+        @DisplayName("I1: t and n near int overflow are refused, so no accepted t aliases another's session (review F10)")
+        void parametersNearOverflow() {
+            List<byte[]> roster = List.of(new byte[]{1}, new byte[]{2}, new byte[]{3});
+            // Review F10's counterexample: 2t + 1 overflowed int, accepting t = 2^30 + 1 for n = 3,
+            // whose low byte equals t = 1 in the session.
+            assertThrows(IllegalArgumentException.class,
+                    () -> DkgConfig.create(0x4000_0001, 3, roster, new byte[0], 1));
+            for (int t : new int[]{Integer.MAX_VALUE, Integer.MAX_VALUE / 2, Integer.MAX_VALUE / 2 + 1,
+                    0x4000_0000, 0x4000_0001, 257, 32, -1, Integer.MIN_VALUE}) {
+                for (int n : new int[]{3, 64, 65, Integer.MAX_VALUE, -1, Integer.MIN_VALUE}) {
+                    // Every combination here is invalid: t ≥ 32 needs n ≥ 65, and n ≤ 0 or ≥ 65.
+                    assertThrows(IllegalArgumentException.class,
+                            () -> DkgConfig.create(t, n, roster, new byte[0], 1), "t=" + t + ", n=" + n);
+                }
+            }
+            // The valid boundaries still pass and keep distinct sessions.
+            DkgConfig low = DkgConfig.create(1, 3, roster, new byte[0], 1);
+            assertEquals(1, low.t());
+            List<byte[]> large = new ArrayList<>();
+            for (int j = 1; j <= 64; j++) large.add(new byte[]{(byte) j});
+            DkgConfig high = DkgConfig.create(31, 64, large, new byte[0], 1);
+            assertEquals(31, high.t());
+            assertThrows(IllegalArgumentException.class, () -> DkgConfig.create(32, 64, large, new byte[0], 1));
+            assertNotEquals(low, high);
+        }
+
+        @Test
         @DisplayName("I16: contexts and sessions from different attempts are never equal")
         void attempts() {
             DkgConfig a = DkgHarness.config(1, 3, "attempts", 1);

@@ -75,13 +75,8 @@ public final class JubjubDiscreteLog {
             return;
         }
         this.stride = 2L * babySteps + 1;
-        int entries = babySteps + 1;
-        long wanted = Math.max(4L, (entries * 4L) / 3 + 1); // load factor at most 3/4
-        long capacityLong = Long.highestOneBit(wanted - 1) << 1;
-        if (capacityLong > (1L << 30)) {
-            throw new IllegalArgumentException("baby-step table too large: " + babySteps);
-        }
-        int capacity = (int) capacityLong;
+        int capacity = tableCapacity(babySteps); // validated in create(), before any allocation
+        int entries = babySteps + 1; // ≤ capacity ≤ 2^30, so no overflow
         this.keys = new long[capacity];
         this.values = new int[capacity];
         this.mask = capacity - 1;
@@ -121,7 +116,12 @@ public final class JubjubDiscreteLog {
         BigInteger points = BigInteger.valueOf(maxBound).add(BigInteger.ONE);
         long ideal = points.shiftRight(1).sqrt().longValueExact() + 1;
         int m = (int) Math.min(ideal, maxBabySteps);
+        tableCapacity(m); // refuses an unsupported table size up front (review F11)
         long strideLength = 2L * m + 1;
+        // A search visits t up to bound + stride − 1, which must not overflow a long.
+        if (maxBound > Long.MAX_VALUE - strideLength) {
+            throw new IllegalArgumentException("bound " + maxBound + " is too close to Long.MAX_VALUE to search");
+        }
         BigInteger giants = points.add(BigInteger.valueOf(strideLength - 1))
                 .divide(BigInteger.valueOf(strideLength));
         if (giants.compareTo(BigInteger.valueOf(maxGiantSteps)) > 0) {
@@ -130,6 +130,26 @@ public final class JubjubDiscreteLog {
                             + " baby steps and " + maxGiantSteps + " giant steps");
         }
         return new JubjubDiscreteLog(maxBound, m, keyMask);
+    }
+
+    /**
+     * The open-addressing capacity for {@code babySteps + 1} entries at load factor at most 3/4:
+     * a power of two, at most {@code 2^30}. Computed in {@code long}, so it is exact for every
+     * {@code int} (review F11: {@code babySteps + 1} wrapped for {@code Integer.MAX_VALUE}).
+     *
+     * @throws IllegalArgumentException if the table would exceed {@code 2^30} slots
+     */
+    static int tableCapacity(int babySteps) {
+        if (babySteps < 1) {
+            throw new IllegalArgumentException("babySteps must be positive");
+        }
+        long entries = babySteps + 1L;
+        long wanted = Math.max(4L, entries * 4 / 3 + 1);
+        long capacity = Long.highestOneBit(wanted - 1) << 1;
+        if (capacity > (1L << 30)) {
+            throw new IllegalArgumentException("baby-step table too large: " + babySteps + " baby steps");
+        }
+        return (int) capacity;
     }
 
     /** The largest bound this table searches. */

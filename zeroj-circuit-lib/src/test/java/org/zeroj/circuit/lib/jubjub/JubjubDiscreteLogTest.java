@@ -98,4 +98,28 @@ class JubjubDiscreteLogTest {
         assertThrows(IllegalArgumentException.class, () -> table.solve(G, -1));
         assertTrue(JubjubDiscreteLog.forBound(Long.MAX_VALUE >> 20).maxBound() > 0);
     }
+
+    @Test
+    @DisplayName("Custom caps cannot overflow the table size or the search arithmetic (review F11)")
+    void customCapsOverflow() {
+        // Review F11's counterexample: babySteps + 1 wrapped, giving an empty four-slot table that
+        // found neither 0 nor 1. It is now refused before anything is allocated.
+        assertThrows(IllegalArgumentException.class,
+                () -> JubjubDiscreteLog.forBound(Long.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE));
+        assertThrows(IllegalArgumentException.class, () -> JubjubDiscreteLog.tableCapacity(Integer.MAX_VALUE));
+        assertThrows(IllegalArgumentException.class, () -> JubjubDiscreteLog.tableCapacity(0));
+        assertEquals(4, JubjubDiscreteLog.tableCapacity(1));
+        assertEquals(1 << 19, JubjubDiscreteLog.tableCapacity(JubjubDiscreteLog.DEFAULT_MAX_BABY_STEPS));
+        // The largest table: 805,306,366 baby steps in 2^30 slots; one more needs 2^31.
+        assertEquals(1 << 30, JubjubDiscreteLog.tableCapacity(805_306_366));
+        assertThrows(IllegalArgumentException.class, () -> JubjubDiscreteLog.tableCapacity(805_306_367));
+        // A bound whose search would step past Long.MAX_VALUE is refused rather than wrapped.
+        assertThrows(IllegalArgumentException.class,
+                () -> JubjubDiscreteLog.forBound(Long.MAX_VALUE, 1 << 10, Long.MAX_VALUE));
+        // Supported custom caps still find small plaintexts, including 0 and 1.
+        JubjubDiscreteLog custom = JubjubDiscreteLog.forBound(1 << 20, 1 << 6, 1 << 16);
+        for (long t : new long[]{0, 1, 4095, 4096, 123_457, 1 << 20}) {
+            assertEquals(OptionalLong.of(t), custom.solve(pointOf(t), 1 << 20), "t=" + t);
+        }
+    }
 }

@@ -60,7 +60,10 @@ public final class DkgConfig {
      *         roster and context sizes are valid, and no two roster keys are equal
      */
     public static DkgConfig create(int t, int n, List<byte[]> roster, byte[] applicationContext, long attempt) {
-        if (t < 1 || n < 2 * t + 1 || n > MAX_PARTICIPANTS) {
+        // Widened: an int 2t + 1 overflows for large t and would accept, e.g., t = 2^30 + 1 with n = 3,
+        // whose one-byte encoding aliases t = 1's session (review F10). Accepted values satisfy
+        // t ≤ 31 and n ≤ 64, so both fit the one-byte fields of the session and transcript.
+        if (t < 1 || n > MAX_PARTICIPANTS || n < 2L * t + 1) {
             throw new IllegalArgumentException("parameters must satisfy t >= 1 and 2t + 1 <= n <= "
                     + MAX_PARTICIPANTS + " (t < n/2); got t=" + t + ", n=" + n);
         }
