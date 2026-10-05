@@ -1,5 +1,7 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import org.zeroj.bls12381.field.MontFr381;
+
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -504,7 +506,7 @@ public final class JubjubPoint {
         }
         BigInteger uSquared = numerator.multiply(denominator.modInverse(BASE_FIELD_PRIME)).mod(BASE_FIELD_PRIME);
 
-        BigInteger uAff = modSqrt(uSquared, BASE_FIELD_PRIME);
+        BigInteger uAff = modSqrt(uSquared);
         if (uAff == null) {
             throw new IllegalArgumentException("Invalid encoded point (no square root for u²)");
         }
@@ -551,44 +553,55 @@ public final class JubjubPoint {
         return new BigInteger(be);
     }
 
+    /** The smallest quadratic non-residue mod {@code p} (checked in {@code JubjubDecodeSqrtTest}). */
+    static final BigInteger TS_NON_RESIDUE = BigInteger.valueOf(5);
+
     /**
-     * Tonelli–Shanks for a generic prime, returning one square root (or
-     * null if {@code a} is not a quadratic residue). For Jubjub's base
-     * field {@code p ≡ 1 (mod 4)}, so the {@code (p+1)/4} shortcut does
-     * not apply — use full Tonelli–Shanks.
+     * Tonelli–Shanks constants for the Jubjub base field: {@code p − 1 = 2^E · S} with
+     * {@code S} odd. A holder class, so the constants are initialized on first use whatever the
+     * order of {@code JubjubPoint}'s own static fields.
      */
-    private static BigInteger modSqrt(BigInteger a, BigInteger p) {
+    private static final class SqrtConstants {
+        static final int E = BASE_FIELD_PRIME.subtract(BigInteger.ONE).getLowestSetBit();
+        static final BigInteger S = BASE_FIELD_PRIME.subtract(BigInteger.ONE).shiftRight(E);
+        static final BigInteger S_MINUS_ONE_HALF = S.subtract(BigInteger.ONE).shiftRight(1);
+        static final MontFr381 G = MontFr381.fromBigInteger(TS_NON_RESIDUE.modPow(S, BASE_FIELD_PRIME));
+
+        private SqrtConstants() {}
+    }
+
+    /**
+     * Tonelli–Shanks over the Jubjub base field (the BLS12-381 scalar field, so the arithmetic
+     * runs on {@link MontFr381}'s Montgomery limbs), returning one square root of {@code a}, or
+     * {@code null} if {@code a} is not a quadratic residue. {@code p ≡ 1 (mod 4)}, so the
+     * {@code (p+1)/4} shortcut does not apply. One exponentiation {@code w = a^((S−1)/2)} gives
+     * both {@code x = a·w = a^((S+1)/2)} and {@code b = x·w = a^S}. A non-residue is detected in
+     * the loop, where {@code b} has order exactly {@code 2^E}. It handles public encodings only.
+     */
+    private static BigInteger modSqrt(BigInteger a) {
         if (a.signum() == 0) return BigInteger.ZERO;
-        if (a.modPow(p.subtract(BigInteger.ONE).shiftRight(1), p).equals(p.subtract(BigInteger.ONE))) {
-            return null; // non-residue
-        }
-        // Tonelli–Shanks
-        BigInteger s = p.subtract(BigInteger.ONE);
-        int e = 0;
-        while (!s.testBit(0)) { s = s.shiftRight(1); e++; }
-        // Find a non-residue n
-        BigInteger n = BigInteger.TWO;
-        BigInteger pMinusOneHalf = p.subtract(BigInteger.ONE).shiftRight(1);
-        while (!n.modPow(pMinusOneHalf, p).equals(p.subtract(BigInteger.ONE))) {
-            n = n.add(BigInteger.ONE);
-        }
-        BigInteger x = a.modPow(s.add(BigInteger.ONE).shiftRight(1), p);
-        BigInteger b = a.modPow(s, p);
-        BigInteger g = n.modPow(s, p);
-        int r = e;
+        MontFr381 am = MontFr381.fromBigInteger(a);
+        MontFr381 w = am.pow(SqrtConstants.S_MINUS_ONE_HALF);
+        MontFr381 x = am.mul(w);
+        MontFr381 b = x.mul(w);
+        MontFr381 g = SqrtConstants.G;
+        int r = SqrtConstants.E;
         while (true) {
-            BigInteger tmp = b;
+            MontFr381 tmp = b;
             int m = 0;
-            while (!tmp.equals(BigInteger.ONE)) {
-                tmp = tmp.multiply(tmp).mod(p);
+            while (!tmp.isOne()) {
+                tmp = tmp.square();
                 m++;
                 if (m == r) return null;
             }
-            if (m == 0) return x;
-            BigInteger gs = g.modPow(BigInteger.TWO.modPow(BigInteger.valueOf(r - m - 1), p.subtract(BigInteger.ONE)), p);
-            g = gs.multiply(gs).mod(p);
-            x = x.multiply(gs).mod(p);
-            b = b.multiply(g).mod(p);
+            if (m == 0) return x.toBigInteger();
+            MontFr381 gs = g;
+            for (int i = 0; i < r - m - 1; i++) {
+                gs = gs.square();
+            }
+            g = gs.square();
+            x = x.mul(gs);
+            b = b.mul(g);
             r = m;
         }
     }

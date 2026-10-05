@@ -613,12 +613,37 @@ change the system even though the relation is unchanged. Therefore:
 - Julc's local evaluator needs a `SlotConfig` for time-dependent scripts. Without one it passes
   raw slot numbers. Found in the usecase; it concerns usecase tooling, not this ADR.
 
+## Implementation notes (refinements recorded during implementation)
+
+These refine the accepted design without changing a security invariant. They are recorded
+here, as AGENTS.md requires, for maintainer acknowledgement. Each is stated normatively in
+`docs/specs/elgamal-jubjub-v1.md`.
+
+1. **Local possession** (D5 says `VerifiedKeyShare.verify` is the only constructor).
+   `VerifiedKeyShare.fromSecret` also exists: a share computed locally from a held secret is
+   possession-verified (spec §3.3). Holding the discrete logarithm is what a possession proof
+   establishes.
+2. **Locally computed decryption shares** (D2b says `verify` is the only constructor).
+   `ElGamal.decryptionShare` returns a share verified by construction: the library computes
+   `D = [sk_j]·A` itself, from a secret whose public key is registered (spec §10.2).
+3. **Homomorphic combinations stay admitted** (D2a says "exactly two ways in"). A combination
+   of admitted ciphertexts under one context is admitted, with the combined bound (spec §10.1).
+   D2 already defines `add`/`scale` on safe ciphertexts; the spec makes the consequence explicit.
+4. **The encryption statement's order** is `PK.u, PK.v, A.u, A.v, B.u, B.v` (spec §8). D7 pins
+   the key and the ciphertext groups separately.
+5. **Affine import** of points from integers, for ledger data, requires canonical coordinates
+   without reduction, the curve equation and subgroup membership (spec §7.4).
+6. **Witness access.** `ElGamal.encryptWithOpening` returns the opening `(m, k)`, and
+   `ElGamalSecretKey.secretScalar()` returns `sk`. They are documented as offline-class witness
+   material, because an encrypting party and a trustee must be able to build their own proofs.
+   Neither creates a safe-layer object without the checks.
+
 ## Implementation status
 
 | Milestone | State | Notes |
 |---|---|---|
 | M0 | Done, reviewed (round 1: approve) | Spec `docs/specs/elgamal-jubjub-v1.md`. The independent Python reference in `zeroj-circuit-lib/src/test/resources/elgamal-reference/` was written from the specs alone and recorded 13 findings, each resolved in the spec. It also cross-checks the usecase prototype's vectors (21 points and the tally). |
-| M1 | In progress | Host API (D2, D2a–D2c, D5, D7). |
-| M2 | Not started | |
+| M1 | Done, reviewed (round 1: approve, P2s closed) | Host API in `org.zeroj.circuit.lib.jubjub`: `ElGamal` (including `encryptWithOpening`), `ElGamalEncryption`, `ElGamalSecretKey`, `ElGamalPublicKey`, `ElGamalKeyContext`/`NOfNKeyContext`, `VerifiedKeyShare`, `RawElGamalCiphertext`, `ElGamalCiphertext`, `DleqStatement`/`EncryptionStatement` and their verifiers, `VerifiedDecryptionShare`, `JubjubDiscreteLog`. `ElGamalApiSurfaceTest` guards the type-enforced invariants. Public data runs on `FastJubjubPoint` (Montgomery limbs: subgroup check 960 → 85 µs). `JubjubPoint` decoding's square root moved to Montgomery limbs (185 → 38 µs per point). Tests: `ElGamalReferenceVectorsTest`, `ElGamalHostApiTest`, `FastJubjubPointTest`, `JubjubDiscreteLogTest`, `JubjubDecodeSqrtTest`. Benchmark: `./gradlew :zeroj-circuit-lib:elgamalBenchmark`. |
+| M2 | In progress | |
 | M3 | Not started | Runs in zeroj-usecases PR #8 against a local ZeroJ snapshot (maintainer decision, 2026-10-05). This deviates from the entry gate "a ZeroJ release containing it". |
 | M4 | Not started | |
