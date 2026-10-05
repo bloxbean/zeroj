@@ -64,13 +64,13 @@ public final class ElGamalPublicKey {
         return point;
     }
 
-    /** Affine {@code u}. */
-    public BigInteger u() {
+    /** Affine {@code u} (named like {@link JubjubPoint#affineU()}, unlike the projective {@code JubjubPoint.u()}). */
+    public BigInteger affineU() {
         return point.u();
     }
 
     /** Affine {@code v}. */
-    public BigInteger v() {
+    public BigInteger affineV() {
         return point.v();
     }
 
