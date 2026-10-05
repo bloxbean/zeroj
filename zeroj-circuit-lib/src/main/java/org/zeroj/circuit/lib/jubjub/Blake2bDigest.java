@@ -54,7 +54,7 @@ final class Blake2bDigest {
         long[] m = new long[16];
         long[] v = new long[16];
         int blocks = blockCount(input.length);
-        // The last block starts at (blocks − 1)·128 ≤ 2^31 − 129, so offset + 127 ≤ Integer.MAX_VALUE.
+        // The last block starts at (blocks − 1)·128 ≤ 2^31 − 128, so offset + 127 ≤ Integer.MAX_VALUE.
         for (int b = 0; b < blocks; b++) {
             boolean last = b == blocks - 1;
             int offset = b * BLOCK;
