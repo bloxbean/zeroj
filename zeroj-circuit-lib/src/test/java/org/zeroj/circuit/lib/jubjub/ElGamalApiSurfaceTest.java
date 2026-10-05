@@ -26,7 +26,8 @@ class ElGamalApiSurfaceTest {
     private static final List<Class<?>> SAFE_TYPES = List.of(
             ElGamalCiphertext.class, VerifiedKeyShare.class, VerifiedDecryptionShare.class,
             ElGamalPublicKey.class, NOfNKeyContext.class, EncryptionStatement.class,
-            DleqStatement.class, ElGamalEncryption.class, ElGamalSecretKey.class);
+            DleqStatement.class, ElGamalEncryption.class, ElGamalSecretKey.class,
+            ThresholdKeyContext.class, ThresholdKeyShare.class, DkgMessage.class);
 
     @Test
     @DisplayName("Safe-layer types are final, not records, and expose no public or protected constructor")
@@ -42,10 +43,10 @@ class ElGamalApiSurfaceTest {
     }
 
     @Test
-    @DisplayName("ElGamalKeyContext stays sealed to the library's context kinds")
+    @DisplayName("ElGamalKeyContext stays sealed to the library's two context kinds")
     void contextSealed() {
         assertTrue(ElGamalKeyContext.class.isSealed());
-        assertEquals(Set.of(NOfNKeyContext.class),
+        assertEquals(Set.of(NOfNKeyContext.class, ThresholdKeyContext.class),
                 Set.of(ElGamalKeyContext.class.getPermittedSubclasses()));
     }
 
@@ -54,7 +55,7 @@ class ElGamalApiSurfaceTest {
     void onlyAdmitAdmits() {
         List<String> found = new ArrayList<>();
         for (Class<?> type : List.of(ElGamal.class, ElGamalCiphertext.class, RawElGamalCiphertext.class,
-                NOfNKeyContext.class)) {
+                NOfNKeyContext.class, ThresholdKeyContext.class)) {
             for (Method m : type.getDeclaredMethods()) {
                 if (!Modifier.isPublic(m.getModifiers())) continue;
                 boolean takesRaw = List.of(m.getParameterTypes()).contains(RawElGamalCiphertext.class);

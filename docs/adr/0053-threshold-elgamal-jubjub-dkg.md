@@ -609,6 +609,6 @@ from the independent reference of M0 and the implementation reviews.
 |---|---|---|
 | M0 | Done, reviewed (round 2: approve; rounds 3–5 on the vector replay, R7–R17: approve) | Spec `docs/specs/elgamal-jubjub-threshold-v1.md`. An independent Python reference of [GJKR07] Fig. 2, written from the paper and the spec (`zeroj-circuit-lib/src/test/resources/elgamal-threshold-reference/`, 514 checks), went through seven revisions. It found A8, the A7 veto, the R5 divergence, the admission completeness gaps, N10, N11 and N12, all resolved in the spec. The Java replay of every fixture and `case.*` vector, `ThresholdReferenceVectorsTest`, lands with M3. |
 | M1 | Done, reviewed (rounds 1–2: approve) | `ThresholdMath` (evaluation, interpolation, Lagrange), `ThresholdVss` (dealing, checks (4) and (5) on secret and public paths, reconstruction), `Blake2bDigest` (RFC 7693, checked against BouncyCastle and Cardano's `Blake2bUtil`). |
-| M2 | Not started | |
+| M2 | Done, reviewed (round 1: two P1s, fixed; round 2: approve; rounds 3–5, admission hardening R8–R17: approve) | `DkgConfig`, `DkgMessage`, `DkgRules` (public rules shared with recomputation), `DkgParticipant` (separate broadcast/private delivery, final aborts A1–A9), `DkgTranscript` (with `deliveredRound`), `ThresholdKeyContext.admit` (library-computed admission, round-7 closure), `ThresholdKeyShare.restore`, `FaultAssumptionViolatedException`. Measured per-participant cost: 21 ms (2-of-3), 49 ms (4-of-7), 214 ms (11-of-21). |
 | M3 | Not started | |
 | M4 | Not started | |

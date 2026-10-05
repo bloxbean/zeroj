@@ -81,4 +81,20 @@ class ElGamalBenchmark {
             timed("solve (t = bound, worst case), bound 2^" + bits, () -> table.solve(worst, bound));
         }
     }
+
+    @Test
+    void dkg() {
+        System.out.println();
+        System.out.println("| DKG (t, n) | Whole run, all n participants | Per participant |");
+        System.out.println("|---|---:|---:|");
+        for (int[] tn : new int[][]{{1, 3}, {2, 5}, {3, 7}, {5, 11}, {10, 21}}) {
+            DkgConfig config = DkgHarness.config(tn[0], tn[1], "bench", tn[1]);
+            DkgHarness.random(config, DkgHarness.HONEST).run(); // warm-up
+            long start = System.nanoTime();
+            DkgHarness h = DkgHarness.random(config, DkgHarness.HONEST).run();
+            double ms = (System.nanoTime() - start) / 1e6;
+            if (!h.aborted.isEmpty()) throw new AssertionError("aborted: " + h.aborted);
+            System.out.printf("| (%d, %d) | %.0f ms | %.0f ms |%n", tn[0], tn[1], ms, ms / tn[1]);
+        }
+    }
 }

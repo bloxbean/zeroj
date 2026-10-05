@@ -9,7 +9,7 @@ package org.zeroj.circuit.lib.jubjub;
  * can decrypt to a wrong in-range value instead of failing. Contexts compare by value: the
  * joint key and the registered share set.
  */
-public sealed interface ElGamalKeyContext permits NOfNKeyContext {
+public sealed interface ElGamalKeyContext permits NOfNKeyContext, ThresholdKeyContext {
 
     /** The key ciphertexts are encrypted to. */
     ElGamalPublicKey jointKey();
