@@ -1,19 +1,24 @@
 # ADR-0054: Encrypted DKG share delivery with HPKE (`dkg-share-delivery-hpke-v1`)
 
 ## Status
-Proposed — 2026-10-05.
-- Design only. This ADR adds no implementation, test or build file. Accepting it would be design
-  acceptance only; it would certify no implementation, test or security property.
+Accepted (design) — 2026-10-09.
+- The reviewer approved r3 at `cc63762` with no outstanding findings, and the maintainer
+  accepted the design.
+- Acceptance is design acceptance only. It certifies no implementation, test or security
+  property.
+- Q1–Q8 were decided by the maintainer on 2026-10-09: each recorded lean is adopted (see "Open
+  questions").
 - It answers ADR-0053's Q1 ("how are the private channels realized?") with an **optional**
   ZeroJ-provided transport. Application-provided channels (ADR-0053 D3) stay supported.
-- It also bears on ADR-0053's Q7 (late shares under partial synchrony); see D7 and Q6.
-- Tracked as #77. Stacked on PR #76, which implements ADR-0052 and ADR-0053.
+- It bears on ADR-0053's Q7 (late shares under partial synchrony); see D7 and Q6.
+- Tracked as #77. Implementation of M0–M3 is in progress on PR #80, one reviewed step at a time.
+  The "Implementation status" section at the end tracks it.
 
 This ADR changes no maturity claim. ADR-0039's assurance classes apply: every secret-bearing
 host operation here is **compatibility/offline** class.
 
 ## Date
-2026-10-05
+2026-10-05 (proposed); 2026-10-09 (accepted)
 
 ## Revision history
 - **r1** (`eb8ddd6`, 2026-10-05): initial proposal.
@@ -37,6 +42,10 @@ host operation here is **compatibility/offline** class.
   complaint. New I15 (answer scope). M2 and the timing harness include both adversarial-complaint
   traces. The threat model's public-answer example is scoped to honest indices. No change to
   Fig. 2's rules.
+- **Accepted** (2026-10-09): approved at r3 (`cc63762`); status flipped without changing the
+  design text.
+- **Decisions recorded** (2026-10-09): the maintainer adopted the leans of Q1–Q8. No design text
+  changes.
 
 ## Risk classification
 - **R3:** D1 (the ciphersuite and mode), D2 (the composition that replaces [GJKR07]'s ideal
@@ -597,6 +606,9 @@ not meet P2, P3, T1 and D7a.
 
 ## Open questions (points needing a maintainer decision)
 
+**Decided 2026-10-09 (maintainer): the lean of every question below is adopted.** The
+questions stay as written for the record.
+
 1. **Q1 (D3, Compatibility): layering.**
    - Options:
      - (a) a separate transport profile; envelopes and announcements are board posts outside the
@@ -648,3 +660,12 @@ not meet P2, P3, T1 and D7a.
   post-quantum replacement for Jubjub ElGamal itself.
 - PVSS-style DKGs with zero-knowledge share proofs could remove complaint rounds. That would be a
   separate ADR.
+
+## Implementation status
+
+| Milestone | State | Notes |
+|---|---|---|
+| M0 | Not started | |
+| M1 | Not started | |
+| M2 | Not started | |
+| M3 | Not started | |
