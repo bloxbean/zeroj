@@ -143,6 +143,9 @@ dependencies {
     testImplementation "com.bloxbean.cardano:cardano-client-crypto:${rootProject.ext.cclVersion}"
     // Authoritative RFC 8032 Ed25519 oracle for the Ed25519 gadget tests.
     testImplementation 'org.bouncycastle:bcprov-jdk18on:1.83'
+    // Reads the vendored standard test vectors (RFC 9180 / CFRG HPKE, Wycheproof) in
+    // src/test/resources/standard-vectors. Test-only.
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 }
 
 /**
