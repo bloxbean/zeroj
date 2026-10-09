@@ -2,6 +2,7 @@ package org.zeroj.circuit.lib.jubjub;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -83,6 +84,8 @@ public final class DkgParticipant {
     /** The exact keys and directory {@link DkgShareDelivery#start} bound; round 1 closes only with these. */
     private Object boundKeys;
     private Object boundDirectory;
+    /** The digest of the round-1 window {@link DkgShareDelivery#closeRound1} first delivered from; a retry must match it. */
+    private byte[] round1Window;
 
     private DkgParticipant(DkgConfig config, int id, ThresholdVss.Dealing dealing) {
         this.config = config;
@@ -121,10 +124,7 @@ public final class DkgParticipant {
      * {@code SHARE} per other participant.
      */
     public List<DkgMessage> start() {
-        requireNotAborted();
-        if (open != 0) {
-            throw new IllegalStateException("already started");
-        }
+        requireStartable();
         open = 1;
         List<DkgMessage> out = new ArrayList<>(config.n());
         out.add(DkgMessage.points(config, DkgMessage.Kind.COMMITMENTS, id, dealing.commitments()));
@@ -190,6 +190,17 @@ public final class DkgParticipant {
         return m;
     }
 
+    /**
+     * Refuses a participant that cannot start, changing nothing: an aborted one throws its abort
+     * again, and one already started throws {@link IllegalStateException}.
+     */
+    void requireStartable() {
+        requireNotAborted();
+        if (open != 0) {
+            throw new IllegalStateException("already started");
+        }
+    }
+
     private void requireNotAborted() {
         if (abort != null) {
             throw abort;
@@ -239,6 +250,18 @@ public final class DkgParticipant {
     /** {@code true} iff {@code keys} and {@code directory} are the very objects bound at start. */
     boolean boundTo(Object keys, Object directory) {
         return encryptedDelivery && boundKeys == keys && boundDirectory == directory;
+    }
+
+    /** {@code true} iff no round-1 window is bound yet, or {@code windowDigest} is the bound one. */
+    boolean round1WindowMatches(byte[] windowDigest) {
+        return round1Window == null || MessageDigest.isEqual(round1Window, windowDigest);
+    }
+
+    /** Binds the round-1 window before its first delivery; later calls keep the first binding. */
+    void bindRound1Window(byte[] windowDigest) {
+        if (round1Window == null) {
+            round1Window = windowDigest.clone();
+        }
     }
 
     /** Aborts this participant (sticky), for transport aborts such as T1. */

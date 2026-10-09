@@ -1,6 +1,9 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -89,10 +92,11 @@ public final class DkgShareDelivery {
 
     /**
      * Starts {@code participant} for encrypted delivery (spec §3.3, §4.1). It checks that the
-     * participant, the directory and the keys share one session and one identifier, applies
-     * abort T1, runs a seal-and-open self-test of the platform's primitives, binds the
-     * participant (see the class documentation), opens round 1, and seals one envelope per other
-     * participant that has a key. It never seals to the dealer itself.
+     * participant, the directory and the keys share one session and one identifier, and that the
+     * participant can start, before anything changes. It then applies abort T1, runs a
+     * seal-and-open self-test of the platform's primitives, binds the participant (see the class
+     * documentation), opens round 1, and seals one envelope per other participant that has a
+     * key. It never seals to the dealer itself.
      *
      * <p>If the self-test fails, nothing has changed and {@code start} can be retried. If sealing
      * fails after round 1 opened (a platform fault, never caused by a directory key), no dealing is
@@ -100,9 +104,12 @@ public final class DkgShareDelivery {
      * its dealing and no honest participant complains about it (spec §5.2).
      *
      * @throws FaultAssumptionViolatedException with reason {@code OWN_KEY_ANNOUNCEMENT_MISSING}
-     *         (T1); the participant is then aborted and the keys destroyed
+     *         (T1); the participant is then aborted and the keys destroyed. A participant that had
+     *         already aborted throws its own abort again, and nothing changes
      * @throws IllegalArgumentException if the participant, directory and keys disagree
-     * @throws IllegalStateException    if the platform's HPKE primitives fail (see above)
+     * @throws IllegalStateException    if the participant has already started (nothing changes:
+     *         T1 is not applied and the keys are kept), or the platform's HPKE primitives fail
+     *         (see above)
      */
     public static SealedDealing start(DkgParticipant participant, DkgKeyDirectory directory, DkgShareDeliveryKeys keys,
                                       SecureRandom random) {
@@ -126,6 +133,9 @@ public final class DkgShareDelivery {
         Objects.requireNonNull(ephemeral, "ephemeral");
         DkgConfig config = participant.config();
         requireSameRun(participant, directory, keys);
+        // Refuse an ineligible participant before T1, which aborts it and destroys the keys: a
+        // second start must not undo a run in progress (external review of 914b68c, item 1).
+        participant.requireStartable();
         try {
             directory.requireOwn(keys);
         } catch (FaultAssumptionViolatedException t1) {
@@ -241,8 +251,14 @@ public final class DkgShareDelivery {
      * failure closing the round), the keys are kept and the call can be retried; while the
      * participant is still at round 1 it stays there. A retry <b>must</b> pass the identical final
      * window: deliveries from the interrupted pass stay with the participant, which counts
-     * byte-identical repeats once. An application that abandons the attempt instead calls
-     * {@link DkgShareDeliveryKeys#destroy()}. The participant can close round 1 in no other way.
+     * byte-identical repeats once. This is enforced. The first call that reaches delivery binds
+     * the participant to the window's digest ({@link #windowDigest}: every post's message and
+     * authenticator bytes, in the given order, repeats included). A later call with any other
+     * window is refused before anything changes. Binding checks only that a retry repeats the
+     * first window. It is no evidence that the window is final or complete, or that other
+     * participants saw the same one: those stay the application's (P1, P2). An application that
+     * abandons the attempt instead calls {@link DkgShareDeliveryKeys#destroy()}. The participant
+     * can close round 1 in no other way.
      *
      * <p>An envelope that fails because of its content (spec §4.2 steps 1–6) is silently absence
      * (ADR-0054 I4). A failure of the platform's primitives is never absence: it fails closed as
@@ -255,7 +271,8 @@ public final class DkgShareDelivery {
      *                                          {@link #start} or is not at round 1, the keys were
      *                                          destroyed, or the platform's primitives failed
      * @throws IllegalArgumentException         if the participant, directory and keys disagree, or
-     *                                          are not the instances given to {@link #start}
+     *                                          are not the instances given to {@link #start}, or a
+     *                                          retry's window differs from the bound one
      * @throws FaultAssumptionViolatedException if the participant aborts while closing round 1
      */
     public static List<DkgMessage> closeRound1(DkgParticipant participant, DkgKeyDirectory directory,
@@ -280,6 +297,14 @@ public final class DkgShareDelivery {
             // into complaints (review C-1).
             throw new IllegalArgumentException("closeRound1 needs the same keys and directory instances given to start");
         }
+        // One snapshot for the digest and the deliveries, so a list changed meanwhile cannot split them.
+        List<AuthenticatedDkgMessage> window = List.copyOf(finalRound1Window);
+        byte[] windowDigest = windowDigest(window);
+        if (!participant.round1WindowMatches(windowDigest)) {
+            // An interrupted pass may already have delivered from the bound window. Another
+            // window would mix two views of round 1 (external review of 914b68c, item 2).
+            throw new IllegalArgumentException("a retry of closeRound1 needs the identical round-1 window");
+        }
         try {
             directory.requireOwn(keys);
         } catch (FaultAssumptionViolatedException t1) {
@@ -293,7 +318,8 @@ public final class DkgShareDelivery {
         try {
             PrivateKey recipient = X25519Bytes.privateKey(skR);
             selfTest(recipient, pkR);
-            for (AuthenticatedDkgMessage post : List.copyOf(finalRound1Window)) {
+            participant.bindRound1Window(windowDigest);
+            for (AuthenticatedDkgMessage post : window) {
                 deliver(config, post.message(), post.authenticator(), recipient, pkR, participant, verifier);
             }
         } catch (GeneralSecurityException e) {
@@ -314,6 +340,37 @@ public final class DkgShareDelivery {
         }
         keys.destroy();
         return complaints;
+    }
+
+    private static final byte[] WINDOW_TAG = Hpke.ascii("zeroj.dkg-share-delivery-hpke.v1.round1-window");
+
+    /**
+     * SHA-256 over a round-1 window, which binds {@link #closeRound1} retries; local only, never
+     * posted. The input is {@code WINDOW_TAG ‖ u32(count)} followed, for every post in the given
+     * order, by {@code u32(|message|) ‖ message ‖ u32(|authenticator|) ‖ authenticator}, with
+     * big-endian lengths. Each field is length-prefixed, so the framing is unambiguous. Order is
+     * significant and repeats count, so reordering, adding, removing or repeating a post changes
+     * the digest.
+     */
+    static byte[] windowDigest(List<AuthenticatedDkgMessage> window) {
+        MessageDigest sha256;
+        try {
+            sha256 = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+        sha256.update(WINDOW_TAG);
+        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
+        sha256.update(length.putInt(0, window.size()).array());
+        for (AuthenticatedDkgMessage post : window) {
+            byte[] message = post.message();
+            byte[] authenticator = post.authenticator();
+            sha256.update(length.putInt(0, message.length).array());
+            sha256.update(message);
+            sha256.update(length.putInt(0, authenticator.length).array());
+            sha256.update(authenticator);
+        }
+        return sha256.digest();
     }
 
     private static void requireSameRun(DkgParticipant participant, DkgKeyDirectory directory, DkgShareDeliveryKeys keys) {

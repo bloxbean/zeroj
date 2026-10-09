@@ -754,6 +754,33 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
       conform to the RFC is therefore refused, rather than turning every honest envelope into a
       complaint.
 
+11. **Lifecycle checks before anything changes** (external review of `914b68c`, two P3s).
+    - **`start` on an ineligible participant.** T1 used to run before the lifecycle check. So a
+      second `start` on a running participant, with a missing or conflicting own-key
+      announcement, aborted it and destroyed its keys. `start` now refuses an ineligible
+      participant first, changing nothing:
+      - one already started gets an `IllegalStateException`;
+      - an aborted one throws its own abort again.
+
+      A legitimate first `start` still applies T1.
+    - **The identical-window retry is enforced** (spec §4.2, "A local fault is not a failed
+      step"). The first `closeRound1` that reaches delivery binds the participant to the
+      window's SHA-256 digest. The digest covers every post's message and authenticator, each
+      length-prefixed, in the given order, with repeats counted. A retry with any other window
+      is refused with `IllegalArgumentException`, before T1 or any delivery.
+    - **What this does not establish:** binding checks only that a retry repeats the first
+      window. It is no evidence that the window is final or complete, or that participants
+      agree on it. Those stay the application's (P1, P2; note 2).
+    - **Tests:**
+      - `startAgainRefusedBeforeT1` covers a missing and a conflicting own key.
+      - `retryNeedsIdenticalWindow` refuses, after a partial delivery: changed message bytes,
+        changed authenticator bytes, an added post, a removed post and a reordered window. Each
+        refusal leaves the participant's shares, round and keys as they were. An identical
+        retry then succeeds.
+      - `windowDigestFraming` checks the framing.
+
+      Each fix's mutant is killed. No design decision changes.
+
 ### Proposed amendment awaiting a maintainer decision (not implemented)
 
 - **T2: a dealer's own D7a self-check** (final security review Z-2, P2). Suppose `closeRound1`

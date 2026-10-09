@@ -343,7 +343,9 @@ These rules are what keep the shares secret. They are not optional:
   at round 1, so it cannot complain about a share it never processed. If `closeRound1` throws
   anything other than an abort (your verifier, or a crypto-provider fault), the participant
   stays at round 1 with its keys; retry with the same window, or call `keys.destroy()` if you
-  give up the attempt. Your verifier must return `false`, not throw, for posts it does not
+  give up the attempt. The retry must pass exactly the same posts in the same order: any other
+  window is refused with `IllegalArgumentException`. This check proves only that the retry
+  repeats the first call. It does not prove the window is final or complete. Your verifier must return `false`, not throw, for posts it does not
   accept. If `start` throws after the participant started, post nothing for it in round 1.
 - **Commitments last.** Post `COMMITMENTS` only after every envelope is final within the round-1
   window, or post them all atomically. If the envelopes cannot make the cutoff, post nothing:

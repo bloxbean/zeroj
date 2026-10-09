@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -679,6 +680,136 @@ class DkgShareDeliveryTest {
                 if (dealer != 2) assertEquals(1, p2.receivedShares(dealer).size(), "one share from dealer " + dealer);
             }
             assertTrue(k2.isDestroyed());
+        }
+
+        @Test
+        @DisplayName("start on a started participant is refused before T1: a missing or conflicting own key neither aborts it nor destroys its keys")
+        void startAgainRefusedBeforeT1() {
+            DkgConfig config = config(1, 3, 1);
+            DkgShareDeliveryKeys k2 = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
+            DkgShareDeliveryKeys otherK2 = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
+            DkgKeyDirectory dir = directoryOf(config, k2);
+            DkgKeyDirectory missing = DkgKeyDirectory.fromRound0(config, List.of(), DkgEncryptedHarness.AUTH);
+            DkgKeyDirectory conflicting = directoryOf(config, k2, otherK2);
+            assertThrows(FaultAssumptionViolatedException.class, () -> conflicting.requireOwn(k2), "the directory alone gives T1");
+            DkgParticipant p2 = DkgParticipant.create(config, 2, new SecureRandom());
+            DkgShareDelivery.start(p2, dir, k2, new SecureRandom());
+            for (DkgKeyDirectory bad : List.of(missing, conflicting)) {
+                assertThrows(IllegalStateException.class, () -> DkgShareDelivery.start(p2, bad, k2, new SecureRandom()));
+                assertFalse(k2.isDestroyed(), "the bound keys are kept");
+                assertEquals(1, p2.openRound());
+                assertTrue(p2.boundTo(k2, dir), "still bound to the first start's keys and directory");
+            }
+            assertEquals(List.of(), DkgShareDelivery.closeRound1(p2, dir, k2, List.of(), DkgEncryptedHarness.AUTH),
+                    "the run continues: no abort was recorded");
+            assertEquals(2, p2.openRound());
+
+            // A legitimate first start still applies T1: abort, keys destroyed.
+            DkgShareDeliveryKeys k3 = DkgShareDeliveryKeys.generate(config, 3, new SecureRandom());
+            DkgParticipant p3 = DkgParticipant.create(config, 3, new SecureRandom());
+            FaultAssumptionViolatedException t1 = assertThrows(FaultAssumptionViolatedException.class,
+                    () -> DkgShareDelivery.start(p3, missing, k3, new SecureRandom()));
+            assertEquals(FaultAssumptionViolatedException.Reason.OWN_KEY_ANNOUNCEMENT_MISSING, t1.reason());
+            assertTrue(k3.isDestroyed());
+            // An aborted participant throws its own abort again and changes nothing more.
+            DkgShareDeliveryKeys fresh = DkgShareDeliveryKeys.generate(config, 3, new SecureRandom());
+            assertSame(t1, assertThrows(FaultAssumptionViolatedException.class,
+                    () -> DkgShareDelivery.start(p3, missing, fresh, new SecureRandom())));
+            assertFalse(fresh.isDestroyed(), "keys given to an aborted participant are not touched");
+            assertEquals(0, p3.openRound());
+        }
+
+        @Test
+        @DisplayName("A retry after partial delivery needs the identical window: changed message or authenticator bytes, added, removed or reordered posts are refused and change nothing")
+        void retryNeedsIdenticalWindow() {
+            DkgConfig config = config(2, 5, 1);
+            List<ThresholdVss.Dealing> d = dealings(2, 5);
+            DkgEncryptedHarness honest = DkgEncryptedHarness.fixed(config, d, DkgEncryptedHarness.HONEST);
+            honest.run();
+            DkgParticipant p2 = DkgParticipant.withDealing(config, 2, d.get(1));
+            DkgShareDeliveryKeys k2 = DkgShareDeliveryKeys.fromSecret(config, 2, DkgEncryptedHarness.testKey("recipient.2"));
+            DkgShareDelivery.start(p2, honest.directory, k2, new SecureRandom());
+            List<AuthenticatedDkgMessage> window = honest.window(honest.board.get(1));
+            int[] calls = {0};
+            DkgAdmissionVerifier flaky = new DkgAdmissionVerifier() {
+                @Override
+                public boolean authenticate(int sender, byte[] rosterKey, byte[] message, byte[] authenticator) {
+                    if (++calls[0] > 3) throw new IllegalStateException("signature service unavailable");
+                    return DkgEncryptedHarness.AUTH.authenticate(sender, rosterKey, message, authenticator);
+                }
+
+                @Override
+                public boolean roundClosed(DkgConfig c, int round, List<byte[]> m, byte[] e) {
+                    return true;
+                }
+            };
+            assertThrows(IllegalStateException.class, () -> DkgShareDelivery.closeRound1(p2, honest.directory, k2, window, flaky));
+            TreeMap<Integer, List<DkgMessage>> partial = new TreeMap<>();
+            for (int dealer = 1; dealer <= config.n(); dealer++) partial.put(dealer, p2.receivedShares(dealer));
+            assertTrue(partial.values().stream().mapToInt(List::size).sum() >= 1, "the failed attempt delivered something");
+
+            int envelope = -1;
+            for (int k = 0; k < window.size(); k++) {
+                if (DkgShareDeliveryCodec.decodeEnvelope(config, window.get(k).message()) != null) {
+                    envelope = k;
+                    break;
+                }
+            }
+            assertTrue(envelope >= 0);
+            AuthenticatedDkgMessage e = window.get(envelope);
+            byte[] message = e.message();
+            message[message.length - 1] ^= 1;
+            byte[] authenticator = e.authenticator();
+            authenticator[0] ^= 1;
+            List<AuthenticatedDkgMessage> messageChanged = new ArrayList<>(window);
+            messageChanged.set(envelope, new AuthenticatedDkgMessage(message, e.authenticator()));
+            List<AuthenticatedDkgMessage> authenticatorChanged = new ArrayList<>(window);
+            authenticatorChanged.set(envelope, new AuthenticatedDkgMessage(e.message(), authenticator));
+            List<AuthenticatedDkgMessage> added = new ArrayList<>(window);
+            added.add(e);
+            List<AuthenticatedDkgMessage> removed = new ArrayList<>(window);
+            removed.remove(envelope);
+            List<AuthenticatedDkgMessage> reordered = new ArrayList<>(window);
+            reordered.add(reordered.remove(0));
+            for (List<AuthenticatedDkgMessage> other : List.of(messageChanged, authenticatorChanged, added, removed, reordered)) {
+                assertNotEquals(HexFormat.of().formatHex(DkgShareDelivery.windowDigest(window)),
+                        HexFormat.of().formatHex(DkgShareDelivery.windowDigest(other)));
+                assertThrows(IllegalArgumentException.class,
+                        () -> DkgShareDelivery.closeRound1(p2, honest.directory, k2, other, DkgEncryptedHarness.AUTH));
+                assertFalse(k2.isDestroyed(), "keys kept");
+                assertEquals(1, p2.openRound(), "still at round 1");
+                for (int dealer = 1; dealer <= config.n(); dealer++) {
+                    assertEquals(partial.get(dealer), p2.receivedShares(dealer), "nothing more delivered from dealer " + dealer);
+                }
+            }
+
+            // The identical window, rebuilt from fresh copies, completes the round.
+            List<AuthenticatedDkgMessage> identical = new ArrayList<>();
+            for (AuthenticatedDkgMessage post : window) identical.add(new AuthenticatedDkgMessage(post.message(), post.authenticator()));
+            assertEquals(List.of(), DkgShareDelivery.closeRound1(p2, honest.directory, k2, identical, DkgEncryptedHarness.AUTH),
+                    "the identical retry: no complaint");
+            for (int dealer = 1; dealer <= config.n(); dealer++) {
+                if (dealer != 2) assertEquals(1, p2.receivedShares(dealer).size(), "one share from dealer " + dealer);
+            }
+            assertTrue(k2.isDestroyed());
+        }
+
+        @Test
+        @DisplayName("The window digest frames every field: moving a byte between message and authenticator, or between posts, changes it")
+        void windowDigestFraming() {
+            byte[] ab = {1, 2};
+            AuthenticatedDkgMessage split1 = new AuthenticatedDkgMessage(new byte[]{1}, new byte[]{2});
+            AuthenticatedDkgMessage split2 = new AuthenticatedDkgMessage(ab, new byte[0]);
+            AuthenticatedDkgMessage split3 = new AuthenticatedDkgMessage(new byte[0], ab);
+            Set<String> digests = new HashSet<>();
+            for (List<AuthenticatedDkgMessage> w : List.of(List.of(split1), List.of(split2), List.of(split3),
+                    List.of(new AuthenticatedDkgMessage(new byte[]{1}, new byte[0]), new AuthenticatedDkgMessage(new byte[]{2}, new byte[0])),
+                    List.<AuthenticatedDkgMessage>of())) {
+                assertTrue(digests.add(HexFormat.of().formatHex(DkgShareDelivery.windowDigest(w))), "distinct digest");
+            }
+            assertArrayEquals(DkgShareDelivery.windowDigest(List.of(split1, split2)),
+                    DkgShareDelivery.windowDigest(List.of(new AuthenticatedDkgMessage(new byte[]{1}, new byte[]{2}), split2)),
+                    "equal contents, equal digest");
         }
     }
 

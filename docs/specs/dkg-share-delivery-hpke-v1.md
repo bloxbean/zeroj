@@ -209,7 +209,9 @@ missing or invalid share is the threshold profile's usual round-2 `COMPLAINT` (A
 If the recipient's own platform fails instead (a primitive is unavailable or errs, or the
 authenticator cannot answer), the recipient must not treat the envelope as absent. It stops
 processing, keeps its key and does not close round 1; it may then process the same final window
-again. Treating such a fault as absence would turn every honest dealer's share into a complaint,
+again, and only that window: the earlier pass may already have delivered from it. A retry that
+repeats the window is still no evidence that the window is final, complete or agreed (P1, P2).
+Treating such a fault as absence would turn every honest dealer's share into a complaint,
 and so into a public answer.
 
 ---
