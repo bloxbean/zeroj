@@ -97,6 +97,142 @@ class DkgShareDeliveryTest {
         }
     }
 
+    // ------------------------------------------------------------------ I3 under attack (review X-7)
+
+    /**
+     * ADR-0053's adversarial suites that can be expressed on an agreed board, rerun over encrypted
+     * delivery and compared with the same attack over private channels (ADR-0054 M2 exit
+     * criterion). Suites that need different views per recipient (A6, A7, A9) cannot be posted on
+     * an agreed board and are not transport-dependent.
+     */
+    @Nested
+    @DisplayName("I3 under attack: board-expressible ADR-0053 adversarial suites give the same outcome as private channels")
+    class AdversarialSuites {
+
+        /** The same attack on the board: a tampered SHARE is sealed in its envelope; broadcasts are posted once each. */
+        private DkgEncryptedHarness.Hooks onBoard(DkgConfig config, List<ThresholdVss.Dealing> d, DkgHarness.Adversary adversary) {
+            DkgHarness bridge = DkgHarness.fixed(config, d, DkgHarness.HONEST);
+            return new DkgEncryptedHarness.Hooks() {
+                @Override
+                public List<byte[]> envelope(int i, int j, byte[] envelope) {
+                    DkgMessage share = DkgMessage.pair(config, DkgMessage.Kind.SHARE, i, j, d.get(i - 1).share(j), d.get(i - 1).sharePrime(j));
+                    List<byte[]> out = new ArrayList<>();
+                    for (DkgHarness.Delivery x : adversary.deliver(share, bridge.honestDeliveries(share))) {
+                        out.add(Arrays.equals(x.bytes(), share.encode()) ? envelope
+                                : DkgShareDelivery.sealOne(config, i, j, publicKeyOf(j), DkgMessage.decode(config, x.bytes()),
+                                DkgEncryptedHarness.testKey("ephemeral." + i + "." + j)));
+                    }
+                    return out;
+                }
+
+                @Override
+                public List<byte[]> broadcast(DkgMessage m) {
+                    List<byte[]> out = new ArrayList<>();
+                    for (DkgHarness.Delivery x : adversary.deliver(m, bridge.honestDeliveries(m))) {
+                        if (out.stream().noneMatch(b -> Arrays.equals(b, x.bytes()))) out.add(x.bytes());
+                    }
+                    return out;
+                }
+            };
+        }
+
+        private void sameOutcome(DkgConfig config, List<ThresholdVss.Dealing> d, DkgHarness.Adversary adversary) {
+            DkgHarness plain = DkgHarness.fixed(config, d, adversary).run();
+            DkgEncryptedHarness enc = DkgEncryptedHarness.fixed(config, d, onBoard(config, d, adversary)).run();
+            assertArrayEquals(DkgTranscript.of(config, plain.transcriptMessages()).digest(),
+                    DkgTranscript.of(config, enc.transcriptMessages()).digest(), "transcript digest");
+            assertEquals(plain.aborted.keySet(), enc.aborted.keySet(), "aborted participants");
+            for (int id : plain.aborted.keySet()) {
+                assertEquals(plain.aborted.get(id).reason(), enc.aborted.get(id).reason(), "abort reason of " + id);
+            }
+            for (int j = 1; j <= config.n(); j++) {
+                if (plain.aborted.containsKey(j)) continue;
+                assertEquals(context(plain.participant(j)), context(enc.participant(j)), "context of " + j);
+                assertEquals(plain.participant(j).result().secretScalar(), enc.participant(j).result().secretScalar(), "x_" + j);
+            }
+        }
+
+        @Test
+        @DisplayName("More than t complaints disqualify the dealer (A2 for it)")
+        void tooManyComplaints() {
+            DkgConfig config = config(2, 5, 1);
+            List<ThresholdVss.Dealing> d = dealings(2, 5);
+            sameOutcome(config, d, (m, honest) -> m.kind() == DkgMessage.Kind.SHARE && m.sender() == 1 && m.subject() >= 3
+                    ? List.of(new DkgHarness.Delivery(1, m.subject(), bump(config, m).encode())) : honest);
+        }
+
+        @Test
+        @DisplayName("A complaint answered with a failing pair disqualifies the dealer")
+        void badAnswer() {
+            DkgConfig config = config(1, 3, 1);
+            List<ThresholdVss.Dealing> d = dealings(1, 3);
+            sameOutcome(config, d, (m, honest) -> {
+                if (m.kind() == DkgMessage.Kind.SHARE && m.sender() == 1 && m.subject() == 2) {
+                    return List.of(new DkgHarness.Delivery(1, 2, bump(config, m).encode()));
+                }
+                if (m.kind() == DkgMessage.Kind.ANSWER && m.sender() == 1) {
+                    byte[] bad = DkgMessage.pair(config, DkgMessage.Kind.ANSWER, 1, m.subject(), m.s().add(BigInteger.ONE).mod(L), m.sPrime()).encode();
+                    List<DkgHarness.Delivery> out = new ArrayList<>();
+                    for (DkgHarness.Delivery x : honest) out.add(new DkgHarness.Delivery(1, x.recipient(), bad));
+                    return out;
+                }
+                return honest;
+            });
+        }
+
+        @Test
+        @DisplayName("Phase-2 Feldman cheat: the dealer is marked and reconstructed (A8 for it); the key is unchanged")
+        void feldmanCheat() {
+            DkgConfig config = config(1, 3, 1);
+            List<ThresholdVss.Dealing> d = dealings(1, 3);
+            sameOutcome(config, d, (m, honest) -> {
+                if (m.kind() == DkgMessage.Kind.EXTRACTION && m.sender() == 3) {
+                    List<JubjubPoint> forged = new ArrayList<>(m.points());
+                    forged.set(1, forged.get(1).add(JubjubPoint.SUBGROUP_GENERATOR).normalized());
+                    byte[] bytes = DkgMessage.points(config, DkgMessage.Kind.EXTRACTION, 3, forged).encode();
+                    List<DkgHarness.Delivery> out = new ArrayList<>();
+                    for (DkgHarness.Delivery x : honest) out.add(new DkgHarness.Delivery(3, x.recipient(), bytes));
+                    return out;
+                }
+                return honest;
+            });
+        }
+
+        @Test
+        @DisplayName("Conflicting COMMITMENTS disqualify; conflicting or withheld EXTRACTION is reconstructed")
+        void conflictsAndWithholding() {
+            DkgConfig config = config(1, 3, 1);
+            List<ThresholdVss.Dealing> d = dealings(1, 3);
+            List<ThresholdVss.Dealing> alt = DkgHarness.dealings(1, 3, 54_999);
+            for (DkgMessage.Kind kind : List.of(DkgMessage.Kind.COMMITMENTS, DkgMessage.Kind.EXTRACTION)) {
+                sameOutcome(config, d, (m, honest) -> {
+                    if (m.kind() == kind && m.sender() == 3) {
+                        List<JubjubPoint> second = kind == DkgMessage.Kind.COMMITMENTS ? alt.get(2).commitments() : alt.get(2).extraction();
+                        byte[] bytes = DkgMessage.points(config, kind, 3, second).encode();
+                        List<DkgHarness.Delivery> out = new ArrayList<>(honest);
+                        for (DkgHarness.Delivery x : honest) out.add(new DkgHarness.Delivery(3, x.recipient(), bytes));
+                        return out;
+                    }
+                    return honest;
+                });
+            }
+            sameOutcome(config, d, (m, honest) -> m.kind() == DkgMessage.Kind.EXTRACTION && m.sender() == 2 ? List.of() : honest);
+        }
+
+        @Test
+        @DisplayName("A5: constant terms summing to 0 abort everyone")
+        void identityKey() {
+            DkgConfig config = config(1, 3, 1);
+            List<ThresholdVss.Dealing> d = List.of(
+                    ThresholdVss.dealWithCoefficients(new BigInteger[]{BigInteger.ONE, BigInteger.TWO}, new BigInteger[]{BigInteger.ONE, BigInteger.ONE}),
+                    ThresholdVss.dealWithCoefficients(new BigInteger[]{BigInteger.TWO, BigInteger.ONE}, new BigInteger[]{BigInteger.TWO, BigInteger.ONE}),
+                    ThresholdVss.dealWithCoefficients(new BigInteger[]{L.subtract(BigInteger.valueOf(3)), BigInteger.TEN}, new BigInteger[]{BigInteger.TEN, BigInteger.ONE}));
+            sameOutcome(config, d, DkgHarness.HONEST);
+            assertEquals(FaultAssumptionViolatedException.Reason.IDENTITY_JOINT_KEY,
+                    DkgEncryptedHarness.fixed(config, d, DkgEncryptedHarness.HONEST).run().aborted.get(1).reason());
+        }
+    }
+
     static byte[] publicKeyOf(int j) {
         try {
             return X25519Bytes.publicFromPrivate(DkgEncryptedHarness.testKey("recipient." + j));
@@ -330,6 +466,57 @@ class DkgShareDeliveryTest {
         }
 
         @Test
+        @DisplayName("start returns exactly one COMMITMENTS to broadcast and one envelope per keyed other participant; no SHARE leaves in the clear (review X-2)")
+        void sealedDealingShape() {
+            DkgConfig config = config(2, 5, 1);
+            List<DkgShareDeliveryKeys> ks = new ArrayList<>();
+            for (int j = 1; j <= 4; j++) ks.add(DkgShareDeliveryKeys.generate(config, j, new SecureRandom())); // 5 has no key
+            DkgKeyDirectory dir = directoryOf(config, ks.toArray(new DkgShareDeliveryKeys[0]));
+            DkgParticipant p1 = DkgParticipant.create(config, 1, new SecureRandom());
+            DkgShareDelivery.SealedDealing dealing = DkgShareDelivery.start(p1, dir, ks.get(0), new SecureRandom());
+            assertEquals(1, dealing.broadcasts().size());
+            assertEquals(DkgMessage.Kind.COMMITMENTS, dealing.broadcasts().get(0).kind());
+            assertEquals(1, dealing.broadcasts().get(0).sender());
+            Set<Integer> recipients = new TreeSet<>();
+            for (byte[] e : dealing.envelopes()) {
+                assertEquals(DkgShareDeliveryCodec.ENVELOPE_LENGTH, e.length);
+                assertThrows(IllegalArgumentException.class, () -> DkgMessage.decode(config, e), "an envelope is no threshold message");
+                recipients.add(DkgShareDeliveryCodec.decodeEnvelope(config, e).recipient());
+            }
+            assertEquals(Set.of(2, 3, 4), recipients);
+        }
+
+        @Test
+        @DisplayName("generate draws the private key from the given generator: fresh keys differ, and a fixed generator gives X25519(k, 9) (review X-3)")
+        void generateUsesRandom() throws Exception {
+            DkgConfig config = config(1, 3, 1);
+            DkgShareDeliveryKeys a = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
+            DkgShareDeliveryKeys b = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
+            assertFalse(Arrays.equals(a.publicKey(), b.publicKey()));
+            assertFalse(Arrays.equals(a.secretFor(config), b.secretFor(config)));
+            byte[] k = DkgEncryptedHarness.testKey("generate.fixed");
+            SecureRandom fixed = new SecureRandom() {
+                @Override
+                public void nextBytes(byte[] bytes) {
+                    System.arraycopy(k, 0, bytes, 0, bytes.length);
+                }
+            };
+            DkgShareDeliveryKeys c = DkgShareDeliveryKeys.generate(config, 2, fixed);
+            assertArrayEquals(k, c.secretFor(config));
+            assertArrayEquals(X25519Bytes.publicFromPrivate(k), c.publicKey());
+            // RFC 7748 §6.1 (Alice), independent of ZeroJ code.
+            byte[] alice = HexFormat.of().parseHex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
+            SecureRandom rfc = new SecureRandom() {
+                @Override
+                public void nextBytes(byte[] bytes) {
+                    System.arraycopy(alice, 0, bytes, 0, bytes.length);
+                }
+            };
+            assertArrayEquals(HexFormat.of().parseHex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"),
+                    DkgShareDeliveryKeys.generate(config, 2, rfc).publicKey());
+        }
+
+        @Test
         @DisplayName("Session and identifier must agree: participant, directory and keys of different runs are refused")
         void sameRun() {
             DkgConfig config = config(1, 3, 1);
@@ -371,19 +558,31 @@ class DkgShareDeliveryTest {
         }
 
         @Test
-        @DisplayName("closeRound1 re-checks T1: a directory without the participant's key at close aborts it (review S-9)")
-        void t1AtClose() {
+        @DisplayName("closeRound1 needs the keys and directory instances given to start; a substitute is refused and changes nothing (review C-1)")
+        void substitutedAtClose() {
             DkgConfig config = config(1, 3, 1);
             DkgShareDeliveryKeys k2 = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
+            DkgShareDeliveryKeys otherK2 = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
             DkgKeyDirectory withKey = directoryOf(config, k2);
+            DkgKeyDirectory sameContent = directoryOf(config, k2);
+            DkgKeyDirectory withOther = directoryOf(config, otherK2);
             DkgKeyDirectory without = DkgKeyDirectory.fromRound0(config, List.of(), DkgEncryptedHarness.AUTH);
             DkgParticipant p2 = DkgParticipant.create(config, 2, new SecureRandom());
             DkgShareDelivery.start(p2, withKey, k2, new SecureRandom());
-            FaultAssumptionViolatedException t1 = assertThrows(FaultAssumptionViolatedException.class,
-                    () -> DkgShareDelivery.closeRound1(p2, without, k2, List.of(), DkgEncryptedHarness.AUTH));
-            assertEquals(FaultAssumptionViolatedException.Reason.OWN_KEY_ANNOUNCEMENT_MISSING, t1.reason());
+            assertThrows(IllegalArgumentException.class,
+                    () -> DkgShareDelivery.closeRound1(p2, without, k2, List.of(), DkgEncryptedHarness.AUTH), "directory without the key");
+            assertThrows(IllegalArgumentException.class,
+                    () -> DkgShareDelivery.closeRound1(p2, sameContent, k2, List.of(), DkgEncryptedHarness.AUTH), "an equal but different directory");
+            assertThrows(IllegalArgumentException.class,
+                    () -> DkgShareDelivery.closeRound1(p2, withOther, otherK2, List.of(), DkgEncryptedHarness.AUTH), "other keys and their directory");
+            assertThrows(IllegalArgumentException.class,
+                    () -> DkgShareDelivery.closeRound1(p2, withKey, otherK2, List.of(), DkgEncryptedHarness.AUTH), "other keys");
+            assertFalse(k2.isDestroyed());
+            assertFalse(otherK2.isDestroyed());
+            assertEquals(1, p2.openRound());
+            DkgShareDelivery.closeRound1(p2, withKey, k2, List.of(), DkgEncryptedHarness.AUTH);
+            assertEquals(2, p2.openRound(), "the bound pair still closes the round");
             assertTrue(k2.isDestroyed());
-            assertThrows(FaultAssumptionViolatedException.class, p2::closeRound, "sticky abort");
         }
 
         @Test
@@ -426,6 +625,46 @@ class DkgShareDeliveryTest {
             assertThrows(IllegalStateException.class, p2::closeRound, "still no way to close round 1 but the barrier");
             assertEquals(List.of(), DkgShareDelivery.closeRound1(p2, honest.directory, k2, window, DkgEncryptedHarness.AUTH),
                     "the retry processes every envelope: no complaint");
+            assertTrue(k2.isDestroyed());
+        }
+
+        @Test
+        @DisplayName("A verifier that throws after accepting some envelopes: the retry adds no second copy and no complaint (review C-2)")
+        void verifierThrowsAfterPartialProgress() {
+            DkgConfig config = config(2, 5, 1);
+            List<ThresholdVss.Dealing> d = dealings(2, 5);
+            DkgEncryptedHarness honest = DkgEncryptedHarness.fixed(config, d, DkgEncryptedHarness.HONEST);
+            honest.run();
+            DkgParticipant p2 = DkgParticipant.withDealing(config, 2, d.get(1));
+            DkgShareDeliveryKeys k2 = DkgShareDeliveryKeys.fromSecret(config, 2, DkgEncryptedHarness.testKey("recipient.2"));
+            DkgShareDelivery.start(p2, honest.directory, k2, new SecureRandom());
+            List<AuthenticatedDkgMessage> window = honest.window(honest.board.get(1));
+            int[] calls = {0};
+            DkgAdmissionVerifier flaky = new DkgAdmissionVerifier() {
+                @Override
+                public boolean authenticate(int sender, byte[] rosterKey, byte[] message, byte[] authenticator) {
+                    if (++calls[0] > 3) throw new IllegalStateException("signature service unavailable");
+                    return DkgEncryptedHarness.AUTH.authenticate(sender, rosterKey, message, authenticator);
+                }
+
+                @Override
+                public boolean roundClosed(DkgConfig c, int round, List<byte[]> m, byte[] e) {
+                    return true;
+                }
+            };
+            assertThrows(IllegalStateException.class, () -> DkgShareDelivery.closeRound1(p2, honest.directory, k2, window, flaky));
+            int partial = 0;
+            for (int dealer = 1; dealer <= config.n(); dealer++) {
+                if (dealer != 2) partial += p2.receivedShares(dealer).size();
+            }
+            assertTrue(partial >= 1, "the failed attempt accepted at least one share before throwing");
+            assertFalse(k2.isDestroyed());
+            assertEquals(1, p2.openRound());
+            assertEquals(List.of(), DkgShareDelivery.closeRound1(p2, honest.directory, k2, window, DkgEncryptedHarness.AUTH),
+                    "the identical retry: no complaint");
+            for (int dealer = 1; dealer <= config.n(); dealer++) {
+                if (dealer != 2) assertEquals(1, p2.receivedShares(dealer).size(), "one share from dealer " + dealer);
+            }
             assertTrue(k2.isDestroyed());
         }
     }
@@ -498,6 +737,28 @@ class DkgShareDeliveryTest {
             }).run();
             assertEquals(1, ignored.posted(2, DkgMessage.Kind.COMPLAINT).size());
             assertEquals(4, ignored.posted(3, DkgMessage.Kind.ANSWER).get(0).subject(), "an honest index is published");
+        }
+
+        @Test
+        @DisplayName("Authenticated junk in the round-1 window (a plaintext SHARE, an early COMPLAINT, garbage) is absent: no throw, no complaint, same transcript (review X-5)")
+        void junkBroadcastsInRoundOne() {
+            DkgConfig config = config(1, 3, 1);
+            List<ThresholdVss.Dealing> d = dealings(1, 3);
+            DkgMessage share31 = DkgMessage.pair(config, DkgMessage.Kind.SHARE, 3, 1, d.get(2).share(1), d.get(2).sharePrime(1));
+            DkgEncryptedHarness junk = DkgEncryptedHarness.fixed(config, d, new DkgEncryptedHarness.Hooks() {
+                @Override
+                public List<DkgEncryptedHarness.Post> extra(int round) {
+                    if (round != 1) return List.of();
+                    return List.of(new DkgEncryptedHarness.Post(3, share31.encode()),
+                            new DkgEncryptedHarness.Post(3, DkgMessage.complaint(config, 3, 1).encode()),
+                            new DkgEncryptedHarness.Post(3, new byte[]{1, 2, 3}));
+                }
+            }).run();
+            DkgEncryptedHarness honest = DkgEncryptedHarness.fixed(config, d, DkgEncryptedHarness.HONEST).run();
+            assertTrue(junk.aborted.isEmpty(), "aborts: " + junk.aborted);
+            assertTrue(junk.posted(2, DkgMessage.Kind.COMPLAINT).isEmpty());
+            assertArrayEquals(DkgTranscript.of(config, honest.transcriptMessages()).digest(),
+                    DkgTranscript.of(config, junk.transcriptMessages()).digest());
         }
 
         @Test
@@ -671,6 +932,80 @@ class DkgShareDeliveryTest {
                 }
             }
             assertEquals(8, encs.size());
+        }
+    }
+
+    // ------------------------------------------------------------------ review Z-1, Z-4
+
+    @Nested
+    @DisplayName("Platform faults fail closed: never absence, never a complaint (review Z-1)")
+    class PlatformFaults {
+
+        @Test
+        @DisplayName("HPKE: tag failure and small-order enc are input failures; a missing provider is not")
+        void hpkeClassification() throws Exception {
+            byte[] skR = DkgEncryptedHarness.testKey("recipient.2");
+            byte[] pkR = X25519Bytes.publicFromPrivate(skR);
+            byte[] info = Hpke.ascii("classification");
+            Hpke.Sealed sealed = Hpke.sealBase(pkR, info, new byte[0], new byte[100], new SecureRandom());
+            byte[] tampered = sealed.ct().clone();
+            tampered[5] ^= 1;
+            assertThrows(Hpke.HpkeException.class, () -> Hpke.openBase(sealed.enc(), skR, info, new byte[0], tampered));
+            byte[] smallOrder = new byte[32];
+            smallOrder[0] = 1;
+            assertThrows(Hpke.HpkeException.class, () -> Hpke.openBase(smallOrder, skR, info, new byte[0], sealed.ct()));
+            assertThrows(Hpke.HpkeException.class, () -> Hpke.sealBase(smallOrder, info, new byte[0], new byte[100], new SecureRandom()));
+            assertThrows(Hpke.HpkeException.class, () -> Hpke.openBase(new byte[31], skR, info, new byte[0], sealed.ct()));
+            DkgEncryptedHarness.withoutProvider("SunJCE", () -> {
+                assertThrows(IllegalStateException.class, () -> Hpke.openBase(sealed.enc(), skR, pkR, info, new byte[0], sealed.ct()));
+                assertThrows(IllegalStateException.class, () -> Hpke.sealBase(pkR, info, new byte[0], new byte[100], new SecureRandom()));
+            });
+            DkgEncryptedHarness.withoutProvider("SunEC", () -> {
+                assertThrows(IllegalStateException.class, () -> Hpke.openBase(sealed.enc(), skR, pkR, info, new byte[0], sealed.ct()));
+                assertThrows(IllegalStateException.class, () -> X25519Bytes.passesSmallOrderProbe(pkR),
+                        "the probe never reports a fault as small order");
+            });
+            assertArrayEquals(new byte[100], Hpke.openBase(sealed.enc(), skR, info, new byte[0], sealed.ct()), "restored");
+        }
+
+        @Test
+        @DisplayName("closeRound1 with a failing AEAD/HKDF provider: no complaint, keys kept, round 1 open; the retry succeeds")
+        void closeRound1() {
+            DkgConfig config = config(2, 5, 1);
+            List<ThresholdVss.Dealing> d = dealings(2, 5);
+            DkgEncryptedHarness honest = DkgEncryptedHarness.fixed(config, d, DkgEncryptedHarness.HONEST);
+            honest.run();
+            DkgParticipant p2 = DkgParticipant.withDealing(config, 2, d.get(1));
+            DkgShareDeliveryKeys k2 = DkgShareDeliveryKeys.fromSecret(config, 2, DkgEncryptedHarness.testKey("recipient.2"));
+            DkgShareDelivery.start(p2, honest.directory, k2, new SecureRandom());
+            List<AuthenticatedDkgMessage> window = honest.window(honest.board.get(1));
+            for (String provider : List.of("SunJCE", "SunEC")) {
+                DkgEncryptedHarness.withoutProvider(provider, () -> assertThrows(IllegalStateException.class,
+                        () -> DkgShareDelivery.closeRound1(p2, honest.directory, k2, window, DkgEncryptedHarness.AUTH), provider));
+                assertFalse(k2.isDestroyed(), provider);
+                assertEquals(1, p2.openRound(), provider);
+            }
+            assertEquals(List.of(), DkgShareDelivery.closeRound1(p2, honest.directory, k2, window, DkgEncryptedHarness.AUTH));
+            assertTrue(k2.isDestroyed());
+        }
+
+        @Test
+        @DisplayName("start with a failing provider changes nothing; the directory refuses to build rather than drop keys")
+        void startAndDirectory() {
+            DkgConfig config = config(1, 3, 1);
+            DkgShareDeliveryKeys k2 = DkgShareDeliveryKeys.generate(config, 2, new SecureRandom());
+            List<AuthenticatedDkgMessage> round0 = List.of(post(config, 2, k2.announcement()));
+            DkgEncryptedHarness.withoutProvider("SunEC", () -> assertThrows(IllegalStateException.class,
+                    () -> DkgKeyDirectory.fromRound0(config, round0, DkgEncryptedHarness.AUTH)));
+            DkgKeyDirectory dir = DkgKeyDirectory.fromRound0(config, round0, DkgEncryptedHarness.AUTH);
+            DkgParticipant p2 = DkgParticipant.create(config, 2, new SecureRandom());
+            DkgEncryptedHarness.withoutProvider("SunJCE", () -> assertThrows(IllegalStateException.class,
+                    () -> DkgShareDelivery.start(p2, dir, k2, new SecureRandom())));
+            assertEquals(0, p2.openRound());
+            assertFalse(p2.boundToEncryptedDelivery());
+            assertFalse(k2.isDestroyed());
+            DkgShareDelivery.start(p2, dir, k2, new SecureRandom());
+            assertEquals(1, p2.openRound(), "the retry starts the participant");
         }
     }
 

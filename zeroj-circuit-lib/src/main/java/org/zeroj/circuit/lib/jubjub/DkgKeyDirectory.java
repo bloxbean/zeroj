@@ -33,6 +33,13 @@ public final class DkgKeyDirectory {
      * the window's cutoff and finality (spec §5). Malformed posts, posts for another session and
      * posts that fail {@code verifier}'s authentication under the announcing participant's roster
      * key are ignored.
+     *
+     * <p>The library cannot check finality. A directory built from a snapshot taken before the
+     * window is final can differ from other participants' directories, which breaks the agreement
+     * the profile relies on (spec §5.3, P2).
+     *
+     * @throws IllegalStateException if the platform's X25519 fails (a fault, never reported as a
+     *                               missing key)
      */
     public static DkgKeyDirectory fromRound0(DkgConfig config, List<AuthenticatedDkgMessage> finalWindow,
                                              DkgAdmissionVerifier verifier) {

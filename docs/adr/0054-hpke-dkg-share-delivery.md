@@ -11,8 +11,9 @@ Accepted (design) — 2026-10-09.
 - It answers ADR-0053's Q1 ("how are the private channels realized?") with an **optional**
   ZeroJ-provided transport. Application-provided channels (ADR-0053 D3) stay supported.
 - It bears on ADR-0053's Q7 (late shares under partial synchrony); see D7 and Q6.
-- Tracked as #77. Implementation of M0–M3 is in progress on PR #80, one reviewed step at a time.
-  The "Implementation status" section at the end tracks it.
+- Tracked as #77. M0–M3 are implemented on PR #80 and reviewed internally (per milestone and in
+  a final whole-PR pass); the PR awaits external review. The "Implementation status" section at
+  the end records the state. The implementation is Experimental and makes no production claim.
 
 This ADR changes no maturity claim. ADR-0039's assurance classes apply: every secret-bearing
 host operation here is **compatibility/offline** class.
@@ -674,17 +675,24 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
    other, and the answers exposed the joint key; both reviewers demonstrated this end to end.
    Fixed: every post is authenticated first, and the participant counts identical copies once.
    Front-running vectors and a mutant-killing regression test are included.
-2. **The barrier is enforced by binding the participant** (D6a; review S-2). `DkgShareDelivery.start`
-   replaces `DkgParticipant.start()` for this transport. It applies T1 and binds the participant,
-   whose public `closeRound()` then refuses round 1, so round 1 closes only through
-   `closeRound1`. `DkgParticipant` gains package-private hooks for this; its protocol is
-   unchanged.
+2. **"Process before closing" is enforced by binding the participant** (D6a; review S-2).
+   `DkgShareDelivery.start` replaces `DkgParticipant.start()` for this transport. It applies T1
+   and binds the participant, whose public `closeRound()` then refuses round 1, so round 1
+   closes only through `closeRound1`. `DkgParticipant` gains package-private hooks for this; its
+   protocol is unchanged.
+   - **What binding does not enforce** (final review X-4): that the window passed to
+     `closeRound1` is complete, that is, taken after the cutoff and finality.
+   - A snapshot taken before finality reproduces the late-processing failure, so this part of
+     the barrier stays the application's, like D7a's posting order.
+   - Closure evidence checked through the verifier could enforce it. That needs a spec
+     addition for rounds 0 and 1, and is a possible follow-up.
 3. **Fail closed on verifier exceptions** (review M-4). An exception from the application's
    authenticator leaves the participant at round 1 with its keys, so `closeRound1` can be
    retried. It is not treated as "unauthentic", which would turn a transient failure into
    false complaints.
 4. **T1 also on a key other than one's own** (spec §3.3). If the directory holds a key for `j`
-   that is not `j`'s announced key, someone authenticated as `j`, so `j` is faulty; it aborts.
+   other than the public key of the private key `j` holds, someone authenticated as `j`
+   announced it, so `j` is faulty; it aborts.
 5. **Spec clarifications from the reference** (S1–S7):
    - round 1's window opens when round 0's closes;
    - the counting rule counts only envelopes actually sent, plus the round 5–6 disclosures;
@@ -697,6 +705,39 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
    inputs before returning a shared secret, so the explicit check is defence in depth. Its
    mutant cannot be killed without a stub provider. It is kept for providers that return
    `0^32`.
+7. **A platform fault is never absence** (spec §4.2; final security review Z-1, P1). Before the
+   fix, any exception from the JDK primitives counted as a failed open. A missing or failing
+   HKDF/AEAD provider at an honest recipient made it complain about every honest dealer, and
+   the answers then exposed their contributions. Now only input-caused failures are absence:
+   - small order, via SunEC's `doPhase` refusal or the all-zero value;
+   - AEAD tag failure;
+   - wrong length.
+
+   Everything else is an `IllegalStateException` that fails closed, like verifier exceptions
+   (note 3). `start` and `closeRound1` also run a seal-and-open self-test with the participant's
+   own keys before judging any input. The small-order probe no longer reports a fault as small
+   order. Tests remove the SunJCE or SunEC provider at each entry point.
+8. **The keys and directory are bound by instance** (final Codex review C-1). `closeRound1`
+   refuses any keys or directory other than the instances given to `start`, so substituting
+   either cannot turn genuine shares into absences.
+9. **Key lifecycle on failure paths** (Z-4). Keys are destroyed when round 1 closes or the
+   participant aborts. Any other failure keeps them, for the documented retry. An application
+   that abandons the attempt calls `destroy()`. HPKE wipes its intermediate secrets in `finally`.
+
+### Proposed amendment awaiting a maintainer decision (not implemented)
+
+- **T2: a dealer's own D7a self-check** (final security review Z-2, P2). Suppose `closeRound1`
+  finds the dealer's own authenticated `COMMITMENTS` in the final window, but an envelope from it
+  to some keyed recipient missing; the application broke D7a. Honest recipients will then
+  complain, and the dealer's answers make those shares public.
+  - **Proposal:** the dealer aborts with a new reason before closing round 1. An aborted dealer
+    answers nothing and is disqualified, so nothing is exposed.
+  - **Why it is not implemented:** it is a new normative abort. It changes the expected outcome
+    of the reference's D7a negative control and contradicts spec §5.2's "Recipients perform no
+    check of this rule" only in spirit, since it is the dealer's own check. It therefore needs a
+    spec amendment and an update to the independent reference, which is ADR scope, not
+    implementation scope.
+  - **Lean:** adopt it in a follow-up.
 
 ## Implementation status
 
@@ -704,5 +745,26 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
 |---|---|---|
 | M0 | Done, reviewed | Spec `docs/specs/dkg-share-delivery-hpke-v1.md`. An independent Python reference (`zeroj-circuit-lib/src/test/resources/dkg-share-delivery-reference/`, 294 checks, 110 replayable vectors), written from the spec and RFC 9180 with no Java read. It reproduces RFC 9180 A.2.1 (all 257 encryptions), Wycheproof X25519, ChaCha20-Poly1305 and HKDF-SHA256, and RFC 7748, RFC 8439 and RFC 5869. Its two revisions raised S1–S7 and R2-1/R2-2, all resolved in the spec. Standard vectors are vendored, pinned by commit and SHA-256, in `src/test/resources/standard-vectors/`. |
 | M1 | Done, reviewed (adversarial and security, 2 rounds) | `Hpke` (Base, single-shot, the D1 suite) and `X25519Bytes` (explicit RFC 7748 decoding, canonicality, small-order probe, all-zero check) on JDK primitives. Tests: `HpkeKnownAnswerTest` (A.2.1, Wycheproof, RFC 7748/8439/5869) and `HpkeDifferentialTest` (BouncyCastle 1.83 both ways, byte-identical with the same ephemeral). The GraalVM native-image probe (`HpkeNativeProbe`) gives output identical to the JVM. Seal 114 µs, open 59 µs. |
-| M2 | Done, reviewed (adversarial and security, 2 rounds; one P0 found and fixed, implementation note 1) | `DkgShareDeliveryKeys`, `DkgKeyDirectory` (T1), `DkgShareDelivery` (`start` binds the participant; `closeRound1` is the barrier, authenticates before anything else, and fails closed). Tests: `DkgShareDeliveryTest` (I2–I15, front-running, binding, fail-closed retry, copied key, cross-session) and `DkgShareDeliveryReferenceVectorsTest` (every reference vector through production code). Integration test `AnnotatedElGamalTest.thresholdEndToEndOverEncryptedBoard`: encrypted DKG, admission from the board, Groth16-proved tally. |
-| M3 | Done | Support matrix and `zeroj-circuit-lib` README rows, a gadget-guide section with the MUST rules, the annotation guide, ADR-0053's Q1/Q7 notes, a threshold spec §5.2 pointer, and `docs/benchmarks/dkg-share-delivery-hpke-2026-10-09.md`. |
+| M2 | Done, reviewed (adversarial and security, 2 rounds; one P0 found and fixed, implementation note 1) | `DkgShareDeliveryKeys`, `DkgKeyDirectory` (T1), `DkgShareDelivery` (`start` binds the participant; `closeRound1` is the barrier, authenticates before anything else, and fails closed). Tests: `DkgShareDeliveryTest` (I2–I15, front-running, binding, fail-closed retry, copied key, cross-session, platform faults). It reruns ADR-0053's board-expressible adversarial suites over encrypted delivery and compares each with private channels: more than `t` complaints, a bad answer, the Feldman cheat, conflicting `COMMITMENTS` or `EXTRACTION`, withheld `EXTRACTION`, and A5. Suites that need per-recipient views (A6, A7, A9) are not transport-dependent. `DkgShareDeliveryReferenceVectorsTest` replays every reference vector. Honest participants and HPKE run through production code. The reference's negative controls (no barrier, D7a ignored) and corrupted participants run through test code, and the §6 counting rule is re-implemented in the test from the spec. Integration test `AnnotatedElGamalTest.thresholdEndToEndOverEncryptedBoard`: encrypted DKG, admission from the board, Groth16-proved tally. |
+| M3 | Done, reviewed in the final pass | Support matrix and `zeroj-circuit-lib` README rows, a gadget-guide section with the MUST rules, the annotation guide, ADR-0053's Q1/Q7 notes, a threshold spec §5.2 pointer, and `docs/benchmarks/dkg-share-delivery-hpke-2026-10-09.md`. |
+
+**Final whole-PR review (2026-10-09).** Three independent reviews ran: spec↔code (Claude),
+security (Claude) and Codex.
+- **Codex:** approved, with C-1 to C-4.
+- **The two Claude reviews:** requested changes.
+
+All findings are addressed except Z-2:
+- **C-1:** instance binding (note 8).
+- **C-2:** a retry after partial progress.
+- **C-3:** HPKE sequence tests.
+- **C-4, Z-5, X-7:** documentation precision.
+- **Z-1 (P1):** a platform fault is never absence (note 7).
+- **Z-3:** the encapsulation-randomness exposure source (spec §6).
+- **Z-4, X-8:** the key lifecycle on failure paths (note 9).
+- **X-1:** the exposure replay now reaches its HPKE reconstruction, guarded by a coverage check.
+- **X-2:** the shape of `broadcasts()`.
+- **X-3:** `generate` uses its generator.
+- **X-4, X-6:** what binding does not enforce, and the round-1 window rule.
+- **X-5:** authenticated junk in the round-1 window.
+- **Z-2** (a dealer's own D7a self-check) awaits a maintainer decision; see "Proposed amendment"
+  above.

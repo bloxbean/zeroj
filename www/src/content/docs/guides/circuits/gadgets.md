@@ -337,13 +337,19 @@ List<DkgMessage> complaints = DkgShareDelivery.closeRound1(participant, director
 
 These rules are what keep the shares secret. They are not optional:
 - **Barrier.** Close round 1 only through `closeRound1`, with the window *after* its cutoff and
-  finality. A participant started with `DkgShareDelivery.start` refuses the plain `closeRound()`
-  at round 1, so it cannot complain about a share it never processed. If `closeRound1` throws,
-  the participant stays at round 1; retry with the same window. Your verifier must return
-  `false`, not throw, for posts it does not accept.
+  finality. The library can't check that: a snapshot taken before finality can miss envelopes,
+  and processing late is exactly the failure the barrier prevents. Round 1's window opens when
+  round 0's closes, so a threshold message posted during round 0 is early and doesn't count. A participant started with `DkgShareDelivery.start` refuses the plain `closeRound()`
+  at round 1, so it cannot complain about a share it never processed. If `closeRound1` throws
+  anything other than an abort (your verifier, or a crypto-provider fault), the participant
+  stays at round 1 with its keys; retry with the same window, or call `keys.destroy()` if you
+  give up the attempt. Your verifier must return `false`, not throw, for posts it does not
+  accept. If `start` throws after the participant started, post nothing for it in round 1.
 - **Commitments last.** Post `COMMITMENTS` only after every envelope is final within the round-1
   window, or post them all atomically. If the envelopes cannot make the cutoff, post nothing:
-  the dealer is then disqualified, and nothing is revealed.
+  the dealer is then disqualified and its contribution is excluded from the key. Honest
+  trustees don't complain about it; a corrupted trustee still can, and receives only its own
+  share in the public answer.
 - **T1.** If your own announcement is missing from the final round-0 window, or the directory holds
   a different key for you, `start` throws `OWN_KEY_ANNOUNCEMENT_MISSING` and aborts the participant.
   Post nothing more for this attempt.

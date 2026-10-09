@@ -3,6 +3,7 @@ package org.zeroj.circuit.lib.jubjub;
 import javax.crypto.KeyAgreement;
 import java.math.BigInteger;
 import java.security.GeneralSecurityException;
+import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -27,6 +28,11 @@ import java.util.Objects;
  * Every shared secret is checked against the all-zero value here, independently of the
  * provider (RFC 9180 §7.1.4).
  *
+ * <p><b>Input refusals versus faults.</b> A small-order input is the only way the input can make
+ * {@link #dh} fail; it is reported as {@link SmallOrderException}, whether SunEC refuses it in
+ * {@code doPhase} or a provider returns the all-zero value. Every other exception is a fault of
+ * the platform, and callers must not treat it as a property of the input (review Z-1).
+ *
  * <p><b>Secret.</b> Private scalars are compatibility/offline class (ADR-0039 §3.1). The DH
  * itself is the JDK provider's (SunEC); no constant-time claim is made for this class.
  */
@@ -42,6 +48,13 @@ final class X25519Bytes {
     static final byte[] PROBE = BASE_POINT.clone();
 
     private X25519Bytes() {
+    }
+
+    /** {@code X25519(k, u)} refused because {@code u} has small order: a property of the input. */
+    static final class SmallOrderException extends GeneralSecurityException {
+        SmallOrderException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /** Spec §2.1: exactly 32 bytes, bit 255 clear and {@code u < p}. */
@@ -79,16 +92,26 @@ final class X25519Bytes {
     /**
      * {@code X25519(scalar, u)}, refusing an all-zero result (RFC 9180 §7.1.4, RFC 7748 §6.1).
      *
-     * @throws GeneralSecurityException if the result is all-zero or the provider refuses the input
+     * @throws SmallOrderException      if {@code u} has small order: the result is all-zero, or
+     *                                  the provider refused the point in {@code doPhase}
+     * @throws GeneralSecurityException any other failure, which is a fault of the platform
      */
     static byte[] dh(PrivateKey scalar, byte[] u) throws GeneralSecurityException {
         Objects.requireNonNull(scalar, "scalar");
+        PublicKey point = publicKey(u);
         KeyAgreement agreement = KeyAgreement.getInstance("X25519");
         agreement.init(scalar);
-        agreement.doPhase(publicKey(u), true);
+        try {
+            agreement.doPhase(point, true);
+        } catch (InvalidKeyException refused) {
+            // SunEC computes the result here and refuses small order ("Point has small order").
+            // The key and the point are this provider's own objects, so nothing else about the
+            // input can be refused at this step.
+            throw new SmallOrderException("small-order X25519 input", refused);
+        }
         byte[] shared = agreement.generateSecret();
         if (isAllZero(shared)) {
-            throw new GeneralSecurityException("all-zero X25519 output");
+            throw new SmallOrderException("all-zero X25519 output", null);
         }
         return shared;
     }
@@ -98,13 +121,20 @@ final class X25519Bytes {
         return dh(privateKey(scalar), BASE_POINT);
     }
 
-    /** Spec §2.2: {@code X25519(PROBE, u) ≠ 0^32}, i.e. {@code u} is not of small order. */
+    /**
+     * Spec §2.2: {@code X25519(PROBE, u) ≠ 0^32}, i.e. {@code u} is not of small order.
+     *
+     * @throws IllegalStateException if X25519 fails for any other reason (a platform fault, never
+     *                               reported as a property of {@code u})
+     */
     static boolean passesSmallOrderProbe(byte[] u) {
         try {
             dh(privateKey(PROBE), u);
             return true;
-        } catch (GeneralSecurityException smallOrder) {
+        } catch (SmallOrderException smallOrder) {
             return false;
+        } catch (GeneralSecurityException fault) {
+            throw new IllegalStateException("X25519 is unavailable", fault);
         }
     }
 

@@ -24,6 +24,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -501,7 +502,9 @@ class DkgShareDeliveryReferenceVectorsTest {
     @TestFactory
     @DisplayName("case.exposure.*: the §6 counting rule, and reconstruction from envelopes opened by Java HPKE where a run backs the case")
     Stream<DynamicTest> exposure() {
-        return cases("exposure", 1).values().stream().map(c -> DynamicTest.dynamicTest(c.name(), () -> {
+        AtomicInteger runBacked = new AtomicInteger();
+        AtomicInteger reconstructions = new AtomicInteger();
+        Stream<DynamicTest> perCase = cases("exposure", 1).values().stream().map(c -> DynamicTest.dynamicTest(c.name(), () -> {
             DkgConfig config = config(c.get("config"));
             int n = config.n();
             Set<Integer> leaked = ids(c.get("leaked"));
@@ -534,8 +537,9 @@ class DkgShareDeliveryReferenceVectorsTest {
             assertEquals(c.get("expect.x"), allExposed ? "exposed" : "unexposed", c.name() + " x");
 
             // Where a run backs the case: open the actual envelopes with Java HPKE and reconstruct.
-            if (!c.has("recipient_keys_from") || !c.get("recipient_keys_from").startsWith("case.run.")) return;
-            String run = c.get("recipient_keys_from").substring("case.run.".length());
+            if (!c.has("source") || !c.get("source").startsWith("case.run.")) return;
+            runBacked.incrementAndGet();
+            String run = c.get("source").substring("case.run.".length());
             Case runCase = cases("run", 1).get(run);
             List<ThresholdVss.Dealing> d = fixtureDealings(run, config.t(), n);
             for (int dealer = 1; dealer <= n; dealer++) {
@@ -554,9 +558,16 @@ class DkgShareDeliveryReferenceVectorsTest {
                 }
                 if (points.size() >= config.t() + 1) {
                     assertEquals(d.get(dealer - 1).share(0), DkgShareDeliveryTest.interpolateAtZero(points), c.name() + " z_" + dealer);
+                    reconstructions.incrementAndGet();
                 }
             }
         }));
+        // Guards the replay itself (final review X-1): the run-backed block must actually run.
+        DynamicTest coverage = DynamicTest.dynamicTest("run-backed exposure cases reach the HPKE reconstruction", () -> {
+            assertTrue(runBacked.get() >= 20, "run-backed cases: " + runBacked.get());
+            assertTrue(reconstructions.get() >= 1, "dealer reconstructions: " + reconstructions.get());
+        });
+        return Stream.concat(perCase, Stream.of(coverage));
     }
 
     private static Set<String> allPairs(int n) {

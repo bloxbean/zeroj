@@ -1,5 +1,6 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
 import javax.crypto.KDF;
 import javax.crypto.spec.HKDFParameterSpec;
@@ -25,6 +26,12 @@ import java.util.Objects;
  * so that the RFC 9180 Appendix A.2.1 known-answer tests can exercise every listed sequence
  * number, and {@link #deriveKeyPair} and {@link #setupBaseSWithEphemeral} are test seams. The
  * export interface is not provided.
+ *
+ * <p><b>Failures.</b> A failure caused by the input is an {@link HpkeException}: a small-order
+ * {@code enc} or {@code pkR} (RFC 9180 §7.1.4, RFC 7748 §6.1), a wrong length, an AEAD
+ * authentication failure, or the message limit. Any other failure of the underlying primitives
+ * (a missing or failing provider) is an {@link IllegalStateException}: it says nothing about the
+ * input, and callers must not treat it as one (review Z-1).
  *
  * <p><b>Secret.</b> Private keys, shared secrets and AEAD keys are compatibility/offline class
  * (ADR-0039 §3.1). Intermediate arrays are wiped on a best-effort basis.
@@ -54,11 +61,29 @@ final class Hpke {
     private Hpke() {
     }
 
-    /** An HPKE failure. The message is generic on purpose; callers treat any failure as absence. */
+    /**
+     * An HPKE failure caused by the input (see the class documentation). The message is generic on
+     * purpose; callers treat it as absence.
+     */
     static final class HpkeException extends Exception {
         HpkeException(Throwable cause) {
             super("HPKE operation failed", cause);
         }
+    }
+
+    /**
+     * Classifies a failure of the primitives: an {@link HpkeException} if the input caused it,
+     * otherwise an {@link IllegalStateException} thrown from here.
+     */
+    private static HpkeException inputFailure(Exception e) {
+        if (e instanceof X25519Bytes.SmallOrderException || e instanceof AEADBadTagException) {
+            return new HpkeException(e);
+        }
+        throw new IllegalStateException("HPKE primitive failure (a platform fault, not a property of the input)", e);
+    }
+
+    private static void wipe(byte[] b) {
+        if (b != null) Arrays.fill(b, (byte) 0);
     }
 
     /** The output of {@link #sealBase}: the encapsulation and the ciphertext. */
@@ -85,20 +110,26 @@ final class Hpke {
         Objects.requireNonNull(info, "info");
         Objects.requireNonNull(aad, "aad");
         Objects.requireNonNull(pt, "pt");
+        if (pkR.length != N_PK) {
+            throw new HpkeException(new IllegalArgumentException("pkR must be " + N_PK + " bytes"));
+        }
+        byte[] dh = null;
+        byte[] sharedSecret = null;
         try {
             byte[] enc = X25519Bytes.publicFromPrivate(skE);
-            byte[] dh = X25519Bytes.dh(X25519Bytes.privateKey(skE), pkR);
-            byte[] sharedSecret = extractAndExpand(dh, concat(enc, pkR));
-            Arrays.fill(dh, (byte) 0);
+            dh = X25519Bytes.dh(X25519Bytes.privateKey(skE), pkR);
+            sharedSecret = extractAndExpand(dh, concat(enc, pkR));
             Context context = keySchedule(sharedSecret, info);
-            Arrays.fill(sharedSecret, (byte) 0);
             try {
                 return new Sealed(enc, context.seal(aad, pt));
             } finally {
                 context.destroy();
             }
         } catch (GeneralSecurityException | RuntimeException e) {
-            throw new HpkeException(e);
+            throw inputFailure(e);
+        } finally {
+            wipe(dh);
+            wipe(sharedSecret);
         }
     }
 
@@ -144,42 +175,52 @@ final class Hpke {
 
     private static Context setupBaseR(byte[] enc, byte[] skR, byte[] knownPkR, byte[] info) throws HpkeException {
         Objects.requireNonNull(skR, "skR");
+        byte[] pkR;
+        PrivateKey recipient;
         try {
-            byte[] pkR = knownPkR != null ? knownPkR : X25519Bytes.publicFromPrivate(skR);
-            return setupBaseR(enc, X25519Bytes.privateKey(skR), pkR, info);
+            pkR = knownPkR != null ? knownPkR : X25519Bytes.publicFromPrivate(skR);
+            recipient = X25519Bytes.privateKey(skR);
         } catch (GeneralSecurityException | RuntimeException e) {
-            throw new HpkeException(e);
+            throw inputFailure(e);
         }
+        return setupBaseR(enc, recipient, pkR, info);
     }
 
     private static Context setupBaseR(byte[] enc, PrivateKey recipient, byte[] pkR, byte[] info) throws HpkeException {
         Objects.requireNonNull(enc, "enc");
         Objects.requireNonNull(info, "info");
+        if (enc.length != N_ENC) {
+            throw new HpkeException(new IllegalArgumentException("enc must be " + N_ENC + " bytes"));
+        }
+        byte[] dh = null;
+        byte[] sharedSecret = null;
         try {
-            if (enc.length != N_ENC) {
-                throw new GeneralSecurityException("enc must be " + N_ENC + " bytes");
-            }
-            byte[] dh = X25519Bytes.dh(recipient, enc);
-            byte[] sharedSecret = extractAndExpand(dh, concat(enc, pkR));
-            Arrays.fill(dh, (byte) 0);
-            Context context = keySchedule(sharedSecret, info);
-            Arrays.fill(sharedSecret, (byte) 0);
-            return context;
+            dh = X25519Bytes.dh(recipient, enc);
+            sharedSecret = extractAndExpand(dh, concat(enc, pkR));
+            return keySchedule(sharedSecret, info);
         } catch (GeneralSecurityException | RuntimeException e) {
-            throw new HpkeException(e);
+            throw inputFailure(e);
+        } finally {
+            wipe(dh);
+            wipe(sharedSecret);
         }
     }
 
     /** {@code SetupBaseS(pkR, info)} with a given ephemeral key; returns {@code enc} too. Test seam. */
     static Context setupBaseSWithEphemeral(byte[] skE, byte[] pkR, byte[] info, byte[][] encOut) throws HpkeException {
+        byte[] dh = null;
+        byte[] sharedSecret = null;
         try {
             byte[] enc = X25519Bytes.publicFromPrivate(skE);
-            byte[] dh = X25519Bytes.dh(X25519Bytes.privateKey(skE), pkR);
-            byte[] sharedSecret = extractAndExpand(dh, concat(enc, pkR));
+            dh = X25519Bytes.dh(X25519Bytes.privateKey(skE), pkR);
+            sharedSecret = extractAndExpand(dh, concat(enc, pkR));
             encOut[0] = enc;
             return keySchedule(sharedSecret, info);
         } catch (GeneralSecurityException | RuntimeException e) {
-            throw new HpkeException(e);
+            throw inputFailure(e);
+        } finally {
+            wipe(dh);
+            wipe(sharedSecret);
         }
     }
 
@@ -282,12 +323,17 @@ final class Hpke {
         }
 
         byte[] open(byte[] aad, byte[] ct) throws HpkeException {
+            Objects.requireNonNull(aad, "aad");
+            Objects.requireNonNull(ct, "ct");
+            if (seq == Long.MAX_VALUE) {
+                throw new HpkeException(new GeneralSecurityException("message limit reached"));
+            }
             try {
                 byte[] out = aead(Cipher.DECRYPT_MODE, aad, ct);
                 seq++;
                 return out;
             } catch (GeneralSecurityException | RuntimeException e) {
-                throw new HpkeException(e);
+                throw inputFailure(e);
             }
         }
 

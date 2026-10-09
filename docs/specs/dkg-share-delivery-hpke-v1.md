@@ -188,6 +188,19 @@ Byte-identical envelopes count once. Envelopes are de-duplicated only **after** 
 publishes nothing about the failure and no other message. The only public consequence of a
 missing or invalid share is the threshold profile's usual round-2 `COMPLAINT` (ADR-0054 D6, I4).
 
+**A local fault is not a failed step.** A step fails only because of the envelope:
+- a malformed header (steps 1, 2, 4);
+- an authentication result of "not authentic" (step 3);
+- a small-order `enc`, refused by X25519 or giving the all-zero value (step 5);
+- an AEAD verification failure (step 5);
+- a plaintext that is not the expected `SHARE` (step 6).
+
+If the recipient's own platform fails instead (a primitive is unavailable or errs, or the
+authenticator cannot answer), the recipient must not treat the envelope as absent. It stops
+processing, keeps its key and does not close round 1; it may then process the same final window
+again. Treating such a fault as absence would turn every honest dealer's share into a complaint,
+and so into a public answer.
+
 ---
 
 ## 5. Windows, the processing barrier and posting order
@@ -258,6 +271,9 @@ This section is informative: it records consequences, not rules.
   - public answers for `i`;
   - the pairs published in rounds 5–6 for `i` (extraction complaints and reconstruction); a
     dealer reconstructed in round 6 is entirely public;
+  - every recipient of an envelope from `i`, if the ephemeral randomness `i` used for sealing is
+    predictable or leaked (§7): with it, anyone can derive each envelope's key. That is at least
+    `n − 1 ≥ t + 1` indices, so `i`'s contribution is exposed;
   - all of them, if `i` is corrupted.
 
   The joint key is exposed when every qualified dealer's contribution is exposed.
@@ -274,7 +290,8 @@ This section is informative: it records consequences, not rules.
   only for that session.
 - **Separation.** It is never the roster key `key_j` and is not derived from it.
 - **Destroy.** The private key is needed only until round 1 is processed (§5.1), and should then
-  be destroyed. Implementations can only make this best-effort; it is offline class (ADR-0039).
+  be destroyed, as it should when the attempt aborts or is abandoned. Implementations can only
+  make this best-effort; it is offline class (ADR-0039).
 - **Fresh randomness.** Every envelope uses a fresh ephemeral key from a cryptographically
   secure generator.
 

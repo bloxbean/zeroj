@@ -3,6 +3,8 @@ package org.zeroj.circuit.lib.jubjub;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -142,6 +144,26 @@ final class DkgEncryptedHarness {
     }
 
     /** Spec §9.1 test keys: SHA-256 of the tag under the profile's test prefix. */
+    /**
+     * Runs {@code body} with the JDK provider {@code name} removed, then reinstalls it at its
+     * position: a platform fault for fail-closed tests. Tests in this module run sequentially.
+     */
+    static void withoutProvider(String name, Runnable body) {
+        Provider[] all = Security.getProviders();
+        int position = -1;
+        for (int k = 0; k < all.length; k++) {
+            if (all[k].getName().equals(name)) position = k;
+        }
+        if (position < 0) throw new IllegalStateException("no provider " + name);
+        Provider removed = all[position];
+        Security.removeProvider(name);
+        try {
+            body.run();
+        } finally {
+            Security.insertProviderAt(removed, position + 1);
+        }
+    }
+
     static byte[] testKey(String tag) {
         try {
             return MessageDigest.getInstance("SHA-256")
@@ -185,6 +207,10 @@ final class DkgEncryptedHarness {
             } catch (FaultAssumptionViolatedException t1) {
                 aborted.put(i, t1);
                 continue;
+            }
+            // The plaintext SHAREs never leave through the broadcasts (final review X-2).
+            if (dealing.broadcasts().size() != 1 || dealing.broadcasts().get(0).kind() != DkgMessage.Kind.COMMITMENTS) {
+                throw new AssertionError("dealer " + i + " broadcasts " + dealing.broadcasts());
             }
             boolean allInWindow = true;
             for (byte[] e : dealing.envelopes()) {

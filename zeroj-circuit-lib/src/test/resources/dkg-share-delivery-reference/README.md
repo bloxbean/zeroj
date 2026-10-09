@@ -500,7 +500,7 @@ the independent check: it must reproduce these vectors byte for byte.
     `skR_1` leaks, `f_5(1)` is known.
   - **Reading used:** "sent" means any authentic envelope posted by `i` to `j`, in a window or
     not. Unauthentic copies carry the same ciphertext and add nothing.
-  - The spec could say "posted (in any window or none)".
+  - The spec could say "posted (in any window or none)". **Resolved:** spec §6 now says so.
 - **R2-2. §3.3, "a key other than the one `j` announced".**
   - Literally, the copier in `mixed_window_3of5` announced `pk1`, and the directory holds `pk1`,
     so T1 would not fire. The purpose of the rule, which is that `j` can open its envelopes, is
@@ -510,6 +510,7 @@ the independent check: it must reproduce these vectors byte for byte.
   - **Reading used:** compare with the key `j` holds (its `recipient_key_tag`). The copier is
     marked as not applying T1.
   - "Other than its own" (the key whose private key `j` holds) would remove the ambiguity.
+    **Resolved:** spec §3.3 now says "other than its own".
 - **R2-3. §6, round-5 and round-6 pairs (note; no change needed).**
   - Corrupted senders can publish pairs that are not on `f_i`, failing (4). They sit at
     corrupted indices, which are counted anyway, so counting them changes nothing.

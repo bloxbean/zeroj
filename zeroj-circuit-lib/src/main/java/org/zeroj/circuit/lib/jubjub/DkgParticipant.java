@@ -80,6 +80,9 @@ public final class DkgParticipant {
     private FaultAssumptionViolatedException abort;
     /** Set by {@link DkgShareDelivery#start}: round 1 then closes only through {@link DkgShareDelivery#closeRound1}. */
     private boolean encryptedDelivery;
+    /** The exact keys and directory {@link DkgShareDelivery#start} bound; round 1 closes only with these. */
+    private Object boundKeys;
+    private Object boundDirectory;
 
     private DkgParticipant(DkgConfig config, int id, ThresholdVss.Dealing dealing) {
         this.config = config;
@@ -219,16 +222,23 @@ public final class DkgParticipant {
         return closeOpenRound();
     }
 
-    /** Binds this participant to encrypted share delivery; only before {@link #start()}. */
-    void bindEncryptedDelivery() {
+    /** Binds this participant to encrypted share delivery with these exact keys and directory; only before {@link #start()}. */
+    void bindEncryptedDelivery(Object keys, Object directory) {
         if (open != 0) {
             throw new IllegalStateException("encrypted delivery must be bound before start");
         }
         encryptedDelivery = true;
+        boundKeys = keys;
+        boundDirectory = directory;
     }
 
     boolean boundToEncryptedDelivery() {
         return encryptedDelivery;
+    }
+
+    /** {@code true} iff {@code keys} and {@code directory} are the very objects bound at start. */
+    boolean boundTo(Object keys, Object directory) {
+        return encryptedDelivery && boundKeys == keys && boundDirectory == directory;
     }
 
     /** Aborts this participant (sticky), for transport aborts such as T1. */

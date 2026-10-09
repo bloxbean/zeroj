@@ -14,28 +14,36 @@ SunJCE); secret operations are compatibility/offline class (ADR-0039).
 | Operation (100-byte `SHARE`) | µs/op |
 |---|---:|
 | `SealBase`: ephemeral key, DH, key schedule, AEAD | 114 |
-| `OpenBase`: DH, key schedule, AEAD; recipient key built once per round | 59 |
+| `OpenBase`: DH, key schedule, AEAD, recipient's public key supplied | 59 |
 | Announcement small-order probe (one X25519) | 54 |
 
 Sealing needs two X25519 operations: the ephemeral public key and the DH. Opening needs one,
 because `closeRound1` passes the recipient's known public key. An earlier version that
-recomputed it cost 111 µs per open.
+recomputed it cost 111 µs per open. The harness calls the `byte[]` overload, which also rebuilds
+the provider private key on every open. `closeRound1` builds it once per round, so the row is an
+upper bound for production.
 
 ## Per participant and per run
 
-Each participant seals `n − 1` envelopes, opens `n − 1`, and runs the probe on up to `n`
-announcements. The delivery work per participant is therefore about
-`(n − 1) · 0.17 ms + n · 0.05 ms`:
+Each participant:
+- seals `n − 1` envelopes and opens `n − 1`;
+- runs the probe on up to `n` announcements;
+- runs two platform self-tests, one seal and one open each, in `start` and `closeRound1`
+  (ADR-0054 implementation note 7).
+
+The delivery work per participant is therefore about
+`(n − 1) · 0.17 ms + n · 0.05 ms + 0.35 ms`:
 
 | `n` | Delivery work per participant (computed from the table above) |
 |---:|---:|
-| 3 | ≈ 0.5 ms |
-| 7 | ≈ 1.4 ms |
-| 21 | ≈ 4.6 ms |
-| 64 | ≈ 14 ms |
+| 3 | ≈ 0.9 ms |
+| 7 | ≈ 1.8 ms |
+| 21 | ≈ 4.9 ms |
+| 64 | ≈ 15 ms |
 
 Whole encrypted runs, with all `n` participants in one JVM, measured against plain runs on the same
-dealings:
+dealings. These were measured before the self-tests were added; they add about 0.35 ms per
+participant, well inside the run-to-run noise:
 
 | DKG (t, n) | Plain run | Encrypted run |
 |---|---:|---:|

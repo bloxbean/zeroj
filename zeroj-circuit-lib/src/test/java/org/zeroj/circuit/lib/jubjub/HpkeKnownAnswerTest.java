@@ -100,6 +100,40 @@ class HpkeKnownAnswerTest {
                 Hpke.openBase(single.enc(), skR, info, hex(encryptions.get(0), "aad"), single.ct()));
     }
 
+    @Test
+    @DisplayName("Context sequence (§5.2): seal and open advance it, a failed open does not, and the limit is refused (review C-3)")
+    void contextSequence() throws Exception {
+        JsonNode v = load("hpke-x25519-sha256-chacha20poly1305-base.json").get(0);
+        byte[] skE = hex(v, "skEm");
+        byte[] skR = hex(v, "skRm");
+        byte[] info = hex(v, "info");
+        byte[][] enc = new byte[1][];
+        Hpke.Context sender = Hpke.setupBaseSWithEphemeral(skE, hex(v, "pkRm"), info, enc);
+        Hpke.Context recipient = Hpke.setupBaseR(enc[0], skR, info);
+
+        // No setSequence: the k-th call uses sequence k, so the vector's encryptions come out in order.
+        JsonNode encryptions = v.get("encryptions");
+        for (int seq = 0; seq < encryptions.size(); seq++) {
+            JsonNode e = encryptions.get(seq);
+            byte[] ct = hex(e, "ct");
+            assertArrayEquals(ct, sender.seal(hex(e, "aad"), hex(e, "pt")), "seal " + seq);
+            byte[] tampered = ct.clone();
+            tampered[0] ^= 1;
+            assertThrows(Hpke.HpkeException.class, () -> recipient.open(hex(e, "aad"), tampered), "tampered " + seq);
+            assertArrayEquals(hex(e, "pt"), recipient.open(hex(e, "aad"), ct), "a failed open leaves sequence " + seq);
+        }
+
+        // One below the limit still works and advances to it; the next call is refused, both ways.
+        JsonNode first = encryptions.get(0);
+        sender.setSequence(Long.MAX_VALUE - 1);
+        recipient.setSequence(Long.MAX_VALUE - 1);
+        byte[] last = sender.seal(hex(first, "aad"), hex(first, "pt"));
+        assertArrayEquals(hex(first, "pt"), recipient.open(hex(first, "aad"), last));
+        assertThrows(GeneralSecurityException.class, () -> sender.seal(hex(first, "aad"), hex(first, "pt")));
+        assertThrows(Hpke.HpkeException.class, () -> recipient.open(hex(first, "aad"), last));
+        assertThrows(IllegalArgumentException.class, () -> sender.setSequence(-1));
+    }
+
     private static byte[] xorNonce(byte[] baseNonce, long seq) {
         byte[] out = baseNonce.clone();
         byte[] s = Hpke.i2osp(seq, Hpke.N_N);
