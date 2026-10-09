@@ -242,6 +242,82 @@ void prove(ZkContext zk,
 > affected. The normative scheme is
 > [jubjub-eddsa-v1](https://github.com/bloxbean/zeroj/blob/main/docs/specs/jubjub-eddsa-v1.md).
 
+## Encryption: ElGamal and threshold keys
+
+`elgamal-jubjub-v1` is exponential ("lifted") ElGamal on Jubjub. A message `m` becomes
+`A = [k]·G`, `B = [m]·G + [k]·PK`. Ciphertexts under one key add up to an encryption of the sum,
+so you can total encrypted votes, bids or survey answers and decrypt only the total. The profile
+is specified in `docs/specs/elgamal-jubjub-v1.md` (ADR-0052). It is **experimental**.
+
+**Proving a ciphertext is well formed.** The circuit side proves that a public ciphertext
+encrypts an in-range message under a key:
+
+```java
+@Prove
+void prove(ZkContext zk,
+           @Public ZkField keyU, @Public ZkField keyV,
+           @Public ZkField aU, @Public ZkField aV, @Public ZkField bU, @Public ZkField bV,
+           @Secret @UInt(bits = 1) ZkUInt vote,
+           @Secret @UInt(bits = 252) ZkUInt randomness) {
+    var key = ZkElGamalPublicKey.fromVerifierFixedPublic(zk, keyU, keyV);
+    ZkElGamal.encrypt(zk, vote, randomness, key).assertAffineEquals(zk, aU, aV, bU, bV);
+}
+```
+
+- The message width is 1 to 64 bits. A wider declaration is refused, because at 252 bits the
+  witness `m = l` would alias `m = 0`.
+- The randomness must be exactly 252 bits and never public. One decomposition drives both
+  scalar multiplications.
+- A key enters either as public coordinates the verifier fixes
+  (`fromVerifierFixedPublic`; the verifier checks subgroup membership), or as a witness proved
+  in the subgroup (`witnessInSubgroup`). Both refuse the identity key.
+
+Cost: 6,558 constraints at width 1, and 6,938 at width 64.
+
+**Trustee proofs.** `ZkElGamal.assertDiscreteLogEquality(zk, x, X…, P…, D…)` proves
+`P = [x]·G` and `D = [x]·X` (6,546 constraints). All six coordinates must be public inputs, so
+the prover never chooses the base. One circuit serves both trustee proofs:
+- a proof of possession of a key share, with `X = G` and `D = P`;
+- a correct decryption share, with `X` the ciphertext handle.
+
+**The host side keeps sums honest.** On the host, use the safe layer in
+`org.zeroj.circuit.lib.jubjub`:
+- an `ElGamalCiphertext` carries its key context and an established plaintext bound;
+- `add` and `scale` refuse to mix keys or to let the bound reach `l`;
+- `decrypt` needs a verified share from every trustee (`VerifiedDecryptionShare`).
+
+A ciphertext from someone else enters only through `ElGamal.admit`, with a verifier that checks
+its encryption proof against the statement the library builds:
+
+```java
+ElGamalCiphertext ballot = ElGamal.admit(RawElGamalCiphertext.decode(bytes), election, 1,
+        statement -> verifyGroth16(proof, statement.publicInputs()));
+ElGamalCiphertext total = ElGamalCiphertext.sum(admittedBallots);
+long yes = ElGamal.decrypt(total, verifiedShares, total.bound().longValueExact());
+```
+
+Decryption recovers `m` with a bounded baby-step giant-step search, so keep the decrypted total
+small (default reach about `2^43`). It fails closed instead of returning a wrong value.
+
+**Threshold keys.** With `elgamal-jubjub-threshold-v1` (ADR-0053), any `t + 1` of `n` trustees
+can decrypt, and up to `t` can be lost or malicious. The trustees run a distributed key
+generation, New-DKG of Gennaro et al., with `DkgParticipant`. No single party ever holds the
+key, provided the transport delivers the private shares on time. A late share can make an honest
+dealer publish it, so timely delivery is a secrecy requirement, not only a liveness one.
+- Your application supplies the transport: a broadcast board with agreement, private channels
+  for shares, and round deadlines.
+- A third party accepts the result with `ThresholdKeyContext.admit`, which requires
+  authenticated messages, closed rounds, and confirmations from at least `t + 1` trustees.
+- Ballots and sums are unchanged. Decryption takes any `t + 1` verified shares.
+
+> **Caution: Offline trustee and encryption operations**
+>
+> Key generation, encryption, decryption shares and the DKG handle secrets with variable-time
+> Java `BigInteger` arithmetic, through the blinded best-effort schedule used for Pedersen.
+> Run them offline or in an isolated process. The in-circuit relations are not affected. "Decrypt
+> once, after a deadline" is your application's rule: decrypting running totals lets anyone
+> recover individual messages by differencing.
+
 ## Real-world crypto: Cardano key derivation
 
 These gadgets reproduce standard wallet primitives *inside* a circuit, so a proof can show "I know
@@ -285,6 +361,8 @@ authorization or replay rules.
 | Pedersen commitment (in-circuit) | BLS12-381 only | Ready, pending external review |
 | Pedersen commitment (off-circuit generation) | Jubjub | Offline or isolated use only |
 | EdDSA-Jubjub | BLS12-381 only | Verification ready pending external review; legacy signing offline only |
+| ElGamal encryption and trustee proofs (in-circuit) | BLS12-381 only | Experimental |
+| ElGamal host API, threshold key generation | Jubjub | Experimental; secret operations offline or isolated only |
 | BLAKE2b, CIP-1852 derivation | Field-agnostic | Ready on BLS12-381 Groth16 |
 | SHA-512, HMAC-SHA512, BIP32-Ed25519 | Field-agnostic | Ready as building blocks |
 | Poseidon MPF/JMT authenticated state | BLS12-381 Poseidon profile | Experimental (separate modules) |

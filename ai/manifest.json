@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "279aa4bc7da8b27fc1c0a2574831475498bcba58",
+  "sourceRevision": "1132ce9582f66730ca992fcdb2062eaededd939a",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -127,7 +127,7 @@
       "description": "The circuit building blocks in zeroj-circuit-lib (hashes, Merkle proofs, ranges, Jubjub, and Cardano key derivation), with status and cost.",
       "url": "https://zeroj.dev/guides/circuits/gadgets/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/gadgets.md",
-      "sha256": "b893a201d0306f97b17ca89a6e9a61a5b3fa6c0f1376c56f6dd877957d0b92ef"
+      "sha256": "c1bdca3637422b0977f7d091fd4e04d2e2be2c2a660df4d4df8c4da06b416bdc"
     },
     {
       "title": "Test your circuits for soundness",
@@ -326,7 +326,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "e3b1eb66806e49548c3ae09c0bcff596ede65c05f8510438a5397da0b44ba5d8"
+      "sha256": "132539cbe42efdc13cd4928ed4a15bb1bf52860b89c3a68ab1894a8cb8f6a1b0"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
