@@ -1,10 +1,12 @@
 # ADR-0055: Confidential notes on Jubjub with encrypted opening delivery (`confidential-note-jubjub-v1`)
 
 ## Status
-Proposed — 2026-10-09.
+Accepted (design) — 2026-10-09.
+- The reviewer approved r4 at `f6f7c90` (round 3, no open P0–P2 findings). The maintainer
+  decided Q1–Q9 (r5) and accepted the design.
+- Acceptance is design acceptance only. It certifies no implementation, test or security
+  property. Assumptions A1–A3 remain unproved, and external review of them is a production gate.
 - Tracked as #79. This is a design-only ADR; no implementation accompanies it.
-- Acceptance would be design acceptance only. It would certify no implementation, test or
-  security property.
 - The decision on the in-circuit consistency proof (D3) is **escalated and blocked** (Q5), in
   the way ADR-0051 escalated its D7. The rest of the design does not depend on it.
 - r2 adds **D3a**: enforced auditor access to the amount, built only from the accepted
@@ -16,7 +18,7 @@ This ADR changes no maturity claim. ADR-0039's assurance classes apply: every se
 host operation here is **compatibility/offline** class.
 
 ## Date
-2026-10-09
+2026-10-09 (proposed); 2026-10-09 (accepted)
 
 ## Revision history
 - **r1** (`a1154ac`, 2026-10-09): initial proposal.
