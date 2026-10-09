@@ -11,10 +11,13 @@ import java.util.Optional;
 /**
  * ADR-0055 M1 GraalVM native-image probe (not a JUnit test). Prints {@code confidential-note-jubjub-v1}
  * results that must be identical on the JVM and in a native image. Reproduce, from the repository
- * root:
+ * root (the classpath adds the runtime outputs of the modules the profile uses: BLS12-381 for the
+ * Jubjub base field, the circuit DSL and the API):
  * <pre>
  * ./gradlew :zeroj-circuit-lib:testClasses
  * CP=zeroj-circuit-lib/build/classes/java/main:zeroj-circuit-lib/build/classes/java/test
+ * CP=$CP:zeroj-bls12381/build/classes/java/main:zeroj-circuit-dsl/build/classes/java/main
+ * CP=$CP:zeroj-api/build/classes/java/main
  * java -cp $CP org.zeroj.circuit.lib.jubjub.NoteNativeProbe &gt; jvm.txt
  * native-image --no-fallback -cp $CP -o note-probe org.zeroj.circuit.lib.jubjub.NoteNativeProbe
  * ./note-probe &gt; native.txt &amp;&amp; diff jvm.txt native.txt   # all but the last (random) line
