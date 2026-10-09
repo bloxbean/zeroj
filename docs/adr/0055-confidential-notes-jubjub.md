@@ -6,7 +6,9 @@ Accepted (design) — 2026-10-09.
   decided Q1–Q9 (r5) and accepted the design.
 - Acceptance is design acceptance only. It certifies no implementation, test or security
   property. Assumptions A1–A3 remain unproved, and external review of them is a production gate.
-- Tracked as #79. This is a design-only ADR; no implementation accompanies it.
+- Tracked as #79. M0–M2, M4 and M5a are implemented on PR #82 ("Implementation status" at the
+  end). M3 follows as a zeroj-usecases PR. The implementation is Experimental and makes no
+  production claim.
 - The in-circuit consistency proof (D3) is **deferred** (Q5 (A), decided). It is blocked pending
   a dedicated, accepted follow-up ADR for a pinned and analysed construction, as ADR-0051
   escalated its D7. The rest of the design does not depend on it.
@@ -981,3 +983,71 @@ and reasons are kept below for the record.
   not use `PRF^ock`.
 - zk-kit's `poseidon-cipher` checks zero padding only when the message is longer than 3
   elements, unlike Khovratovich's note. This is relevant to Q5 (B), if it is ever chosen.
+- `AliasCheck.check` (zeroj-circuit-lib) only decomposes a value into `nBits` booleans. For
+  `nBits ≥ 255` both `x` and `x + p` fit, so it does not enforce a canonical representation, which
+  its Javadoc claims. D3a does not use it: §8.3's argument below needs no in-circuit `< p` check.
+  It deserves its own fix and issue.
+
+## Implementation notes (refinements recorded during implementation)
+
+These refine the accepted design. They are recorded for maintainer acknowledgement, as AGENTS.md
+requires, and each is stated normatively in `docs/specs/confidential-note-jubjub-v1.md`. They
+came from the independent reference (its findings S1–S6) and from implementation.
+
+1. **Step numbering** (reference S1). The spec numbers acceptance steps 1–7. D6's steps 1–5 group
+   them, and spec §5 maps one to the other.
+2. **The commitment's coordinates are canonical, with no reduction** (reference S3; spec §5 step
+   7). A reader takes `C` as the affine `(u, v)` the note carries. Coordinates outside `[0, p)`,
+   or off the curve, are "not mine". Before this, a reader that reduced mod `p` and one that did
+   not could disagree. `NoteScanner.open(delivery, u, v)` checks this before any secret work.
+3. **An AEAD known-answer self-test before use** (as ADR-0054 note 7). The platform's
+   ChaCha20-Poly1305 is the profile's only platform-dependent primitive. A missing or
+   non-conforming provider would make every delivery look like "not mine", so
+   `NoteScanner.of` and `ConfidentialNotes.seal` first run the first Zcash Sapling vector's
+   `k_enc`/`p_enc`/`c_enc` (14 µs) and fail closed. Any provider exception other than a tag
+   failure is a platform fault (`IllegalStateException`), never "not mine".
+4. **A test hook for I13.** `JubjubPoint.SecretScheduleObserver` gains a
+   `publicMultiplication()` callback, called by the variable-time `scalarMul`. Tests then prove
+   that acceptance runs exactly three blinded schedules and no unblinded multiplication. It costs
+   one `ThreadLocal` read per `scalarMul`.
+5. **A shared AEAD helper.** ChaCha20-Poly1305 moved from `Hpke` into a package-private `Aead`
+   class that both profiles use. ADR-0054's RFC 9180 known answers and the Wycheproof suite now run
+   through it.
+6. **Personalised BLAKE2b on secret input.** `Blake2bDigest` gains the parameter-block
+   personalization ([BLAKE2] §2.8) and zeroes its message words, working vector and state before
+   returning. It is checked against BouncyCastle's personalised BLAKE2b over lengths 0–300.
+7. **The hash-compressed layout needs no in-circuit `< p` check** (spec §8.3).
+   - The validator requires every datum coordinate to be canonical, and hashes `I2OSP(c, 32)`.
+   - The circuit constrains 32 bytes per coordinate (8 bits each) whose big-endian value equals
+     the `R_enc` coordinate in the field, and hashes them.
+   - A prover that serialized `c + p` instead would produce a different digest, and its proof
+     would not verify. Equal digests force equal bytes (collision resistance of BLAKE2b-256), and
+     so the canonical encoding.
+8. **D3a passed M5a's gate, so Q5's condition is met** (see "Implementation status").
+   - Both layouts were measured on a two-output transfer with one auditor, in ZeroJ's reference
+     validator: 72.9% (direct) and 46.8% (hash-compressed) of the step limit, each under 10% of
+     the memory limit.
+   - **Recommended use (for acknowledgement):** the direct layout when its measured cost fits the
+     gate. It has 34,184 constraints and proves in 3.9 s. The hash-compressed layout fits where the
+     direct one does not: more auditors or outputs. It has 355,514 constraints and proves in 16.6 s.
+   - An application that runs another script in the same transaction, such as the points demo's
+     minting policy, must measure its own total. M3 does this for the demo.
+9. **Allocation.** Each blinded scalar multiplication allocates about 3.7 MB of short-lived
+   `BigInteger` garbage, so a failed trial decryption allocates about 4 MB. That is ADR-0039's
+   approved compatibility path. The allocation-free fixed-limb kernel is an unapproved candidate
+   (ADR-0039 M9), and moving this profile to it would be a separate reviewed decision. The
+   profile's own code allocates only fixed-size buffers.
+10. **Test-key tags** (reference S2). Spec §9.1 lists every tag the reference uses, and every
+    derived scalar is emitted with the vectors.
+
+## Implementation status
+
+| Milestone | State | Notes |
+|---|---|---|
+| M0 | Done | Spec `docs/specs/confidential-note-jubjub-v1.md`. An independent Python reference (`zeroj-circuit-lib/src/test/resources/confidential-note-reference/`), written from the spec and the Zcash specification with no Java read. It runs over 300 checks and emits more than 110 replayable vectors, reproducing all 10 Zcash Sapling vectors, RFC 7693 and RFC 8439, and catching 28 of 29 seeded defects. The one it cannot catch (KDF over the re-encoded `E` alone) is unobservable under canonical decoding. The Zcash vectors are vendored, pinned by commit and SHA-256. |
+| M1 | Done | `Blake2bDigest` personalization, `Aead`, `SaplingNoteCrypto`, the AEAD self-test. `ConfidentialNoteKnownAnswerTest` covers all 10 Zcash vectors (Agree both ways, KDF, encryption and decryption), decoding refusals and fault classification. Also run: the personalised BLAKE2b differential against BouncyCastle 1.83, and Wycheproof ChaCha20-Poly1305 through `Aead`. `NoteNativeProbe` gives output identical to the JVM in a GraalVM native image. |
+| M2 | Done | `NoteViewingKey`, `NoteReaderKey`, `NoteOpening`, `ConfidentialNotes`, `NoteScanner`. Tests: `ConfidentialNotesTest` (I1–I11, platform faults, API surface), `NoteScheduleTest` (I13) and `ConfidentialNoteReferenceVectorsTest` (every reference vector, byte for byte, including sealing). Eight guards were each reverted to confirm a test fails. |
+| M4 | Done | Benchmark `docs/benchmarks/confidential-note-jubjub-2026-10-09.md`. A failed trial decryption costs 2.2 ms and an acceptance 7.2 ms; scanning runs at 2,049 notes/s on 16 threads. README, support matrix and gadget-guide rows and section, with the D6, D7 and D9 rules. |
+| M5a | Done; **D3a passed its gate** | `AuditedConfidentialNoteOnChainTest` and `AuditedConfidentialNoteValidator` (Plutus V3, Julc VM). Direct layout: 24 public inputs, 7.29e9 steps (72.9%). Hash-compressed layout: 10 public inputs, 4.68e9 steps (46.8%). I12's invalid witnesses and the validator mutations are rejected, and the auditor recovers every created note's amount from the datum. |
+| M3 | Not started | A separate zeroj-usecases PR: the points demo on Yaci DevKit, with its minting policy in the measured total. |
+| M5 | Blocked | Q5 (A): pending a dedicated, accepted follow-up ADR. |
