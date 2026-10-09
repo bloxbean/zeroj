@@ -87,6 +87,52 @@ class Blake2bDigestTest {
         assertFalse(Arrays.equals(zero, one), "the last byte must affect the digest");
     }
 
+    @Test
+    @DisplayName("Personalization: agrees with BouncyCastle's personalised BLAKE2b, lengths 0..300 and several personalizations (ADR-0055 M1)")
+    void personalisedDifferential() {
+        Random rnd = new Random(55);
+        byte[][] personalizations = {
+                "ZeroJ_NoteKDF_v1".getBytes(StandardCharsets.US_ASCII),
+                "Zcash_SaplingKDF".getBytes(StandardCharsets.US_ASCII),
+                new byte[16],
+                HEX.parseHex("000102030405060708090a0b0c0d0e0f"),
+                HEX.parseHex("ffffffffffffffffffffffffffffffff"),
+        };
+        for (byte[] pers : personalizations) {
+            for (int length = 0; length <= 300; length++) {
+                byte[] input = new byte[length];
+                rnd.nextBytes(input);
+                for (int outLength : new int[]{32, 64, 1, 17}) {
+                    assertArrayEquals(bouncyCastle(input, outLength, pers), Blake2bDigest.digest(input, outLength, pers),
+                            "length " + length + ", out " + outLength + ", pers " + HEX.formatHex(pers));
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("An all-zero personalization equals none; any other changes the digest; a wrong length is refused")
+    void personalizationRules() {
+        byte[] input = "abc".getBytes(StandardCharsets.US_ASCII);
+        assertArrayEquals(Blake2bDigest.digest(input, 32), Blake2bDigest.digest(input, 32, new byte[16]));
+        byte[] pers = "ZeroJ_NoteKDF_v1".getBytes(StandardCharsets.US_ASCII);
+        assertFalse(Arrays.equals(Blake2bDigest.digest(input, 32), Blake2bDigest.digest(input, 32, pers)));
+        byte[] flipped = pers.clone();
+        flipped[15] ^= 1;
+        assertFalse(Arrays.equals(Blake2bDigest.digest(input, 32, pers), Blake2bDigest.digest(input, 32, flipped)),
+                "every personalization byte is used");
+        assertThrows(IllegalArgumentException.class, () -> Blake2bDigest.digest(input, 32, new byte[15]));
+        assertThrows(IllegalArgumentException.class, () -> Blake2bDigest.digest(input, 32, new byte[17]));
+    }
+
+    private static byte[] bouncyCastle(byte[] input, int outLength, byte[] personalization) {
+        var digest = new org.bouncycastle.crypto.digests.Blake2bDigest(null, outLength, null, personalization);
+        digest.update(input, 0, input.length);
+        byte[] out = new byte[outLength];
+        digest.doFinal(out, 0);
+        return out;
+    }
+
     private static byte[] bouncyCastle(byte[] input, int bits) {
         var digest = new org.bouncycastle.crypto.digests.Blake2bDigest(bits);
         digest.update(input, 0, input.length);
