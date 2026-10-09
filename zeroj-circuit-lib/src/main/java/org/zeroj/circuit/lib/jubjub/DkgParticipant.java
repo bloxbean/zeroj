@@ -78,6 +78,8 @@ public final class DkgParticipant {
     private byte[] digest;
     private ThresholdKeyShare result;
     private FaultAssumptionViolatedException abort;
+    /** Set by {@link DkgShareDelivery#start}: round 1 then closes only through {@link DkgShareDelivery#closeRound1}. */
+    private boolean encryptedDelivery;
 
     private DkgParticipant(DkgConfig config, int id, ThresholdVss.Dealing dealing) {
         this.config = config;
@@ -116,6 +118,7 @@ public final class DkgParticipant {
      * {@code SHARE} per other participant.
      */
     public List<DkgMessage> start() {
+        requireNotAborted();
         if (open != 0) {
             throw new IllegalStateException("already started");
         }
@@ -198,6 +201,54 @@ public final class DkgParticipant {
      */
     public List<DkgMessage> closeRound() {
         requireNotAborted();
+        if (encryptedDelivery && open == 1) {
+            // The processing barrier of dkg-share-delivery-hpke-v1 §5.1 (ADR-0054 D6a): a bound
+            // participant never closes round 1 except after every envelope has been processed.
+            throw new IllegalStateException("round 1 of a run using encrypted share delivery closes only through"
+                    + " DkgShareDelivery.closeRound1");
+        }
+        return closeOpenRound();
+    }
+
+    /** {@link #closeRound()} without the delivery guard; {@link DkgShareDelivery#closeRound1} only. */
+    List<DkgMessage> closeRoundOneAfterDelivery() {
+        if (!encryptedDelivery || open != 1) {
+            throw new IllegalStateException("not a bound participant at round 1");
+        }
+        requireNotAborted();
+        return closeOpenRound();
+    }
+
+    /** Binds this participant to encrypted share delivery; only before {@link #start()}. */
+    void bindEncryptedDelivery() {
+        if (open != 0) {
+            throw new IllegalStateException("encrypted delivery must be bound before start");
+        }
+        encryptedDelivery = true;
+    }
+
+    boolean boundToEncryptedDelivery() {
+        return encryptedDelivery;
+    }
+
+    /** Aborts this participant (sticky), for transport aborts such as T1. */
+    void abortWith(FaultAssumptionViolatedException e) {
+        if (abort == null) {
+            abort = e;
+            forgetSecrets();
+        }
+    }
+
+    DkgConfig config() {
+        return config;
+    }
+
+    /** The distinct {@code SHARE}s received from {@code dealer} so far (tests and vectors only). */
+    List<DkgMessage> receivedShares(int dealer) {
+        return List.copyOf(sharesReceived.getOrDefault(dealer, List.of()));
+    }
+
+    private List<DkgMessage> closeOpenRound() {
         try {
             return switch (open) {
                 case 1 -> closeDeal();

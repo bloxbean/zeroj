@@ -29,7 +29,12 @@ public final class FaultAssumptionViolatedException extends RuntimeException {
         /** A8: this participant's own dealing was marked for reconstruction. */
         OWN_DEALING_MARKED,
         /** A9: this participant's own complaint is missing from its delivered round-2 set. */
-        OWN_COMPLAINT_MISSING
+        OWN_COMPLAINT_MISSING,
+        /**
+         * T1 ({@code dkg-share-delivery-hpke-v1} §3.3, ADR-0054 D4): this participant's own
+         * round-0 key announcement is missing or in conflict, so it aborts before round 1.
+         */
+        OWN_KEY_ANNOUNCEMENT_MISSING
     }
 
     private final Reason reason;
