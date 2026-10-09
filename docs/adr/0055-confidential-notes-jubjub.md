@@ -7,6 +7,8 @@ Proposed — 2026-10-09.
   security property.
 - The decision on the in-circuit consistency proof (D3) is **escalated and blocked** (Q5), in
   the way ADR-0051 escalated its D7. The rest of the design does not depend on it.
+- r2 adds **D3a**: enforced auditor access to the amount, built only from the accepted
+  `elgamal-jubjub-v1` profile. It is gated on measuring its on-chain cost (M5a).
 
 This ADR changes no maturity claim. ADR-0039's assurance classes apply: every secret-bearing
 host operation here is **compatibility/offline** class.
@@ -15,7 +17,19 @@ host operation here is **compatibility/offline** class.
 2026-10-09
 
 ## Revision history
-- **r1** (2026-10-09): initial proposal.
+- **r1** (`a1154ac`, 2026-10-09): initial proposal.
+- **r2** (2026-10-09; the author's recommendations, before the first review):
+  - New **D3a**: enforced auditor access to the amount through `elgamal-jubjub-v1`, with two
+    32-bit limbs. The same Groth16 proof binds them to `C`, and the auditor key is a public input
+    taken from the registry.
+  - New I12 and M5a, with an on-chain cost gate.
+  - Q5 gains option (D); the lean is now (A) for the general cipher proof plus (D) for auditors.
+  - Q4: the sender reader is off by default.
+  - Q6: possession is checked at registration, not per transfer, because Plutus has no Jubjub
+    builtins.
+  - Q7: enforcing generations needs D3a.
+  - Q8: grounded in the Conway ledger's 64-bit quantities.
+  - The open questions now open with the author's recommendation.
 
 ## Risk classification
 - **R3:** D2 (viewing keys and key agreement), D5 (the ciphersuite: key agreement, KDF and
@@ -25,6 +39,8 @@ host operation here is **compatibility/offline** class.
 - **R2:** D1 (the note and its delivery), D7 (ephemeral randomness and sender recovery), D8
   (encodings, the datum and validator obligations) and D9 (secret handling on the host).
 - **R3, escalated:** D3 (an optional in-circuit proof that each delivery opens the commitment).
+- **R2:** D3a (a circuit composing the accepted `elgamal-jubjub-v1` and `pedersen-jubjub-v1`
+  relations; it adds no new primitive).
 - **Not decided here:** D4 (twisted ElGamal) is recorded as deferred.
 
 ## Context
@@ -128,7 +144,8 @@ native field.
     It cannot check that the ciphertext decrypts, or that it decrypts to `C`'s opening.
   - The recipient detects a bad delivery on receipt (D6), but cannot prevent it.
   - An auditor's guarantee is therefore "a ciphertext addressed to me exists", not "I can read
-    this transfer". Making it the latter is D3's purpose.
+    this transfer". Making it the latter is D3's purpose. D3a gives it for the **amount**, with
+    accepted primitives only.
 - **Host side channels.** Scanning decrypts attacker-supplied ephemeral keys with the viewing
   key. The arithmetic is ZeroJ's `BigInteger` Jubjub code, ADR-0039's compatibility/offline
   class (D9).
@@ -181,11 +198,18 @@ native field.
   - §2.8 (the AEAD).
   - §4: "The most important security consideration in implementing this document is the
     uniqueness of the nonce used in ChaCha20".
+- **[ConwayCDDL]** IntersectMBO/cardano-ledger `eras/conway/impl/cddl/data/conway.cddl`, commit
+  `56ddee12ec768b85d14c62da049a33fc05114323`. Fetched 2026-10-09. It defines
+  `positive_coin = 1 .. max_word64` and `mint = {+ policy_id => {+ asset_name => nonzero_int64}}`.
+- **Protocol parameters** (Koios `cli_protocol_params`, fetched 2026-10-09):
+  `utxoCostPerByte = 4310`, and `maxTxExecutionUnits = {steps: 10,000,000,000, memory:
+  16,500,000}`.
 - **ZeroJ:**
   - ADR-0051 and `docs/specs/pedersen-jubjub-v1.md` (§2 the bases, §3 the commitment and §3.1
     the blinding, §4 the encoding and the subgroup rule);
   - ADR-0052 and `docs/specs/elgamal-jubjub-v1.md` (§2 sampling, §3.1 key validation, §3.3
-    possession);
+    possession, §4 width, §6 bounded decryption, §9.1 `R_enc`);
+  - ADR-0026 (on-chain Groth16 cost at 2 public inputs);
   - ADR-0039 (assurance classes);
   - ADR-0054 (the public-board analysis and the failure classification of its implementation
     notes 7 and 10).
@@ -299,6 +323,60 @@ So D3 is **escalated (Q5) and blocked**. It needs either:
 
 Nothing in D1, D2 and D5–D9 depends on D3. The datum layout reserves no D3 fields: a D3 profile
 would be a different profile with its own datum, not an option within this one.
+
+### D3a — Enforced auditor access to the amount (R2; r2; Q5 (D))
+
+The cases that need enforcement are the **auditor's**. An owner is a party to the payment and
+detects a bad delivery on receipt (D6). An auditor sees the transfer only through the chain. An
+auditor also needs only the amount, not the blinding.
+
+D3a gives each required auditor an amount it is **guaranteed** to decrypt, using only what
+ADR-0052 already accepted:
+- **Limbs.** The prover splits `v = L_0 + 2^32·L_1`, with each `L_j < 2^32` constrained in the
+  circuit.
+- **Encryption.** It encrypts each limb to the auditor key `PK_a` with `elgamal-jubjub-v1` at
+  width `w = 32` (spec §4), with an independent `k` per limb.
+- **One proof.** The transfer's Groth16 proof asserts, alongside the existing balance relation:
+  - `R_enc(32)` (spec §9.1) for each limb ciphertext;
+  - the limb decomposition;
+  - that the `v` opening `C` is the `v` the limbs recombine to (one witness, one decomposition).
+- **Public inputs.**
+  - `PK_a`, which the validator takes from the auditor registry's reference input. This makes
+    the auditor key generation enforceable (Q7).
+  - Each ciphertext's affine coordinates, which the validator takes from the note's datum.
+  - `R_enc`'s key-membership rule makes `PK_a ∈ 𝔾` the verifier's obligation. It is discharged
+    when the key is registered (Q6).
+- **Datum.**
+  - The limb ciphertexts are stored as affine coordinates, as `C` is, because a validator cannot
+    afford Jubjub point decompression.
+  - That is 8 field elements per auditor, about 270 bytes of CBOR. At 4,310 lovelace per byte it
+    adds about 1.2 ADA of minimum ADA (estimate).
+- **Decryption.** The auditor decrypts each limb by bounded discrete log, `maxPlaintext = 2^32 − 1`.
+  The ElGamal benchmark (2026-10-05) measured, at `2^32`, a 21 ms table build (once, reusable)
+  and 7–19 ms per solve, so a whole note takes well under 0.1 s.
+- **Why 32-bit limbs.** A Groth16 public input costs on-chain work: one G1 multiplication and
+  addition each.
+  - ZeroJ measured about 2.14e9 CPU at 2 public inputs (ADR-0026) and about 4.25e9 at 9
+    (ADR-0052's ballot validator). That is roughly 0.3e9 per extra input, an upper estimate
+    because the ballot figure includes validator logic.
+  - The points transfer already costs 3.85e9 of the 10e9 per-transaction step limit
+    (`maxTxExecutionUnits.steps`, Koios, 2026-10-09).
+  - Four 16-bit limbs would add 18 public inputs (about 5.4e9, so about 9.3e9 in total). Two
+    32-bit limbs add 10 (about 3e9, so about 6.9e9 in total).
+  - Both totals are estimates. M5a must measure them.
+- **Circuit cost estimate.** About 13–14k constraints per auditor, from two `R_enc` instances,
+  each between the measured 6,558 (`w = 1`) and 6,938 (`w = 64`). The transfer circuit itself is
+  7,231.
+- **What it does not give.**
+  - The auditor learns the amount, not the blinding, and cannot spend.
+  - The owner's delivery stays D5 (detect-only).
+  - The ciphertexts are IND-CPA ElGamal, under ADR-0052's threat model. They are bound to `C` by
+    the proof, not by an AEAD.
+  - When D3a is used, the auditor's D5 delivery is optional: it adds the blinding but no
+    enforcement.
+- **Gate.** D3a is adopted only if M5a measures the transfer within budget with a stated margin
+  (lean: at most 80% of the step and memory limits). Otherwise auditing stays detect-only, and
+  the documentation says so plainly.
 
 ### D4 — Twisted ElGamal (deferred)
 
@@ -501,6 +579,14 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 - **I10 (D5) Conformance.** With Zcash's personalization strings, the KA, KDF and Sym code
   reproduces every [ZTV] Sapling note-encryption vector (`shared_secret`, `k_enc`, `c_enc`, and
   `Agree(ivk, epk)`). With the profile's strings, it reproduces the independent reference.
+- **I12 (D3a) Enforced auditor amount.**
+  - The circuit constrains `L_0, L_1 < 2^32` and `v = L_0 + 2^32·L_1`, with the same `v`
+    opening `C`.
+  - Each limb ciphertext satisfies `R_enc(32)`, with its own 252-bit `k`.
+  - `PK_a` and every ciphertext coordinate are public inputs. The validator fixes them from the
+    registry reference input and the datum; no redeemer supplies them.
+  - Invalid-witness tests: a wrong limb, a limb at `2^32`, a swapped ciphertext, another key,
+    and a recombination that differs from `C`'s `v`.
 - **I11 (D9) Secret class.** Secret multiplications run on subgroup points only, with the
   blinded schedule. No API or document claims constant time or online suitability.
 
@@ -515,7 +601,9 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 - The demos' validators, datums and transaction builders change (M3), but their circuits and
   verification keys do not: deliveries are not public inputs.
 - ZeroJ gains a personalised BLAKE2b used on secret data, and a second Jubjub key type.
-- Without D3, auditor access is only as good as the senders' honesty, with detection afterwards.
+- Without D3 or D3a, auditor access is only as good as the senders' honesty, with detection
+  afterwards. With D3a, the amount is enforced. The cost is about 10 more public inputs, 13–14k
+  more constraints and about 1.2 ADA more minimum ADA per auditor (estimates, M5a).
 
 ## Compatibility
 
@@ -537,6 +625,7 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 | M2 | Note API: viewing keys with the possession statement; sealing for a reader list; scanning and opening with D6's checks; the unopenable report. | M1 | Every reference case replays (I1–I9). An API-surface test: final classes, redacted secrets, no public ephemeral seam (I2, I6). |
 | M3 | zeroj-usecases: migrate the confidential-points demo to on-chain delivery with one auditor, on Yaci DevKit (solvency optional), in a separate usecases PR. | M2 released or snapshot-pinned | DevKit E2E: issue, transfer and redeem with recovery from chain data by owner and auditor. Validator mutation tests: missing auditor delivery, wrong lengths, extra deliveries. A garbage delivery is reported as unopenable. |
 | M4 | Docs: support matrix, gadget/guide section with the D6, D7 and D9 MUSTs, benchmark doc. | M2 | Experimental status; scan and seal costs measured. |
+| M5a | D3a circuit (auditor amount escrow) on the points demo. | M2; Q5 (D) adopted | Constraints measured. On-chain CPU and memory measured in the Plutus VM, within the gate of D3a (lean: ≤ 80% of the per-transaction limits). I12's invalid-witness tests. The auditor decrypts every note from chain data. Validator mutation tests: a key not from the registry, ciphertext coordinates not from the datum. |
 | M5 | D3 circuit profile. | **Blocked on Q5** | Defined by the follow-up decision. |
 
 ## Verification and test-vector strategy
@@ -557,6 +646,9 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 - **Differential:** BouncyCastle's BLAKE2b and ChaCha20-Poly1305 in tests only (main code uses JDK
   primitives and ZeroJ's own BLAKE2b).
 - **E2E:** M3 on Yaci DevKit, with validator mutation tests.
+- **D3a:** the `elgamal-jubjub-v1` reference vectors for each limb ciphertext, I12's
+  invalid-witness tests, Groth16 prove/verify showing that every public input is bound, and an
+  on-chain budget measurement (M5a).
 - **Not evidence of security:** passing vectors show conformance, not confidentiality.
 
 ## Production / audit gates
@@ -564,8 +656,8 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 - External review of D2, D5, D6 and D7, and of the M1 BLAKE2b used on secrets.
 - A review of the scanning deployment model against ADR-0039 before any wallet integration.
 - The reader-registry design of any real application.
-- D3 stays blocked until Q5 is decided; no document may claim enforced auditor access before
-  then.
+- D3 stays blocked until Q5 is decided. No document may claim enforced auditor access except
+  for the amount, and then only with D3a, after M5a passes its budget gate.
 
 ## Risks
 
@@ -580,8 +672,19 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   (ADR-0006).
 - **Metadata:** the reader count and order reveal the application's auditor policy, and owners
   stay public.
+- **D3a's budget:** with an auditor, the transfer may approach the per-transaction step limit.
+  This leaves little room for more inputs or outputs in the same transaction, and the measured
+  cost may rule D3a out (M5a gate).
 
 ## Open questions (points needing a maintainer decision)
+
+**Author's recommendation (r2):** adopt the leans below. Each was chosen to avoid
+ZeroJ-defined cryptography and to fit Cardano's ledger and Plutus limits.
+- Q1 (b), Q2 (a), Q3 (a), Q4 (a), off by default.
+- Q5: (A) for the general proof, plus (D) for auditors, behind M5a's budget gate.
+- Q6 (a), at registration.
+- Q7: application policy, with per-period auditor keys enforced through D3a.
+- Q8 (a).
 
 - **Q1 — Personalization strings.**
   - (a) Use Zcash's `"Zcash_SaplingKDF"` verbatim.
@@ -611,7 +714,9 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   - (a) The sender as an ordinary reader, optional.
   - (b) Sapling's `ovk`/`C^out`.
 
-  **Lean (a):** no second mechanism; the cost is 89 bytes when used.
+  **Lean (a), off by default:** no second mechanism, and the cost is 89 bytes when used. A
+  sender that does not add itself keeps forward secrecy against later compromise of its own
+  keys. Change outputs already go to the sender as the owner.
 - **Q5 — D3** (escalated; blocks M5).
   - (A) Defer D3 until a Poseidon AE construction is published with analysis.
   - (B) Accept SAFE Algorithm 7 over ZeroJ's vetted Poseidon `t = 5` BLS12-381 instance
@@ -620,20 +725,41 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   - (C) Prove D5's BLAKE2b and ChaCha20-Poly1305 in-circuit, at an estimated 10^5 constraints per
     reader.
 
-  **Lean (A):** ship D1–D9, and revisit D3 with a dedicated ADR.
+  - (D) (r2) Enforce only what auditors need, the amount, with D3a: `elgamal-jubjub-v1` limb
+    ciphertexts bound to `C` in the transfer proof. Accepted primitives only. The estimated cost
+    is about 10 public inputs and 13–14k constraints per auditor, gated by M5a.
+
+  **Lean: (A) and (D).** Ship D1–D9. Add D3a if M5a's measurement fits the budget. Revisit a
+  general D3 only with a dedicated ADR.
 - **Q6 — Proof of possession for registered keys.**
   - (a) `elgamal-jubjub-v1` §3.3's DLEQ statement.
   - (b) None. Registries rely on governance only.
 
-  **Lean (a):** it is already pinned and implemented. Possession is not authorization.
+  **Lean (a), checked once at registration:** it is already pinned and implemented, and
+  possession is not authorization.
+  - Plutus has builtins for BLS12-381's G1 and G2, not for Jubjub, so a per-transfer on-chain
+    DLEQ check is not practical.
+  - The registry's governance checks possession off-chain, or through a Groth16 proof of the
+    statement when the key is registered. The registry, held as a reference input, then contains
+    only checked keys.
+  - This also discharges `R_enc`'s `PK ∈ 𝔾` verifier obligation for D3a.
 - **Q7 — Auditor key generations.** Should the profile define generations (for example a period
   index stored next to each registry key), or leave them to applications? **Lean:** leave them
-  to applications, and document the pattern.
+  to applications, and document the pattern of per-period auditor keys in the registry.
+  - Without D3a, a validator cannot tell which key a delivery was encrypted to, so a sender
+    could use a retired key undetected.
+  - With D3a, `PK_a` is a public input taken from the registry, so the current generation is
+    enforced.
 - **Q8 — Value width.**
   - (a) 64-bit only.
   - (b) Up to 252 bits, as `pedersen-jubjub-v1` allows.
 
-  **Lean (a):** it matches the gadgets' convention and keeps the plaintext fixed-length.
+  **Lean (a):** it matches the gadgets' convention, keeps the plaintext fixed-length, and
+  matches Cardano.
+  - The Conway ledger CDDL bounds output token quantities by `positive_coin = 1 .. max_word64`
+    and mint amounts by `nonzero_int64`.
+  - Its `coin` is a CBOR `uint`, but lovelace supply is far below `2^64`.
+  - So every native quantity fits in 64 bits.
 
 ## Related findings (out of scope)
 
