@@ -57,6 +57,9 @@ class ConfidentialNoteBenchmark {
         NoteScanner strangerScanner = NoteScanner.of(stranger);
         byte[] invalidE = mine.clone();
         System.arraycopy(JubjubPoint.IDENTITY.toBytes(), 0, invalidE, 0, 32);
+        byte[] offSubgroupE = mine.clone();
+        JubjubPoint order2 = JubjubPoint.fromAffine(BigInteger.ZERO, JubjubCurve.BASE_FIELD_PRIME.subtract(BigInteger.ONE));
+        System.arraycopy(JubjubPoint.fromBytes(Arrays.copyOf(mine, 32)).add(order2).toBytes(), 0, offSubgroupE, 0, 32);
 
         System.out.println("| Operation | µs/op | KiB allocated/op |");
         System.out.println("|---|---:|---:|");
@@ -67,7 +70,8 @@ class ConfidentialNoteBenchmark {
                 measure(30, () -> ConfidentialNotes.seal(opening, List.of(owner.readerKey(), auditor.readerKey()), RNG)));
         row("Open: full acceptance (Agree + KDF + AEAD + blinded commit)", measure(40, () -> ownerScanner.open(mine, c)));
         row("Open: failed trial, another reader's key (Agree + KDF + AEAD reject)", measure(60, () -> strangerScanner.open(mine, c)));
-        row("Open: invalid E rejected before any secret work", measure(400, () -> ownerScanner.open(invalidE, c)));
+        row("Open: E the identity, rejected before any secret work", measure(400, () -> ownerScanner.open(invalidE, c)));
+        row("Open: E on the curve but off the subgroup, rejected by the subgroup check", measure(400, () -> ownerScanner.open(offSubgroupE, c)));
         row("Open: wrong length rejected", measure(4000, () -> ownerScanner.open(Arrays.copyOf(mine, 88), c)));
         row("Scanner creation (AEAD known-answer self-test)", measure(400, () -> NoteScanner.of(owner)));
         row("AEAD self-test alone", measure(400, NoteAeadSelfTest::run));

@@ -80,6 +80,7 @@ public final class NoteScanner {
         Objects.requireNonNull(delivery, "delivery");
         Objects.requireNonNull(u, "u");
         Objects.requireNonNull(v, "v");
+        requireLive();
         if (!canonical(u) || !canonical(v)) {
             return Optional.empty();
         }
@@ -92,13 +93,22 @@ public final class NoteScanner {
         return open(delivery, commitment);
     }
 
+    /** A destroyed key throws on every call, whatever the input (not only once it reaches the secret). */
+    private void requireLive() {
+        if (key.isDestroyed()) {
+            throw new IllegalStateException("the viewing key has been destroyed");
+        }
+    }
+
     private static boolean canonical(BigInteger x) {
         return x.signum() >= 0 && x.compareTo(JubjubCurve.BASE_FIELD_PRIME) < 0;
     }
 
     /**
-     * Opens one delivery against the note's commitment (spec §5 steps 1–7), for a commitment the
-     * caller already holds as a point.
+     * Opens one delivery against a commitment the library itself derived as a point (spec §5 steps
+     * 1–7). Package-private: a point built from datum coordinates with
+     * {@link JubjubPoint#fromAffine} is reduced mod {@code p}, which step 7 forbids, so applications
+     * use {@link #open(byte[], BigInteger, BigInteger)}.
      *
      * @param delivery   the delivery at this reader's position in the note
      * @param commitment the note's commitment {@code C}, as the note container records it
@@ -106,9 +116,10 @@ public final class NoteScanner {
      *         {@code commitment}
      * @throws IllegalStateException if the platform's primitives fail, or the key was destroyed
      */
-    public Optional<NoteOpening> open(byte[] delivery, JubjubPoint commitment) {
+    Optional<NoteOpening> open(byte[] delivery, JubjubPoint commitment) {
         Objects.requireNonNull(delivery, "delivery");
         Objects.requireNonNull(commitment, "commitment");
+        requireLive();
         if (delivery.length != ConfidentialNotes.DELIVERY_LENGTH) {
             return Optional.empty(); // step 1
         }
@@ -187,20 +198,19 @@ public final class NoteScanner {
             this.ownedByMe = ownedByMe;
         }
 
-        /**
-         * @param delivery   the delivery at this reader's position in the note
-         * @param commitment the note's commitment
-         * @param ownedByMe  the result of the wallet's own owner-credential check (spec §5)
-         */
-        public static Candidate of(byte[] delivery, JubjubPoint commitment, boolean ownedByMe) {
+        /** A candidate with a library-derived commitment point (package-private; see {@link NoteScanner#open(byte[], JubjubPoint)}). */
+        static Candidate of(byte[] delivery, JubjubPoint commitment, boolean ownedByMe) {
             Objects.requireNonNull(delivery, "delivery");
             Objects.requireNonNull(commitment, "commitment");
             return new Candidate(delivery.clone(), commitment, null, null, ownedByMe);
         }
 
         /**
-         * As {@link #of(byte[], JubjubPoint, boolean)}, with the commitment as the affine
-         * coordinates the note carries; non-canonical coordinates do not open (spec §5 step 7).
+         * @param delivery  the delivery at this reader's position in the note
+         * @param u         the commitment's affine {@code u}, as the note carries it
+         * @param v         the commitment's affine {@code v}, as the note carries it; non-canonical
+         *                  coordinates do not open (spec §5 step 7)
+         * @param ownedByMe the result of the wallet's own owner-credential check (spec §5)
          */
         public static Candidate of(byte[] delivery, BigInteger u, BigInteger v, boolean ownedByMe) {
             Objects.requireNonNull(delivery, "delivery");

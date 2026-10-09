@@ -105,9 +105,38 @@ class ConfidentialNoteKnownAnswerTest {
     }
 
     @Test
-    @DisplayName("The AEAD self-test passes on this platform")
+    @DisplayName("The AEAD self-test passes on this platform, and fails closed for a provider that accepts a forged tag")
     void selfTest() {
         NoteAeadSelfTest.run();
+        // A provider that skips tag verification: decrypts with the right keystream, ignores the tag.
+        NoteAeadSelfTest.Primitives noTagCheck = new NoteAeadSelfTest.Primitives() {
+            @Override
+            public byte[] encrypt(byte[] key, byte[] plaintext) {
+                return SaplingNoteCrypto.encrypt(key, plaintext);
+            }
+
+            @Override
+            public byte[] decrypt(byte[] key, byte[] ciphertext) {
+                byte[] opened = SaplingNoteCrypto.decrypt(key, ciphertext);
+                return opened != null ? opened : new byte[ciphertext.length - 16]; // a forged tag "opens"
+            }
+        };
+        assertThrows(IllegalStateException.class, () -> NoteAeadSelfTest.run(noTagCheck));
+        // A provider whose encryption is wrong.
+        NoteAeadSelfTest.Primitives wrongCipher = new NoteAeadSelfTest.Primitives() {
+            @Override
+            public byte[] encrypt(byte[] key, byte[] plaintext) {
+                byte[] out = SaplingNoteCrypto.encrypt(key, plaintext);
+                out[0] ^= 1;
+                return out;
+            }
+
+            @Override
+            public byte[] decrypt(byte[] key, byte[] ciphertext) {
+                return SaplingNoteCrypto.decrypt(key, ciphertext);
+            }
+        };
+        assertThrows(IllegalStateException.class, () -> NoteAeadSelfTest.run(wrongCipher));
     }
 
     @Test

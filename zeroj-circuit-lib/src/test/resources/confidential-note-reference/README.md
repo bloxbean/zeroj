@@ -117,12 +117,12 @@ tag))) mod l` (spec §9.1). None derived to zero.
 |---|---|
 | `reader.<name>` | The viewing keys of `owner`, `auditor1`, `auditor2`, `auditor3` and `other` (spec §9.1). |
 | `ephemeral.<case>.<i>` | The ephemeral of reader `i` (0-based, §4 order) in a `deliver` case, or of the single sealed delivery of an `open` case (`i = 0`). |
-| `ephemeral.<case>.0.retry<k>` | **Not in spec §9.1.** Only for `e_noncanonical_v_plus_p` (`retry8`) and `e_noncanonical_reencoded_kdf` (`retry2`). These cases need a point whose `v + p` still fits in 255 bits, which about 10% of points satisfy. The reference takes the first `k = 0, 1, 2, …` that works. The tag is emitted as `case.open.<case>.ephemeral_tag`. |
+| `ephemeral.<case>.0.retry<k>` | Listed in spec §9.1 since its revision. Only for `e_noncanonical_v_plus_p` (`retry8`) and `e_noncanonical_reencoded_kdf` (`retry2`). These cases need a point whose `v + p` still fits in 255 bits, which about 10% of points satisfy. The reference tries the plain tag first, then `retry1`, `retry2`, …, as spec §9.1 says. The tag is emitted as `case.open.<case>.ephemeral_tag`. |
 | `ephemeral.readerkey_<case>.0`, `ephemeral.duplicate_readers.<i>` | Ephemerals for the sealing attempts of the `readerkey` family. A refused seal never uses them. |
 | `blinding.<case>` | The blinding of a case (§9.1). `r1_blinding0` and `r1_zero_opening` use the literal blinding 0, and `r_l_minus_1`, `r_equals_l`, `r_l_plus_5` and `r_max_256` use literal blindings. |
-| `blinding.<case>.1`, `blinding.<case>.2` | **Not in spec §9.1.** The two plaintexts of a `reuse` case. |
-| `elgamal.<name>` | **Not in spec §9.1.** The D3a auditor ElGamal secrets (`elgamal.auditor1`, `elgamal.auditor2`). They are separate from the viewing keys (`reader.<name>`). |
-| `d3a.<case>.k.<o>.<a>.<j>` | **Not in spec §9.1.** The ElGamal randomness of limb `j` of note `o` for auditor `a` (`o` and `a` 1-based, as in §8.1). |
+| `blinding.<case>.1`, `blinding.<case>.2` | Listed in spec §9.1 since its revision. The two plaintexts of a `reuse` case. |
+| `elgamal.<name>` | Listed in spec §9.1 since its revision. The D3a auditor ElGamal secrets (`elgamal.auditor1`, `elgamal.auditor2`). They are separate from the viewing keys (`reader.<name>`). |
+| `d3a.<case>.k.<o>.<a>.<j>` | Listed in spec §9.1 since its revision. The ElGamal randomness of limb `j` of note `o` for auditor `a` (`o` and `a` 1-based, as in §8.1). |
 
 Every ephemeral tag is used once, except the deliberate reuse family
 (`check.lifecycle.ephemeral_tags_never_reused`, `check.lifecycle.ephemerals_distinct`).

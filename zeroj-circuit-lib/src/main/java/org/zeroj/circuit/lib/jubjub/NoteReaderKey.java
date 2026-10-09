@@ -51,8 +51,16 @@ public final class NoteReaderKey {
      * Decodes a reader key for an application registry, and checks its proof of possession: a
      * DLEQ statement of the {@code elgamal-jubjub-v1} §3.3 form, {@code X = G},
      * {@code P = D = key} (spec §2.2; ADR-0055 Q6). Possession is checked once, at registration.
-     * It shows that the registrant can decrypt, not that it is the reader the application
-     * intends; which keys a registry admits is the application's to govern.
+     * It shows that <b>someone</b> knows the key's discrete logarithm, nothing more:
+     * <ul>
+     *   <li>the statement carries no context, so a published proof can be replayed to register the
+     *       same key elsewhere, by anyone;</li>
+     *   <li>it is the same statement as {@code elgamal-jubjub-v1} possession, so it does not show
+     *       which profile the key is for.</li>
+     * </ul>
+     * A registry therefore binds each registration to its registrant and to this profile itself
+     * (for example with the registrant's signature over the profile id, the key and the
+     * registry), and decides which keys it admits.
      *
      * @throws IllegalArgumentException if the key is invalid or the verifier rejects the
      *         statement

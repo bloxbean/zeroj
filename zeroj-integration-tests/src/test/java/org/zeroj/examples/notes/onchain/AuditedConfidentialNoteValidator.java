@@ -16,36 +16,48 @@ import org.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 import java.math.BigInteger;
 
 /**
- * ADR-0055 M5a measurement validator: {@code ConfidentialNoteValidator} (ADR-0051 M4) extended
- * with D3a, enforced auditor access to the amount of every note the transfer creates.
+ * ADR-0055 M5a measurement validator: {@code ConfidentialNoteValidator} (ADR-0051 M4) carrying
+ * {@code confidential-note-jubjub-v1} deliveries and D3a, enforced auditor access to the amount of
+ * every note the spend creates. Test code that measures the design's on-chain cost; it is not a
+ * product validator.
  *
- * <p><b>Datum</b> {@code Note(owner, u, v, audit)}: the owner's key hash, the affine
- * {@code pedersen-jubjub-v1} commitment, and the note's D3a audit data for one auditor. The audit
- * data is a list of 8 canonical field elements: limb 0 then limb 1, each {@code A.u, A.v, B.u, B.v}
- * of an {@code elgamal-jubjub-v1} encryption at width 32 (spec §8.1). The note's delivery bytes
- * ({@code confidential-note-jubjub-v1} §3.2) would sit beside them; they are not inputs to the
- * proof and do not change the measured cost, so this measurement omits them.
- *
- * <p><b>Auditor key.</b> The auditor's {@code elgamal-jubjub-v1} key {@code PK_a} comes from a
- * registry <b>reference input</b> that holds the {@code registryPolicy}/{@code registryToken}
- * asset, with inline datum {@code Constr 0 [I u, I v]}. That makes the key generation the
- * registry's to govern, and enforceable (ADR-0055 Q7). The registry's governance checks possession
- * and subgroup membership at registration (Q6); this validator checks only canonical coordinates.
- *
- * <p><b>Public inputs</b>, all from the ledger (never the redeemer):
- * {@code [in.u, in.v, out1.u, out1.v, out2.u, out2.v, PK.u, PK.v]} followed by either:
+ * <p><b>Datum</b> {@code Note(owner, u, v, audit, deliveries)}:
  * <ul>
- *   <li>{@code compressed = 0} (spec §8.2): {@code out1.audit[0..7], out2.audit[0..7]};</li>
+ *   <li>the owner's key hash and the affine {@code pedersen-jubjub-v1} commitment;</li>
+ *   <li>{@code audit}: 8 canonical field elements for one auditor, limb 0 then limb 1, each
+ *       {@code A.u, A.v, B.u, B.v} of an {@code elgamal-jubjub-v1} encryption at width 32 (spec
+ *       §8.1);</li>
+ *   <li>{@code deliveries}: exactly {@code readers} byte strings of 89 bytes each, in reader
+ *       order (spec §3.2; ADR-0055 D8). Presence and length are all a validator can check.</li>
+ * </ul>
+ *
+ * <p><b>Spends.</b> With {@code outputs = 2} (a transfer) the spend creates exactly two notes and
+ * {@code in = out1 + out2}. With {@code outputs = 1} (a redeem) it creates one change note and
+ * {@code in = change + price}, with the price from the redeemer and bound by the proof.
+ *
+ * <p><b>Auditor key.</b> {@code PK_a} comes from <b>exactly one</b> registry reference input
+ * holding <b>exactly one</b> {@code registryPolicy}/{@code registryToken}, with inline datum
+ * exactly {@code Constr 0 [I u, I v]}. A second entry, another quantity or another shape fails, so
+ * the submitter cannot pick a retired generation's key (ADR-0055 Q7). Possession and subgroup
+ * membership are checked at registration (Q6); this validator checks canonical coordinates.
+ *
+ * <p><b>Fresh randomness.</b> The handles {@code A = [k]·G} of all limb encryptions in the spend
+ * must be pairwise distinct. A repeated {@code k} would make {@code B0 − B1 = [L0 − L1]·G} public.
+ *
+ * <p><b>Public inputs</b>, all from the ledger or bound by the proof:
+ * {@code [in.u, in.v, out1.u, out1.v, (out2.u, out2.v | price), PK.u, PK.v]} followed by either
+ * <ul>
+ *   <li>{@code compressed = 0} (spec §8.2): the audit coordinates of each created note in output
+ *       order; or</li>
  *   <li>{@code compressed = 1} (spec §8.3): {@code digest_hi, digest_lo}, where
- *       {@code digest = blake2b_256(I2OSP(c, 32) ‖ …)} over the same 16 coordinates in the same
+ *       {@code digest = blake2b_256(I2OSP(c, 32) ‖ …)} over the same coordinates in the same
  *       order.</li>
  * </ul>
  *
  * <p>Everything else is {@code ConfidentialNoteValidator}'s: the owner signs; exactly one input
- * under this payment credential; exactly two continuing outputs, read in output order; every
- * coordinate canonical. Its limits (no issuance control; proofs bound to commitments rather than
- * outputs) apply unchanged. This is test code that measures D3a's cost; it is not a product
- * validator.
+ * under this payment credential; the continuing outputs read in output order; every coordinate
+ * canonical. Its limits (no issuance control; proofs bound to commitments rather than outputs)
+ * apply unchanged.
  */
 @SpendingValidator
 public class AuditedConfidentialNoteValidator {
@@ -58,17 +70,16 @@ public class AuditedConfidentialNoteValidator {
     @Param static byte[] registryPolicy;
     @Param static byte[] registryToken;
     @Param static BigInteger compressed;
+    @Param static BigInteger outputs;
+    @Param static BigInteger readers;
 
-    record Note(byte[] owner, BigInteger u, BigInteger v, PlutusData audit) {}
+    record Note(byte[] owner, BigInteger u, BigInteger v, PlutusData audit, PlutusData deliveries) {}
 
-    record Transfer(byte[] piA, byte[] piB, byte[] piC) {}
+    record Spend(BigInteger price, byte[] piA, byte[] piB, byte[] piC) {}
 
     @Entrypoint
-    public static boolean validate(Note datum, Transfer transfer, ScriptContext ctx) {
-        if (!canonicalField(datum.u()) || !canonicalField(datum.v())
-                || !signedBy(ctx, datum.owner())) {
-            return false;
-        }
+    public static boolean validate(Note datum, Spend spend, ScriptContext ctx) {
+        if (!signedBy(ctx, datum.owner())) return false;
 
         var ownInputOptional = ContextsLib.findOwnInput(ctx);
         if (ownInputOptional.isEmpty()) return false;
@@ -115,62 +126,84 @@ public class AuditedConfidentialNoteValidator {
                 continuing = continuing;
             }
         }
-        if (continuing != 2 || !wellFormed) return false;
+        if (!wellFormed || !BigInteger.valueOf(continuing).equals(outputs)) return false;
+        if (!priceOk(spend.price())) return false;
 
-        // The auditor key from the registry reference input.
-        boolean found = false;
-        BigInteger pkU = BigInteger.ZERO;
-        BigInteger pkV = BigInteger.ZERO;
+        // Exactly one registry entry: one token-bearing reference input, quantity 1, Constr 0 [I, I].
+        int entries = 0;
+        PlutusData key = Builtins.iData(BigInteger.ZERO);
         for (TxInInfo reference : ctx.txInfo().referenceInputs()) {
             TxOut entry = reference.resolved();
-            boolean isRegistry = ValuesLib.assetOf(entry.value(), registryPolicy, registryToken)
-                    .compareTo(BigInteger.ZERO) > 0;
-            if (isRegistry && !found) {
-                PlutusData key = inlineDatum(entry);
-                found = Builtins.constrTag(key) == 0;
-                pkU = Builtins.unIData(Builtins.headList(Builtins.constrFields(key)));
-                pkV = Builtins.unIData(Builtins.headList(Builtins.tailList(Builtins.constrFields(key))));
+            BigInteger quantity = ValuesLib.assetOf(entry.value(), registryPolicy, registryToken);
+            if (quantity.equals(BigInteger.ONE)) {
+                entries = entries + 1;
+                key = inlineDatum(entry);
+            } else if (quantity.compareTo(BigInteger.ZERO) > 0) {
+                entries = entries + 1;
+                key = Builtins.iData(BigInteger.ZERO); // a quantity other than 1 fails isRegistryKey
             } else {
-                found = found;
-                pkU = pkU;
-                pkV = pkV;
+                entries = entries;
+                key = key;
             }
         }
-        if (!found || !canonicalField(pkU) || !canonicalField(pkV)) return false;
+        if (entries != 1 || !isRegistryKey(key)) return false;
+        BigInteger pkU = Builtins.unIData(Builtins.headList(Builtins.constrFields(key)));
+        BigInteger pkV = Builtins.unIData(Builtins.headList(Builtins.tailList(Builtins.constrFields(key))));
 
-        PlutusData tail = auditInputs(noteAudit(out1), noteAudit(out2));
-
+        PlutusData audit1 = noteAudit(out1);
+        if (!distinctHandles(audit1, audit1, true)) return false;
+        if (outputs.equals(BigInteger.valueOf(2)) && !distinctAcross(audit1, noteAudit(out2))) return false;
         PlutusData publicInputs = Builtins.listData(
                 Builtins.mkCons(Builtins.iData(datum.u()),
                 Builtins.mkCons(Builtins.iData(datum.v()),
                 Builtins.mkCons(Builtins.iData(noteU(out1)),
                 Builtins.mkCons(Builtins.iData(noteV(out1)),
-                Builtins.mkCons(Builtins.iData(noteU(out2)),
-                Builtins.mkCons(Builtins.iData(noteV(out2)),
-                Builtins.mkCons(Builtins.iData(pkU),
-                Builtins.mkCons(Builtins.iData(pkV),
-                        tail)))))))));
+                        tailInputs(out2, audit1, spend.price(), pkU, pkV))))));
         return Groth16BLS12381Lib.verify(
                 publicInputs,
-                transfer.piA(), transfer.piB(), transfer.piC(),
+                spend.piA(), spend.piB(), spend.piC(),
                 vkAlpha, vkBeta, vkGamma, vkDelta, vkIc);
     }
 
-    /** The public inputs after the auditor key: spec §8.2 or §8.3, by {@code compressed}. */
+    /** A transfer carries no price; a redeem's price is in {@code [1, 2^32)}. */
+    private static boolean priceOk(BigInteger price) {
+        if (outputs.equals(BigInteger.valueOf(2))) {
+            return price.equals(BigInteger.ZERO);
+        }
+        return price.compareTo(BigInteger.ZERO) > 0 && price.compareTo(BigInteger.valueOf(4294967296L)) < 0;
+    }
+
+    /** The public inputs after {@code out1}: {@code out2} or the price, then the key, then the audit data. */
+    private static PlutusData tailInputs(PlutusData out2, PlutusData audit1, BigInteger price, BigInteger pkU, BigInteger pkV) {
+        if (outputs.equals(BigInteger.valueOf(2))) {
+            return Builtins.mkCons(Builtins.iData(noteU(out2)),
+                    Builtins.mkCons(Builtins.iData(noteV(out2)),
+                    Builtins.mkCons(Builtins.iData(pkU),
+                    Builtins.mkCons(Builtins.iData(pkV),
+                            auditInputs(audit1, noteAudit(out2))))));
+        }
+        return Builtins.mkCons(Builtins.iData(price),
+                Builtins.mkCons(Builtins.iData(pkU),
+                Builtins.mkCons(Builtins.iData(pkV),
+                        auditInputs(audit1, Builtins.listData(Builtins.mkNilData())))));
+    }
+
+    /**
+     * The audit public inputs: spec §8.2 (the coordinates, {@code audit1} then {@code audit2}) or
+     * §8.3 (the two digest halves), by {@code compressed}. {@code audit2} is empty for one output.
+     */
     private static PlutusData auditInputs(PlutusData audit1, PlutusData audit2) {
         if (compressed.equals(BigInteger.ZERO)) {
-            // Spec §8.2: out1's 8 coordinates, then out2's (already a list of canonical integers).
-            return prependAudit(audit1, audit2);
+            return prependAudit(audit1, Builtins.unListData(audit2));
         }
-        // Spec §8.3: blake2b_256 over I2OSP(c, 32) of the same 16 coordinates, split in halves.
         byte[] digest = Builtins.blake2b_256(Builtins.appendByteString(auditBytes(audit1), auditBytes(audit2)));
         return Builtins.mkCons(Builtins.iData(Builtins.byteStringToInteger(true, Builtins.sliceByteString(0, 16, digest))),
                 Builtins.mkCons(Builtins.iData(Builtins.byteStringToInteger(true, Builtins.sliceByteString(16, 16, digest))),
                         Builtins.mkNilData()));
     }
 
-    /** {@code audit1}'s 8 entries prepended to the list {@code audit2}. */
-    private static PlutusData prependAudit(PlutusData audit1, PlutusData audit2) {
+    /** {@code audit1}'s 8 entries prepended to the list {@code rest}. */
+    private static PlutusData prependAudit(PlutusData audit1, PlutusData rest) {
         PlutusData a0 = Builtins.unListData(audit1);
         PlutusData a1 = Builtins.tailList(a0);
         PlutusData a2 = Builtins.tailList(a1);
@@ -187,10 +220,10 @@ public class AuditedConfidentialNoteValidator {
                 Builtins.mkCons(Builtins.headList(a5),
                 Builtins.mkCons(Builtins.headList(a6),
                 Builtins.mkCons(Builtins.headList(a7),
-                        Builtins.unListData(audit2)))))))));
+                        rest))))))));
     }
 
-    /** {@code I2OSP(c, 32)} of the 8 audit coordinates, concatenated in order. */
+    /** {@code I2OSP(c, 32)} of the audit coordinates, concatenated in order (empty for an empty list). */
     private static byte[] auditBytes(PlutusData audit) {
         byte[] out = Builtins.integerToByteString(true, 0, BigInteger.ZERO);
         PlutusData rest = Builtins.unListData(audit);
@@ -199,7 +232,38 @@ public class AuditedConfidentialNoteValidator {
                     Builtins.integerToByteString(true, 32, Builtins.unIData(Builtins.headList(rest))));
             rest = Builtins.tailList(rest);
         }
-        return out; // isNote has already required exactly 8 entries
+        return out;
+    }
+
+    /**
+     * With {@code sameNote}, the two limb handles of note {@code a} differ. Otherwise no handle of
+     * {@code a} equals a handle of {@code b}. A handle is the point {@code (A.u, A.v)}.
+     */
+    private static boolean distinctHandles(PlutusData a, PlutusData b, boolean sameNote) {
+        PlutusData x = Builtins.unListData(a);
+        PlutusData xa0u = Builtins.headList(x);
+        PlutusData xa0v = Builtins.headList(Builtins.tailList(x));
+        PlutusData x4 = Builtins.tailList(Builtins.tailList(Builtins.tailList(Builtins.tailList(x))));
+        PlutusData xa1u = Builtins.headList(x4);
+        PlutusData xa1v = Builtins.headList(Builtins.tailList(x4));
+        if (sameNote) {
+            return !(Builtins.equalsData(xa0u, xa1u) && Builtins.equalsData(xa0v, xa1v));
+        }
+        PlutusData y = Builtins.unListData(b);
+        PlutusData ya0u = Builtins.headList(y);
+        PlutusData ya0v = Builtins.headList(Builtins.tailList(y));
+        PlutusData y4 = Builtins.tailList(Builtins.tailList(Builtins.tailList(Builtins.tailList(y))));
+        PlutusData ya1u = Builtins.headList(y4);
+        PlutusData ya1v = Builtins.headList(Builtins.tailList(y4));
+        return !(Builtins.equalsData(xa0u, ya0u) && Builtins.equalsData(xa0v, ya0v))
+                && !(Builtins.equalsData(xa0u, ya1u) && Builtins.equalsData(xa0v, ya1v))
+                && !(Builtins.equalsData(xa1u, ya0u) && Builtins.equalsData(xa1v, ya0v))
+                && !(Builtins.equalsData(xa1u, ya1u) && Builtins.equalsData(xa1v, ya1v));
+    }
+
+    /** All four handles of two notes are pairwise distinct (each note's own pair is checked separately). */
+    private static boolean distinctAcross(PlutusData audit1, PlutusData audit2) {
+        return distinctHandles(audit2, audit2, true) && distinctHandles(audit1, audit2, false);
     }
 
     private static boolean signedBy(ScriptContext ctx, byte[] owner) {
@@ -210,7 +274,7 @@ public class AuditedConfidentialNoteValidator {
         return found;
     }
 
-    /** The inline datum; a missing or hashed datum yields an integer, which {@link #isNote} rejects. */
+    /** The inline datum; a missing or hashed datum yields an integer, which the shape checks reject. */
     private static PlutusData inlineDatum(TxOut output) {
         return switch (output.datum()) {
             case OutputDatum.OutputDatumInline inline -> inline.datum();
@@ -219,9 +283,20 @@ public class AuditedConfidentialNoteValidator {
         };
     }
 
+    /** {@code Constr 0 [I u, I v]}, both canonical, exactly two fields. */
+    private static boolean isRegistryKey(PlutusData key) {
+        if (Builtins.constrTag(key) != 0) return false;
+        PlutusData fields = Builtins.constrFields(key);
+        PlutusData rest = Builtins.tailList(fields);
+        return Builtins.nullList(Builtins.tailList(rest))
+                && canonicalField(Builtins.unIData(Builtins.headList(fields)))
+                && canonicalField(Builtins.unIData(Builtins.headList(rest)));
+    }
+
     /**
-     * {@code Constr 0 [bytes(28), int, int, list of exactly 8 ints]}, every integer canonical.
-     * Any other shape returns false or makes a builtin fail (fail closed).
+     * {@code Constr 0 [bytes(28), int, int, list of exactly 8 canonical ints, list of exactly
+     * readers 89-byte strings]}, with canonical commitment coordinates. Any other shape returns
+     * false or makes a builtin fail (fail closed).
      */
     private static boolean isNote(PlutusData value) {
         if (Builtins.constrTag(value) != 0) return false;
@@ -229,20 +304,29 @@ public class AuditedConfidentialNoteValidator {
         PlutusData f1 = Builtins.tailList(fields);
         PlutusData f2 = Builtins.tailList(f1);
         PlutusData f3 = Builtins.tailList(f2);
-        if (!Builtins.nullList(Builtins.tailList(f3))) return false;
+        PlutusData f4 = Builtins.tailList(f3);
+        if (!Builtins.nullList(Builtins.tailList(f4))) return false;
         if (Builtins.lengthOfByteString(Builtins.unBData(Builtins.headList(fields))) != 28) return false;
         if (!canonicalField(Builtins.unIData(Builtins.headList(f1)))) return false;
         if (!canonicalField(Builtins.unIData(Builtins.headList(f2)))) return false;
-        PlutusData audit = Builtins.unListData(Builtins.headList(f3));
         int count = 0;
         boolean canonical = true;
-        PlutusData rest = audit;
+        PlutusData rest = Builtins.unListData(Builtins.headList(f3));
         while (!Builtins.nullList(rest)) {
             canonical = canonical && canonicalField(Builtins.unIData(Builtins.headList(rest)));
             count = count + 1;
             rest = Builtins.tailList(rest);
         }
-        return canonical && count == 8;
+        if (!canonical || count != 8) return false;
+        int deliveries = 0;
+        boolean lengths = true;
+        PlutusData each = Builtins.unListData(Builtins.headList(f4));
+        while (!Builtins.nullList(each)) {
+            lengths = lengths && Builtins.lengthOfByteString(Builtins.unBData(Builtins.headList(each))) == 89;
+            deliveries = deliveries + 1;
+            each = Builtins.tailList(each);
+        }
+        return lengths && BigInteger.valueOf(deliveries).equals(readers);
     }
 
     private static byte[] noteOwner(PlutusData note) {

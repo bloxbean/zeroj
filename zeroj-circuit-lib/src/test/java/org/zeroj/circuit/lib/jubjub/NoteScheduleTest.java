@@ -17,9 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * ADR-0055 I13: every secret multiplication of {@code confidential-note-jubjub-v1} uses the
- * blinded fixed schedule, and none reaches the variable-time {@link JubjubPoint#scalarMul}.
- * The observer counts both, so a stray {@link PedersenCommitment#verify} on the acceptance path
- * (which multiplies the secret opening unblinded) fails these tests.
+ * blinded fixed schedule, and none reaches a variable-time multiplication
+ * ({@link JubjubPoint#scalarMul} or {@code FastJubjubPoint.scalarMulPublic}). The observer counts
+ * both kinds. The only variable-time multiplication on these paths is the public subgroup check
+ * {@code [l]·E} of a received ephemeral key, so a stray {@link PedersenCommitment#verify} (which
+ * multiplies the secret opening unblinded) or a secret sent down the fast path fails these tests.
  */
 class NoteScheduleTest {
 
@@ -46,7 +48,7 @@ class NoteScheduleTest {
     void acceptance() {
         Counter c = observe(() -> scanner.open(delivery, commitment).orElseThrow());
         assertBlinded(c, 3);
-        assertEquals(0, c.publicMultiplications, "the secret opening must never reach scalarMul");
+        assertEquals(1, c.publicMultiplications, "only the public subgroup check [l]·E; the opening never reaches scalarMul");
     }
 
     @Test
@@ -55,7 +57,7 @@ class NoteScheduleTest {
         NoteScanner otherScanner = NoteScanner.of(other);
         Counter c = observe(() -> otherScanner.open(delivery, commitment));
         assertBlinded(c, 1);
-        assertEquals(0, c.publicMultiplications);
+        assertEquals(1, c.publicMultiplications, "only the public subgroup check [l]·E");
     }
 
     @Test
@@ -65,6 +67,7 @@ class NoteScheduleTest {
         System.arraycopy(JubjubPoint.IDENTITY.toBytes(), 0, identityE, 0, 32);
         Counter c = observe(() -> scanner.open(identityE, commitment));
         assertBlinded(c, 0);
+        assertEquals(0, c.publicMultiplications, "the identity is refused before the subgroup check");
         Counter shortDelivery = observe(() -> scanner.open(new byte[88], commitment));
         assertBlinded(shortDelivery, 0);
         // E plus a small-order component: still a curve point, so only the subgroup check stops it.
@@ -75,6 +78,7 @@ class NoteScheduleTest {
         System.arraycopy(e.add(order2).toBytes(), 0, mixed, 0, 32);
         Counter mixedOrder = observe(() -> scanner.open(mixed, commitment));
         assertBlinded(mixedOrder, 0);
+        assertEquals(1, mixedOrder.publicMultiplications, "the subgroup check refuses it");
         assertTrue(scanner.open(mixed, commitment).isEmpty());
     }
 

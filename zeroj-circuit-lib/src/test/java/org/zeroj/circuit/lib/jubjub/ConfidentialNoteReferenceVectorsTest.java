@@ -3,8 +3,11 @@ package org.zeroj.circuit.lib.jubjub;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -40,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Regenerate with {@code python3 confidential_note_jubjub_v1_reference.py} in that directory.
  */
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ConfidentialNoteReferenceVectorsTest {
 
     private static final String RESOURCE = "/confidential-note-reference/reference-output.txt";
@@ -156,7 +160,7 @@ class ConfidentialNoteReferenceVectorsTest {
             } finally {
                 JubjubPoint.clearSecretScheduleObserverForTesting();
             }
-            assertEquals(0, counter.publicMultiplications, "no unblinded multiplication on the opening path");
+            assertTrue(counter.publicMultiplications <= 1, "at most the public subgroup check [l]·E is variable-time");
             int step = Integer.parseInt(get(p + "step"));
             if (get(p + "expect").equals("accept")) {
                 assertEquals(num(get(p + "value")), result.orElseThrow().value());
@@ -166,12 +170,23 @@ class ConfidentialNoteReferenceVectorsTest {
                 assertTrue(result.isEmpty(), "reject at step " + step);
                 boolean canonical = u.signum() >= 0 && u.compareTo(JubjubCurve.BASE_FIELD_PRIME) < 0
                         && v.signum() >= 0 && v.compareTo(JubjubCurve.BASE_FIELD_PRIME) < 0;
-                if (step <= 2 || !canonical) {
-                    assertEquals(0, counter.schedules.size(), "a public reject does no secret work");
-                }
+                boolean onCurve = canonical && onCurve(u, v);
+                // Secret work per failing step: public rejects none; steps 5–6 only the key agreement;
+                // step 7 the key agreement and the blinded recomputation of C.
+                int expected = step <= 2 || !onCurve ? 0 : step <= 6 ? 1 : 3;
+                assertEquals(expected, counter.schedules.size(), "blinded schedules for a reject at step " + step);
             }
             REPLAYED.incrementAndGet();
         }));
+    }
+
+    private static boolean onCurve(BigInteger u, BigInteger v) {
+        try {
+            JubjubPoint.fromAffine(u, v);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     @TestFactory
@@ -272,7 +287,7 @@ class ConfidentialNoteReferenceVectorsTest {
     }
 
     @TestFactory
-    @DisplayName("d3a_mut: every mutation of order, encoding or digest gives a different digest")
+    @DisplayName("d3a_mut (reference self-consistency): every mutation of order, encoding or digest gives a different digest")
     Stream<DynamicTest> d3aMutations() {
         return cases("d3a_mut").stream().map(c -> DynamicTest.dynamicTest(c, () -> {
             String base = c.substring(0, c.indexOf('.'));
@@ -285,6 +300,7 @@ class ConfidentialNoteReferenceVectorsTest {
     }
 
     @TestFactory
+    @Order(Integer.MAX_VALUE)
     @DisplayName("Coverage: every case vector of the reference was replayed")
     Stream<DynamicTest> coverage() {
         return Stream.of(DynamicTest.dynamicTest("all families", () -> {
@@ -295,6 +311,7 @@ class ConfidentialNoteReferenceVectorsTest {
             }
             assertEquals(expected, listed, "every family is replayed by this test");
             assertNotEquals(0, listed);
+            assertEquals(listed, REPLAYED.get(), "every listed case actually ran (this test runs after the families)");
         }));
     }
 }

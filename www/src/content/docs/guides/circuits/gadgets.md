@@ -401,9 +401,10 @@ These rules are not optional:
 Without a proof, a validator can check only that each required reader has a delivery of the right
 length, not that it decrypts. ADR-0055's D3a closes that for the **amount** an auditor needs: the
 transfer's Groth16 proof also encrypts each created note's amount to the auditor's
-`elgamal-jubjub-v1` key in two 32-bit limbs. It measured within the per-transaction budget (72.9%
-of the step limit for a two-output transfer with one auditor, 46.8% with the hash-compressed
-layout). It covers notes created by proof-enforced transitions only; issued notes rest on the
+`elgamal-jubjub-v1` key in two 32-bit limbs. It measured within the per-transaction budget in a test-only
+reference validator (73.4% of the step limit for a two-output transfer with one auditor, 55.2% for
+a redeem, 47.3% with the hash-compressed layout); your application measures its own complete
+transaction. It covers notes created by proof-enforced transitions only; issued notes rest on the
 issuer.
 
 :::caution[Offline trustee and encryption operations]

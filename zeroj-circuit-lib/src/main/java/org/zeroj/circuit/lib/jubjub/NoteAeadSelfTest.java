@@ -54,23 +54,50 @@ final class NoteAeadSelfTest {
             + "5dd67018e62e8c1ab0c19a25418726ccf2f5e88b97692112924bda2fde7348bad7295241729db4f38711c7ea98c5d419"
             + "7c66fd23";
 
+    /** The two primitives under test; a seam so the checks themselves can be tested. */
+    interface Primitives {
+        byte[] encrypt(byte[] key, byte[] plaintext);
+
+        /** The plaintext, or {@code null} if the tag does not verify. */
+        byte[] decrypt(byte[] key, byte[] ciphertext);
+    }
+
     /**
-     * Encrypts and decrypts the known answer.
+     * Encrypts and decrypts the known answer, and requires a forged tag to be refused.
      *
-     * @throws IllegalStateException if either direction fails or differs
+     * @throws IllegalStateException if any check fails
      */
     static void run() {
+        run(new Primitives() {
+            @Override
+            public byte[] encrypt(byte[] key, byte[] plaintext) {
+                return SaplingNoteCrypto.encrypt(key, plaintext);
+            }
+
+            @Override
+            public byte[] decrypt(byte[] key, byte[] ciphertext) {
+                return SaplingNoteCrypto.decrypt(key, ciphertext);
+            }
+        });
+    }
+
+    static void run(Primitives aead) {
         HexFormat hex = HexFormat.of();
         byte[] key = hex.parseHex(KEY);
         byte[] plaintext = hex.parseHex(PLAINTEXT);
         byte[] ciphertext = hex.parseHex(CIPHERTEXT);
-        byte[] sealed = SaplingNoteCrypto.encrypt(key, plaintext);
-        if (!Arrays.equals(ciphertext, sealed)) {
+        if (!Arrays.equals(ciphertext, aead.encrypt(key, plaintext))) {
             throw new IllegalStateException("ChaCha20-Poly1305 self-test: encryption differs from the known answer");
         }
-        byte[] opened = SaplingNoteCrypto.decrypt(key, ciphertext);
+        byte[] opened = aead.decrypt(key, ciphertext);
         if (opened == null || !Arrays.equals(plaintext, opened)) {
             throw new IllegalStateException("ChaCha20-Poly1305 self-test: decryption differs from the known answer");
+        }
+        // The provider must also refuse a forged tag; otherwise integrity would rest on step 7 alone.
+        byte[] forged = ciphertext.clone();
+        forged[forged.length - 1] ^= 1;
+        if (aead.decrypt(key, forged) != null) {
+            throw new IllegalStateException("ChaCha20-Poly1305 self-test: a forged tag was accepted");
         }
     }
 }

@@ -267,6 +267,7 @@ public final class DkgMessage {
         byte[] out = new byte[32];
         int copy = Math.min(raw.length, 32);
         System.arraycopy(raw, raw.length - copy, out, 32 - copy, copy);
+        Arrays.fill(raw, (byte) 0); // callers include secret scalars (ADR-0055 D9)
         return out;
     }
 

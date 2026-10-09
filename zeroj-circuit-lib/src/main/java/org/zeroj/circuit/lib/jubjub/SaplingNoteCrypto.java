@@ -28,7 +28,9 @@ import static org.zeroj.circuit.lib.jubjub.JubjubCurve.SUBGROUP_ORDER;
  * blinded best-effort schedule on subgroup points only. Encoding a shared secret inverts its
  * projective {@code Z} with {@code BigInteger} arithmetic. Everything here is
  * compatibility/offline class (ADR-0039 §3.1), with no constant-time claim. Byte forms of secrets
- * are wiped after use, best effort.
+ * are wiped after use, best effort. Copies that cannot be wiped remain: {@code BigInteger}s
+ * (the viewing secret is rebuilt per {@code open}), the {@code SecretKeySpec} clone of each
+ * symmetric key, and the provider's cipher state.
  *
  * <p><b>Failures.</b> A failure caused by the input (a tag that does not verify, a wrong length,
  * an invalid point) is reported as {@code null}. A failure of the platform's provider is an
@@ -79,7 +81,7 @@ final class SaplingNoteCrypto {
         if (ephemeralKey.length != POINT_LENGTH) {
             throw new IllegalArgumentException("ephemeral key must be 32 bytes");
         }
-        byte[] shared = sharedSecret.toBytes();
+        byte[] shared = sharedSecret.normalized().toBytes(); // one inversion of Z, not two
         byte[] input = new byte[2 * POINT_LENGTH];
         try {
             System.arraycopy(shared, 0, input, 0, POINT_LENGTH);

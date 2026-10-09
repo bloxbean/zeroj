@@ -77,8 +77,15 @@ from one.
 **Possession.** A reader key held in an application registry is registered with a
 possession proof of the `elgamal-jubjub-v1` §3.3 form, checked once at registration: the DLEQ
 statement with `X = G` and `P = D = P_reader`. Only the form of the statement is reused; the
-key stays a viewing key. Possession is not authorization: which keys a registry admits, and in
-which generation, is the application's to govern.
+key stays a viewing key. Possession is not authorization. The statement carries no context:
+it shows that someone knows the key's discrete logarithm, and a published proof can be replayed
+to register the same key elsewhere. It is also the same statement as an `elgamal-jubjub-v1` key's.
+A registry therefore binds each registration to its registrant and to this profile itself (for
+example by the registrant's signature over the profile identifier, the key and the registry),
+and governs which keys it admits, and in which generation.
+
+**Storage.** A reader keeps its viewing secret, as `I2OSP(sk, 32)`, for as long as it needs to
+read the notes delivered to it. Restoring requires exactly 32 bytes encoding `1 ≤ sk < l`.
 
 ---
 
@@ -229,6 +236,15 @@ asserts, for every pair `(o, a)`:
 
 `PK_a` is the auditor's `elgamal-jubjub-v1` key. It is a separate key from the auditor's
 viewing key (§2.2).
+
+**Fresh randomness.** Each limb encryption uses its own randomness. The circuit cannot force the
+randomness of different limbs to differ, and a repeated `k` would reveal the difference of the two
+limbs (`B0 − B1 = [L0 − L1]·G`). A validator therefore requires the handles `A` of all limb
+encryptions in a transaction to be pairwise distinct.
+
+**The auditor key's source.** A validator takes `PK_a` from exactly one registry entry. A second
+entry for the same token, a token quantity other than one, or a datum of another shape is
+refused, so that the submitter cannot choose an older generation's key.
 
 ### 8.2 Public inputs (direct layout)
 After the application's own public inputs, the order is:

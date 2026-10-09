@@ -51,6 +51,60 @@ public final class NoteViewingKey {
         }
     }
 
+    /**
+     * Restores a viewing key from the 32-byte secret {@link #exportSecret()} produced, so that
+     * notes delivered earlier can be read after a restart (ADR-0055 D2: old generations stay
+     * readable only while their key is kept). The caller's array is not retained; wipe it after use.
+     *
+     * @throws IllegalArgumentException unless {@code secret} is exactly 32 bytes encoding
+     *         {@code 1 ≤ sk < l} (big-endian, {@code I2OSP(sk, 32)})
+     */
+    public static NoteViewingKey restore(byte[] secret) {
+        Objects.requireNonNull(secret, "secret");
+        if (secret.length != 32) {
+            throw new IllegalArgumentException("a viewing-key secret is exactly 32 bytes");
+        }
+        BigInteger sk = new BigInteger(1, secret);
+        if (sk.signum() == 0 || sk.compareTo(SUBGROUP_ORDER) >= 0) {
+            throw new IllegalArgumentException("a viewing-key secret must encode 1 <= sk < l");
+        }
+        return new NoteViewingKey(sk);
+    }
+
+    /**
+     * The secret as 32 bytes, {@code I2OSP(sk, 32)}, for the wallet's own encrypted key storage.
+     * The caller owns the copy and must wipe it after storing it. Anyone who obtains these bytes
+     * reads every note ever delivered to this key.
+     *
+     * @throws IllegalStateException once destroyed
+     */
+    public synchronized byte[] exportSecret() {
+        if (destroyed) {
+            throw new IllegalStateException("the viewing key has been destroyed");
+        }
+        return secret.clone();
+    }
+
+    /**
+     * Proves possession of this key for registration (spec §2.2; ADR-0055 Q6). The application's
+     * DLEQ prover receives the statement ({@code X = G}, {@code P = D = readerKey}) and the
+     * witness {@code sk}, for that call only, and returns its proof. The prover runs in the
+     * wallet's own process (ADR-0039 offline class) and must not retain the witness.
+     *
+     * @throws IllegalStateException once destroyed
+     */
+    public <T> T provePossession(PossessionProver<T> prover) {
+        Objects.requireNonNull(prover, "prover");
+        return prover.prove(possessionStatement(), secretScalar());
+    }
+
+    /** The application's DLEQ prover for {@link #provePossession}. */
+    @FunctionalInterface
+    public interface PossessionProver<T> {
+        /** Returns a proof of {@code statement} with witness {@code secret}; must not retain {@code secret}. */
+        T prove(DleqStatement statement, BigInteger secret);
+    }
+
     /** Test seam: a key with a fixed secret (vectors only). */
     static NoteViewingKey fromSecret(BigInteger sk) {
         Objects.requireNonNull(sk, "sk");

@@ -366,8 +366,12 @@ are reused unchanged. Applications choose whether the note's owner credential (a
 - **Proof of possession.** A key in an application registry (auditors, and owners where
   required) comes with a possession proof of the `elgamal-jubjub-v1` §3.3 form (DLEQ with
   `X = G`, `D = P`), made over the viewing key itself (Q6). Only the proof's form is reused; the
-  key stays a viewing key (I6). Possession shows that the registrant can decrypt. It does not show that the
-  registrant is the auditor the application intends; that is registry governance (D8).
+  key stays a viewing key (I6). Possession shows only that someone knows the key's discrete
+  logarithm. The statement has no context, so a published proof can be replayed to register the
+  same key elsewhere, and it is the same statement as an `elgamal-jubjub-v1` key's. A registry
+  therefore binds each registration to its registrant and to this profile (for example a
+  registrant signature over the profile id, the key and the registry), and decides which keys it
+  admits (D8).
 - **A D3a auditor has two keys** (r3). Its viewing key `P` (this profile) receives D5
   deliveries. A separate `elgamal-jubjub-v1` key `PK_a` receives D3a's limb ciphertexts. The
   two are distinct key types (I6); neither is derived from the other.
@@ -1023,15 +1027,20 @@ came from the independent reference (its findings S1–S6) and from implementati
    - A prover that serialized `c + p` instead would produce a different digest, and its proof
      would not verify. Equal digests force equal bytes (collision resistance of BLAKE2b-256), and
      so the canonical encoding.
-8. **D3a passed M5a's gate, so Q5's condition is met** (see "Implementation status").
-   - Both layouts were measured on a two-output transfer with one auditor, in ZeroJ's reference
-     validator: 72.9% (direct) and 46.8% (hash-compressed) of the step limit, each under 10% of
-     the memory limit.
+8. **D3a passed M5a's gate on ZeroJ's reference validator** (see "Implementation status").
+   - Measured with one auditor, the datum carrying deliveries, and the registry and handle checks,
+     in the Julc VM's Plutus V3 cost model (protocol version 11):
+     - transfer (two notes), direct: 73.4% of the step limit and 10.8% of memory;
+     - redeem (one change note), direct: 55.2% and 7.6%;
+     - transfer, hash-compressed: 47.3% and 9.9%.
+   - Q5's condition is met for this reference spending validator. **The final gate check for an
+     application is its complete transaction**: the points demo also runs a minting policy, and
+     the direct transfer leaves 6.6 points of margin. M3 measures that on DevKit before the demo
+     adopts D3a.
    - **Recommended use (for acknowledgement):** the direct layout when its measured cost fits the
-     gate. It has 34,184 constraints and proves in 3.9 s. The hash-compressed layout fits where the
-     direct one does not: more auditors or outputs. It has 355,514 constraints and proves in 16.6 s.
-   - An application that runs another script in the same transaction, such as the points demo's
-     minting policy, must measure its own total. M3 does this for the demo.
+     gate (34,184 constraints for the transfer; seconds to prove). The hash-compressed layout fits
+     where the direct one does not, such as more auditors or outputs (355,514 constraints; tens of
+     seconds to prove).
 9. **Allocation.** Each blinded scalar multiplication allocates about 3.7 MB of short-lived
    `BigInteger` garbage, so a failed trial decryption allocates about 4 MB. That is ADR-0039's
    approved compatibility path. The allocation-free fixed-limb kernel is an unapproved candidate
@@ -1039,6 +1048,40 @@ came from the independent reference (its findings S1–S6) and from implementati
    profile's own code allocates only fixed-size buffers.
 10. **Test-key tags** (reference S2). Spec §9.1 lists every tag the reference uses, and every
     derived scalar is emitted with the vectors.
+11. **Final implementation review** (2026-10-10). Four independent reviews ran: spec↔code
+    (Claude, R-1–R-10), security (Claude, S-1–S-6), D3a soundness and performance (Claude,
+    D-1–D-9), and Codex (C-1–C-5). None found a P0 or a soundness hole. The changes:
+    - **Key lifecycle API** (C-1, C-3, S-1, R-1). `NoteViewingKey.exportSecret()` and
+      `restore(byte[32])` (canonical, `1 ≤ sk < l`) keep a key across restarts.
+      `provePossession(prover)` hands the application's DLEQ prover the statement and the witness
+      for that call only. An external-package test produces and verifies a real Groth16
+      possession proof and refuses it for another key.
+    - **Opening takes the note's coordinates** (R-2). `NoteScanner.open(delivery, u, v)` and
+      `Candidate.of(delivery, u, v, owned)` are the public entry points. The point overloads are
+      package-private: `JubjubPoint.fromAffine` reduces mod `p`, which step 7 forbids.
+    - **Wiping** (C-5, S-2). The encoders' `toByteArray` temporaries are now zeroed; the copies that
+      cannot be (`BigInteger`, `SecretKeySpec`, cipher state) are documented.
+    - **Self-test** (S-3, R-5). It also requires a forged tag to be refused. Its checks are tested
+      through a package-private seam: a fake JCE provider cannot be loaded on signed-provider JDKs.
+    - **I13 instrumentation** (S-4, R-7). `FastJubjubPoint`'s variable-time multiplication is
+      observed too. An acceptance shows exactly three blinded schedules and one variable-time
+      multiplication, the public subgroup check `[l]·E`.
+    - **Destroyed keys** throw for every input (S-6). **Possession wording** (S-5): a possession
+      statement has no context, so registries bind registrant and profile themselves (spec §2.2).
+    - **D3a validator obligations** (D-1, D-5; spec §8.1). The auditor key comes from exactly one
+      registry entry, with quantity 1 and the exact datum shape, so a submitter cannot choose a
+      retired generation. Limb handles must be pairwise distinct: the circuit cannot stop a
+      prover from reusing `k`, which would reveal `L0 − L1`.
+    - **M5a coverage** (C-2, C-4, R-3, D-2, D-3, D-4). Redeem is measured. The datum carries real
+      deliveries with D8's checks. The compressed layout has its own invalid-witness and
+      serialization-binding tests; removing the byte-binding constraint makes them fail. Wording
+      is scoped to the reference validator, and the application's complete transaction is M3's
+      final check.
+    - **Performance** (D-7, D-8, D-9). The KDF normalizes the shared secret once. The self-test
+      stays per seal (about 15 µs), so a provider change is caught. The benchmark adds an
+      off-subgroup `E` row and states that runs are single-shot.
+    - **Docs** (R-4, R-8, R-9). D3a's scope is stated: proof-enforced transitions only, test-only
+      reference validator, no library API. The reference README is aligned with spec §9.1.
 
 ## Implementation status
 
@@ -1047,7 +1090,7 @@ came from the independent reference (its findings S1–S6) and from implementati
 | M0 | Done | Spec `docs/specs/confidential-note-jubjub-v1.md`. An independent Python reference (`zeroj-circuit-lib/src/test/resources/confidential-note-reference/`), written from the spec and the Zcash specification with no Java read. It runs over 300 checks and emits more than 110 replayable vectors, reproducing all 10 Zcash Sapling vectors, RFC 7693 and RFC 8439, and catching 28 of 29 seeded defects. The one it cannot catch (KDF over the re-encoded `E` alone) is unobservable under canonical decoding. The Zcash vectors are vendored, pinned by commit and SHA-256. |
 | M1 | Done | `Blake2bDigest` personalization, `Aead`, `SaplingNoteCrypto`, the AEAD self-test. `ConfidentialNoteKnownAnswerTest` covers all 10 Zcash vectors (Agree both ways, KDF, encryption and decryption), decoding refusals and fault classification. Also run: the personalised BLAKE2b differential against BouncyCastle 1.83, and Wycheproof ChaCha20-Poly1305 through `Aead`. `NoteNativeProbe` gives output identical to the JVM in a GraalVM native image. |
 | M2 | Done | `NoteViewingKey`, `NoteReaderKey`, `NoteOpening`, `ConfidentialNotes`, `NoteScanner`. Tests: `ConfidentialNotesTest` (I1–I11, platform faults, API surface), `NoteScheduleTest` (I13) and `ConfidentialNoteReferenceVectorsTest` (every reference vector, byte for byte, including sealing). Eight guards were each reverted to confirm a test fails. |
-| M4 | Done | Benchmark `docs/benchmarks/confidential-note-jubjub-2026-10-09.md`. A failed trial decryption costs 2.2 ms and an acceptance 7.2 ms; scanning runs at 2,049 notes/s on 16 threads. README, support matrix and gadget-guide rows and section, with the D6, D7 and D9 rules. |
-| M5a | Done; **D3a passed its gate** | `AuditedConfidentialNoteOnChainTest` and `AuditedConfidentialNoteValidator` (Plutus V3, Julc VM). Direct layout: 24 public inputs, 7.29e9 steps (72.9%). Hash-compressed layout: 10 public inputs, 4.68e9 steps (46.8%). I12's invalid witnesses and the validator mutations are rejected, and the auditor recovers every created note's amount from the datum. |
+| M4 | Done | Benchmark `docs/benchmarks/confidential-note-jubjub-2026-10-09.md`. A failed trial decryption costs about 1.7 ms and an acceptance about 5 ms; scanning runs at about 5,000 notes/s on 16 threads (runs varied by up to about 40%). README, support matrix and gadget-guide rows and section, with the D6, D7 and D9 rules. |
+| M5a | Done on the reference validator; **D3a within the gate**; application total pending M3 | `AuditedConfidentialNoteOnChainTest` and `AuditedConfidentialNoteValidator` (Plutus V3, Julc VM cost model PV11). The datum carries deliveries; the auditor key comes from exactly one registry entry; limb handles must be distinct. Transfer, direct: 24 public inputs, 7.34e9 steps (73.4%). Redeem, direct: 15 inputs, 5.52e9 (55.2%). Transfer, hash-compressed: 10 inputs, 4.73e9 (47.3%). I12's invalid witnesses (both layouts), the compressed layout's serialization binding (foreign, little-endian and `c + p` bytes; swapped or flipped digest halves), reused randomness and every validator mutation are rejected. Owner and auditor recover every created note from the datum. The compressed test is `heavy` (excluded from CI's default task). |
 | M3 | Not started | A separate zeroj-usecases PR: the points demo on Yaci DevKit, with its minting policy in the measured total. |
 | M5 | Blocked | Q5 (A): pending a dedicated, accepted follow-up ADR. |

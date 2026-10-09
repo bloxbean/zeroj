@@ -73,6 +73,8 @@ class ConfidentialNotesTest {
                         if (i == j) {
                             assertEquals(opening.value(), result.orElseThrow().value());
                             assertEquals(opening.blinding(), result.orElseThrow().blinding());
+                            // I4: an algebraic cross-check only; acceptance itself never uses verify.
+                            assertTrue(PedersenCommitment.verify(c, result.orElseThrow().value(), result.orElseThrow().blinding()));
                         } else {
                             assertTrue(result.isEmpty(), "reader " + i + " must not open position " + j);
                         }
@@ -289,9 +291,26 @@ class ConfidentialNotesTest {
             k.destroy();
             assertTrue(k.isDestroyed());
             assertThrows(IllegalStateException.class, () -> scanner.open(d, o.commitment()));
+            assertThrows(IllegalStateException.class, () -> scanner.open(new byte[3], o.commitment()),
+                    "a destroyed key throws for every input, not only once it reaches the secret");
             assertThrows(IllegalStateException.class, () -> NoteScanner.of(k));
+            assertThrows(IllegalStateException.class, k::exportSecret);
             assertTrue(k.toString().contains("destroyed"));
             k.destroy(); // idempotent
+        }
+
+        @Test
+        @DisplayName("Restore and provePossession: export/restore round-trips; the prover gets the statement and its witness")
+        void restoreAndPossession() {
+            NoteViewingKey k = key();
+            NoteViewingKey restored = NoteViewingKey.restore(k.exportSecret());
+            assertEquals(k.readerKey(), restored.readerKey());
+            boolean consistent = k.provePossession((statement, secret) ->
+                    statement.kind() == DleqStatement.Kind.POSSESSION
+                            && JubjubPoint.SUBGROUP_GENERATOR.scalarMul(secret).projectiveEquals(k.readerKey().point()));
+            assertTrue(consistent, "the witness is the discrete logarithm of the reader key");
+            assertThrows(IllegalArgumentException.class, () -> NoteViewingKey.restore(new byte[32]));
+            assertThrows(IllegalArgumentException.class, () -> NoteViewingKey.restore(DkgMessage.i2osp32(SUBGROUP_ORDER)));
         }
 
         @Test

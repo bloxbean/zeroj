@@ -22,8 +22,8 @@ import static org.zeroj.circuit.lib.jubjub.JubjubCurve.SUBGROUP_ORDER;
  * NoteOpening opening = NoteOpening.random(value, random);
  * JubjubPoint c = opening.commitment();                       // the note's datum commitment
  * List<byte[]> deliveries = ConfidentialNotes.seal(opening, List.of(owner, auditor), random);
- * // ... recipient:
- * Optional<NoteOpening> mine = NoteScanner.of(viewingKey).open(deliveries.get(0), c);
+ * // ... recipient, with the commitment's affine coordinates as the note carries them:
+ * Optional<NoteOpening> mine = NoteScanner.of(viewingKey).open(deliveries.get(0), datumU, datumV);
  * }</pre>
  *
  * <p><b>Rules the library enforces:</b> reader keys are valid (I5) and pairwise distinct; every
@@ -77,6 +77,8 @@ public final class ConfidentialNotes {
                 throw new IllegalArgumentException("reader keys must be pairwise distinct");
             }
         }
+        // Re-run on every seal (about 15 µs, under 0.5% of a seal), so a provider change at run
+        // time is caught too.
         NoteAeadSelfTest.run();
         byte[] pt = plaintext(opening);
         try {
