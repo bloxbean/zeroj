@@ -227,46 +227,109 @@ final class Hpke {
 
     /** {@code DeriveKeyPair(ikm)} for X25519 (§7.1.3); returns {@code skR}. Test seam. */
     static byte[] deriveKeyPair(byte[] ikm) throws HpkeException {
+        byte[] dkpPrk = null;
         try {
-            byte[] dkpPrk = labeledExtract(KEM_SUITE_ID, EMPTY, ascii("dkp_prk"), ikm);
+            dkpPrk = labeledExtract(KEM_SUITE_ID, EMPTY, ascii("dkp_prk"), ikm);
             return labeledExpand(KEM_SUITE_ID, dkpPrk, ascii("sk"), EMPTY, N_SK);
         } catch (GeneralSecurityException e) {
             throw new HpkeException(e);
+        } finally {
+            wipe(dkpPrk);
         }
     }
 
     // ---------------------------------------------------------------- key schedule (§5.1)
 
+    /**
+     * The key schedule. Intermediate secrets are wiped on every path; {@code key} and
+     * {@code base_nonce} are wiped too unless they pass to the returned {@link Context}, whose
+     * {@code destroy()} is then the caller's (review F4).
+     */
     private static Context keySchedule(byte[] sharedSecret, byte[] info) throws GeneralSecurityException {
-        byte[] pskIdHash = labeledExtract(HPKE_SUITE_ID, EMPTY, ascii("psk_id_hash"), EMPTY);
-        byte[] infoHash = labeledExtract(HPKE_SUITE_ID, EMPTY, ascii("info_hash"), info);
+        return keySchedule(JDK_HKDF, sharedSecret, info);
+    }
+
+    /** {@link #keySchedule(byte[], byte[])} over a given HKDF; tests inject failures through it. */
+    static Context keySchedule(Hkdf hkdf, byte[] sharedSecret, byte[] info) throws GeneralSecurityException {
+        byte[] pskIdHash = labeledExtract(hkdf, HPKE_SUITE_ID, EMPTY, ascii("psk_id_hash"), EMPTY);
+        byte[] infoHash = labeledExtract(hkdf, HPKE_SUITE_ID, EMPTY, ascii("info_hash"), info);
         byte[] keyScheduleContext = concat(new byte[]{MODE_BASE}, pskIdHash, infoHash);
-        byte[] secret = labeledExtract(HPKE_SUITE_ID, sharedSecret, ascii("secret"), EMPTY);
-        byte[] key = labeledExpand(HPKE_SUITE_ID, secret, ascii("key"), keyScheduleContext, N_K);
-        byte[] baseNonce = labeledExpand(HPKE_SUITE_ID, secret, ascii("base_nonce"), keyScheduleContext, N_N);
-        Arrays.fill(secret, (byte) 0);
-        return new Context(key, baseNonce);
+        byte[] secret = null;
+        byte[] key = null;
+        byte[] baseNonce = null;
+        boolean transferred = false;
+        try {
+            secret = labeledExtract(hkdf, HPKE_SUITE_ID, sharedSecret, ascii("secret"), EMPTY);
+            key = labeledExpand(hkdf, HPKE_SUITE_ID, secret, ascii("key"), keyScheduleContext, N_K);
+            baseNonce = labeledExpand(hkdf, HPKE_SUITE_ID, secret, ascii("base_nonce"), keyScheduleContext, N_N);
+            Context context = new Context(key, baseNonce);
+            transferred = true;
+            return context;
+        } finally {
+            wipe(secret);
+            if (!transferred) {
+                wipe(key);
+                wipe(baseNonce);
+            }
+        }
     }
 
     /** {@code ExtractAndExpand(dh, kem_context)} of DHKEM (§4.1). */
     private static byte[] extractAndExpand(byte[] dh, byte[] kemContext) throws GeneralSecurityException {
-        byte[] eaePrk = labeledExtract(KEM_SUITE_ID, EMPTY, ascii("eae_prk"), dh);
-        byte[] sharedSecret = labeledExpand(KEM_SUITE_ID, eaePrk, ascii("shared_secret"), kemContext, N_SECRET);
-        Arrays.fill(eaePrk, (byte) 0);
-        return sharedSecret;
+        return extractAndExpand(JDK_HKDF, dh, kemContext);
+    }
+
+    /** {@link #extractAndExpand(byte[], byte[])} over a given HKDF; tests inject failures through it. */
+    static byte[] extractAndExpand(Hkdf hkdf, byte[] dh, byte[] kemContext) throws GeneralSecurityException {
+        byte[] eaePrk = null;
+        try {
+            eaePrk = labeledExtract(hkdf, KEM_SUITE_ID, EMPTY, ascii("eae_prk"), dh);
+            return labeledExpand(hkdf, KEM_SUITE_ID, eaePrk, ascii("shared_secret"), kemContext, N_SECRET);
+        } finally {
+            wipe(eaePrk); // on every path (review F4)
+        }
     }
 
     // ---------------------------------------------------------------- labeled HKDF (§4)
 
+    /**
+     * HKDF-SHA256 Extract and Expand (RFC 5869 §2.2, §2.3). Production uses {@link #JDK_HKDF} only;
+     * the interface lets tests fail a chosen derivation on any JDK (review F4).
+     */
+    interface Hkdf {
+        byte[] extract(byte[] salt, byte[] ikm) throws GeneralSecurityException;
+
+        byte[] expand(byte[] prk, byte[] info, int length) throws GeneralSecurityException;
+    }
+
+    /** HKDF-SHA256 through {@code javax.crypto.KDF}, looked up by algorithm only (see {@link X25519Bytes}). */
+    static final Hkdf JDK_HKDF = new Hkdf() {
+        @Override
+        public byte[] extract(byte[] salt, byte[] ikm) throws GeneralSecurityException {
+            HKDFParameterSpec.Builder builder = HKDFParameterSpec.ofExtract().addIKM(ikm);
+            if (salt.length > 0) {
+                builder.addSalt(salt); // an absent salt is HashLen zero bytes, as RFC 5869 §2.2 requires
+            }
+            return KDF.getInstance("HKDF-SHA256").deriveData(builder.extractOnly());
+        }
+
+        @Override
+        public byte[] expand(byte[] prk, byte[] info, int length) throws GeneralSecurityException {
+            return KDF.getInstance("HKDF-SHA256")
+                    .deriveData(HKDFParameterSpec.expandOnly(new SecretKeySpec(prk, "HKDF-PRK"), info, length));
+        }
+    };
+
     /** {@code LabeledExtract(salt, label, ikm) = Extract(salt, "HPKE-v1" ‖ suite_id ‖ label ‖ ikm)}. */
     static byte[] labeledExtract(byte[] suiteId, byte[] salt, byte[] label, byte[] ikm) throws GeneralSecurityException {
+        return labeledExtract(JDK_HKDF, suiteId, salt, label, ikm);
+    }
+
+    private static byte[] labeledExtract(Hkdf hkdf, byte[] suiteId, byte[] salt, byte[] label, byte[] ikm)
+            throws GeneralSecurityException {
         byte[] labeledIkm = concat(HPKE_V1, suiteId, label, ikm);
-        HKDFParameterSpec.Builder builder = HKDFParameterSpec.ofExtract().addIKM(labeledIkm);
-        if (salt.length > 0) {
-            builder.addSalt(salt); // an absent salt is HashLen zero bytes, as RFC 5869 §2.2 requires
-        }
         try {
-            return hkdf().deriveData(builder.extractOnly());
+            return hkdf.extract(salt, labeledIkm);
         } finally {
             Arrays.fill(labeledIkm, (byte) 0);
         }
@@ -274,13 +337,12 @@ final class Hpke {
 
     /** {@code LabeledExpand(prk, label, info, L) = Expand(prk, I2OSP(L, 2) ‖ "HPKE-v1" ‖ suite_id ‖ label ‖ info, L)}. */
     static byte[] labeledExpand(byte[] suiteId, byte[] prk, byte[] label, byte[] info, int length) throws GeneralSecurityException {
-        byte[] labeledInfo = concat(i2osp(length, 2), HPKE_V1, suiteId, label, info);
-        SecretKeySpec prkKey = new SecretKeySpec(prk, "HKDF-PRK");
-        return hkdf().deriveData(HKDFParameterSpec.expandOnly(prkKey, labeledInfo, length));
+        return labeledExpand(JDK_HKDF, suiteId, prk, label, info, length);
     }
 
-    private static KDF hkdf() throws GeneralSecurityException {
-        return KDF.getInstance("HKDF-SHA256");
+    private static byte[] labeledExpand(Hkdf hkdf, byte[] suiteId, byte[] prk, byte[] label, byte[] info, int length)
+            throws GeneralSecurityException {
+        return hkdf.expand(prk, concat(i2osp(length, 2), HPKE_V1, suiteId, label, info), length);
     }
 
     static byte[] kemSuiteId() {

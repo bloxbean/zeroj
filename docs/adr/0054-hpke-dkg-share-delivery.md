@@ -726,6 +726,13 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
 9. **Key lifecycle on failure paths** (Z-4). Keys are destroyed when round 1 closes or the
    participant aborts. Any other failure keeps them, for the documented retry. An application
    that abandons the attempt calls `destroy()`. HPKE wipes its intermediate secrets in `finally`.
+   - **Also on failure (external Codex review, F4):** the key schedule wipes `eae_prk` and
+     `secret` on every path. It also wipes `key` and `base_nonce` unless they passed to the
+     returned context.
+   - **Tests:** `HpkeFailureWipeTest` injects HKDF failures through a package-private
+     `Hpke.Hkdf` seam, which runs on any JDK. It also injects them through a delegating JCA
+     provider; that variant runs on OpenJDK builds, while Oracle JDK and GraalVM accept only
+     signed JCE providers and skip it.
 10. **Small order is decided without the provider** (security round 2, R2-1, and spec↔code
     round 2, X-9; P2).
     - **The bug:** after note 7, small order was recognised by SunEC's `InvalidKeyException`.
@@ -791,6 +798,8 @@ All findings are addressed except Z-2:
 - **X-5:** authenticated junk in the round-1 window.
 - **Z-2** (a dealer's own D7a self-check) awaits a maintainer decision; see "Proposed amendment"
   above.
+- **External Codex review of `a3b67a1`:** F4 (P2), wiping intermediate HPKE secrets when HKDF
+  fails part-way (note 9), is fixed.
 - **Round 2:** both reviews found the same regression from the Z-1 fix (R2-1/X-9, note 10). It
   is fixed. Also in round 2:
   - X-10: the T1 re-check in `closeRound1` is documented as defence in depth;
