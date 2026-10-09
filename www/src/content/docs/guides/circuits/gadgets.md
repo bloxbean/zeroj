@@ -305,11 +305,55 @@ can decrypt, and up to `t` can be lost or malicious. The trustees run a distribu
 generation, New-DKG of Gennaro et al., with `DkgParticipant`. No single party ever holds the
 key, provided the transport delivers the private shares on time. A late share can make an honest
 dealer publish it, so timely delivery is a secrecy requirement, not only a liveness one.
-- Your application supplies the transport: a broadcast board with agreement, private channels
-  for shares, and round deadlines.
+- Your application supplies the transport: a broadcast board with agreement and round
+  deadlines. For the private shares it can supply its own channels, or use ZeroJ's encrypted
+  delivery over the same board (below).
 - A third party accepts the result with `ThresholdKeyContext.admit`, which requires
   authenticated messages, closed rounds, and confirmations from at least `t + 1` trustees.
 - Ballots and sums are unchanged. Decryption takes any `t + 1` verified shares.
+
+**Encrypted share delivery over the board.** `dkg-share-delivery-hpke-v1` (ADR-0054,
+experimental) removes the private channels. It encrypts each share with HPKE (RFC 9180 Base
+mode; X25519, HKDF-SHA256, ChaCha20-Poly1305) to the recipient's key for this attempt, and the
+dealer posts the envelope on the board. Delivery becomes visible, and trustees need not be
+online together. The key generation, its transcript and admission are unchanged.
+
+```java
+// Round 0: a fresh key per attempt, announced under the roster key.
+DkgShareDeliveryKeys keys = DkgShareDeliveryKeys.generate(config, myId, random);
+post(keys.announcement());
+DkgKeyDirectory directory = DkgKeyDirectory.fromRound0(config, finalRound0Window, verifier);
+
+// Round 1: start (instead of participant.start()); post the envelopes, and the COMMITMENTS only
+// once the envelopes are final.
+DkgShareDelivery.SealedDealing dealing = DkgShareDelivery.start(participant, directory, keys, random);
+postAndAwaitFinality(dealing.envelopes());
+post(dealing.broadcasts());
+
+// Close round 1 behind the barrier, with the complete final window. This also destroys the keys.
+List<DkgMessage> complaints = DkgShareDelivery.closeRound1(participant, directory, keys, finalRound1Window, verifier);
+// Rounds 2–7 continue with participant.receiveBroadcast / closeRound as before.
+```
+
+These rules are what keep the shares secret. They are not optional:
+- **Barrier.** Close round 1 only through `closeRound1`, with the window *after* its cutoff and
+  finality. A participant started with `DkgShareDelivery.start` refuses the plain `closeRound()`
+  at round 1, so it cannot complain about a share it never processed. If `closeRound1` throws,
+  the participant stays at round 1; retry with the same window. Your verifier must return
+  `false`, not throw, for posts it does not accept.
+- **Commitments last.** Post `COMMITMENTS` only after every envelope is final within the round-1
+  window, or post them all atomically. If the envelopes cannot make the cutoff, post nothing:
+  the dealer is then disqualified, and nothing is revealed.
+- **T1.** If your own announcement is missing from the final round-0 window, or the directory holds
+  a different key for you, `start` throws `OWN_KEY_ANNOUNCEMENT_MISSING` and aborts the participant.
+  Post nothing more for this attempt.
+- **Keys.** Generate fresh keys per attempt; they are separate from the roster key. Ciphertexts on
+  a public board are kept forever, and a leaked key opens what was sent to it. A few leaked keys,
+  together with corrupted trustees, can expose the joint key.
+
+The construction rests on a stated assumption: that encryption can replace the private channels
+of the GJKR07 proof. That assumption, and the delivery argument, await external review. See the
+spec `docs/specs/dkg-share-delivery-hpke-v1.md`.
 
 :::caution[Offline trustee and encryption operations]
 Key generation, encryption, decryption shares and the DKG handle secrets with variable-time
@@ -364,6 +408,7 @@ authorization or replay rules.
 | EdDSA-Jubjub | BLS12-381 only | Verification ready pending external review; legacy signing offline only |
 | ElGamal encryption and trustee proofs (in-circuit) | BLS12-381 only | Experimental |
 | ElGamal host API, threshold key generation | Jubjub | Experimental; secret operations offline or isolated only |
+| Encrypted DKG share delivery (`dkg-share-delivery-hpke-v1`) | X25519 HPKE | Experimental; Assumption A1 and the delivery contract await external review |
 | BLAKE2b, CIP-1852 derivation | Field-agnostic | Ready on BLS12-381 Groth16 |
 | SHA-512, HMAC-SHA512, BIP32-Ed25519 | Field-agnostic | Ready as building blocks |
 | Poseidon MPF/JMT authenticated state | BLS12-381 Poseidon profile | Experimental (separate modules) |

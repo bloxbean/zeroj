@@ -661,11 +661,48 @@ questions stay as written for the record.
 - PVSS-style DKGs with zero-knowledge share proofs could remove complaint rounds. That would be a
   separate ADR.
 
+## Implementation notes (refinements recorded during implementation)
+
+These refine the accepted design and are recorded for maintainer acknowledgement, as AGENTS.md
+requires. Each is stated normatively in `docs/specs/dkg-share-delivery-hpke-v1.md`. They came
+from the independent reference (findings S1–S7) and the M1/M2 reviews.
+
+1. **De-duplicate only after authentication** (spec §4.2; reviews M-1 and S-1, P0). The first
+   implementation dropped byte-identical posts before authenticating them. A corrupted
+   participant could then front-run unauthentic copies of honest envelopes, or of a
+   `COMMITMENTS`. The genuine posts were skipped, honest participants complained about each
+   other, and the answers exposed the joint key; both reviewers demonstrated this end to end.
+   Fixed: every post is authenticated first, and the participant counts identical copies once.
+   Front-running vectors and a mutant-killing regression test are included.
+2. **The barrier is enforced by binding the participant** (D6a; review S-2). `DkgShareDelivery.start`
+   replaces `DkgParticipant.start()` for this transport. It applies T1 and binds the participant,
+   whose public `closeRound()` then refuses round 1, so round 1 closes only through
+   `closeRound1`. `DkgParticipant` gains package-private hooks for this; its protocol is
+   unchanged.
+3. **Fail closed on verifier exceptions** (review M-4). An exception from the application's
+   authenticator leaves the participant at round 1 with its keys, so `closeRound1` can be
+   retried. It is not treated as "unauthentic", which would turn a transient failure into
+   false complaints.
+4. **T1 also on a key other than one's own** (spec §3.3). If the directory holds a key for `j`
+   that is not `j`'s announced key, someone authenticated as `j`, so `j` is faulty; it aborts.
+5. **Spec clarifications from the reference** (S1–S7):
+   - round 1's window opens when round 0's closes;
+   - the counting rule counts only envelopes actually sent, plus the round 5–6 disclosures;
+   - the `GenerateKeyPair` citation is fixed;
+   - atomic posting is a board property;
+   - the test-key tag scheme is pinned;
+   - byte-identical plaintexts count once;
+   - a T1 participant answers nothing.
+6. **The all-zero DH check is unreachable on SunEC** (review M-6). SunEC refuses small-order
+   inputs before returning a shared secret, so the explicit check is defence in depth. Its
+   mutant cannot be killed without a stub provider. It is kept for providers that return
+   `0^32`.
+
 ## Implementation status
 
 | Milestone | State | Notes |
 |---|---|---|
-| M0 | Not started | |
-| M1 | Not started | |
-| M2 | Not started | |
-| M3 | Not started | |
+| M0 | Done, reviewed | Spec `docs/specs/dkg-share-delivery-hpke-v1.md`. An independent Python reference (`zeroj-circuit-lib/src/test/resources/dkg-share-delivery-reference/`, 294 checks, 110 replayable vectors), written from the spec and RFC 9180 with no Java read. It reproduces RFC 9180 A.2.1 (all 257 encryptions), Wycheproof X25519, ChaCha20-Poly1305 and HKDF-SHA256, and RFC 7748, RFC 8439 and RFC 5869. Its two revisions raised S1–S7 and R2-1/R2-2, all resolved in the spec. Standard vectors are vendored, pinned by commit and SHA-256, in `src/test/resources/standard-vectors/`. |
+| M1 | Done, reviewed (adversarial and security, 2 rounds) | `Hpke` (Base, single-shot, the D1 suite) and `X25519Bytes` (explicit RFC 7748 decoding, canonicality, small-order probe, all-zero check) on JDK primitives. Tests: `HpkeKnownAnswerTest` (A.2.1, Wycheproof, RFC 7748/8439/5869) and `HpkeDifferentialTest` (BouncyCastle 1.83 both ways, byte-identical with the same ephemeral). The GraalVM native-image probe (`HpkeNativeProbe`) gives output identical to the JVM. Seal 114 µs, open 59 µs. |
+| M2 | Done, reviewed (adversarial and security, 2 rounds; one P0 found and fixed, implementation note 1) | `DkgShareDeliveryKeys`, `DkgKeyDirectory` (T1), `DkgShareDelivery` (`start` binds the participant; `closeRound1` is the barrier, authenticates before anything else, and fails closed). Tests: `DkgShareDeliveryTest` (I2–I15, front-running, binding, fail-closed retry, copied key, cross-session) and `DkgShareDeliveryReferenceVectorsTest` (every reference vector through production code). Integration test `AnnotatedElGamalTest.thresholdEndToEndOverEncryptedBoard`: encrypted DKG, admission from the board, Groth16-proved tally. |
+| M3 | Done | Support matrix and `zeroj-circuit-lib` README rows, a gadget-guide section with the MUST rules, the annotation guide, ADR-0053's Q1/Q7 notes, a threshold spec §5.2 pointer, and `docs/benchmarks/dkg-share-delivery-hpke-2026-10-09.md`. |

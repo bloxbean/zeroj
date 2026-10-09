@@ -271,7 +271,9 @@ ElGamal encryption (`elgamal-jubjub-v1`, experimental) has typed adapters too:
 
 See `AnnotatedElGamalBallot` and `AnnotatedElGamalDleq`, proved and verified in
 `AnnotatedElGamalTest`. The test also runs the full flow: verified admission of ballots,
-possession proofs, threshold key generation, and verified decryption shares.
+possession proofs, threshold key generation, and verified decryption shares. It runs the threshold key
+generation twice: once over private channels, and once with the private shares HPKE-encrypted on the
+board (`dkg-share-delivery-hpke-v1`, ADR-0054).
 Jubjub adapters use BLS12-381.
 
 Bind every prover-supplied point with `ZkJubjubPoint.witnessAffine(zk, u, v)`. It asserts the

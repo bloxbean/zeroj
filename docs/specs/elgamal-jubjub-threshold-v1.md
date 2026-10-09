@@ -270,6 +270,11 @@ deadline, with deadlines chosen accordingly. How an honest dealer should respond
 it believes is caused by late delivery is an open maintainer question (ADR-0053 Q7). This
 profile does not change Fig. 2's rule.
 
+*Informative.* The transport profile [`dkg-share-delivery-hpke-v1`](dkg-share-delivery-hpke-v1.md)
+(ADR-0054) delivers the `SHARE`s as HPKE envelopes on the board. Its processing barrier,
+commitments-last posting order and abort T1 remove this precondition's dependence on timing, for
+deployments that meet its delivery contract. It changes nothing in this profile.
+
 A4 cannot be triggered without knowing `log_G H`. Pairs that pass (4) but disagree with the
 polynomial require that discrete logarithm. So A4 is a defensive check, and the independent
 reference exercises it only with a test-only trapdoor base.
