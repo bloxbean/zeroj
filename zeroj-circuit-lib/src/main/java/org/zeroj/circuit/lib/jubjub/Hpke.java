@@ -18,7 +18,8 @@ import java.util.Objects;
  * HPKE [RFC 9180] in Base mode for the single suite of {@code dkg-share-delivery-hpke-v1}
  * (ADR-0054 D1): DHKEM(X25519, HKDF-SHA256) {@code 0x0020}, HKDF-SHA256 {@code 0x0001},
  * ChaCha20Poly1305 {@code 0x0003}. Assembled from the RFC text on JDK primitives
- * ({@code javax.crypto.KDF}, SunEC X25519, SunJCE ChaCha20-Poly1305).
+ * ({@code javax.crypto.KDF}, SunEC X25519, SunJCE ChaCha20-Poly1305) through algorithm-only
+ * lookups (see {@link X25519Bytes} on providers).
  *
  * <p>Production code uses only single-shot SealBase and OpenBase (§6.1), at sequence number 0:
  * {@link #sealBaseWithEphemeral} with an ephemeral key the caller drew from a {@code SecureRandom}
@@ -265,7 +266,7 @@ final class Hpke {
             builder.addSalt(salt); // an absent salt is HashLen zero bytes, as RFC 5869 §2.2 requires
         }
         try {
-            return KDF.getInstance("HKDF-SHA256").deriveData(builder.extractOnly());
+            return hkdf().deriveData(builder.extractOnly());
         } finally {
             Arrays.fill(labeledIkm, (byte) 0);
         }
@@ -275,7 +276,11 @@ final class Hpke {
     static byte[] labeledExpand(byte[] suiteId, byte[] prk, byte[] label, byte[] info, int length) throws GeneralSecurityException {
         byte[] labeledInfo = concat(i2osp(length, 2), HPKE_V1, suiteId, label, info);
         SecretKeySpec prkKey = new SecretKeySpec(prk, "HKDF-PRK");
-        return KDF.getInstance("HKDF-SHA256").deriveData(HKDFParameterSpec.expandOnly(prkKey, labeledInfo, length));
+        return hkdf().deriveData(HKDFParameterSpec.expandOnly(prkKey, labeledInfo, length));
+    }
+
+    private static KDF hkdf() throws GeneralSecurityException {
+        return KDF.getInstance("HKDF-SHA256");
     }
 
     static byte[] kemSuiteId() {

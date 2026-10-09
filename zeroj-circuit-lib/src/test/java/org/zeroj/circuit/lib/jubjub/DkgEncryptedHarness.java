@@ -164,6 +164,17 @@ final class DkgEncryptedHarness {
         }
     }
 
+    /** Runs {@code body} with {@code provider} preferred over every other provider, then removes it. */
+    static void withPreferredProvider(Provider provider, Runnable body) {
+        if (Security.getProvider(provider.getName()) != null) throw new IllegalStateException(provider.getName() + " already installed");
+        Security.insertProviderAt(provider, 1);
+        try {
+            body.run();
+        } finally {
+            Security.removeProvider(provider.getName());
+        }
+    }
+
     static byte[] testKey(String tag) {
         try {
             return MessageDigest.getInstance("SHA-256")

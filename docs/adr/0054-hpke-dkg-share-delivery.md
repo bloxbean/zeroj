@@ -709,12 +709,12 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
    fix, any exception from the JDK primitives counted as a failed open. A missing or failing
    HKDF/AEAD provider at an honest recipient made it complain about every honest dealer, and
    the answers then exposed their contributions. Now only input-caused failures are absence:
-   - small order, via SunEC's `doPhase` refusal or the all-zero value;
+   - small order (decided as note 10 says);
    - AEAD tag failure;
    - wrong length.
 
    Everything else is an `IllegalStateException` that fails closed, like verifier exceptions
-   (note 3). `start` and `closeRound1` also run a seal-and-open self-test with the participant's
+   (note 3). Note 10 refines how small order is decided. `start` and `closeRound1` also run a seal-and-open self-test with the participant's
    own keys before judging any input. The small-order probe no longer reports a fault as small
    order. Tests remove the SunJCE or SunEC provider at each entry point.
 8. **The keys and directory are bound by instance** (final Codex review C-1). `closeRound1`
@@ -723,6 +723,22 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
 9. **Key lifecycle on failure paths** (Z-4). Keys are destroyed when round 1 closes or the
    participant aborts. Any other failure keeps them, for the documented retry. An application
    that abandons the attempt calls `destroy()`. HPKE wipes its intermediate secrets in `finally`.
+10. **Small order is decided without the provider** (security round 2, R2-1, and spec↔code
+    round 2, X-9; P2).
+    - **The bug:** after note 7, small order was recognised by SunEC's `InvalidKeyException`.
+      With BouncyCastle preferred, which is common in Java stacks, a small-order `enc` or
+      announced key raised a different exception. It was classified as a platform fault, so one
+      corrupted trustee could stall every honest participant.
+    - **The fix:** small order is now decided before the provider is called, by membership in
+      the five canonical small-order u-coordinates (spec §2.2, informative note). The set is
+      checked against Wycheproof, and the all-zero check is kept.
+    - A test runs a whole DKG with BouncyCastle as the preferred provider.
+    - **Provider selection stays algorithm-only.** Pinning `SunEC`/`SunJCE` by name was tried
+      and broke the GraalVM native image, which registers a provider only when an
+      algorithm-only lookup reaches it. With BouncyCastle preferred, BouncyCastle computes
+      X25519 and the AEAD. The outcome does not change: small order is decided by ZeroJ, and BC
+      reports tag failures as `AEADBadTagException`. I10's "JDK primitives" therefore holds for
+      the default provider order. Provider policy is listed as a review gate.
 
 ### Proposed amendment awaiting a maintainer decision (not implemented)
 
@@ -745,7 +761,15 @@ from the independent reference (findings S1–S7) and the M1/M2 reviews.
 |---|---|---|
 | M0 | Done, reviewed | Spec `docs/specs/dkg-share-delivery-hpke-v1.md`. An independent Python reference (`zeroj-circuit-lib/src/test/resources/dkg-share-delivery-reference/`, 294 checks, 110 replayable vectors), written from the spec and RFC 9180 with no Java read. It reproduces RFC 9180 A.2.1 (all 257 encryptions), Wycheproof X25519, ChaCha20-Poly1305 and HKDF-SHA256, and RFC 7748, RFC 8439 and RFC 5869. Its two revisions raised S1–S7 and R2-1/R2-2, all resolved in the spec. Standard vectors are vendored, pinned by commit and SHA-256, in `src/test/resources/standard-vectors/`. |
 | M1 | Done, reviewed (adversarial and security, 2 rounds) | `Hpke` (Base, single-shot, the D1 suite) and `X25519Bytes` (explicit RFC 7748 decoding, canonicality, small-order probe, all-zero check) on JDK primitives. Tests: `HpkeKnownAnswerTest` (A.2.1, Wycheproof, RFC 7748/8439/5869) and `HpkeDifferentialTest` (BouncyCastle 1.83 both ways, byte-identical with the same ephemeral). The GraalVM native-image probe (`HpkeNativeProbe`) gives output identical to the JVM. Seal 114 µs, open 59 µs. |
-| M2 | Done, reviewed (adversarial and security, 2 rounds; one P0 found and fixed, implementation note 1) | `DkgShareDeliveryKeys`, `DkgKeyDirectory` (T1), `DkgShareDelivery` (`start` binds the participant; `closeRound1` is the barrier, authenticates before anything else, and fails closed). Tests: `DkgShareDeliveryTest` (I2–I15, front-running, binding, fail-closed retry, copied key, cross-session, platform faults). It reruns ADR-0053's board-expressible adversarial suites over encrypted delivery and compares each with private channels: more than `t` complaints, a bad answer, the Feldman cheat, conflicting `COMMITMENTS` or `EXTRACTION`, withheld `EXTRACTION`, and A5. Suites that need per-recipient views (A6, A7, A9) are not transport-dependent. `DkgShareDeliveryReferenceVectorsTest` replays every reference vector. Honest participants and HPKE run through production code. The reference's negative controls (no barrier, D7a ignored) and corrupted participants run through test code, and the §6 counting rule is re-implemented in the test from the spec. Integration test `AnnotatedElGamalTest.thresholdEndToEndOverEncryptedBoard`: encrypted DKG, admission from the board, Groth16-proved tally. |
+| M2 | Done, reviewed (adversarial and security, 2 rounds; one P0 found and fixed, implementation note 1) | `DkgShareDeliveryKeys`, `DkgKeyDirectory` (T1), `DkgShareDelivery` (`start` binds the participant; `closeRound1` is the barrier, authenticates before anything else, and fails closed). Tests: `DkgShareDeliveryTest` (I2–I15, front-running, binding, fail-closed retry, copied key, cross-session, platform faults). It reruns several of ADR-0053's adversarial suites over encrypted delivery and compares each with private channels, asserting that each attack took effect:
+- more than `t` complaints;
+- a bad answer;
+- the Feldman cheat;
+- conflicting `COMMITMENTS` or `EXTRACTION`;
+- withheld `EXTRACTION`;
+- A5.
+
+Other board-expressible suites are not rerun: a single unanswered complaint, A3, the rushing order and A7's lying confirmations. They act only on broadcasts, which the transport does not touch. Suites that need per-recipient views (A6, A9) cannot be posted on an agreed board. `DkgShareDeliveryReferenceVectorsTest` replays every reference vector. Honest participants and HPKE run through production code. The reference's negative controls (no barrier, D7a ignored) and corrupted participants run through test code, and the §6 counting rule is re-implemented in the test from the spec. Integration test `AnnotatedElGamalTest.thresholdEndToEndOverEncryptedBoard`: encrypted DKG, admission from the board, Groth16-proved tally. |
 | M3 | Done, reviewed in the final pass | Support matrix and `zeroj-circuit-lib` README rows, a gadget-guide section with the MUST rules, the annotation guide, ADR-0053's Q1/Q7 notes, a threshold spec §5.2 pointer, and `docs/benchmarks/dkg-share-delivery-hpke-2026-10-09.md`. |
 
 **Final whole-PR review (2026-10-09).** Three independent reviews ran: spec↔code (Claude),
@@ -768,3 +792,8 @@ All findings are addressed except Z-2:
 - **X-5:** authenticated junk in the round-1 window.
 - **Z-2** (a dealer's own D7a self-check) awaits a maintainer decision; see "Proposed amendment"
   above.
+- **Round 2:** both reviews found the same regression from the Z-1 fix (R2-1/X-9, note 10). It
+  is fixed. Also in round 2:
+  - X-10: the T1 re-check in `closeRound1` is documented as defence in depth;
+  - X-11: each adversarial rerun asserts that its attack took effect;
+  - spec §3.2: a fault while building the directory is not a missing key.

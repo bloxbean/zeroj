@@ -200,9 +200,9 @@ public final class DkgShareDelivery {
      * Closes round 1 behind the processing barrier (spec §5.1; ADR-0054 D6a, I11). For a
      * participant started with {@link #start}, it:
      * <ol>
-     *   <li>checks the session and identifier of the participant, directory and keys, requires
-     *       the very keys and directory instances given to {@link #start}, and checks abort T1
-     *       again;</li>
+     *   <li>checks the session and identifier of the participant, directory and keys, and
+     *       requires the very keys and directory instances given to {@link #start} (with these,
+     *       T1 cannot newly apply; it is re-checked only as defence in depth);</li>
      *   <li>authenticates every post of the window under its sender's roster key, and drops those
      *       that fail. Nothing is de-duplicated before authentication, so a copy posted under
      *       another author cannot shadow the genuine post;</li>
@@ -236,8 +236,7 @@ public final class DkgShareDelivery {
      *                                          destroyed, or the platform's primitives failed
      * @throws IllegalArgumentException         if the participant, directory and keys disagree, or
      *                                          are not the instances given to {@link #start}
-     * @throws FaultAssumptionViolatedException on T1, or if the participant aborts while closing
-     *                                          round 1
+     * @throws FaultAssumptionViolatedException if the participant aborts while closing round 1
      */
     public static List<DkgMessage> closeRound1(DkgParticipant participant, DkgKeyDirectory directory,
                                                DkgShareDeliveryKeys keys,

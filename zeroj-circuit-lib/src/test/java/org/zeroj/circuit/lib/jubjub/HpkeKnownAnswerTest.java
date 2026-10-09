@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.TreeSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -198,6 +200,34 @@ class HpkeKnownAnswerTest {
         assertEquals(518, total);
         assertTrue(zeroRefused > 0, "Wycheproof contains all-zero cases");
         assertTrue(nonCanonical > 0, "Wycheproof contains non-canonical public values");
+    }
+
+    @Test
+    @DisplayName("The provider-independent small-order set equals Wycheproof's all-zero public values (review R2-1)")
+    void smallOrderSetMatchesWycheproof() {
+        JsonNode root;
+        try {
+            root = load("wycheproof-x25519_test.json");
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+        Set<BigInteger> zero = new TreeSet<>();
+        int nonZero = 0;
+        for (JsonNode group : root.get("testGroups")) {
+            for (JsonNode t : group.get("tests")) {
+                byte[] pub = hex(t, "public");
+                String id = "tcId " + t.get("tcId").asInt();
+                if (X25519Bytes.isAllZero(hex(t, "shared"))) {
+                    assertTrue(X25519Bytes.isSmallOrder(pub), id);
+                    zero.add(X25519Bytes.decodeUCoordinate(pub));
+                } else if (!"invalid".equals(t.get("result").asText())) {
+                    assertFalse(X25519Bytes.isSmallOrder(pub), id);
+                    nonZero++;
+                }
+            }
+        }
+        assertEquals(5, zero.size(), "0, 1, p − 1 and the two order-8 u-coordinates: " + zero);
+        assertTrue(nonZero > 400);
     }
 
     @Test

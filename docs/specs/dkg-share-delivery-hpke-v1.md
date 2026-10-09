@@ -80,6 +80,15 @@ Hence `X25519(k, u) = 0^32` exactly when the point with u-coordinate `u` has ord
 order. One fixed scalar decides it for all. A small-order key would make every dealer's `Encap` fail (§1). Refusing it in the
 announcement gives every participant the same directory (§3.2).
 
+*Informative.* Reduced mod `p`, there are exactly five such u-coordinates: `0`, `1`, `p − 1`,
+and the two order-8 values
+`325606250916557431795983626356110631294008115727848805560023387167927233504` and
+`39382357235489614581723060781553021112529911719440698176882885853963445705823`. They are the
+public values of every all-zero case in Wycheproof `x25519_test.json` (§9.2). An implementation
+may decide "small order" by membership in this set, for the probe and for `enc` (§4.2 step 5),
+instead of by how its X25519 provider reports it. The outcome is identical, and it does not
+depend on the provider (§4.2, "A local fault is not a failed step").
+
 ### 2.3 Private keys
 
 A recipient private key `skR` is 32 bytes from a cryptographically secure generator: RFC 9180
@@ -121,7 +130,9 @@ For each `j`, consider the delivered announcements from `j`. Byte-identical copi
 - None, or two or more distinct ones (a **conflict**): `j` has **no key**.
 
 The directory is a deterministic function of the final round-0 window, so every honest
-participant computes the same one.
+participant computes the same one. A local fault while building it (§4.2, "A local fault is not
+a failed step") is not a missing key: the participant does not build a directory and may retry
+on the same window.
 
 ### 3.3 Abort T1 — own key missing
 

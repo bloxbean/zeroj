@@ -1,5 +1,6 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -136,7 +137,7 @@ class DkgShareDeliveryTest {
             };
         }
 
-        private void sameOutcome(DkgConfig config, List<ThresholdVss.Dealing> d, DkgHarness.Adversary adversary) {
+        private DkgEncryptedHarness sameOutcome(DkgConfig config, List<ThresholdVss.Dealing> d, DkgHarness.Adversary adversary) {
             DkgHarness plain = DkgHarness.fixed(config, d, adversary).run();
             DkgEncryptedHarness enc = DkgEncryptedHarness.fixed(config, d, onBoard(config, d, adversary)).run();
             assertArrayEquals(DkgTranscript.of(config, plain.transcriptMessages()).digest(),
@@ -150,6 +151,7 @@ class DkgShareDeliveryTest {
                 assertEquals(context(plain.participant(j)), context(enc.participant(j)), "context of " + j);
                 assertEquals(plain.participant(j).result().secretScalar(), enc.participant(j).result().secretScalar(), "x_" + j);
             }
+            return enc;
         }
 
         @Test
@@ -157,8 +159,10 @@ class DkgShareDeliveryTest {
         void tooManyComplaints() {
             DkgConfig config = config(2, 5, 1);
             List<ThresholdVss.Dealing> d = dealings(2, 5);
-            sameOutcome(config, d, (m, honest) -> m.kind() == DkgMessage.Kind.SHARE && m.sender() == 1 && m.subject() >= 3
+            DkgEncryptedHarness enc = sameOutcome(config, d, (m, honest) -> m.kind() == DkgMessage.Kind.SHARE && m.sender() == 1 && m.subject() >= 3
                     ? List.of(new DkgHarness.Delivery(1, m.subject(), bump(config, m).encode())) : honest);
+            assertEquals(FaultAssumptionViolatedException.Reason.OWN_DEALING_DISQUALIFIED, enc.aborted.get(1).reason(), "the attack took effect");
+            assertEquals(Set.of(2, 3, 4, 5), context(enc.participant(2)).qual());
         }
 
         @Test
@@ -166,7 +170,7 @@ class DkgShareDeliveryTest {
         void badAnswer() {
             DkgConfig config = config(1, 3, 1);
             List<ThresholdVss.Dealing> d = dealings(1, 3);
-            sameOutcome(config, d, (m, honest) -> {
+            DkgEncryptedHarness enc = sameOutcome(config, d, (m, honest) -> {
                 if (m.kind() == DkgMessage.Kind.SHARE && m.sender() == 1 && m.subject() == 2) {
                     return List.of(new DkgHarness.Delivery(1, 2, bump(config, m).encode()));
                 }
@@ -178,6 +182,7 @@ class DkgShareDeliveryTest {
                 }
                 return honest;
             });
+            assertEquals(Set.of(2, 3), context(enc.participant(2)).qual(), "the attack took effect");
         }
 
         @Test
@@ -185,7 +190,7 @@ class DkgShareDeliveryTest {
         void feldmanCheat() {
             DkgConfig config = config(1, 3, 1);
             List<ThresholdVss.Dealing> d = dealings(1, 3);
-            sameOutcome(config, d, (m, honest) -> {
+            DkgEncryptedHarness enc = sameOutcome(config, d, (m, honest) -> {
                 if (m.kind() == DkgMessage.Kind.EXTRACTION && m.sender() == 3) {
                     List<JubjubPoint> forged = new ArrayList<>(m.points());
                     forged.set(1, forged.get(1).add(JubjubPoint.SUBGROUP_GENERATOR).normalized());
@@ -196,6 +201,7 @@ class DkgShareDeliveryTest {
                 }
                 return honest;
             });
+            assertEquals(FaultAssumptionViolatedException.Reason.OWN_DEALING_MARKED, enc.aborted.get(3).reason(), "the attack took effect");
         }
 
         @Test
@@ -205,7 +211,7 @@ class DkgShareDeliveryTest {
             List<ThresholdVss.Dealing> d = dealings(1, 3);
             List<ThresholdVss.Dealing> alt = DkgHarness.dealings(1, 3, 54_999);
             for (DkgMessage.Kind kind : List.of(DkgMessage.Kind.COMMITMENTS, DkgMessage.Kind.EXTRACTION)) {
-                sameOutcome(config, d, (m, honest) -> {
+                DkgEncryptedHarness enc = sameOutcome(config, d, (m, honest) -> {
                     if (m.kind() == kind && m.sender() == 3) {
                         List<JubjubPoint> second = kind == DkgMessage.Kind.COMMITMENTS ? alt.get(2).commitments() : alt.get(2).extraction();
                         byte[] bytes = DkgMessage.points(config, kind, 3, second).encode();
@@ -215,8 +221,15 @@ class DkgShareDeliveryTest {
                     }
                     return honest;
                 });
+                if (kind == DkgMessage.Kind.COMMITMENTS) {
+                    assertEquals(Set.of(1, 2), context(enc.participant(1)).qual(), "conflicting COMMITMENTS disqualify");
+                } else {
+                    assertEquals(Set.of(3), DkgTranscript.of(config, enc.transcriptMessages()).recompute().marked(), "conflicting EXTRACTION is marked");
+                }
             }
-            sameOutcome(config, d, (m, honest) -> m.kind() == DkgMessage.Kind.EXTRACTION && m.sender() == 2 ? List.of() : honest);
+            DkgEncryptedHarness withheld = sameOutcome(config, d,
+                    (m, honest) -> m.kind() == DkgMessage.Kind.EXTRACTION && m.sender() == 2 ? List.of() : honest);
+            assertEquals(Set.of(2), DkgTranscript.of(config, withheld.transcriptMessages()).recompute().marked(), "withheld EXTRACTION is marked");
         }
 
         @Test
@@ -966,6 +979,40 @@ class DkgShareDeliveryTest {
                         "the probe never reports a fault as small order");
             });
             assertArrayEquals(new byte[100], Hpke.openBase(sealed.enc(), skR, info, new byte[0], sealed.ct()), "restored");
+        }
+
+        @Test
+        @DisplayName("With BouncyCastle preferred: small-order enc and keys are still absence, not a stall; honest envelopes still open (review R2-1)")
+        void preferredThirdPartyProvider() {
+            DkgConfig config = config(1, 3, 1);
+            List<ThresholdVss.Dealing> d = dealings(1, 3);
+            byte[] zeroEnc = new byte[32];
+            DkgEncryptedHarness.withPreferredProvider(new BouncyCastleProvider(), () -> {
+                // Round 0: corrupted 3 announces u = 0; round 1: it sends u = 0 as enc to everyone.
+                DkgEncryptedHarness h = DkgEncryptedHarness.fixed(config, d, new DkgEncryptedHarness.Hooks() {
+                    @Override
+                    public List<byte[]> announcement(int j, byte[] announcement) {
+                        return j == 3 ? List.of(DkgShareDeliveryCodec.announcement(config, 3, zeroEnc)) : List.of(announcement);
+                    }
+
+                    @Override
+                    public List<DkgEncryptedHarness.Post> extra(int round) {
+                        if (round != 1) return List.of();
+                        return List.of(
+                                new DkgEncryptedHarness.Post(3, DkgShareDeliveryCodec.envelope(config, 3, 1, zeroEnc, new byte[DkgShareDeliveryCodec.CT_LENGTH])),
+                                new DkgEncryptedHarness.Post(3, DkgShareDeliveryCodec.envelope(config, 3, 2, zeroEnc, new byte[DkgShareDeliveryCodec.CT_LENGTH])));
+                    }
+                }).run();
+                assertFalse(h.directory.hasKey(3), "a small-order key is no key");
+                assertEquals(FaultAssumptionViolatedException.Reason.OWN_KEY_ANNOUNCEMENT_MISSING, h.aborted.get(3).reason());
+                assertEquals(Set.of(3), h.aborted.keySet(), "only 3 aborts; 1 and 2 closed round 1 past the small-order envelopes");
+                assertTrue(h.posted(2, DkgMessage.Kind.COMPLAINT).isEmpty(), "3 dealt nothing, so nobody complains");
+                assertEquals(Set.of(1, 2), context(h.participant(1)).qual());
+                byte[] skR = DkgEncryptedHarness.testKey("recipient.2");
+                assertThrows(Hpke.HpkeException.class,
+                        () -> Hpke.openBase(zeroEnc, skR, new byte[1], new byte[0], new byte[DkgShareDeliveryCodec.CT_LENGTH]));
+                assertFalse(X25519Bytes.passesSmallOrderProbe(zeroEnc));
+            });
         }
 
         @Test

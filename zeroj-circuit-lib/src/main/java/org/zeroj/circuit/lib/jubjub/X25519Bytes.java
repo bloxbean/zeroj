@@ -3,7 +3,6 @@ package org.zeroj.circuit.lib.jubjub;
 import javax.crypto.KeyAgreement;
 import java.math.BigInteger;
 import java.security.GeneralSecurityException;
-import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -11,6 +10,7 @@ import java.security.spec.NamedParameterSpec;
 import java.security.spec.XECPrivateKeySpec;
 import java.security.spec.XECPublicKeySpec;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * X25519 on 32-byte strings, with the decoding done here rather than by a provider
@@ -29,9 +29,17 @@ import java.util.Objects;
  * provider (RFC 9180 §7.1.4).
  *
  * <p><b>Input refusals versus faults.</b> A small-order input is the only way the input can make
- * {@link #dh} fail; it is reported as {@link SmallOrderException}, whether SunEC refuses it in
- * {@code doPhase} or a provider returns the all-zero value. Every other exception is a fault of
- * the platform, and callers must not treat it as a property of the input (review Z-1).
+ * {@link #dh} fail. It is decided here, before the provider is called, against the five canonical
+ * small-order u-coordinates, and reported as {@link SmallOrderException}; the all-zero check
+ * stays as defence in depth. Every exception from the provider is then a fault of the platform,
+ * and callers must not treat it as a property of the input. The decision therefore does not
+ * depend on how a provider reports small order (reviews Z-1, R2-1).
+ *
+ * <p><b>Providers.</b> Lookups name the algorithm only, so the highest-priority provider serves
+ * them: {@code SunEC} on a standard JDK. Naming the provider would break native images, which
+ * register a provider only when an algorithm-only lookup reaches it. An application that prefers
+ * a third-party provider (for example BouncyCastle) gets that provider's X25519; small order is
+ * still decided here, so the outcome does not change (review R2-1).
  *
  * <p><b>Secret.</b> Private scalars are compatibility/offline class (ADR-0039 §3.1). The DH
  * itself is the JDK provider's (SunEC); no constant-time claim is made for this class.
@@ -46,6 +54,21 @@ final class X25519Bytes {
 
     /** The small-order probe scalar of spec §2.2: {@code 0x09 ‖ 0^31}. */
     static final byte[] PROBE = BASE_POINT.clone();
+
+    /**
+     * The u-coordinates, reduced mod {@code p}, of the points of order dividing 8 on Curve25519
+     * and its twist: {@code 0}, {@code 1}, {@code p − 1} and the two order-8 points. A clamped
+     * scalar is {@code 8k'} with {@code 2^251 ≤ k' < 2^252}, below both large prime orders, so
+     * {@code X25519(k, u) = 0^32} exactly for these {@code u} (spec §2.2). The set equals the
+     * public values of every all-zero case in Wycheproof {@code x25519_test.json}
+     * ({@code HpkeKnownAnswerTest.smallOrderSetMatchesWycheproof}).
+     */
+    private static final Set<BigInteger> SMALL_ORDER = Set.of(
+            BigInteger.ZERO,
+            BigInteger.ONE,
+            P.subtract(BigInteger.ONE),
+            new BigInteger("325606250916557431795983626356110631294008115727848805560023387167927233504"),
+            new BigInteger("39382357235489614581723060781553021112529911719440698176882885853963445705823"));
 
     private X25519Bytes() {
     }
@@ -77,7 +100,7 @@ final class X25519Bytes {
 
     /** The provider public key for a 32-byte u-coordinate, decoded per RFC 7748 §5. */
     static PublicKey publicKey(byte[] b) throws GeneralSecurityException {
-        return KeyFactory.getInstance("XDH")
+        return keyFactory()
                 .generatePublic(new XECPublicKeySpec(NamedParameterSpec.X25519, decodeUCoordinate(b)));
     }
 
@@ -86,29 +109,25 @@ final class X25519Bytes {
         if (scalar == null || scalar.length != 32) {
             throw new IllegalArgumentException("an X25519 private key is 32 bytes");
         }
-        return KeyFactory.getInstance("XDH").generatePrivate(new XECPrivateKeySpec(NamedParameterSpec.X25519, scalar));
+        return keyFactory().generatePrivate(new XECPrivateKeySpec(NamedParameterSpec.X25519, scalar));
     }
 
     /**
      * {@code X25519(scalar, u)}, refusing an all-zero result (RFC 9180 §7.1.4, RFC 7748 §6.1).
      *
-     * @throws SmallOrderException      if {@code u} has small order: the result is all-zero, or
-     *                                  the provider refused the point in {@code doPhase}
+     * @throws SmallOrderException      if {@code u} has small order (decided before the provider
+     *                                  is called), or the provider returned the all-zero value
      * @throws GeneralSecurityException any other failure, which is a fault of the platform
      */
     static byte[] dh(PrivateKey scalar, byte[] u) throws GeneralSecurityException {
         Objects.requireNonNull(scalar, "scalar");
+        if (isSmallOrder(u)) {
+            throw new SmallOrderException("small-order X25519 input", null);
+        }
         PublicKey point = publicKey(u);
         KeyAgreement agreement = KeyAgreement.getInstance("X25519");
         agreement.init(scalar);
-        try {
-            agreement.doPhase(point, true);
-        } catch (InvalidKeyException refused) {
-            // SunEC computes the result here and refuses small order ("Point has small order").
-            // The key and the point are this provider's own objects, so nothing else about the
-            // input can be refused at this step.
-            throw new SmallOrderException("small-order X25519 input", refused);
-        }
+        agreement.doPhase(point, true);
         byte[] shared = agreement.generateSecret();
         if (isAllZero(shared)) {
             throw new SmallOrderException("all-zero X25519 output", null);
@@ -136,6 +155,15 @@ final class X25519Bytes {
         } catch (GeneralSecurityException fault) {
             throw new IllegalStateException("X25519 is unavailable", fault);
         }
+    }
+
+    private static KeyFactory keyFactory() throws GeneralSecurityException {
+        return KeyFactory.getInstance("XDH");
+    }
+
+    /** {@code true} iff {@code u}, decoded per RFC 7748 §5, is a small-order u-coordinate. */
+    static boolean isSmallOrder(byte[] u) {
+        return SMALL_ORDER.contains(decodeUCoordinate(u));
     }
 
     static boolean isAllZero(byte[] b) {
