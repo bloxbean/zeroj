@@ -5,6 +5,7 @@ import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.IntFunction;
@@ -161,16 +162,35 @@ public final class DkgShareDelivery {
 
     private static final byte[] SELF_TEST_INFO = Hpke.ascii("zeroj.dkg-share-delivery-hpke.v1.self-test");
 
+    // RFC 9180 Appendix A.2.1 (DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, ChaCha20Poly1305, Base),
+    // encryption at sequence 0. Public test values, copied from the vendored CFRG vectors
+    // (src/test/resources/standard-vectors/); HpkeKnownAnswerTest checks the same values.
+    private static final String A21_SK_R = "8057991eef8f1f1af18f4a9491d16a1ce333f695d4db8e38da75975c4478e0fb";
+    private static final String A21_PK_R = "4310ee97d88cc1f088a5576c77ab0cf5c3ac797f3d95139c6c84b5429c59662a";
+    private static final String A21_ENC = "1afa08d3dec047a643885163f1180476fa7ddb54c6a8029ea33f95796bf2ac4a";
+    private static final String A21_INFO = "4f6465206f6e2061204772656369616e2055726e";
+    private static final String A21_AAD_0 = "436f756e742d30";
+    private static final String A21_PT_0 = "4265617574792069732074727574682c20747275746820626561757479";
+    private static final String A21_CT_0 = "1c5250d8034ec2b784ba2cfd69dbdb8af406cfe3ff938e131f0def8c8b60b4db21993c62ce81883d2dd1b51a28";
+
     /**
-     * Seals a fixed plaintext to {@code pkR} under a fresh ephemeral key and opens it with
-     * {@code recipient}: a local check of the platform's X25519, HKDF and ChaCha20-Poly1305, run
-     * before any input is judged (review Z-1). Nothing of it is posted.
+     * A local check of the platform's X25519, HKDF and ChaCha20-Poly1305, run before any input is
+     * judged (reviews Z-1, R3-1). Nothing of it is posted. It opens the RFC 9180 Appendix A.2.1
+     * sequence-0 ciphertext, a known answer that a provider consistent with itself but not with
+     * the RFC fails. It then seals a fixed plaintext to {@code pkR} under a fresh ephemeral key and
+     * opens it with {@code recipient}.
      *
-     * @throws IllegalStateException if any step fails or the plaintext differs
+     * @throws IllegalStateException if any step fails or a plaintext differs
      */
     private static void selfTest(PrivateKey recipient, byte[] pkR) {
         byte[] pt = new byte[DkgShareDeliveryCodec.SHARE_LENGTH];
         try {
+            HexFormat hex = HexFormat.of();
+            byte[] known = Hpke.openBase(hex.parseHex(A21_ENC), hex.parseHex(A21_SK_R), hex.parseHex(A21_PK_R),
+                    hex.parseHex(A21_INFO), hex.parseHex(A21_AAD_0), hex.parseHex(A21_CT_0));
+            if (!Arrays.equals(hex.parseHex(A21_PT_0), known)) {
+                throw new IllegalStateException("HPKE known-answer self-test returned a different plaintext");
+            }
             Hpke.Sealed sealed = Hpke.sealBase(pkR, SELF_TEST_INFO, new byte[0], pt, new SecureRandom());
             if (!Arrays.equals(pt, Hpke.openBase(sealed.enc(), recipient, pkR, SELF_TEST_INFO, new byte[0], sealed.ct()))) {
                 throw new IllegalStateException("HPKE self-test returned a different plaintext");

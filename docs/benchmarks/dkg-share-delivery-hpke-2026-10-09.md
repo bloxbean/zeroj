@@ -28,21 +28,21 @@ upper bound for production.
 Each participant:
 - seals `n − 1` envelopes and opens `n − 1`;
 - runs the probe on up to `n` announcements;
-- runs two platform self-tests, one seal and one open each, in `start` and `closeRound1`
-  (ADR-0054 implementation note 7).
+- runs two platform self-tests, in `start` and `closeRound1` (ADR-0054 implementation notes 7
+  and 10). Each one opens the RFC 9180 A.2.1 known answer, then seals and opens once.
 
 The delivery work per participant is therefore about
-`(n − 1) · 0.17 ms + n · 0.05 ms + 0.35 ms`:
+`(n − 1) · 0.17 ms + n · 0.05 ms + 0.47 ms`:
 
 | `n` | Delivery work per participant (computed from the table above) |
 |---:|---:|
-| 3 | ≈ 0.9 ms |
-| 7 | ≈ 1.8 ms |
-| 21 | ≈ 4.9 ms |
+| 3 | ≈ 1.0 ms |
+| 7 | ≈ 1.9 ms |
+| 21 | ≈ 5.1 ms |
 | 64 | ≈ 15 ms |
 
 Whole encrypted runs, with all `n` participants in one JVM, measured against plain runs on the same
-dealings. These were measured before the self-tests were added; they add about 0.35 ms per
+dealings. These were measured before the self-tests were added; they add about 0.5 ms per
 participant, well inside the run-to-run noise:
 
 | DKG (t, n) | Plain run | Encrypted run |
