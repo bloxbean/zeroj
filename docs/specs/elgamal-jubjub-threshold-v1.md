@@ -144,7 +144,10 @@ authenticated, well-formed message **of round `r`** that arrived while round `r`
 round `r − 1` closed (for round 1, once the session started) and before round `r` closed. A
 message that is late, early or malformed counts as **absent**. An early message, sent while an
 earlier round was open, is dropped and not carried forward into its own round; honest
-participants send round `r`'s messages only while round `r` is open. Every rule below is a deterministic function of the delivered broadcast sets, so all
+participants send round `r`'s messages only while round `r` is open. (*Informative:* with the
+transport profile [`dkg-share-delivery-hpke-v1`](dkg-share-delivery-hpke-v1.md), round 1 opens
+when that profile's round 0 closes, its §5; a message of this profile posted during round 0 is
+early.) Every rule below is a deterministic function of the delivered broadcast sets, so all
 honest participants, and anyone recomputing a transcript, take the same decisions.
 
 **R1.** Dealer `i` is **disqualified** if its `COMMITMENTS` is absent or in conflict.
@@ -269,6 +272,11 @@ must therefore deliver private `SHARE`s between honest participants before the r
 deadline, with deadlines chosen accordingly. How an honest dealer should respond to a complaint
 it believes is caused by late delivery is an open maintainer question (ADR-0053 Q7). This
 profile does not change Fig. 2's rule.
+
+*Informative.* The transport profile [`dkg-share-delivery-hpke-v1`](dkg-share-delivery-hpke-v1.md)
+(ADR-0054) delivers the `SHARE`s as HPKE envelopes on the board. Its processing barrier,
+commitments-last posting order and abort T1 remove this precondition's dependence on timing, for
+deployments that meet its delivery contract. It changes nothing in this profile.
 
 A4 cannot be triggered without knowing `log_G H`. Pairs that pass (4) but disagree with the
 polynomial require that discrete logarithm. So A4 is a defensive check, and the independent

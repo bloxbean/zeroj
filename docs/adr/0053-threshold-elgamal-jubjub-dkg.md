@@ -11,6 +11,10 @@ Accepted (design) — 2026-10-05.
 - Q2–Q6 were decided by the maintainer on 2026-10-05: each recorded lean is adopted. Q1 (the
   private channels) stays escalated and does not block the library, whose transport is
   pluggable (#77).
+- **2026-10-09:** Q1 is answered by ADR-0054 (Accepted), which provides an optional ZeroJ
+  transport for the private shares: HPKE-encrypted envelopes on the board. Q7 is resolved for
+  deployments that use that transport and meet its delivery contract (ADR-0054 Q6). Neither
+  changes this ADR's protocol, encodings or admission.
 
 This ADR builds on ADR-0052 (Accepted). It changes no maturity claim. ADR-0039's assurance
 classes apply: every secret-bearing operation here is **compatibility/offline** class.
@@ -510,6 +514,11 @@ ADR-0052's host API, ADR-0052's own M0 and M1 come first (see the PR description
        would need its own pinned references and review.
    - Lean: (a). **Escalated**, and still open; tracked in #77. The library takes no position:
      the transport is the application's.
+   - **Answered 2026-10-09 by ADR-0054 (Accepted).** It adds an optional transport,
+     `dkg-share-delivery-hpke-v1`: each `SHARE` is HPKE-encrypted (RFC 9180) to a per-attempt
+     recipient key and posted on the board. It is a pinned standard used as specified, not new
+     cryptography, and replacing ideal channels by encryption is stated there as Assumption A1,
+     for external review. Option (a) stays available.
 2. **Q2 (D2): thresholds above a majority**, such as 4-of-5.
    - Lean: unsupported. Theorem 1 covers only `t < n/2`.
    - **Decided 2026-10-05 (maintainer): lean adopted.**
@@ -543,6 +552,17 @@ ADR-0052's host API, ADR-0052's own M0 and M1 come first (see the PR description
        disqualification. This changes `QUAL` semantics and needs analysis;
      - (c) use a construction from the asynchronous-DKG literature (out of scope, D8).
    - Lean: (a), with the transport review gate covering deadlines. **Escalated.**
+   - **Resolved 2026-10-09, scoped (ADR-0054 Q6).** For deployments that use
+     `dkg-share-delivery-hpke-v1` and meet its contract, a share is delivered when its envelope
+     is in the final round-1 window. Three rules then apply:
+     - the processing barrier (ADR-0054 D6a);
+     - abort T1 for a missing own key (D4);
+     - a dealer's `COMMITMENTS` only after its envelopes are final (D7a).
+
+     Together they make an honest recipient's false absence complaint impossible, and keep every
+     answer by an honest qualified dealer at a corrupted index. Secrecy then no longer depends on
+     publication timing. The precondition, and this question, stay as stated above for
+     application-provided channels.
 
 ## Related findings (out of scope)
 

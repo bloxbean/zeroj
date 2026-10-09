@@ -23,7 +23,15 @@ import java.util.List;
  */
 public interface DkgAdmissionVerifier {
 
-    /** {@code true} iff {@code message} was sent by the participant holding {@code rosterKey}. */
+    /**
+     * {@code true} iff {@code message} was sent by the participant holding {@code rosterKey}.
+     *
+     * <p>Return {@code false}, never throw, for input that is malformed or not authentic: the
+     * authenticator bytes come from the board and may be chosen by an attacker. Throw only on a
+     * transient fault of the checking itself. {@link DkgShareDelivery#closeRound1} then stops
+     * without closing round 1 (fail closed) and can be retried; a verifier that throws on attacker
+     * input would block that participant's round 1 for good.
+     */
     boolean authenticate(int sender, byte[] rosterKey, byte[] message, byte[] authenticator);
 
     /**

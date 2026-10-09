@@ -2,6 +2,7 @@ package org.zeroj.circuit.lib.jubjub;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,6 +79,13 @@ public final class DkgParticipant {
     private byte[] digest;
     private ThresholdKeyShare result;
     private FaultAssumptionViolatedException abort;
+    /** Set by {@link DkgShareDelivery#start}: round 1 then closes only through {@link DkgShareDelivery#closeRound1}. */
+    private boolean encryptedDelivery;
+    /** The exact keys and directory {@link DkgShareDelivery#start} bound; round 1 closes only with these. */
+    private Object boundKeys;
+    private Object boundDirectory;
+    /** The digest of the round-1 window {@link DkgShareDelivery#closeRound1} first delivered from; a retry must match it. */
+    private byte[] round1Window;
 
     private DkgParticipant(DkgConfig config, int id, ThresholdVss.Dealing dealing) {
         this.config = config;
@@ -116,9 +124,7 @@ public final class DkgParticipant {
      * {@code SHARE} per other participant.
      */
     public List<DkgMessage> start() {
-        if (open != 0) {
-            throw new IllegalStateException("already started");
-        }
+        requireStartable();
         open = 1;
         List<DkgMessage> out = new ArrayList<>(config.n());
         out.add(DkgMessage.points(config, DkgMessage.Kind.COMMITMENTS, id, dealing.commitments()));
@@ -184,6 +190,17 @@ public final class DkgParticipant {
         return m;
     }
 
+    /**
+     * Refuses a participant that cannot start, changing nothing: an aborted one throws its abort
+     * again, and one already started throws {@link IllegalStateException}.
+     */
+    void requireStartable() {
+        requireNotAborted();
+        if (open != 0) {
+            throw new IllegalStateException("already started");
+        }
+    }
+
     private void requireNotAborted() {
         if (abort != null) {
             throw abort;
@@ -198,6 +215,73 @@ public final class DkgParticipant {
      */
     public List<DkgMessage> closeRound() {
         requireNotAborted();
+        if (encryptedDelivery && open == 1) {
+            // The processing barrier of dkg-share-delivery-hpke-v1 §5.1 (ADR-0054 D6a): a bound
+            // participant never closes round 1 except after every envelope has been processed.
+            throw new IllegalStateException("round 1 of a run using encrypted share delivery closes only through"
+                    + " DkgShareDelivery.closeRound1");
+        }
+        return closeOpenRound();
+    }
+
+    /** {@link #closeRound()} without the delivery guard; {@link DkgShareDelivery#closeRound1} only. */
+    List<DkgMessage> closeRoundOneAfterDelivery() {
+        if (!encryptedDelivery || open != 1) {
+            throw new IllegalStateException("not a bound participant at round 1");
+        }
+        requireNotAborted();
+        return closeOpenRound();
+    }
+
+    /** Binds this participant to encrypted share delivery with these exact keys and directory; only before {@link #start()}. */
+    void bindEncryptedDelivery(Object keys, Object directory) {
+        if (open != 0) {
+            throw new IllegalStateException("encrypted delivery must be bound before start");
+        }
+        encryptedDelivery = true;
+        boundKeys = keys;
+        boundDirectory = directory;
+    }
+
+    boolean boundToEncryptedDelivery() {
+        return encryptedDelivery;
+    }
+
+    /** {@code true} iff {@code keys} and {@code directory} are the very objects bound at start. */
+    boolean boundTo(Object keys, Object directory) {
+        return encryptedDelivery && boundKeys == keys && boundDirectory == directory;
+    }
+
+    /** {@code true} iff no round-1 window is bound yet, or {@code windowDigest} is the bound one. */
+    boolean round1WindowMatches(byte[] windowDigest) {
+        return round1Window == null || MessageDigest.isEqual(round1Window, windowDigest);
+    }
+
+    /** Binds the round-1 window before its first delivery; later calls keep the first binding. */
+    void bindRound1Window(byte[] windowDigest) {
+        if (round1Window == null) {
+            round1Window = windowDigest.clone();
+        }
+    }
+
+    /** Aborts this participant (sticky), for transport aborts such as T1. */
+    void abortWith(FaultAssumptionViolatedException e) {
+        if (abort == null) {
+            abort = e;
+            forgetSecrets();
+        }
+    }
+
+    DkgConfig config() {
+        return config;
+    }
+
+    /** The distinct {@code SHARE}s received from {@code dealer} so far (tests and vectors only). */
+    List<DkgMessage> receivedShares(int dealer) {
+        return List.copyOf(sharesReceived.getOrDefault(dealer, List.of()));
+    }
+
+    private List<DkgMessage> closeOpenRound() {
         try {
             return switch (open) {
                 case 1 -> closeDeal();

@@ -97,4 +97,58 @@ class ElGamalBenchmark {
             System.out.printf("| (%d, %d) | %.0f ms | %.0f ms |%n", tn[0], tn[1], ms, ms / tn[1]);
         }
     }
+
+    @Test
+    void dkgShareDelivery() throws Exception {
+        // ADR-0054: HPKE seal/open per envelope, then whole encrypted runs against plain runs.
+        DkgConfig config = DkgHarness.config(2, 5, "bench-delivery", 1);
+        byte[] skR = new byte[32];
+        RNG.nextBytes(skR);
+        byte[] pkR = X25519Bytes.publicFromPrivate(skR);
+        byte[] info = DkgShareDeliveryCodec.info(config, 1, 2);
+        byte[] share = new byte[DkgShareDeliveryCodec.SHARE_LENGTH];
+        for (int i = 0; i < 3_000; i++) { // warm-up
+            Hpke.Sealed w = Hpke.sealBase(pkR, info, new byte[0], share, RNG);
+            Hpke.openBase(w.enc(), skR, info, new byte[0], w.ct());
+        }
+        Hpke.Sealed sealed = Hpke.sealBase(pkR, info, new byte[0], share, RNG);
+        double seal = microsPerOp(5_000, () -> {
+            try {
+                Hpke.sealBase(pkR, info, new byte[0], share, RNG);
+            } catch (Hpke.HpkeException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        double open = microsPerOp(5_000, () -> {
+            try {
+                Hpke.openBase(sealed.enc(), skR, pkR, info, new byte[0], sealed.ct());
+            } catch (Hpke.HpkeException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        double probe = microsPerOp(5_000, () -> X25519Bytes.passesSmallOrderProbe(pkR));
+        System.out.println();
+        System.out.println("| HPKE (DHKEM X25519, HKDF-SHA256, ChaCha20Poly1305), 100-byte SHARE | µs/op |");
+        System.out.println("|---|---:|");
+        System.out.printf("| SealBase (one envelope) | %.0f |%n", seal);
+        System.out.printf("| OpenBase (one envelope) | %.0f |%n", open);
+        System.out.printf("| Announcement small-order probe | %.0f |%n", probe);
+        System.out.println();
+        System.out.println("| DKG (t, n) | Plain run | Encrypted run | Added per participant |");
+        System.out.println("|---|---:|---:|---:|");
+        for (int[] tn : new int[][]{{1, 3}, {2, 5}, {3, 7}, {5, 11}, {10, 21}}) {
+            DkgConfig c = DkgHarness.config(tn[0], tn[1], "bench-delivery", tn[1]);
+            List<ThresholdVss.Dealing> d = DkgHarness.dealings(tn[0], tn[1], tn[1]);
+            DkgHarness.fixed(c, d, DkgHarness.HONEST).run();
+            DkgEncryptedHarness.fixed(c, d, DkgEncryptedHarness.HONEST).run(); // warm-up
+            long a = System.nanoTime();
+            DkgHarness.fixed(c, d, DkgHarness.HONEST).run();
+            double plainMs = (System.nanoTime() - a) / 1e6;
+            long b = System.nanoTime();
+            DkgEncryptedHarness h = DkgEncryptedHarness.fixed(c, d, DkgEncryptedHarness.HONEST).run();
+            double encMs = (System.nanoTime() - b) / 1e6;
+            if (!h.aborted.isEmpty()) throw new AssertionError("aborted: " + h.aborted);
+            System.out.printf("| (%d, %d) | %.0f ms | %.0f ms | %.1f ms |%n", tn[0], tn[1], plainMs, encMs, (encMs - plainMs) / tn[1]);
+        }
+    }
 }
