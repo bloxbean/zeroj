@@ -64,7 +64,7 @@ dependencies {
 // Offline regressions. The pure-Java Groth16 setup+prove tests need more than the 1g root default.
 test {
     useJUnitPlatform {
-        excludeTags 'e2e'
+        excludeTags 'e2e', 'heavy'
     }
     maxHeapSize = '2g'
     // ADR-0047: the snarkjs interop suites (it.snarkjs.*) skip when snarkjs is absent locally. The
@@ -89,6 +89,25 @@ tasks.register('e2eTest', Test) {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
     systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
     maxHeapSize = '2g'
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
+}
+
+// Heavy offline measurements, excluded from the default test task: large circuits whose Groth16
+// setup and proving need more heap and minutes. ADR-0055 M5a's hash-compressed D3a layout is one.
+//   ./gradlew :zeroj-integration-tests:heavyTest --tests '*AuditedConfidentialNote*'
+tasks.register('heavyTest', Test) {
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'heavy'
+    }
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    maxHeapSize = '12g'
+    outputs.upToDateWhen { false }
     testLogging {
         events "passed", "skipped", "failed"
         showStandardStreams = true
