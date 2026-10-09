@@ -18,7 +18,7 @@ host operation here is **compatibility/offline** class.
 
 ## Revision history
 - **r1** (`a1154ac`, 2026-10-09): initial proposal.
-- **r2** (2026-10-09; the author's recommendations, before the first review):
+- **r2** (`edd5d01`, 2026-10-09; the author's recommendations, before the first review):
   - New **D3a**: enforced auditor access to the amount through `elgamal-jubjub-v1`, with two
     32-bit limbs. The same Groth16 proof binds them to `C`, and the auditor key is a public input
     taken from the registry.
@@ -30,6 +30,26 @@ host operation here is **compatibility/offline** class.
   - Q7: enforcing generations needs D3a.
   - Q8: grounded in the Conway ledger's 64-bit quantities.
   - The open questions now open with the author's recommendation.
+- **r3** (2026-10-09; responds to the review of `edd5d01`):
+  - F1 → D5 separates the **exact reuse of the three primitives** from the **adapted note
+    protocol**, and lists the changed premises. [ZcashSpec] §8.7's partitioning-oracle argument
+    is no longer credited: it needs a note commitment that binds the recipient key, and `C` does
+    not. The adaptation's claims are now assumptions A1–A3 for external review, with a candidate
+    argument for A3. The threat model, D6, gates and references are updated.
+  - F2 → D6 step 4 recomputes `C` on the blinded secret-bearing path (`commit`, then compare),
+    never `verify`. New I13 (schedule regression gate). I4 is now algebraic equivalence only.
+    D9, Consequences, M2 and M4 separate the cost of a failed trial decryption from a full
+    acceptance, and M4 must measure both.
+  - F3 → D3a now covers **every created output** of a transaction for every required auditor,
+    with a fixed output, limb and coordinate order. The points transfer has two outputs, so it
+    needs 18 public inputs (2 key + 2 outputs × 2 limbs × 4), estimated at about 9.25e9 steps,
+    **above** the 8e9 gate; and 26–28k added constraints. D3a is therefore **conditional**:
+    adopted only if M5a measures within the gate, either as specified or with the
+    hash-compressed variant it must also evaluate. Auditor coverage is never reduced. I12, M5a,
+    Q5, Compatibility and Consequences are updated.
+  - Clarifications: D3a uses a **separate `elgamal-jubjub-v1` auditor key**, paired with the
+    auditor's viewing key and generation in the registry (D2, I6). The BLAKE2b gadget figure is
+    labelled by its measured shape.
 
 ## Risk classification
 - **R3:** D2 (viewing keys and key agreement), D5 (the ciphersuite: key agreement, KDF and
@@ -128,8 +148,29 @@ native field.
   to be IND-CCA2-secure and key-private". §4.1.4 requires that Sym be "one-time
   (INT-CTXT ∧ IND-CPA)-secure", where "One-time here means that an honest protocol participant
   will almost surely encrypt only one message with a given key". The spec states these as
-  requirements on its instantiation. This ADR relies on them, and on their analysis by the Zcash
-  designers. It does not re-prove them.
+  requirements on its instantiation. This ADR relies on them for each single delivery, which is
+  one such ciphertext (D5). It does not re-prove them.
+- **What the adaptation assumes** (r3, F1). The note protocol around the primitives is ZeroJ's,
+  not Sapling's (D5 lists the differences), so Zcash's protocol-level arguments do not carry over
+  automatically. This ADR states its claims as assumptions, for external review:
+  - **A1 (confidentiality of a delivery).** With `P_i` validated and `e_i` fresh, `(E_i, ct_i)`
+    reveals nothing about the plaintext beyond its length to anyone without `sk_i`. This is the
+    §4.1.6 requirement applied to a delivery whose base is `G` rather than `g_d`.
+  - **A2 (integrity of acceptance).** An accepted `(v, r)` is `C`'s opening. This follows from
+    `pedersen-jubjub-v1`'s binding (to residues mod `l`), whatever the ciphertext.
+  - **A3 (no useful multi-key partitioning).** ChaCha20-Poly1305 is not key-committing. A sender
+    knows `e_i`, so it can compute several readers' keys and craft one `ct` that decrypts under
+    each of them ([LGR2021]-style). The candidate argument:
+    - acceptance also requires the plaintext to open `C`, and by A2 only one opening exists;
+    - two keys would therefore have to produce the same 41-byte plaintext from the same `ct`,
+      which needs equal keystream prefixes;
+    - so a delivery passes acceptance under at most one reader key, except with negligible
+      probability.
+
+    This argument is ZeroJ's and **has not been reviewed**. [ZcashSpec] §8.7's argument does
+    not apply, because `C` does not commit to the reader's key. Acceptance outcomes are local to
+    the wallet; a wallet that acts visibly on them (for example by spending at once) gives an
+    observer, at most, this one-key outcome.
 - **What it does not give:**
   - **No forward secrecy with respect to the reader's key.** Anyone who later obtains a viewing
     key decrypts every note ever delivered to it.
@@ -175,7 +216,9 @@ native field.
     LEBS2OSP_256(repr_J(sharedSecret)) ‖ ephemeralKey)`.
   - §5.4.9.3: Jubjub, `h_J = 8`, and `repr_J`/`abst_J`.
   - §8.7: "the checking of note commitments makes partitioning oracle attacks [LGR2021] against
-    the transmitted note ciphertext infeasible".
+    the transmitted note ciphertext infeasible". Its argument assumes the note commitment "opens
+    to a note with pk_d and g_d". It is cited (r3) to explain why it does **not** apply to this
+    profile (A3).
 - **[ZIP212]** ZIP 212, "Allow Recipient to Derive Ephemeral Secret from Note Plaintext", Final
   (zcash/zips commit `7b9e678ff3eabf8514f9d0e32cfbf11b27e12696`). Fetched 2026-10-09. It is
   cited for the alternative in Q3.
@@ -193,6 +236,8 @@ native field.
   - [RFC7693] (fetched 2026-10-09) specifies BLAKE2 but says personalization and salt "use fields
     in the parameter block that are not defined in this document". It is cited for the core
     function and its Appendix A vector only.
+- **[LGR2021]** J. Len, P. Grubbs, T. Ristenpart, *Partitioning Oracle Attacks*, USENIX Security
+  2021. Cited through [ZcashSpec] §8.7; not fetched (**unverified** directly).
 - **[RFC8439]** Y. Nir, A. Langley, *ChaCha20 and Poly1305 for IETF Protocols*, June 2018. It
   obsoletes RFC 7539, which [ZcashSpec] cites. Fetched 2026-10-09.
   - §2.8 (the AEAD).
@@ -280,6 +325,12 @@ are reused unchanged. Applications choose whether the note's owner credential (a
   `X = G`, `D = P`), made over the viewing key itself (Q6). Only the proof's form is reused; the
   key stays a viewing key (I6). Possession shows that the registrant can decrypt. It does not show that the
   registrant is the auditor the application intends; that is registry governance (D8).
+- **A D3a auditor has two keys** (r3). Its viewing key `P` (this profile) receives D5
+  deliveries. A separate `elgamal-jubjub-v1` key `PK_a` receives D3a's limb ciphertexts. The
+  two are distinct key types (I6); neither is derived from the other.
+  - The registry records both as one entry per auditor and generation, each with its own
+    possession proof.
+  - A transfer uses the pair from one generation.
 - **Rotation.** A reader rotates by registering a new key. Notes delivered earlier stay readable
   only by the old key, which the reader must keep for as long as it needs them. Generations of
   auditor keys (one per period) limit what one leaked key exposes (Q7).
@@ -294,7 +345,9 @@ read this note":
 
 **It cannot be built on D5's ciphersuite at a sensible cost.** Proving D5 in R1CS needs, per
 reader:
-- one BLAKE2b block for the KDF, measured at 76,832 constraints per block (`gadgets.md`);
+- BLAKE2b over the KDF's 64-byte input. `gadgets.md` gives 76,832 constraints per block. The
+  first review measured 76,352 rows for the existing unpersonalized BLAKE2b-256 gadget at a
+  64-byte secret input, and 75,808 at 32 bytes; a personalized variant is not built;
 - ChaCha20 and Poly1305, for which ZeroJ has no gadgets.
 
 That is an **estimate of the order of 10^5 constraints per reader**, against 7,231 for the whole
@@ -332,25 +385,37 @@ auditor also needs only the amount, not the blinding.
 
 D3a gives each required auditor an amount it is **guaranteed** to decrypt, using only what
 ADR-0052 already accepted:
-- **Limbs.** The prover splits `v = L_0 + 2^32·L_1`, with each `L_j < 2^32` constrained in the
-  circuit.
-- **Encryption.** It encrypts each limb to the auditor key `PK_a` with `elgamal-jubjub-v1` at
-  width `w = 32` (spec §4), with an independent `k` per limb.
+- **Coverage: every created note** (r3, F3). The relation covers **every note output the
+  transaction creates**, for **every required auditor**. A transfer with two outputs audits both;
+  coverage is never reduced to save cost.
+- **Limbs.** For each created note `o`, the prover splits `v_o = L_{o,0} + 2^32·L_{o,1}`, with
+  each `L_{o,j} < 2^32` constrained in the circuit.
+- **Encryption.** It encrypts each limb to the auditor's ElGamal key `PK_a` (D2: a separate key
+  from the auditor's viewing key) with `elgamal-jubjub-v1` at width `w = 32` (spec §4), with an
+  independent `k` per limb.
 - **One proof.** The transfer's Groth16 proof asserts, alongside the existing balance relation:
   - `R_enc(32)` (spec §9.1) for each limb ciphertext;
-  - the limb decomposition;
-  - that the `v` opening `C` is the `v` the limbs recombine to (one witness, one decomposition).
-- **Public inputs.**
-  - `PK_a`, which the validator takes from the auditor registry's reference input. This makes
-    the auditor key generation enforceable (Q7).
-  - Each ciphertext's affine coordinates, which the validator takes from the note's datum.
+  - each limb decomposition;
+  - that the `v_o` opening note `o`'s `C_o` is the `v_o` its limbs recombine to (one witness,
+    one decomposition).
+- **Public inputs, in a fixed order.**
+  - First, each required auditor's `PK_a` (`u`, then `v`), in registry order. The validator
+    takes them from the registry's reference input, one generation per transaction. This makes
+    the generation enforceable (Q7).
+  - Then, for each created note in transaction output order, for each auditor in registry order,
+    for limb 0 then limb 1: `A.u, A.v, B.u, B.v`. The validator takes them from that output's
+    datum.
+  - No redeemer supplies any of them.
   - `R_enc`'s key-membership rule makes `PK_a ∈ 𝔾` the verifier's obligation. It is discharged
     when the key is registered (Q6).
+  - Count: `2·a + 8·a·n_out` for `a` auditors and `n_out` created notes. The points transfer
+    (two outputs, one auditor) needs **18**; the redeem (one change note) needs **10**. Four
+    16-bit limbs would need 34 for the transfer.
 - **Datum.**
-  - The limb ciphertexts are stored as affine coordinates, as `C` is, because a validator cannot
-    afford Jubjub point decompression.
-  - That is 8 field elements per auditor, about 270 bytes of CBOR. At 4,310 lovelace per byte it
-    adds about 1.2 ADA of minimum ADA (estimate).
+  - Each note's limb ciphertexts are stored as affine coordinates, as `C` is, because a
+    validator cannot afford Jubjub point decompression.
+  - That is 8 field elements per auditor per note, about 270 bytes of CBOR. At 4,310 lovelace
+    per byte it adds about 1.2 ADA of minimum ADA per note (estimate).
 - **Decryption.** The auditor decrypts each limb by bounded discrete log, `maxPlaintext = 2^32 − 1`.
   The ElGamal benchmark (2026-10-05) measured, at `2^32`, a 21 ms table build (once, reusable)
   and 7–19 ms per solve, so a whole note takes well under 0.1 s.
@@ -361,12 +426,24 @@ ADR-0052 already accepted:
     because the ballot figure includes validator logic.
   - The points transfer already costs 3.85e9 of the 10e9 per-transaction step limit
     (`maxTxExecutionUnits.steps`, Koios, 2026-10-09).
-  - Four 16-bit limbs would add 18 public inputs (about 5.4e9, so about 9.3e9 in total). Two
-    32-bit limbs add 10 (about 3e9, so about 6.9e9 in total).
-  - Both totals are estimates. M5a must measure them.
-- **Circuit cost estimate.** About 13–14k constraints per auditor, from two `R_enc` instances,
-  each between the measured 6,558 (`w = 1`) and 6,938 (`w = 64`). The transfer circuit itself is
-  7,231.
+  - For the two-output transfer, two 32-bit limbs add 18 public inputs: about 3.85e9 +
+    18 × 0.3e9 ≈ **9.25e9 steps, above the 8e9 gate** (r3, F3; r2 counted one output only). Four
+    16-bit limbs would add 34 inputs, far beyond the 10e9 limit.
+  - These are estimates. M5a must measure them.
+- **Circuit cost estimate.** About 26–28k added constraints per transfer with one auditor, from
+  four `R_enc(32)` instances, each between the measured 6,558 (`w = 1`) and 6,938 (`w = 64`). The
+  transfer circuit itself is 7,231.
+- **A variant M5a must also evaluate: hash-compressed public inputs.** This reduces cost without
+  reducing coverage.
+  - The validator hashes the canonical serialization of every audit ciphertext coordinate in the
+    transaction with Plutus's `blake2b_256` builtin.
+  - It passes the digest as two 128-bit public inputs, beside the `PK_a` coordinates.
+  - The circuit recomputes the same BLAKE2b over its witnessed coordinates.
+  - The public inputs then drop to `2·a + 2`, which is 4 for the transfer.
+  - The cost moves into the prover: about 512 bytes of input is four BLAKE2b blocks, an
+    **estimate** of about 3×10^5 more constraints.
+  - It uses only pinned primitives and existing gadgets. Its serialization would be fixed by the
+    M0 spec.
 - **What it does not give.**
   - The auditor learns the amount, not the blinding, and cannot spend.
   - The owner's delivery stays D5 (detect-only).
@@ -374,9 +451,11 @@ ADR-0052 already accepted:
     the proof, not by an AEAD.
   - When D3a is used, the auditor's D5 delivery is optional: it adds the blinding but no
     enforcement.
-- **Gate.** D3a is adopted only if M5a measures the transfer within budget with a stated margin
-  (lean: at most 80% of the step and memory limits). Otherwise auditing stays detect-only, and
-  the documentation says so plainly.
+- **Gate: D3a is conditional** (r3). It is adopted only if M5a measures the **complete**
+  transfer (every output audited) within budget with a stated margin (lean: at most 80% of the
+  step and memory limits), as specified or with the hash-compressed variant. By the r3 estimate,
+  the configuration as specified does not fit. If neither fits, D3a stays deferred: auditing
+  stays detect-only, and the documentation says so plainly.
 
 ### D4 — Twisted ElGamal (deferred)
 
@@ -415,11 +494,27 @@ personalization strings, Q1):
 
 No other suite, mode or negotiation is accepted.
 
-**Why exact Sapling rather than a "Sapling-like" design.** Every primitive and its composition
-come from one specification, with stated security requirements (§4.1.4, §4.1.6) and independent
-test vectors ([ZTV]). Q1's personalization change is a parameter that BLAKE2 provides for exactly
-this purpose ([BLAKE2] §2.8). The implementation takes the strings as parameters, so the [ZTV]
-vectors run through the same code with Zcash's strings (I10).
+**What is exact, and what is adapted** (r3, F1).
+- **Exact: the three primitives and their composition for one ciphertext.** These are
+  `DerivePublic`, `Agree`, `KDF` over `(sharedSecret, received epk bytes)` and `Sym` with a fresh
+  ephemeral key. They come from one specification, with stated security requirements (§4.1.4,
+  §4.1.6) and independent vectors ([ZTV]). Q1's personalization is a parameter that BLAKE2
+  provides for exactly this purpose ([BLAKE2] §2.8). The implementation takes the strings as
+  parameters, so [ZTV] runs through the same code with Zcash's strings (I10). The vectors show
+  primitive conformance, nothing more.
+- **Adapted: the note protocol and the acceptance predicate.** The premises that change from
+  Sapling are:
+  - the base is the fixed Pedersen `G`, not a diversified `g_d`, and there are no diversified
+    addresses;
+  - the commitment `C = [v]G + [r]H` commits to the opening only. Sapling's note commitment also
+    binds the recipient's `g_d` and `pk_d`;
+  - a note has several deliveries, one per reader, each with its own ephemeral key;
+  - the plaintext is ZeroJ's (D6), not Sapling's note plaintext;
+  - the owner credential (D6 step 5) is an application rule, not cryptographically tied to the
+    viewing key.
+
+  The adaptation's security claims are therefore stated as assumptions A1–A3 (threat model), not
+  inherited from Zcash's protocol arguments. They are an external-review gate.
 
 ### D6 — Plaintext and acceptance (R3)
 
@@ -440,8 +535,11 @@ vectors run through the same code with Zcash's strings (I10).
   2. `ct_i` is exactly 57 bytes, and `Sym.Decrypt(K_i, ct_i)` succeeds, with `K_i` computed from
      the received `E_i` bytes.
   3. The lead byte is `0x01`, and `r < l`.
-  4. `encode([v]·G + [r]·H)` equals the datum's `C` (equivalently, the affine coordinates are
-     equal).
+  4. `[v]·G + [r]·H` equals the datum's `C`. The comparison may be of encodings or of affine
+     coordinates. The recomputation handles a secret opening, so it uses the blinded
+     secret-bearing path: `PedersenCommitment.commit(v, r)`, then a comparison. It **never** uses
+     `PedersenCommitment.verify`, which is for disclosed openings and runs unblinded
+     variable-time multiplications (r3, F2; I13).
   5. The output's owner credential is the wallet's own, for the owner role, and the output is at
      the application's script address with the application's note token.
 
@@ -455,8 +553,9 @@ vectors run through the same code with Zcash's strings (I10).
   is reported to the wallet's user as **unopenable**, not silently skipped. It is value the user
   owns but cannot spend, and it is the evidence of a misbehaving sender.
 - **Why check `C`.** The check makes the opening, not the ciphertext, the authenticated object:
-  a delivery that decrypts but does not open `C` is rejected. It is also what [ZcashSpec] §8.7
-  credits with making partitioning-oracle attacks infeasible.
+  a delivery that decrypts but does not open `C` is rejected (A2). It is also the premise of the
+  candidate multi-key argument A3. [ZcashSpec] §8.7's argument is **not** claimed: it relies on
+  a note commitment that binds the recipient's key, and `C` binds no key.
 
 ### D7 — Ephemeral randomness and sender recovery (R2)
 
@@ -510,9 +609,9 @@ vectors run through the same code with Zcash's strings (I10).
 
 ### D9 — Secret handling on the host (R2)
 
-- Key generation, encryption (`[e_i]·G`, `[8·e_i]·P_i`) and decryption (`[8·sk]·E_i`) run on
-  ZeroJ's `BigInteger` Jubjub code, using the blinded best-effort schedule (ADR-0038) on
-  subgroup points only. This is **compatibility/offline class** (ADR-0039 §3.1). There is no
+- Key generation, encryption (`[e_i]·G`, `[8·e_i]·P_i`), decryption (`[8·sk]·E_i`) and the
+  acceptance recomputation of `C` (`[v]·G`, `[r]·H`; D6 step 4) run on ZeroJ's `BigInteger`
+  Jubjub code, using the blinded best-effort schedule (ADR-0038) on subgroup points only. This is **compatibility/offline class** (ADR-0039 §3.1). There is no
   constant-time claim.
 - **Scanning is the sensitive case.** A wallet decrypts attacker-chosen `E_i` with its viewing
   key, once per note. It must run where no attacker can observe its timing: in the user's own
@@ -524,10 +623,14 @@ vectors run through the same code with Zcash's strings (I10).
 - ChaCha20-Poly1305 comes from the JDK (`Cipher` "ChaCha20-Poly1305"), as in ADR-0054. Lookups
   are algorithm-only, with ADR-0054's input-versus-platform-fault classification.
 - Secrets in `byte[]` are wiped after use, best effort. `BigInteger` copies cannot be wiped.
-- **Measured costs** (ElGamal benchmark, 2026-10-05, Apple M4 Max) give an **estimate** for
-  scanning: about 1.8 ms per note per viewing key, or about 1.8 s per 1,000 notes. That is a
-  38 µs decode, an 85 µs subgroup check and a 1,650 µs blinded multiplication; the hash and
-  AEAD are negligible.
+- **Costs** (r3, F2). These are **estimates** from measured components (ElGamal benchmark,
+  2026-10-05, Apple M4 Max). M4 must measure both paths.
+  - **A failed trial decryption** (a note not for this key): about 1.8 ms per note per viewing
+    key, or about 1.8 s per 1,000 notes. That is a 38 µs decode, an 85 µs subgroup check and a
+    1,650 µs blinded multiplication; the AEAD rejects, and the hash and AEAD are negligible.
+  - **A full acceptance** adds the blinded recomputation of `C`: two more blinded
+    multiplications, about 3.3 ms. The first review measured about 2.94 ms for this step alone
+    after warm-up. That gives about 5 ms per accepted note.
 
 ### D10 — Out of scope
 - Hiding owners, the transaction graph, note counts or reader roles.
@@ -564,8 +667,9 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   - Within one note, reader keys are pairwise distinct.
 - **I3 (D6) Acceptance is all-or-nothing.** A note is accepted only after D6 steps 1–4 pass. A
   delivery that decrypts but does not open `C` is never accepted.
-- **I4 (D1, D6) The commitment is unchanged.** `C` is exactly `pedersen-jubjub-v1`'s `C(v, r)`,
-  and the delivered `(v, r)` verifies with `PedersenCommitment.verify`.
+- **I4 (D1, D6) The commitment is unchanged.** `C` is exactly `pedersen-jubjub-v1`'s `C(v, r)`.
+  In tests, the delivered `(v, r)` also satisfies `PedersenCommitment.verify`, as an algebraic
+  cross-check only. The acceptance path itself follows I13.
 - **I5 (D2) Reader keys validated.** No encryption to a key that is non-canonical, outside `𝔾`,
   or the identity.
 - **I6 (D2) Key separation.** A viewing key is never used by another profile, and no other
@@ -579,14 +683,25 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 - **I10 (D5) Conformance.** With Zcash's personalization strings, the KA, KDF and Sym code
   reproduces every [ZTV] Sapling note-encryption vector (`shared_secret`, `k_enc`, `c_enc`, and
   `Agree(ivk, epk)`). With the profile's strings, it reproduces the independent reference.
-- **I12 (D3a) Enforced auditor amount.**
-  - The circuit constrains `L_0, L_1 < 2^32` and `v = L_0 + 2^32·L_1`, with the same `v`
-    opening `C`.
+- **I12 (D3a) Enforced auditor amount, for every created note.**
+  - For each created note `o` and each auditor, the circuit constrains
+    `L_{o,0}, L_{o,1} < 2^32` and `v_o = L_{o,0} + 2^32·L_{o,1}`, with the same `v_o` opening
+    `C_o`.
   - Each limb ciphertext satisfies `R_enc(32)`, with its own 252-bit `k`.
-  - `PK_a` and every ciphertext coordinate are public inputs. The validator fixes them from the
-    registry reference input and the datum; no redeemer supplies them.
-  - Invalid-witness tests: a wrong limb, a limb at `2^32`, a swapped ciphertext, another key,
-    and a recombination that differs from `C`'s `v`.
+  - `PK_a` and every ciphertext coordinate, or their digest in the hash-compressed variant, are
+    public inputs in D3a's fixed order. The validator fixes them from the registry reference
+    input and each output's datum; no redeemer supplies them.
+  - Invalid-witness and mutation tests:
+    - a wrong limb, or a limb at `2^32`;
+    - swapped ciphertexts, between limbs or between outputs;
+    - another key;
+    - a recombination that differs from `C_o`'s `v_o`;
+    - either output's audit data absent, wrong, or not bound.
+- **I13 (D6, D9) Secret-bearing acceptance path** (r3, F2). The acceptance recomputation of `C`
+  uses the blinded schedules for both `v` and `r`, and never an unblinded multiplication by a
+  secret scalar. A schedule regression test (in the style of `SecretScalarScheduleTest`) counts
+  the blinded schedules on the acceptance path and fails if `verify` or another unblinded path
+  is used.
 - **I11 (D9) Secret class.** Secret multiplications run on subgroup points only, with the
   blinded schedule. No API or document claims constant time or online suitability.
 
@@ -596,14 +711,17 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   deliveries on receipt.
 - Notes get bigger: 89 bytes per reader, and about 0.8 ADA more minimum ADA with one auditor
   (estimate).
-- Wallets must scan: about 1.8 ms per note per viewing key (estimate from measured components).
-  Scanning needs the offline class's isolation.
+- Wallets must scan. The estimates from measured components are about 1.8 ms per note per
+  viewing key for a failed trial decryption, and about 5 ms for an accepted note. Scanning needs
+  the offline class's isolation.
 - The demos' validators, datums and transaction builders change (M3), but their circuits and
   verification keys do not: deliveries are not public inputs.
 - ZeroJ gains a personalised BLAKE2b used on secret data, and a second Jubjub key type.
 - Without D3 or D3a, auditor access is only as good as the senders' honesty, with detection
-  afterwards. With D3a, the amount is enforced. The cost is about 10 more public inputs, 13–14k
-  more constraints and about 1.2 ADA more minimum ADA per auditor (estimates, M5a).
+  afterwards. With D3a, if M5a admits it, the amount of every created note is enforced. For the
+  points transfer with one auditor, that costs 18 more public inputs (or 4 with the
+  hash-compressed variant), 26–28k more constraints (plus about 3×10^5 for the variant), and
+  about 1.2 ADA more minimum ADA per note (estimates, M5a).
 
 ## Compatibility
 
@@ -615,6 +733,9 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   notes have no deliveries. Migration is a usecase concern (M3): the demo has no deployed state to
   migrate.
 - No change to ADR-0052/0053/0054 profiles.
+- D1–D9 leave circuits and verification keys unchanged. D3a, if adopted, changes the transfer
+  and redeem circuits, their public-input layouts and their verification keys, and so their
+  validators.
 
 ## Implementation milestones
 
@@ -622,10 +743,10 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 |---|---|---|---|
 | M0 | Normative spec `docs/specs/confidential-note-jubjub-v1.md`. An independent Python reference, written from the spec and [ZcashSpec] with no Java read. The vendored [ZTV] file, pinned by commit and SHA-256. | ADR accepted; Q1–Q4 and Q6–Q8 decided | The reference reproduces all 10 [ZTV] vectors (I10) and the [BLAKE2]/RFC 7693 Appendix A vectors. It emits replayable cases: good deliveries for 1–4 readers; every D6 failure (wrong key; tampered `E`/`ct`; `E` non-canonical, small-order, outside `𝔾` or the identity; wrong length; bad lead byte; `r ≥ l`; an opening that does not match `C`); a repeated `e_i` (shown to leak the plaintext XOR); and the copied-note case for D6 step 5. Byte-identical output on rerun. |
 | M1 | Host primitives: personalised BLAKE2b; `KA`, `KDF`, `Sym` on JDK ChaCha20-Poly1305; the fault classification. | M0 | [ZTV] KATs (I10); a BLAKE2b differential with personalization against BouncyCastle in tests; negatives for every malformed input; a native-image probe with identical output (as ADR-0054 M1). |
-| M2 | Note API: viewing keys with the possession statement; sealing for a reader list; scanning and opening with D6's checks; the unopenable report. | M1 | Every reference case replays (I1–I9). An API-surface test: final classes, redacted secrets, no public ephemeral seam (I2, I6). |
+| M2 | Note API: viewing keys with the possession statement; sealing for a reader list; scanning and opening with D6's checks; the unopenable report. | M1 | Every reference case replays (I1–I9). An API-surface test: final classes, redacted secrets, no public ephemeral seam (I2, I6). The acceptance-path schedule regression test (I13). |
 | M3 | zeroj-usecases: migrate the confidential-points demo to on-chain delivery with one auditor, on Yaci DevKit (solvency optional), in a separate usecases PR. | M2 released or snapshot-pinned | DevKit E2E: issue, transfer and redeem with recovery from chain data by owner and auditor. Validator mutation tests: missing auditor delivery, wrong lengths, extra deliveries. A garbage delivery is reported as unopenable. |
-| M4 | Docs: support matrix, gadget/guide section with the D6, D7 and D9 MUSTs, benchmark doc. | M2 | Experimental status; scan and seal costs measured. |
-| M5a | D3a circuit (auditor amount escrow) on the points demo. | M2; Q5 (D) adopted | Constraints measured. On-chain CPU and memory measured in the Plutus VM, within the gate of D3a (lean: ≤ 80% of the per-transaction limits). I12's invalid-witness tests. The auditor decrypts every note from chain data. Validator mutation tests: a key not from the registry, ciphertext coordinates not from the datum. |
+| M4 | Docs: support matrix, gadget/guide section with the D6, D7 and D9 MUSTs, benchmark doc. | M2 | Experimental status. Seal cost measured. Scan cost measured separately for a failed trial decryption and for a full acceptance. |
+| M5a | D3a circuit (auditor amount escrow) on the points demo: transfer (both outputs) and redeem (change note). Both the specified layout and the hash-compressed variant are evaluated. | M2; Q5 (D) adopted | Constraints and prover time measured. On-chain CPU and memory measured in the Plutus VM for the **complete** transaction against the aggregate per-transaction limits, within D3a's gate (lean: ≤ 80%). I12's invalid-witness and mutation tests, including either output's audit data absent, wrong or unbound. The auditor decrypts every created note from chain data. Validator mutation tests: a key not from the registry, ciphertext coordinates not from the datum. If neither layout fits, D3a is recorded as deferred. |
 | M5 | D3 circuit profile. | **Blocked on Q5** | Defined by the follow-up decision. |
 
 ## Verification and test-vector strategy
@@ -654,6 +775,8 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 ## Production / audit gates
 
 - External review of D2, D5, D6 and D7, and of the M1 BLAKE2b used on secrets.
+- External review of the adaptation's assumptions A1–A3 (r3), in particular A3's candidate
+  multi-key argument, which is ZeroJ's own and unreviewed.
 - A review of the scanning deployment model against ADR-0039 before any wallet integration.
 - The reader-registry design of any real application.
 - D3 stays blocked until Q5 is decided. No document may claim enforced auditor access except
@@ -672,16 +795,18 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   (ADR-0006).
 - **Metadata:** the reader count and order reveal the application's auditor policy, and owners
   stay public.
-- **D3a's budget:** with an auditor, the transfer may approach the per-transaction step limit.
-  This leaves little room for more inputs or outputs in the same transaction, and the measured
-  cost may rule D3a out (M5a gate).
+- **D3a's budget:** auditing every output of the two-output transfer is estimated above the
+  gate (about 9.25e9 of 10e9 steps). The hash-compressed variant moves the cost to the prover.
+  The measured cost may rule D3a out (M5a gate).
+- **The adaptation (A1–A3) is unreviewed.** Primitive vectors do not cover it.
 
 ## Open questions (points needing a maintainer decision)
 
 **Author's recommendation (r2):** adopt the leans below. Each was chosen to avoid
 ZeroJ-defined cryptography and to fit Cardano's ledger and Plutus limits.
 - Q1 (b), Q2 (a), Q3 (a), Q4 (a), off by default.
-- Q5: (A) for the general proof, plus (D) for auditors, behind M5a's budget gate.
+- Q5: (A) for the general proof. (D) for auditors is conditional on M5a's measurement; the r3
+  estimate for the specified layout exceeds the gate.
 - Q6 (a), at registration.
 - Q7: application policy, with per-period auditor keys enforced through D3a.
 - Q8 (a).
@@ -725,12 +850,17 @@ ZeroJ-defined cryptography and to fit Cardano's ledger and Plutus limits.
   - (C) Prove D5's BLAKE2b and ChaCha20-Poly1305 in-circuit, at an estimated 10^5 constraints per
     reader.
 
-  - (D) (r2) Enforce only what auditors need, the amount, with D3a: `elgamal-jubjub-v1` limb
-    ciphertexts bound to `C` in the transfer proof. Accepted primitives only. The estimated cost
-    is about 10 public inputs and 13–14k constraints per auditor, gated by M5a.
+  - (D) (r2; corrected in r3) Enforce only what auditors need, the amount of every created
+    note, with D3a: `elgamal-jubjub-v1` limb ciphertexts bound to each `C_o` in the transaction's
+    proof. Accepted primitives only.
+    - Estimated cost for the two-output transfer with one auditor: 18 public inputs, about
+      9.25e9 steps, which is **above the 8e9 gate**; and 26–28k constraints.
+    - The hash-compressed variant needs 4 public inputs, plus an estimated 3×10^5 prover
+      constraints.
 
-  **Lean: (A) and (D).** Ship D1–D9. Add D3a if M5a's measurement fits the budget. Revisit a
-  general D3 only with a dedicated ADR.
+  **Lean: (A), plus (D) as conditional.** Ship D1–D9. Adopt D3a only if M5a measures the
+  complete transaction within the gate (as specified or compressed). Otherwise keep it deferred.
+  Never narrow its coverage. Revisit a general D3 only with a dedicated ADR.
 - **Q6 — Proof of possession for registered keys.**
   - (a) `elgamal-jubjub-v1` §3.3's DLEQ statement.
   - (b) None. Registries rely on governance only.
@@ -749,7 +879,7 @@ ZeroJ-defined cryptography and to fit Cardano's ledger and Plutus limits.
   - Without D3a, a validator cannot tell which key a delivery was encrypted to, so a sender
     could use a retired key undetected.
   - With D3a, `PK_a` is a public input taken from the registry, so the current generation is
-    enforced.
+    enforced. The registry pairs it with the auditor's viewing key, per generation (D2).
 - **Q8 — Value width.**
   - (a) 64-bit only.
   - (b) Up to 252 bits, as `pedersen-jubjub-v1` allows.
