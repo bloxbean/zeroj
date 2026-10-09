@@ -7,8 +7,9 @@ Accepted (design) — 2026-10-09.
 - Acceptance is design acceptance only. It certifies no implementation, test or security
   property. Assumptions A1–A3 remain unproved, and external review of them is a production gate.
 - Tracked as #79. This is a design-only ADR; no implementation accompanies it.
-- The decision on the in-circuit consistency proof (D3) is **escalated and blocked** (Q5), in
-  the way ADR-0051 escalated its D7. The rest of the design does not depend on it.
+- The in-circuit consistency proof (D3) is **deferred** (Q5 (A), decided). It is blocked pending
+  a dedicated, accepted follow-up ADR for a pinned and analysed construction, as ADR-0051
+  escalated its D7. The rest of the design does not depend on it.
 - r2 adds **D3a**: enforced auditor access to the amount, built only from the accepted
   `elgamal-jubjub-v1` profile. It is gated on measuring its on-chain cost (M5a).
 - **Q1–Q9 were decided by the maintainer on 2026-10-09** (r5). Each adopts the author's
@@ -71,6 +72,11 @@ host operation here is **compatibility/offline** class.
   recommendation; the "Open questions" section records them. The text that depended on a lean
   now states the decision: D5 (Q1), D7 (Q4), D3a and M5a (Q5's 80% gate). Q2, Q3, Q6 and Q8
   were already written into D2, D6 and D7. No design content changes.
+- The reviewer approved r5 and the status change at `3e80d5a` (round 4).
+- **r6** (2026-10-09; responds to the review of `3e80d5a`): F5 (P3), wording only. Text that
+  still treated Q5 or Q9 as pending now states the decision: Status, D3, D3a, D10, M5, M5a and
+  the production gates. D3 is blocked pending a dedicated, accepted follow-up ADR for a pinned
+  and analysed construction. The demo uses trusted issuance (Q9 (a)).
 
 ## Risk classification
 - **R3:** D2 (viewing keys and key agreement), D5 (the ciphersuite: key agreement, KDF and
@@ -370,7 +376,7 @@ are reused unchanged. Applications choose whether the note's owner credential (a
   only by the old key, which the reader must keep for as long as it needs them. Generations of
   auditor keys (one per period) limit what one leaked key exposes (Q7).
 
-### D3 — Optional in-circuit consistency proof (R3; escalated and blocked)
+### D3 — Optional in-circuit consistency proof (R3; deferred, Q5)
 
 An application may want the transfer proof to also show, for each required reader, that `ct_i`
 decrypts under `P_i` to the opening of `C`. That turns "a ciphertext exists" into "the reader can
@@ -404,10 +410,9 @@ project's bar for "pinned and analysed":
   HKDF plus AES-GCM in 2024. Its current transfer circuit does not prove that the note's value
   encryption decrypts.
 
-So D3 is **escalated (Q5) and blocked**. It needs either:
-- a maintainer decision that accepts a named Poseidon AE construction at a stated assurance
-  level, as a separate profile (for example `confidential-note-jubjub-poseidon-v1`); or
-- a follow-up ADR once such a construction is published with analysis.
+So D3 is **deferred** (Q5 (A), decided 2026-10-09). It is **blocked pending a dedicated,
+accepted follow-up ADR** for a pinned and analysed construction, which would be a separate
+profile (for example `confidential-note-jubjub-poseidon-v1`).
 
 Nothing in D1, D2 and D5–D9 depends on D3. The datum layout reserves no D3 fields: a D3 profile
 would be a different profile with its own datum, not an option within this one.
@@ -427,7 +432,8 @@ ADR-0052 already accepted:
     coverage is never reduced to save cost.
   - Transitions without a proof are **not** covered. In the points demo that is issuance. Their
     audit data rests on the authorized issuer, which the validator authenticates but whose
-    ciphertexts it cannot check. Q9 asks whether to make issuance proof-enforced.
+    ciphertexts it cannot check. The demo uses this trusted issuance (Q9 (a), decided).
+    Applications whose auditor must not trust the issuer add an issuance proof (Q9 (b)).
 - **Limbs.** For each created note `o`, the prover splits `v_o = L_{o,0} + 2^32·L_{o,1}`, with
   each `L_{o,j} < 2^32` constrained in the circuit.
 - **Encryption.** It encrypts each limb to the auditor's ElGamal key `PK_a` (D2: a separate key
@@ -687,7 +693,7 @@ No other suite, mode or negotiation is accepted.
   keys).
 - Spending keys and owner authorization, which stay the application's (ADR-0006).
 - A post-quantum construction.
-- D3, until Q5 is decided.
+- D3, deferred (Q5): blocked pending a dedicated, accepted follow-up ADR.
 
 ### Alternatives considered
 
@@ -799,8 +805,8 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 | M2 | Note API: viewing keys with the possession statement; sealing for a reader list; scanning and opening with D6's checks; the unopenable report. | M1 | Every reference case replays (I1–I9). An API-surface test: final classes, redacted secrets, no public ephemeral seam (I2, I6). The acceptance-path schedule regression test (I13). |
 | M3 | zeroj-usecases: migrate the confidential-points demo to on-chain delivery with one auditor, on Yaci DevKit (solvency optional), in a separate usecases PR. | M2 released or snapshot-pinned | DevKit E2E: issue, transfer and redeem with recovery from chain data by owner and auditor. Validator mutation tests: missing auditor delivery, wrong lengths, extra deliveries. A garbage delivery is reported as unopenable. |
 | M4 | Docs: support matrix, gadget/guide section with the D6, D7 and D9 MUSTs, benchmark doc. | M2 | Experimental status. Seal cost measured. Scan cost measured separately for a failed trial decryption and for a full acceptance. |
-| M5a | D3a circuit (auditor amount escrow) on the points demo: transfer (both outputs) and redeem (change note). Both the specified layout and the hash-compressed variant are evaluated. | M2; Q5 (D) adopted | Constraints and prover time measured. On-chain CPU and memory measured in the Plutus VM for the **complete** transaction against the aggregate per-transaction limits, within D3a's gate (decided, Q5: ≤ 80%). I12's invalid-witness and mutation tests, including either output's audit data absent, wrong or unbound. The auditor decrypts every note that transfer and redeem create, from chain data. Validator mutation tests: a key not from the registry; ciphertext coordinates not from the datum; for the variant, a mutated serialization, order or digest half. Issuance stays out of scope unless Q9 adds it; if it does, an authorized issuer supplying a wrong audit ciphertext must be rejected. If neither layout fits, D3a is recorded as deferred. |
-| M5 | D3 circuit profile. | **Blocked on Q5** | Defined by the follow-up decision. |
+| M5a | D3a circuit (auditor amount escrow) on the points demo: transfer (both outputs) and redeem (change note). Both the specified layout and the hash-compressed variant are evaluated. | M2 (Q5 (D) is adopted conditionally, gated by this milestone) | Constraints and prover time measured. On-chain CPU and memory measured in the Plutus VM for the **complete** transaction against the aggregate per-transaction limits, within D3a's gate (decided, Q5: ≤ 80%). I12's invalid-witness and mutation tests, including either output's audit data absent, wrong or unbound. The auditor decrypts every note that transfer and redeem create, from chain data. Validator mutation tests: a key not from the registry; ciphertext coordinates not from the datum; for the variant, a mutated serialization, order or digest half. Issuance is out of scope: the demo uses trusted issuance (Q9 (a)). An application that chooses Q9 (b) must also show that an authorized issuer supplying a wrong audit ciphertext is rejected. If neither layout fits, D3a is recorded as deferred. |
+| M5 | D3 circuit profile. | **Blocked** pending a dedicated, accepted follow-up ADR for a pinned, analysed construction (Q5 (A)) | Defined by that ADR. |
 
 ## Verification and test-vector strategy
 
@@ -832,10 +838,10 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
   multi-key argument, which is ZeroJ's own and unreviewed.
 - A review of the scanning deployment model against ADR-0039 before any wallet integration.
 - The reader-registry design of any real application.
-- D3 stays blocked until Q5 is decided. No document may claim enforced auditor access except
-  for the amount, and then only with D3a, after M5a passes its budget gate. Even then, the
-  claim covers only the notes of proof-enforced transitions. Issued notes rest on the issuer,
-  unless Q9 adds an issuance proof.
+- D3 stays blocked pending a dedicated, accepted follow-up ADR for a pinned and analysed
+  construction (Q5 (A)). No document may claim enforced auditor access except for the amount,
+  and then only with D3a, after M5a passes its budget gate. Even then, the claim covers only the
+  notes of proof-enforced transitions. In the demo, issued notes rest on the issuer (Q9 (a)).
 
 ## Risks
 
