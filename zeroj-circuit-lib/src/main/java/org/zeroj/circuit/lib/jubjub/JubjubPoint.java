@@ -65,6 +65,13 @@ public final class JubjubPoint {
         void scheduleStarted(int iterations);
         void addition();
         void doubling();
+
+        /**
+         * A variable-time {@link #scalarMul} started. It is meant for public scalars only; tests
+         * use this to prove that a secret path never reaches it (ADR-0055 I13).
+         */
+        default void publicMultiplication() {
+        }
     }
 
     static void installSecretScheduleObserverForTesting(SecretScheduleObserver observer) {
@@ -263,6 +270,8 @@ public final class JubjubPoint {
      */
     public JubjubPoint scalarMul(BigInteger k) {
         Objects.requireNonNull(k, "k");
+        SecretScheduleObserver observer = SECRET_SCHEDULE_OBSERVER.get();
+        if (observer != null) observer.publicMultiplication();
         if (k.signum() == 0) return IDENTITY;
         boolean negate = k.signum() < 0;
         BigInteger scalar = negate ? k.negate() : k;
