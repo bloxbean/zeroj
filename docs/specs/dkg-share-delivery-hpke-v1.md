@@ -202,7 +202,7 @@ missing or invalid share is the threshold profile's usual round-2 `COMPLAINT` (A
 **A local fault is not a failed step.** A step fails only because of the envelope:
 - a malformed header (steps 1, 2, 4);
 - an authentication result of "not authentic" (step 3);
-- a small-order `enc`, refused by X25519 or giving the all-zero value (step 5);
+- a small-order `enc` (decided as in §2.2), or the all-zero value (step 5);
 - an AEAD verification failure (step 5);
 - a plaintext that is not the expected `SHARE` (step 6).
 
