@@ -166,6 +166,7 @@ public final class NoteScanner {
      */
     public Scan scan(List<Candidate> candidates) {
         Objects.requireNonNull(candidates, "candidates");
+        requireLive();
         List<Opened> opened = new ArrayList<>();
         List<Integer> unopenable = new ArrayList<>();
         for (int i = 0; i < candidates.size(); i++) {

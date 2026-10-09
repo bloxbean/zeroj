@@ -33,16 +33,23 @@ import java.math.BigInteger;
  *
  * <p><b>Spends.</b> With {@code outputs = 2} (a transfer) the spend creates exactly two notes and
  * {@code in = out1 + out2}. With {@code outputs = 1} (a redeem) it creates one change note and
- * {@code in = change + price}, with the price from the redeemer and bound by the proof.
+ * {@code in = change + price}, with the price from the redeemer and bound by the proof. Where the
+ * price goes on the ledger (paid, burned or minted) is the application's to check, and is not part
+ * of the measured cost.
  *
  * <p><b>Auditor key.</b> {@code PK_a} comes from <b>exactly one</b> registry reference input
  * holding <b>exactly one</b> {@code registryPolicy}/{@code registryToken}, with inline datum
- * exactly {@code Constr 0 [I u, I v]}. A second entry, another quantity or another shape fails, so
- * the submitter cannot pick a retired generation's key (ADR-0055 Q7). Possession and subgroup
- * membership are checked at registration (Q6); this validator checks canonical coordinates.
+ * exactly {@code Constr 0 [I u, I v]}. A second entry, another quantity or another shape fails.
+ * That makes the key the current generation's only if the registry token is a singleton that the
+ * registry's own script moves forward on rotation: this validator sees only the reference inputs
+ * a transaction supplies, so an older entry still unspent could be supplied alone (ADR-0055 Q7,
+ * implementation note 11). Possession and subgroup membership are checked at registration (Q6);
+ * this validator checks canonical coordinates.
  *
  * <p><b>Fresh randomness.</b> The handles {@code A = [k]·G} of all limb encryptions in the spend
  * must be pairwise distinct. A repeated {@code k} would make {@code B0 − B1 = [L0 − L1]·G} public.
+ * This catches exact reuse within the transaction (an honest wallet's accident); related or
+ * cross-transaction randomness is not detectable, and rests on the prover's generator.
  *
  * <p><b>Public inputs</b>, all from the ledger or bound by the proof:
  * {@code [in.u, in.v, out1.u, out1.v, (out2.u, out2.v | price), PK.u, PK.v]} followed by either

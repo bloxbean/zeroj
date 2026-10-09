@@ -294,6 +294,9 @@ class ConfidentialNotesTest {
             assertThrows(IllegalStateException.class, () -> scanner.open(new byte[3], o.commitment()),
                     "a destroyed key throws for every input, not only once it reaches the secret");
             assertThrows(IllegalStateException.class, () -> NoteScanner.of(k));
+            assertThrows(IllegalStateException.class, () -> scanner.scan(List.of()), "even an empty scan");
+            assertThrows(IllegalStateException.class, () -> scanner.open(new byte[3], BASE_FIELD_PRIME, BigInteger.ONE),
+                    "even non-canonical coordinates");
             assertThrows(IllegalStateException.class, k::exportSecret);
             assertTrue(k.toString().contains("destroyed"));
             k.destroy(); // idempotent
@@ -407,6 +410,10 @@ class ConfidentialNotesTest {
             }
         }
         assertFalse(Modifier.isPublic(NoteViewingKey.class.getDeclaredMethod("fromSecret", BigInteger.class).getModifiers()));
+        // R-2: a point built with fromAffine is reduced mod p, so only the (u, v) entry points are public.
+        assertFalse(Modifier.isPublic(NoteScanner.class.getDeclaredMethod("open", byte[].class, JubjubPoint.class).getModifiers()));
+        assertFalse(Modifier.isPublic(NoteScanner.Candidate.class.getDeclaredMethod("of", byte[].class, JubjubPoint.class, boolean.class).getModifiers()));
+        assertTrue(Modifier.isPublic(NoteScanner.class.getDeclaredMethod("open", byte[].class, BigInteger.class, BigInteger.class).getModifiers()));
         assertFalse(Modifier.isPublic(NoteViewingKey.class.getDeclaredMethod("secretScalar").getModifiers()));
     }
 }

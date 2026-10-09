@@ -386,6 +386,7 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
         measureAndCheck(f);
         invalidWitnesses(f);
         reusedRandomnessRejected(f);
+        retiredEntryAloneIsTheRegistrysObligation(f);
     }
 
     @Test
@@ -504,6 +505,33 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
     }
 
     /**
+     * The limit of the registry check (ADR-0055 implementation note 11). With only a retired
+     * generation's entry supplied, and the limbs encrypted to that retired key, this validator
+     * accepts: it sees only the reference inputs a transaction supplies. Only a singleton registry
+     * token, moved forward on rotation so that no older entry stays unspent, rules this out. The
+     * current entry, supplied alone, still refuses limbs encrypted to the retired key.
+     */
+    private void retiredEntryAloneIsTheRegistrysObligation(Fixture f) {
+        ElGamalSecretKey retired = ElGamalSecretKey.generate(RANDOM);
+        JubjubPoint retiredPk = retired.publicKey().point();
+        List<Note> outs = new ArrayList<>();
+        for (Note n : f.outs) {
+            List<Limb> limbs = new ArrayList<>();
+            for (Limb l : n.limbs()) limbs.add(Limb.of(l.m(), l.k(), retiredPk));
+            outs.add(n.withLimbs(limbs));
+        }
+        Map<String, List<BigInteger>> w = witness(f, outs);
+        put(w, "pkU", retired.publicKey().affineU());
+        put(w, "pkV", retired.publicKey().affineV());
+        var proof = f.prove(w);
+        PlutusData oldOnly = context(f, outs, proof, Mutation.REGISTRY_MISSING, retiredEntry(retired.publicKey()));
+        assertTrue(evaluate(f.program, oldOnly) instanceof EvalResult.Success,
+                "an unspent retired entry supplied alone is accepted: the registry token must be a singleton");
+        assertTrue(evaluate(f.program, context(f, outs, proof, Mutation.NONE)) instanceof EvalResult.Failure,
+                "with the current entry, limbs to the retired key are refused");
+    }
+
+    /**
      * The compressed layout's serialization binding (spec §8.3; ADR-0055 implementation note 7).
      * <ul>
      *   <li>Bytes that are not the coordinate (another ciphertext's, little-endian, a flipped
@@ -567,7 +595,7 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
 
     enum Mutation {
         NONE,
-        AUDIT_ABSENT, AUDIT_WRONG_OUT1, AUDIT_WRONG_OUT2, AUDIT_SWAPPED_BETWEEN_OUTPUTS, AUDIT_LIMBS_SWAPPED,
+        AUDIT_ABSENT, AUDIT_ABSENT_OUT2, AUDIT_WRONG_OUT1, AUDIT_WRONG_OUT2, AUDIT_SWAPPED_BETWEEN_OUTPUTS, AUDIT_LIMBS_SWAPPED,
         AUDIT_NON_CANONICAL, AUDIT_SEVEN_ENTRIES,
         DELIVERY_SHORT, DELIVERY_MISSING,
         REGISTRY_MISSING, REGISTRY_OTHER_KEY, REGISTRY_WRONG_TOKEN, REGISTRY_SECOND_ENTRY_BEFORE, REGISTRY_SECOND_ENTRY_AFTER,
@@ -576,13 +604,18 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
 
         boolean appliesTo(Shape shape) {
             return switch (this) {
-                case AUDIT_WRONG_OUT2, AUDIT_SWAPPED_BETWEEN_OUTPUTS -> shape == Shape.TRANSFER;
+                case AUDIT_ABSENT_OUT2, AUDIT_WRONG_OUT2, AUDIT_SWAPPED_BETWEEN_OUTPUTS -> shape == Shape.TRANSFER;
                 default -> true;
             };
         }
     }
 
     private PlutusData context(Fixture f, List<Note> outs, SnarkjsToCardano.ProofCompressed proof, Mutation m) {
+        return context(f, outs, proof, m, null);
+    }
+
+    private PlutusData context(Fixture f, List<Note> outs, SnarkjsToCardano.ProofCompressed proof, Mutation m,
+                               TxInInfo extraReference) {
         TxOutRef ownRef = TestDataBuilder.randomTxOutRef_typed();
         PlutusData inDatum = noteDatum(f.input, f.input.audit(), f.input.deliveries());
         byte[] piA = m == Mutation.TAMPERED_PROOF ? flipped(proof.piA()) : proof.piA();
@@ -617,7 +650,8 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
             List<byte[]> deliveries = new ArrayList<>(n.deliveries());
             if (o == 0 && m == Mutation.DELIVERY_SHORT) deliveries.set(1, Arrays.copyOf(deliveries.get(1), 88));
             if (o == 0 && m == Mutation.DELIVERY_MISSING) deliveries.remove(1);
-            PlutusData datum = o == 0 && m == Mutation.AUDIT_ABSENT
+            boolean absent = (o == 0 && m == Mutation.AUDIT_ABSENT) || (o == 1 && m == Mutation.AUDIT_ABSENT_OUT2);
+            PlutusData datum = absent
                     ? PlutusData.constr(0, PlutusData.bytes(n.owner()), PlutusData.integer(n.commitment().affineU()),
                             PlutusData.integer(n.commitment().affineV()), deliveriesData(deliveries))
                     : noteDatum(n, audits.get(o), deliveries);
@@ -637,12 +671,20 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
             builder.referenceInput(registryEntry(token, quantity, keyDatum));
         }
         if (m == Mutation.REGISTRY_SECOND_ENTRY_AFTER) builder.referenceInput(retiredEntry());
+        if (extraReference != null) builder.referenceInput(extraReference);
         return builder.buildPlutusData();
     }
 
-    /** A retired generation's entry for the same token: the submitter must not be able to choose. */
+    /**
+     * A retired generation's entry carrying the same token. With a singleton registry token it
+     * could not still be unspent; this test validator models the case to show what it refuses
+     * (two entries supplied) and what it cannot refuse (an old entry supplied alone).
+     */
     private static TxInInfo retiredEntry() {
-        ElGamalPublicKey retired = ElGamalSecretKey.generate(RANDOM).publicKey();
+        return retiredEntry(ElGamalSecretKey.generate(RANDOM).publicKey());
+    }
+
+    private static TxInInfo retiredEntry(ElGamalPublicKey retired) {
         return registryEntry(REGISTRY_TOKEN, BigInteger.ONE,
                 PlutusData.constr(0, PlutusData.integer(retired.affineU()), PlutusData.integer(retired.affineV())));
     }

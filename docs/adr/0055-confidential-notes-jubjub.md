@@ -453,7 +453,7 @@ ADR-0052 already accepted:
 - **Public inputs, in a fixed order.**
   - First, each required auditor's `PK_a` (`u`, then `v`), in registry order. The validator
     takes them from the registry's reference input, one generation per transaction. This makes
-    the generation enforceable (Q7).
+    the generation enforceable (Q7), given a singleton registry token (implementation note 11).
   - Then, for each created note in transaction output order, for each auditor in registry order,
     for limb 0 then limb 1: `A.u, A.v, B.u, B.v`. The validator takes them from that output's
     datum.
@@ -954,7 +954,8 @@ and reasons are kept below for the record.
   - Without D3a, a validator cannot tell which key a delivery was encrypted to, so a sender
     could use a retired key undetected.
   - With D3a, `PK_a` is a public input taken from the registry, so the current generation is
-    enforced. The registry pairs it with the auditor's viewing key, per generation (D2).
+    enforced, provided the registry token is a singleton moved forward on rotation, or the token
+    name is per generation and pinned (implementation note 11; spec §8.1). The registry pairs it with the auditor's viewing key, per generation (D2).
 - **Q8 — Value width.**
   - (a) 64-bit only.
   - (b) Up to 252 bits, as `pedersen-jubjub-v1` allows.
@@ -1066,12 +1067,19 @@ came from the independent reference (its findings S1–S6) and from implementati
     - **I13 instrumentation** (S-4, R-7). `FastJubjubPoint`'s variable-time multiplication is
       observed too. An acceptance shows exactly three blinded schedules and one variable-time
       multiplication, the public subgroup check `[l]·E`.
-    - **Destroyed keys** throw for every input (S-6). **Possession wording** (S-5): a possession
+    - **Destroyed keys** throw for every input, including an empty `scan` (S-6, C-7). **Possession wording** (S-5): a possession
       statement has no context, so registries bind registrant and profile themselves (spec §2.2).
     - **D3a validator obligations** (D-1, D-5; spec §8.1). The auditor key comes from exactly one
-      registry entry, with quantity 1 and the exact datum shape, so a submitter cannot choose a
-      retired generation. Limb handles must be pairwise distinct: the circuit cannot stop a
-      prover from reusing `k`, which would reveal `L0 − L1`.
+      supplied registry entry, with quantity 1 and the exact datum shape. That does not by itself
+      make it the current generation (Codex round 2, C-6): a validator sees only the reference
+      inputs it is given, so an older entry that is still unspent could be supplied alone. The
+      check removes ambiguity only. Enforcing the current generation needs a **singleton**
+      registry token moved forward on rotation by the registry's own script, a per-generation
+      token name pinned by the validator, or burning retired tokens (spec §8.1). That is the
+      application's obligation, and a test shows that this validator accepts an old-only entry
+      (C-6, V-1). Limb handles must be pairwise distinct; that catches exact reuse of `k` within a
+      transaction only (V-2). Limb handles must be pairwise
+      distinct: the circuit cannot stop a prover from reusing `k`, which would reveal `L0 − L1`.
     - **M5a coverage** (C-2, C-4, R-3, D-2, D-3, D-4). Redeem is measured. The datum carries real
       deliveries with D8's checks. The compressed layout has its own invalid-witness and
       serialization-binding tests; removing the byte-binding constraint makes them fail. Wording

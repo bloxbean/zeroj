@@ -76,9 +76,9 @@ mainnet's per-transaction limits on 2026-10-09: 10,000,000,000 steps and 16,500,
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Transfer (two notes), direct (spec §8.2) | 24 | 34,184 | 2.9–5.7 s | 7,335,025,102 | 73.4% | 1,773,956 | 10.8% |
 | Redeem (one change note, public price), direct | 15 | 18,366 | 2.4 s | 5,517,318,556 | 55.2% | 1,249,126 | 7.6% |
-| Transfer (two notes), hash-compressed (spec §8.3) | 10 | 355,514 | 11.7–22 s | 4,728,153,869 | 47.3% | 1,638,102 | 9.9% |
+| Transfer (two notes), hash-compressed (spec §8.3) | 10 | 355,514 | 12–28 s | 4,728,153,869 | 47.3% | 1,638,102 | 9.9% |
 
-Prove times are single runs on a busy machine; repeated runs varied by up to a factor of two. CPU
+Prove times are single runs, some on a busy machine; repeated runs varied by more than a factor of two. CPU
 steps and memory are deterministic.
 
 For comparison, the same transfer without D3a (`ConfidentialNoteValidator`, 6 public inputs,
@@ -95,7 +95,8 @@ For comparison, the same transfer without D3a (`ConfidentialNoteValidator`, 6 pu
   321,000 more constraints, mostly the in-circuit BLAKE2b over 512 bytes. It leaves room for more
   auditors or outputs on-chain, at a prover cost.
 - **Scope of the measurement.** These figures are for ZeroJ's reference validator, a single
-  spending script. An application that also runs a minting policy in the same transaction (as
+  spending script. The redeem's price is bound by the proof, but where it goes on the ledger (paid,
+  burned or minted) is the application's check and is not measured here. An application that also runs a minting policy in the same transaction (as
   the points demo does) adds that script's cost; the direct transfer leaves 6.6 percentage points
   below the gate. ADR-0055 M3 measures the demo's complete transaction, which is the final gate
   check for that application.

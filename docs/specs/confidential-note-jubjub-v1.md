@@ -240,11 +240,25 @@ viewing key (§2.2).
 **Fresh randomness.** Each limb encryption uses its own randomness. The circuit cannot force the
 randomness of different limbs to differ, and a repeated `k` would reveal the difference of the two
 limbs (`B0 − B1 = [L0 − L1]·G`). A validator therefore requires the handles `A` of all limb
-encryptions in a transaction to be pairwise distinct.
+encryptions in a transaction to be pairwise distinct. This catches exact reuse within one
+transaction, the honest wallet's accident; related randomness (`k1 = k0 + c`, `k1 = −k0`) and reuse
+across transactions are not detectable. A prover can disclose its own amounts anyway, so the
+guarantee rests on the prover's random generator (§2.1).
 
-**The auditor key's source.** A validator takes `PK_a` from exactly one registry entry. A second
+**The auditor key's source.** A validator takes `PK_a` from exactly one registry entry: a second
 entry for the same token, a token quantity other than one, or a datum of another shape is
-refused, so that the submitter cannot choose an older generation's key.
+refused. That alone does not make the key current: a validator sees only the reference inputs a
+transaction supplies, so if an older entry carrying the token were still unspent, a submitter
+could supply only that one. The per-transaction check removes ambiguity only. Enforcing the
+current generation needs one of:
+- a **singleton** registry token (one unit, in one output), which the registry's own validator or
+  minting policy moves forward on rotation, so that no older entry stays unspent; or
+- a token name per generation, pinned by the spending validator as a parameter and changed on
+  rotation; or
+- burning the retired generation's token.
+
+That is the application's obligation; the D3a guarantee of the current generation holds only under
+it.
 
 ### 8.2 Public inputs (direct layout)
 After the application's own public inputs, the order is:
