@@ -955,7 +955,8 @@ and reasons are kept below for the record.
     could use a retired key undetected.
   - With D3a, `PK_a` is a public input taken from the registry, so the current generation is
     enforced, provided the registry token is a singleton moved forward on rotation, or the token
-    name is per generation and pinned (implementation note 11; spec §8.1). The registry pairs it with the auditor's viewing key, per generation (D2).
+    name is per generation and pinned (implementation note 11; spec §8.1). The registry pairs it
+    with the auditor's viewing key, per generation (D2).
 - **Q8 — Value width.**
   - (a) 64-bit only.
   - (b) Up to 252 bits, as `pedersen-jubjub-v1` allows.
@@ -1077,9 +1078,9 @@ came from the independent reference (its findings S1–S6) and from implementati
       registry token moved forward on rotation by the registry's own script, a per-generation
       token name pinned by the validator, or burning retired tokens (spec §8.1). That is the
       application's obligation, and a test shows that this validator accepts an old-only entry
-      (C-6, V-1). Limb handles must be pairwise distinct; that catches exact reuse of `k` within a
-      transaction only (V-2). Limb handles must be pairwise
-      distinct: the circuit cannot stop a prover from reusing `k`, which would reveal `L0 − L1`.
+      (C-6, V-1). Limb handles must be pairwise distinct, because the circuit cannot stop a prover
+      from reusing `k`, which would reveal `L0 − L1`. The check catches exact reuse within a
+      transaction only (V-2).
     - **M5a coverage** (C-2, C-4, R-3, D-2, D-3, D-4). Redeem is measured. The datum carries real
       deliveries with D8's checks. The compressed layout has its own invalid-witness and
       serialization-binding tests; removing the byte-binding constraint makes them fail. Wording
