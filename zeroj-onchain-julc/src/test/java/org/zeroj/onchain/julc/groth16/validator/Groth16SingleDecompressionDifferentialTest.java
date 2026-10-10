@@ -51,10 +51,13 @@ import static org.junit.jupiter.api.Assertions.fail;
  * the same honest and adversarial vectors and requires the same outcome for each: accept,
  * {@code false}, or a builtin failure (told apart by the probe validators' expected-result
  * redeemer), except for the divergences listed in {@link #DIVERGENCES}, which only swap
- * {@code false} and a builtin failure on malformed key data. An accepted proof must save exactly
- * the removed decompressions, (n + 4) G1 and 4 G2, to within half a G1 decompression.
- * Pairing-preserving vectors (all inputs zero, every IC entry the generator) isolate each proof
- * and key point's infinity check, with explicit expected outcomes.
+ * {@code false} and a builtin failure on malformed key data. Below the multi-scalar threshold an
+ * accepted proof must save exactly the removed decompressions, (n + 4) G1 and 4 G2, to within less
+ * than one G1 decompression; from it, the pinned multi-scalar saving. Every run of the library is
+ * also counted for scalar multiplications and pairing steps over the whole evaluation
+ * ({@link Ops}). Pairing-preserving vectors (all inputs zero, every IC entry the generator)
+ * isolate each proof and key point's infinity check, and degenerate-scalar vectors exercise the
+ * multi-scalar path at 0, r - 1 and vk_x = infinity, with explicit expected outcomes.
  */
 class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
@@ -67,7 +70,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     enum Outcome { ACCEPT, FALSE, ERROR }
 
     /** {@code ops} is counted for the library under test only, {@code null} for the reference. */
-    record Run(Outcome outcome, long cpu, Ops ops) {}
+    record Run(Outcome outcome, long cpu, long mem, Ops ops) {}
 
     /**
      * How many scalar multiplications and pairing steps one whole evaluation ran, read off a run
@@ -115,8 +118,8 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     /**
      * A rejection may cost no more than the reference's plus this much: room for the IC byte
      * checks and the count walk (about 2.7e6 steps per entry). It catches gross extra work, such
-     * as multiplying when the counts disagree. Premature multiplication before a later IC entry
-     * fails is checked by counting operations instead (see {@link #assertOps}).
+     * as multiplying when the counts disagree. Multiplication before a later IC entry fails is
+     * checked by counting operations instead (see {@link #assertOps}).
      */
     private static long rejectionSlack(int icEntries) {
         return 3_000_000L * icEntries + 5_000_000L;
@@ -134,9 +137,12 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                         .toArray(new BigInteger[0])));
         PROOFS.put("linear (3 inputs)", linearProof(3));
         PROOFS.put("linear (4 inputs)", linearProof(4));
+        PROOFS.put("linear (6 inputs)", linearProof(6));
+        PROOFS.put("linear (7 inputs)", linearProof(7));
         PROOFS.put("linear (9 inputs)", linearProof(9));
         PROOFS.put("linear (24 inputs)", linearProof(24));
         PROOFS.put("zero input (3 inputs, p1 = 0)", linearProof(3, 1));
+        PROOFS.put("zero input (9 inputs, p2 = 0)", linearProof(9, 2));
 
         long[] costs;
         try (InputStream in = JulcVm.class.getResourceAsStream("/cost-model/plutus-v3-pv11-costs-v1.params")) {
@@ -173,6 +179,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 if (v.label().endsWith(": honest")) {
                     assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
                     assertSaving(v.label(), tp.inputs().length + 4, v.ic().size(), reference.cpu() - optimized.cpu());
+                    System.out.printf("[issue #84] %s: memory %,d units (reference %,d)%n", v.label(), optimized.mem(), reference.mem());
                 }
                 outcomes.merge(optimized.outcome(), 1, Integer::sum);
                 vectors++;
@@ -220,15 +227,36 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
     /**
      * Exactly the {@code g1} G1 decompressions (A, C, alpha and the IC entries) and 4 G2 (B, beta,
-     * gamma, delta) removed, less the new code's per-IC-entry overhead (the byte checks, about
-     * 1.1e6 to 1.2e6 steps per entry; verifyFour, which drops a recursion, saves up to 4e6 more).
-     * The window {@code [expected - 1.3e6 per IC entry - 3e6, expected + 5e6]} is narrower than one
-     * G1 decompression (52.9e6) up to 33 public inputs, so up to there one decompression more or
-     * fewer fails.
+     * gamma, delta) removed, less the new code's overhead (the byte checks, the count walk and the
+     * threshold walk, about 2e6 steps per IC entry; verifyFour, which drops a recursion, saves up
+     * to 4e6 more). The window {@code [expected - 2.4e6 per IC entry - 4e6, expected + 5e6]}
+     * applies below the multi-scalar threshold (fewer than 7 inputs, at most 7 IC entries) and to
+     * verifyFour, where it is far narrower than one G1 decompression (52.9e6), so one decompression
+     * more or fewer fails.
      */
+    /**
+     * From 7 public inputs (ADR-0056 M2) the library sums IC with one multi-scalar multiplication,
+     * so the saving is the removed decompressions plus the scalar multiplications it replaces. Those
+     * savings are pinned (Julc VM, PV11 cost model, JuLC #241 at 4cc63c24) to within 1e7 steps,
+     * well below one decompression; a JuLC or cost-model change must re-measure them.
+     */
+    private static final Map<Integer, Long> MSM_SAVINGS = Map.of(
+            7, 907_949_732L,
+            9, 1_115_968_872L,
+            24, 2_676_112_422L);
+    private static final int MSM_MIN_INPUTS = 7;
+
     private static void assertSaving(String label, int g1, int icEntries, long saved) {
+        int inputs = icEntries - 1;
+        if (g1 == inputs + 4 && inputs >= MSM_MIN_INPUTS) {
+            Long pinned = MSM_SAVINGS.get(inputs);
+            System.out.printf("[issue #84] %s: %,d steps saved (multi-scalar path)%n", label, saved);
+            assertNotNull(pinned, label + ": no pinned multi-scalar saving for " + inputs + " inputs");
+            assertTrue(Math.abs(saved - pinned) < 10_000_000L, label + ": saved " + saved + ", pinned " + pinned);
+            return;
+        }
         long expected = g1 * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
-        long lower = expected - 1_300_000L * icEntries - 3_000_000L;
+        long lower = expected - 2_400_000L * icEntries - 4_000_000L;
         long upper = expected + 5_000_000L;
         assertTrue(upper - lower < G1_UNCOMPRESS, label + ": the window must stay narrower than one decompression");
         System.out.printf("[issue #84] %s: %,d steps saved (removed decompressions: %,d)%n", label, saved, expected);
@@ -237,18 +265,20 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     }
 
     /**
-     * ADR-0045 V1 over the whole evaluation (review F11): a vector refused for its IC entries, its
-     * input count or an input outside {@code [0, r)} runs no scalar multiplication and no pairing
-     * step at all, whether it ends in {@code false} or a builtin failure. An accepted proof runs
-     * one scalar multiplication per input, four Miller loops and one final verification.
-     * (r2 matched builtin names in the last 20 trace entries with the wrong case, so it could
-     * never fail.)
+     * ADR-0045 V1 over the whole evaluation (#86 review F11, #87 review F3): a vector refused for its IC entries,
+     * its input count or an input outside {@code [0, r)} runs no scalar multiplication and no
+     * pairing step at all, whether it ends in {@code false} or a builtin failure. An accepted
+     * proof runs the four Miller loops and one final verification, and sums IC with one
+     * multi-scalar multiplication from {@link #MSM_MIN_INPUTS} inputs on (verify) or one scalar
+     * multiplication per input below that and in verifyFour, which pins the threshold.
      */
     private static void assertOps(Vector v, Run optimized, boolean four) {
         if (refusedBeforeVkX(v.label())) {
             assertEquals(Ops.NONE, optimized.ops(), v.label() + " (" + optimized.outcome() + ")");
         } else if (optimized.outcome() == Outcome.ACCEPT) {
-            assertEquals(new Ops(v.inputs().length, 0, 4, 1), optimized.ops(), v.label());
+            int n = v.inputs().length;
+            boolean msm = !four && n >= MSM_MIN_INPUTS;
+            assertEquals(new Ops(msm ? 0 : n, msm ? 1 : 0, 4, 1), optimized.ops(), v.label());
         }
     }
 
@@ -277,14 +307,14 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         Run run = run(Groth16VerifyOutcomeProbe.class, honest);
         assertEquals(new Ops(3, 0, 4, 1), run.ops());
         assertOps(honest, run, false);
-        assertThrows(AssertionFailedError.class, () -> assertOps(honest, new Run(Outcome.ACCEPT, 0, new Ops(2, 0, 4, 1)), false));
+        assertThrows(AssertionFailedError.class, () -> assertOps(honest, new Run(Outcome.ACCEPT, 0, 0, new Ops(2, 0, 4, 1)), false));
 
         // A refused vector: no count passes but zero, for each forbidden builtin.
         Vector refused = new Vector("guard: IC[last] flag cleared", tp.vk(), tp.vk().ic(), tp.proof(), tp.inputs());
-        assertOps(refused, new Run(Outcome.ERROR, 0, Ops.NONE), false);
+        assertOps(refused, new Run(Outcome.ERROR, 0, 0, Ops.NONE), false);
         for (Ops forbidden : List.of(new Ops(1, 0, 0, 0), new Ops(0, 1, 0, 0), new Ops(0, 0, 1, 0), new Ops(0, 0, 0, 1))) {
             for (Outcome outcome : List.of(Outcome.ERROR, Outcome.FALSE)) {
-                assertThrows(AssertionFailedError.class, () -> assertOps(refused, new Run(outcome, 0, forbidden), false),
+                assertThrows(AssertionFailedError.class, () -> assertOps(refused, new Run(outcome, 0, 0, forbidden), false),
                         forbidden + " " + outcome);
             }
         }
@@ -372,6 +402,62 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         }
     }
 
+    @Test
+    @DisplayName("Degenerate scalars around the multi-scalar threshold (#87 review F1): 0, r - 1, cancelling terms and vk_x = infinity give the reference's outcome, with invalid IC points under zero coefficients still refused")
+    void degenerateScalarsAroundMsmThreshold() {
+        BigInteger rMinus1 = FR.subtract(BigInteger.ONE);
+        int checked = 0;
+        for (int n : new int[]{6, 7, 9}) {
+            BigInteger[] zeros = new BigInteger[n];
+            Arrays.fill(zeros, BigInteger.ZERO);
+            BigInteger[] allRMinus1 = new BigInteger[n];
+            Arrays.fill(allRMinus1, rMinus1);
+            List<Vector> cases = new ArrayList<>();
+            cases.add(degenerate(n, "every s = 0, accepted", zeros, null));
+            cases.add(degenerate(n, "s1 = r - 1, vk_x infinity, accepted", with(zeros, 0, rMinus1), null));
+            cases.add(degenerate(n, "s1 = 1 and s2 = r - 1 cancel, accepted", with(with(zeros, 0, BigInteger.ONE), 1, rMinus1), null));
+            cases.add(degenerate(n, "every s = r - 1, accepted", allRMinus1, null));
+            cases.add(degenerate(n, "s1 = r - 1 against a proof for vk_x = G", with(zeros, 0, rMinus1), zeros));
+            Vector base = cases.get(0);
+            for (int k : new int[]{1, n}) {
+                cases.add(new Vector(base.label().replace("every s = 0, accepted", "IC[" + k + "] infinity, s = 0"),
+                        base.vk(), with(base.ic(), k, infinityG1()), base.proof(), zeros));
+                cases.add(new Vector(base.label().replace("every s = 0, accepted", "IC[" + k + "] flag cleared, s = 0"),
+                        base.vk(), with(base.ic(), k, flag(base.ic().get(k), 0x7F, 0)), base.proof(), zeros));
+            }
+            for (Vector v : cases) {
+                Run optimized = run(Groth16VerifyOutcomeProbe.class, v);
+                Run reference = run(Groth16VerifyOutcomeProbeReference.class, v);
+                Outcome expected = v.label().endsWith("accepted") ? Outcome.ACCEPT
+                        : v.label().contains("flag cleared") ? Outcome.ERROR : Outcome.FALSE;
+                assertEquals(expected, reference.outcome(), "reference: " + v.label());
+                assertEquals(expected, optimized.outcome(), v.label());
+                assertOps(v, optimized, false);
+                checked++;
+            }
+        }
+        System.out.printf("[issue #84] degenerate scalars: %d vectors at 6, 7 and 9 inputs%n", checked);
+    }
+
+    /**
+     * Every IC entry G, so {@code vk_x = x·G} with {@code x = 1 + s_1 + … + s_n mod r}; alpha,
+     * beta, gamma, delta, B and C are G or H, and {@code A = (2 + x)·G}, so the pairing equation
+     * {@code a = 1 + x + 1} holds. {@code proofFor}, when given, builds A for those scalars
+     * instead, so the equation fails unless both sums agree.
+     */
+    private static Vector degenerate(int n, String what, BigInteger[] scalars, BigInteger[] proofFor) {
+        BigInteger[] forProof = proofFor == null ? scalars : proofFor;
+        BigInteger x = BigInteger.ONE;
+        for (BigInteger s : forProof) x = x.add(s);
+        byte[] g = g1(1);
+        byte[] h = g2(1);
+        List<byte[]> ic = new ArrayList<>();
+        for (int i = 0; i <= n; i++) ic.add(g);
+        var vk = new SnarkjsToCardano.VkCompressed(g, h, h, h, ic);
+        var proof = proof(g1(x.add(BigInteger.TWO)), h, g);
+        return new Vector("degenerate (" + n + " inputs): " + what, vk, ic, proof, scalars);
+    }
+
     /**
      * Generators G, H; every IC entry G and every input 0, so {@code vk_x = G}. With
      * {@code A = a·G, B = b·H, C = c·G, alpha = α·G, beta = β·H, gamma = γ·H, delta = δ·H} the
@@ -400,6 +486,13 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         Arrays.fill(zeros, BigInteger.ZERO);
         String label = "pairing-preserving (" + inputs + " inputs): " + (position < 0 ? "baseline" : names[position] + " infinity");
         return new Vector(label, vk, ic, proof, zeros);
+    }
+
+    /** {@code k·G} compressed for any {@code k} (reduced mod r); {@code 0} gives infinity. */
+    private static byte[] g1(BigInteger k) {
+        BigInteger e = k.mod(FR);
+        if (e.signum() == 0) return infinityG1();
+        return ProverToCardano.g1Compress(JacobianG1BLS381.GENERATOR.scalarMul(e).toAffine());
     }
 
     /** {@code k·G} compressed; {@code 0} gives the compressed point at infinity. */
@@ -541,7 +634,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
             assertEquals(decisive instanceof EvalResult.Success, counted instanceof EvalResult.Success, v.label());
             ops = Ops.of(counted.budgetConsumed().cpuSteps());
         }
-        return new Run(outcome, decisive.budgetConsumed().cpuSteps(), ops);
+        return new Run(outcome, decisive.budgetConsumed().cpuSteps(), decisive.budgetConsumed().memoryUnits(), ops);
     }
 
     private static Program applied(CompileResult compiled, Vector v) {
