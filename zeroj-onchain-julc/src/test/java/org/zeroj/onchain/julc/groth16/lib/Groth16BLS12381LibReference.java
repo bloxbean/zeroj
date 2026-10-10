@@ -10,10 +10,12 @@ import org.julclang.stdlib.annotation.OnchainLibrary;
 import java.math.BigInteger;
 
 /**
- * Reusable on-chain Groth16 verifier logic for BLS12-381 proofs.
+ * Test-only copy of {@code Groth16BLS12381Lib} as of {@code 458bfb1} (before issue #84), kept as
+ * the differential reference: the optimized library must accept, reject and fail exactly where this
+ * one does, while decompressing each point once instead of twice.
  */
 @OnchainLibrary
-public class Groth16BLS12381Lib {
+public class Groth16BLS12381LibReference {
 
     /*
      * One builder per public-input count. Julc compiles overloads by name, not signature
@@ -104,15 +106,12 @@ public class Groth16BLS12381Lib {
         if (Builtins.nullList(icCursor)) {
             return false;
         }
-        if (!validScalars(inputsCursor)) {
+        if (!validScalars(inputsCursor) || !validIcPoints(icCursor)) {
             return false;
         }
 
-        byte[] ic0 = Builtins.unBData(Builtins.headList(icCursor));
-        if (Builtins.lengthOfByteString(ic0) != 48) return false;
-        JulcG1 vkX = Builtins.bls12_381_G1_uncompress(ic0);
-        if (!canonicalNonInfinityG1(ic0, vkX)) return false;
-        return accumulateIc(inputsCursor, Builtins.tailList(icCursor), vkX, true,
+        JulcG1 vkX = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+        return verifyWithPublicInputs(inputsCursor, Builtins.tailList(icCursor), vkX,
                 piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
@@ -147,79 +146,38 @@ public class Groth16BLS12381Lib {
         if (!scalarInFr(pub0) || !scalarInFr(pub1) || !scalarInFr(pub2) || !scalarInFr(pub3)) {
             return false;
         }
+        if (!validIcPoints(ic0)) {
+            return false;
+        }
 
-        // Each IC entry is validated in order and decompressed once, then reused below.
-        byte[] e0 = Builtins.unBData(Builtins.headList(ic0));
-        if (Builtins.lengthOfByteString(e0) != 48) return false;
-        JulcG1 p0 = Builtins.bls12_381_G1_uncompress(e0);
-        if (!canonicalNonInfinityG1(e0, p0)) return false;
-        byte[] e1 = Builtins.unBData(Builtins.headList(ic1));
-        if (Builtins.lengthOfByteString(e1) != 48) return false;
-        JulcG1 p1 = Builtins.bls12_381_G1_uncompress(e1);
-        if (!canonicalNonInfinityG1(e1, p1)) return false;
-        byte[] e2 = Builtins.unBData(Builtins.headList(ic2));
-        if (Builtins.lengthOfByteString(e2) != 48) return false;
-        JulcG1 p2 = Builtins.bls12_381_G1_uncompress(e2);
-        if (!canonicalNonInfinityG1(e2, p2)) return false;
-        byte[] e3 = Builtins.unBData(Builtins.headList(ic3));
-        if (Builtins.lengthOfByteString(e3) != 48) return false;
-        JulcG1 p3 = Builtins.bls12_381_G1_uncompress(e3);
-        if (!canonicalNonInfinityG1(e3, p3)) return false;
-        byte[] e4 = Builtins.unBData(Builtins.headList(ic4));
-        if (Builtins.lengthOfByteString(e4) != 48) return false;
-        JulcG1 p4 = Builtins.bls12_381_G1_uncompress(e4);
-        if (!canonicalNonInfinityG1(e4, p4)) return false;
-
-        JulcG1 vkX1 = Builtins.bls12_381_G1_add(p0, Builtins.bls12_381_G1_scalarMul(pub0, p1));
-        JulcG1 vkX2 = Builtins.bls12_381_G1_add(vkX1, Builtins.bls12_381_G1_scalarMul(pub1, p2));
-        JulcG1 vkX3 = Builtins.bls12_381_G1_add(vkX2, Builtins.bls12_381_G1_scalarMul(pub2, p3));
-        JulcG1 vkX4 = Builtins.bls12_381_G1_add(vkX3, Builtins.bls12_381_G1_scalarMul(pub3, p4));
+        JulcG1 vkX0 = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(ic0)));
+        JulcG1 vkX1 = addPublicInput(vkX0, pub0, ic1);
+        JulcG1 vkX2 = addPublicInput(vkX1, pub1, ic2);
+        JulcG1 vkX3 = addPublicInput(vkX2, pub2, ic3);
+        JulcG1 vkX4 = addPublicInput(vkX3, pub3, ic4);
 
         return verifyWithComputedVkX(vkX4, piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
-    /**
-     * Validates every remaining {@code IC} entry in order, exactly as a separate validation pass
-     * would (length, then decompression, then canonical non-infinity encoding), and folds
-     * {@code input_i · IC[i]} into {@code vkX} with the same decompressed point while public
-     * inputs remain. {@code aligned} stays true while every entry has had an input. Only after
-     * every entry is validated are the counts compared and the proof checked: the order, and so
-     * the outcome (accept, {@code false}, or a builtin failure), of the former two passes.
-     */
-    private static boolean accumulateIc(PlutusData inputsCursor,
-                                        PlutusData icCursor,
-                                        JulcG1 vkX,
-                                        boolean aligned,
-                                        byte[] piA,
-                                        byte[] piB,
-                                        byte[] piC,
-                                        byte[] vkAlpha,
-                                        byte[] vkBeta,
-                                        byte[] vkGamma,
-                                        byte[] vkDelta) {
-        if (Builtins.nullList(icCursor)) {
-            if (!aligned || !Builtins.nullList(inputsCursor)) return false;
-            return verifyWithComputedVkX(vkX, piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
+    private static boolean verifyWithPublicInputs(PlutusData inputsCursor,
+                                                  PlutusData icCursor,
+                                                  JulcG1 vkX,
+                                                  byte[] piA,
+                                                  byte[] piB,
+                                                  byte[] piC,
+                                                  byte[] vkAlpha,
+                                                  byte[] vkBeta,
+                                                  byte[] vkGamma,
+                                                  byte[] vkDelta) {
+        if (!matchingLengths(inputsCursor, icCursor)) {
+            return false;
         }
-        byte[] encoded = Builtins.unBData(Builtins.headList(icCursor));
-        if (Builtins.lengthOfByteString(encoded) != 48) return false;
-        JulcG1 ic = Builtins.bls12_381_G1_uncompress(encoded);
-        if (!canonicalNonInfinityG1(encoded, ic)) return false;
-        if (Builtins.nullList(inputsCursor)) {
-            return accumulateIc(inputsCursor, Builtins.tailList(icCursor), vkX, false,
-                    piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
-        }
-        JulcG1 next = Builtins.bls12_381_G1_add(vkX,
-                Builtins.bls12_381_G1_scalarMul(Builtins.asInteger(Builtins.headList(inputsCursor)), ic));
-        return accumulateIc(Builtins.tailList(inputsCursor), Builtins.tailList(icCursor), next, aligned,
-                piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
+
+        JulcG1 computedVkX = computeVkX(inputsCursor, icCursor, vkX);
+        return verifyWithComputedVkX(computedVkX, piA, piB, piC,
+                vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
-    /**
-     * Each proof and key point is checked in order (length, decompression, canonical non-infinity
-     * encoding) and the decompressed point is then used in the pairing: one decompression per point
-     * (issue #84), the same checks and the same order as before.
-     */
     private static boolean verifyWithComputedVkX(JulcG1 computedVkX,
                                                  byte[] piA,
                                                  byte[] piB,
@@ -228,27 +186,24 @@ public class Groth16BLS12381Lib {
                                                  byte[] vkBeta,
                                                  byte[] vkGamma,
                                                  byte[] vkDelta) {
-        if (Builtins.lengthOfByteString(piA) != 48) return false;
+        if (!isCanonicalNonInfinityG1(piA)
+                || !isCanonicalNonInfinityG2(piB)
+                || !isCanonicalNonInfinityG1(piC)
+                || !isCanonicalNonInfinityG1(vkAlpha)
+                || !isCanonicalNonInfinityG2(vkBeta)
+                || !isCanonicalNonInfinityG2(vkGamma)
+                || !isCanonicalNonInfinityG2(vkDelta)) {
+            return false;
+        }
+
         JulcG1 a = Builtins.bls12_381_G1_uncompress(piA);
-        if (!canonicalNonInfinityG1(piA, a)) return false;
-        if (Builtins.lengthOfByteString(piB) != 96) return false;
         JulcG2 b = Builtins.bls12_381_G2_uncompress(piB);
-        if (!canonicalNonInfinityG2(piB, b)) return false;
-        if (Builtins.lengthOfByteString(piC) != 48) return false;
         JulcG1 c = Builtins.bls12_381_G1_uncompress(piC);
-        if (!canonicalNonInfinityG1(piC, c)) return false;
-        if (Builtins.lengthOfByteString(vkAlpha) != 48) return false;
+
         JulcG1 alpha = Builtins.bls12_381_G1_uncompress(vkAlpha);
-        if (!canonicalNonInfinityG1(vkAlpha, alpha)) return false;
-        if (Builtins.lengthOfByteString(vkBeta) != 96) return false;
-        JulcG2 beta = Builtins.bls12_381_G2_uncompress(vkBeta);
-        if (!canonicalNonInfinityG2(vkBeta, beta)) return false;
-        if (Builtins.lengthOfByteString(vkGamma) != 96) return false;
+        JulcG2 beta  = Builtins.bls12_381_G2_uncompress(vkBeta);
         JulcG2 gamma = Builtins.bls12_381_G2_uncompress(vkGamma);
-        if (!canonicalNonInfinityG2(vkGamma, gamma)) return false;
-        if (Builtins.lengthOfByteString(vkDelta) != 96) return false;
         JulcG2 delta = Builtins.bls12_381_G2_uncompress(vkDelta);
-        if (!canonicalNonInfinityG2(vkDelta, delta)) return false;
 
         JulcG1 negAlpha = Builtins.bls12_381_G1_neg(alpha);
         JulcMlResult lhs = Builtins.bls12_381_mulMlResult(
@@ -259,6 +214,22 @@ public class Groth16BLS12381Lib {
                 Builtins.bls12_381_millerLoop(c, delta));
 
         return Builtins.bls12_381_finalVerify(lhs, rhs);
+    }
+
+    private static JulcG1 addPublicInput(JulcG1 vkX, BigInteger publicInput, PlutusData icCursor) {
+        JulcG1 ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+        JulcG1 scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
+        return Builtins.bls12_381_G1_add(vkX, scaled);
+    }
+
+    private static boolean matchingLengths(PlutusData inputsCursor, PlutusData icCursor) {
+        if (Builtins.nullList(inputsCursor)) {
+            return Builtins.nullList(icCursor);
+        } else if (Builtins.nullList(icCursor)) {
+            return false;
+        } else {
+            return matchingLengths(Builtins.tailList(inputsCursor), Builtins.tailList(icCursor));
+        }
     }
 
     private static boolean validScalars(PlutusData cursor) {
@@ -283,19 +254,44 @@ public class Groth16BLS12381Lib {
                 .add(BigInteger.valueOf(658699938581184513L));
     }
 
-    /**
-     * {@code encoded} is the canonical compressed encoding of {@code point} (it re-compresses to the
-     * same bytes) and not the compressed point at infinity. {@code point} is
-     * {@code uncompress(encoded)}, already computed by the caller.
-     */
-    private static boolean canonicalNonInfinityG1(byte[] encoded, JulcG1 point) {
-        return Builtins.equalsByteString(Builtins.bls12_381_G1_compress(point), encoded)
-                && !isCompressedInfinityG1(encoded);
+    private static boolean validIcPoints(PlutusData cursor) {
+        if (Builtins.nullList(cursor)) {
+            return true;
+        } else {
+            return isCanonicalNonInfinityG1(Builtins.unBData(Builtins.headList(cursor)))
+                    && validIcPoints(Builtins.tailList(cursor));
+        }
     }
 
-    private static boolean canonicalNonInfinityG2(byte[] encoded, JulcG2 point) {
-        return Builtins.equalsByteString(Builtins.bls12_381_G2_compress(point), encoded)
-                && !isCompressedInfinityG2(encoded);
+    private static JulcG1 computeVkX(PlutusData inputsCursor, PlutusData icCursor, JulcG1 vkX) {
+        if (Builtins.nullList(inputsCursor)) {
+            return vkX;
+        } else {
+            BigInteger publicInput = Builtins.asInteger(Builtins.headList(inputsCursor));
+            JulcG1 ic = Builtins.bls12_381_G1_uncompress(Builtins.unBData(Builtins.headList(icCursor)));
+            JulcG1 scaled = Builtins.bls12_381_G1_scalarMul(publicInput, ic);
+            JulcG1 nextVkX = Builtins.bls12_381_G1_add(vkX, scaled);
+            return computeVkX(Builtins.tailList(inputsCursor), Builtins.tailList(icCursor), nextVkX);
+        }
+    }
+
+    private static boolean isCanonicalG1(byte[] compressed) {
+        return Builtins.lengthOfByteString(compressed) == 48
+                && Builtins.equalsByteString(
+                        Builtins.bls12_381_G1_compress(Builtins.bls12_381_G1_uncompress(compressed)),
+                        compressed);
+    }
+
+    private static boolean isCanonicalNonInfinityG1(byte[] compressed) {
+        return isCanonicalG1(compressed) && !isCompressedInfinityG1(compressed);
+    }
+
+    private static boolean isCanonicalNonInfinityG2(byte[] compressed) {
+        return Builtins.lengthOfByteString(compressed) == 96
+                && Builtins.equalsByteString(
+                        Builtins.bls12_381_G2_compress(Builtins.bls12_381_G2_uncompress(compressed)),
+                        compressed)
+                && !isCompressedInfinityG2(compressed);
     }
 
     private static boolean isCompressedInfinityG1(byte[] compressed) {
