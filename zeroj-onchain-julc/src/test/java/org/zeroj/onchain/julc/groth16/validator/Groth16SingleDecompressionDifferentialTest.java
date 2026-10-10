@@ -170,15 +170,34 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
     /**
      * Exactly the {@code g1} G1 decompressions (A, C, alpha and the IC entries) and 4 G2 (B, beta,
-     * gamma, delta) removed, less the new code's per-IC-entry overhead (the byte checks, about
-     * 1.1e6 to 1.2e6 steps per entry; verifyFour, which drops a recursion, saves up to 4e6 more).
-     * The window {@code [expected - 1.3e6 per IC entry - 3e6, expected + 5e6]} is narrower than one
-     * G1 decompression (52.9e6) up to 33 public inputs, so up to there one decompression more or
-     * fewer fails.
+     * gamma, delta) removed, less the new code's overhead (the byte checks and the path choice,
+     * about 1.2e6 to 1.5e6 steps per IC entry; verifyFour, which drops a recursion, saves up to 4e6
+     * more). The window {@code [expected - 1.6e6 per IC entry - 4e6, expected + 5e6]} applies below
+     * the multi-scalar threshold (fewer than 7 inputs) and to verifyFour, where it is far narrower
+     * than one G1 decompression (52.9e6), so one decompression more or fewer fails.
      */
+    /**
+     * From 7 public inputs (ADR-0056 M2) the library sums IC with one multi-scalar multiplication,
+     * so the saving is the removed decompressions plus the scalar multiplications it replaces. Those
+     * savings are pinned (Julc VM, PV11 cost model, JuLC 0.1.0-pre19 with #240) to within 1e7 steps,
+     * well below one decompression; a JuLC or cost-model change must re-measure them.
+     */
+    private static final Map<Integer, Long> MSM_SAVINGS = Map.of(
+            9, 1_121_135_718L,
+            24, 2_681_279_268L);
+    private static final int MSM_MIN_INPUTS = 7;
+
     private static void assertSaving(String label, int g1, int icEntries, long saved) {
+        int inputs = icEntries - 1;
+        if (g1 == inputs + 4 && inputs >= MSM_MIN_INPUTS) {
+            Long pinned = MSM_SAVINGS.get(inputs);
+            System.out.printf("[issue #84] %s: %,d steps saved (multi-scalar path)%n", label, saved);
+            assertNotNull(pinned, label + ": no pinned multi-scalar saving for " + inputs + " inputs");
+            assertTrue(Math.abs(saved - pinned) < 10_000_000L, label + ": saved " + saved + ", pinned " + pinned);
+            return;
+        }
         long expected = g1 * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
-        long lower = expected - 1_300_000L * icEntries - 3_000_000L;
+        long lower = expected - 1_600_000L * icEntries - 4_000_000L;
         long upper = expected + 5_000_000L;
         assertTrue(upper - lower < G1_UNCOMPRESS, label + ": the window must stay narrower than one decompression");
         System.out.printf("[issue #84] %s: %,d steps saved (removed decompressions: %,d)%n", label, saved, expected);

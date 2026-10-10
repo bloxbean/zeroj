@@ -87,11 +87,34 @@ Notes on the table:
 canonical non-infinity), exactly as the old `validIcPoints` did, and decompressed once. Only
 then is `vk_x` computed from the same points. The outcomes are identical to `458bfb1`.
 
-**D3. Multi-scalar multiplication is deferred.** It needs an incremental native point list, so
+**D3. Multi-scalar multiplication (r3, milestone M2).** ~~Deferred.~~ It needs an incremental native point list, so
 that the already validated points can be passed to `bls12_381_G1_multiScalarMul` without a second
 decompression. That is Julc issue bloxbean/julc#240. With it, the estimated extra saving is about
 +0.14e9 steps at 9 inputs and about +0.92e9 at 24 inputs, used only from about 8 inputs. It is
 negative below that. It will be a separate revision once Julc provides the API.
+
+**D3 as implemented (r3).** It uses JuLC's incremental native lists (bloxbean/julc#241: `g1PointsEmpty`, `g1PointsCons`, `scalarsEmpty`, `scalarsCons`). From 7 public inputs, `verify` takes `icSumMsm` when the counts agree:
+1. The same walk validates every IC entry once on the way down: decompression, then canonical encoding and not infinity (`validatedIcPoint`).
+2. On the way back up it conses each validated point onto a native `JulcG1Points` list.
+3. Only after the walk has returned, so after every entry is validated (I1), it computes
+   `vk_x = IC[0] + bls12_381_G1_multiScalarMul(scalars, points)`, where `scalars` is the native list
+   of the public inputs.
+4. Below 7 inputs, or when the counts disagree, D″'s path is unchanged.
+
+The two paths validate identically, so I1–I4 hold for both. The threshold was measured on the
+same proofs, as steps saved compared with `458bfb1`:
+
+| Inputs | D″ (per-input `scalarMul`) | Multi-scalar | Difference |
+|---|---|---|---|
+| 2 | 0.611e9 | 0.393e9 | −0.218e9 |
+| 3 | 0.662e9 | 0.497e9 | −0.165e9 |
+| 4 | 0.712e9 | 0.601e9 | −0.111e9 |
+| 9 | 0.976e9 | **1.116e9** | +0.140e9 |
+| 24 | 1.752e9 | **2.676e9** | +0.924e9 |
+
+The multi-scalar path gains about 52e6 steps per input and crosses over at 7. Its savings at 9
+and 24 inputs are pinned in the test to within 1e7 steps. It needs the JuLC release that contains
+#241; until then M2 builds only against a local JuLC snapshot of #241.
 
 ## Invariants
 - **I1 (ADR-0045 V1).** No scalar multiplication or pairing happens before every IC entry has
@@ -173,9 +196,14 @@ through outcome probes (accept / `false` / builtin failure) and checks:
   - **Exit:** I1–I6 asserted by `Groth16SingleDecompressionDifferentialTest`; the module and
     integration suites green; zeroj-usecases green against a local publish; an independent review
     with no open P0–P2.
-- **M2 (after bloxbean/julc#240 is released).** Collect the validated points into a native list
-  and use `bls12_381_G1_multiScalarMul` from about 8 inputs. This needs an ADR revision with its
-  own measurements and differential tests.
+- **M2 (r3; implemented against a local JuLC with #241).** Collect the validated points into a
+  native list and use `bls12_381_G1_multiScalarMul` from 7 inputs.
+  - **Entry gate:** JuLC #241 reviewed.
+  - **Exit:**
+    - the same differential suite passes, with identical outcomes and every V1 check;
+    - the multi-scalar savings are pinned;
+    - zeroj-usecases is green against local ZeroJ and JuLC builds.
+  - **Merge gate:** a JuLC release containing #241, and `julcVersion` bumped to it.
 
 ## Production and audit gates
 - **Maintainer acceptance** of this ADR, including I4. It is Proposed until then, and it should be
@@ -206,6 +234,9 @@ through outcome probes (accept / `false` / builtin failure) and checks:
     the second listed divergence (an undecodable entry, then an infinity entry).
   - **P3:** the recursion note is corrected (pending levels, not tail recursion), and a 24-input
     proof is measured. I5 now states the per-entry overhead.
+- **r3** (2026-10-11): D3 implemented as milestone M2, using bloxbean/julc#241. A multi-scalar path
+  is used from 7 public inputs, with measured savings of 1.116e9 steps at 9 inputs and 2.676e9 at
+  24. It merges only after a JuLC release.
 - **r2** (also responds to Fable's review of `c1d8f5d`, which found no V1 violation or
   accept-set difference):
   - **F1 (P1):** I5's window is now `[expected − 1.3e6·(n + 1) − 3e6, expected + 5e6]`. It is
