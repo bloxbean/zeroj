@@ -1,6 +1,7 @@
 package org.zeroj.onchain.julc.groth16.validator;
 
 import org.julclang.compiler.CompileResult;
+import org.julclang.core.DefaultFun;
 import org.julclang.core.PlutusData;
 import org.julclang.core.Program;
 import org.julclang.testkit.ContractTest;
@@ -12,6 +13,7 @@ import org.julclang.vm.PlutusLanguage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.opentest4j.AssertionFailedError;
 import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.crypto.groth16.Groth16ProverBLS381;
@@ -37,6 +39,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -262,7 +265,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     }
 
     /**
-     * ADR-0045 V1 over the whole evaluation (#87 review F3): a vector refused for its IC entries,
+     * ADR-0045 V1 over the whole evaluation (#86 review F11, #87 review F3): a vector refused for its IC entries,
      * its input count or an input outside {@code [0, r)} runs no scalar multiplication and no
      * pairing step at all, whether it ends in {@code false} or a builtin failure. An accepted
      * proof runs the four Miller loops and one final verification, and sums IC with one
@@ -285,6 +288,39 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         boolean icRefused = what.contains("IC[") && !what.contains("negated");
         return icRefused || what.contains("IC has") || what.contains("too few inputs") || what.contains("too many inputs")
                 || what.equals("empty IC") || what.startsWith("input = r") || what.equals("input = -1");
+    }
+
+    @Test
+    @DisplayName("The operation guard (review F11): it sees the real builtins and fails on each forbidden one")
+    void operationGuardSeesTheRealBuiltins() {
+        TestProof tp = PROOFS.get("linear (3 inputs)");
+        Vector honest = new Vector("guard: honest", tp.vk(), tp.vk().ic(), tp.proof(), tp.inputs());
+        // The counts come from the builtins themselves: the honest run's trace holds the real enum
+        // values, and the counting run reports them.
+        CompileResult compiled = COMPILED.computeIfAbsent(Groth16VerifyOutcomeProbe.class,
+                c -> compileValidator(c, Path.of("src/test/java")));
+        EvalResult traced = evaluate(applied(compiled, honest), context(honest, 1));
+        List<DefaultFun> trace = traced.builtinTrace().stream().map(e -> e.fun()).toList();
+        assertTrue(traced instanceof EvalResult.Success, "honest proof");
+        assertTrue(trace.contains(DefaultFun.Bls12_381_millerLoop) && trace.contains(DefaultFun.Bls12_381_finalVerify),
+                "trace: " + trace);
+        Run run = run(Groth16VerifyOutcomeProbe.class, honest);
+        assertEquals(new Ops(3, 0, 4, 1), run.ops());
+        assertOps(honest, run, false);
+        assertThrows(AssertionFailedError.class, () -> assertOps(honest, new Run(Outcome.ACCEPT, 0, 0, new Ops(2, 0, 4, 1)), false));
+
+        // A refused vector: no count passes but zero, for each forbidden builtin.
+        Vector refused = new Vector("guard: IC[last] flag cleared", tp.vk(), tp.vk().ic(), tp.proof(), tp.inputs());
+        assertOps(refused, new Run(Outcome.ERROR, 0, 0, Ops.NONE), false);
+        for (Ops forbidden : List.of(new Ops(1, 0, 0, 0), new Ops(0, 1, 0, 0), new Ops(0, 0, 1, 0), new Ops(0, 0, 0, 1))) {
+            for (Outcome outcome : List.of(Outcome.ERROR, Outcome.FALSE)) {
+                assertThrows(AssertionFailedError.class, () -> assertOps(refused, new Run(outcome, 0, 0, forbidden), false),
+                        forbidden + " " + outcome);
+            }
+        }
+        // The counts decode the marks exactly.
+        long cpu = 3 * SCALAR_MUL_MARK + 4 * MILLER_LOOP_MARK + FINAL_VERIFY_MARK + 99_999_999_999L;
+        assertEquals(new Ops(3, 0, 4, 1), Ops.of(cpu));
     }
 
     /** A rejected vector costs the new library at most the reference's cost plus {@link #rejectionSlack}. */
@@ -599,6 +635,12 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
             ops = Ops.of(counted.budgetConsumed().cpuSteps());
         }
         return new Run(outcome, decisive.budgetConsumed().cpuSteps(), decisive.budgetConsumed().memoryUnits(), ops);
+    }
+
+    private static Program applied(CompileResult compiled, Vector v) {
+        return compiled.program().applyParams(
+                PlutusData.bytes(v.vk().alpha()), PlutusData.bytes(v.vk().beta()),
+                PlutusData.bytes(v.vk().gamma()), PlutusData.bytes(v.vk().delta()), icData(v.ic()));
     }
 
     private PlutusData context(Vector v, int expect) {

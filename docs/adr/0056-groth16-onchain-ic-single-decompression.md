@@ -106,7 +106,7 @@ then is `vk_x` computed from the same points. The outcomes are identical to `458
 
 **D3. Multi-scalar multiplication (milestone M2).** Passing the already validated points to
 `bls12_381_G1_multiScalarMul` without a second decompression needs an incremental native point
-list, which JuLC lacked (bloxbean/julc#240); r1 therefore deferred it. Since r3 it uses JuLC's
+list, which JuLC lacked (bloxbean/julc#240); r1 therefore deferred it. Since r4 it uses JuLC's
 incremental native lists (bloxbean/julc#241: `g1PointsEmpty`, `g1PointsCons`, `scalarsEmpty`, `scalarsCons`). From 7 public inputs, `verify` takes `icSumMsm` when the counts agree:
 1. The same walk validates every IC entry once on the way down: decompression, then canonical encoding and not infinity (`validatedIcPoint`).
 2. On the way back up it conses each validated point onto a native `JulcG1Points` list.
@@ -127,7 +127,7 @@ same proofs, as steps saved compared with `458bfb1`:
 | 24 | 1.752e9 | **2.676e9** | +0.924e9 |
 
 The multi-scalar path gains about 53e6 steps per input over the per-input path, and the two cross
-between 6 and 7 inputs. With the threshold in place (r4, measured with JuLC `4cc63c24`), the
+between 6 and 7 inputs. With the threshold in place (r5, measured with JuLC `4cc63c24`), the
 saving is 0.814e9 steps at 6 inputs (per-input path) and 0.908e9 at 7 (multi-scalar path).
 Fable's review of `5ffa908` forced each path at 5–10 and 24 inputs: the per-input path would save
 0.865e9 at 7, and the multi-scalar path about 5–10e6 less than the per-input path at 6, so 7 is
@@ -179,19 +179,23 @@ a local JuLC snapshot of #241.
   entry (the byte checks and the count walk). No scalar multiplication runs when the counts
   disagree, or before an IC entry that fails. This is checked in two ways:
   - **Cost:** asserted on every rejected vector.
-  - **Whole-evaluation operation counts (r4).** Each vector of the library under test is also
-    evaluated under the PV11 cost model with the CPU intercepts of G1 `scalarMul`, G1
-    `multiScalarMul`, `millerLoop` and `finalVerify` set to 10^11, 10^13, 10^15 and 10^17, so
-    the consumed CPU spells out how many of each ran. The test checks the original values at
-    those parameter indices before marking them. Every vector refused by its IC entries, its
-    input count or an input out of range, whether by `false` or by a builtin failure, runs none
-    of the four. Every accepted proof runs 4 Miller loops and one final verification, plus `n`
-    scalar multiplications below 7 inputs (and in `verifyFour`) or exactly one multi-scalar
-    multiplication from 7. (r2 checked only the last 20 builtins before a failure.)
+  - **Whole-evaluation operation counts (r3, review F11; r5 for the multi-scalar path).** Each
+    vector of the library under test is also evaluated under the PV11 cost model with the CPU
+    intercepts of G1 `scalarMul`, G1 `multiScalarMul`, `millerLoop` and `finalVerify` set to
+    10^11, 10^13, 10^15 and 10^17, so the consumed CPU spells out how many of each ran. The test
+    checks the original values at those parameter indices before marking them. Every vector
+    refused by its IC entries, its input count or an input out of range, whether by `false` or by
+    a builtin failure, runs none of the four. Every accepted proof runs 4 Miller loops and one
+    final verification, plus `n` scalar multiplications below 7 inputs (and in `verifyFour`) or
+    exactly one multi-scalar multiplication from 7. A self-test ties the counts to the real
+    `DefaultFun` values in an honest run's trace, and requires the guard to fail on each
+    forbidden operation, with a passing control. (r2 matched builtin names in the last 20 trace
+    entries with the wrong case, so that check could never fail.)
 
-  Mutation checks: multiplying before the recursion costs an extra 8.4e7 steps (r2);
-  multiplying on a count mismatch fails the cost check; moving the threshold from 7 to 8 fails
-  the operation counts at 7 inputs (r4).
+  Mutation checks: multiplying when the counts disagree, and multiplying before the recursion,
+  are each caught by the operation counts alone with the cost check disabled (r3); the cost
+  check also catches both. Moving the threshold from 7 to 8 fails the operation counts at 7
+  inputs (r5).
 
 ## Consequences
 - **Savings per verification** compared with `main`, measured: 0.61e9 steps at 2 inputs; with
@@ -201,14 +205,15 @@ a local JuLC snapshot of #241.
     with M1 alone, 0.071 and 0.126 ADA.
   - It also frees 6–27% of the step budget for larger circuits.
 - **Script hashes** of every validator using the library change. Measured as the blueprint's
-  `compiledCode` bytes, `Groth16BLS12381Verifier` goes from 1,059 (`458bfb1`) to 1,186 with M1
-  (Julc testkit's `scriptSizeBytes()`: 1,053 to 1,180) and to 1,401 with M2 (JuLC `4cc63c24`):
+  `compiledCode` bytes, `Groth16BLS12381Verifier` goes from 1,059 (`458bfb1`) to 1,203 with M1
+  at `1525e97` (Julc testkit's `scriptSizeBytes()`: 1,053 to 1,197; r1's 1,186 predates the
+  count check) and to 1,401 with M2 (JuLC `4cc63c24`):
   +342 bytes in all.
 - **Memory units rise.** The pending recursion levels, the byte checks and (M2) the native lists
   add CEK steps and live values.
   - M1, measured on zeroj-usecases transactions against PR #85: auction bid +2.1%, settlement of
     3 bids +3.9%, registry rotation (two 7-input proofs) +6.2%.
-  - With M2, per verification against `458bfb1` (r4 test output): 187,318 against 160,395 units
+  - With M2, per verification against `458bfb1` (r5 test output): 187,318 against 160,395 units
     at 2 inputs, 407,620 against 322,228 at 9 and 839,275 against 669,013 at 24, about +26%. The
     multi-scalar path uses less memory than the per-input path would (Fable: 414,454 at 9,
     901,174 at 24).
@@ -224,12 +229,13 @@ through outcome probes (accept / `false` / builtin failure) and checks:
 - **Proofs:** honest proofs for 2 (snarkjs), 3, 4, 6, 7, 9 and 24 public inputs, so both sides
   of the multi-scalar threshold, and proofs with one public input equal to 0 at 3 and 9 inputs.
   Zero public inputs (`IC = [G]`) are covered by the pairing-preserving vectors.
-- **Degenerate scalars around the threshold (r4)** at 6, 7 and 9 inputs, on a key whose IC
+- **Degenerate scalars around the threshold (r5)** at 6, 7 and 9 inputs, on a key whose IC
   entries are all `G`: every scalar 0, `r − 1` so that `vk_x` is infinity, two terms that cancel,
   every scalar `r − 1`, each accepted with a matching proof, and `r − 1` against a proof for a
   different `vk_x`, refused. With zero coefficients, an infinity IC entry still returns `false`
   and an undecodable one still fails. Both libraries give the stated outcome.
-- **Operation counts (I6, r4)** for every vector of the library under test.
+- **Operation counts (I6, r3; r5 for the multi-scalar path)** for every vector of the library
+  under test, and a self-test of that guard.
 - **Paths:** the 7-, 9- and 24-input proofs (honest and all their mutations) and the degenerate
   vectors at 7 and 9 take the multi-scalar path; the others take the per-input path.
   `verifyFour` is unchanged by M2.
@@ -240,7 +246,7 @@ through outcome probes (accept / `false` / builtin failure) and checks:
   infinity checks, with explicit expected `FALSE`, plus an accepted baseline. This covers both
   `verify` and `verifyFour`.
 - **Equality:** outcomes are equal except the pinned I4 instances, and the I5 saving is asserted
-  exactly (r4: 537 `verify` vectors, 56 `verifyFour`, 27 degenerate).
+  exactly (r5: 537 `verify` vectors, 56 `verifyFour`, 27 degenerate).
 - **Suites:** the `:zeroj-onchain-julc` and `:zeroj-integration-tests` suites, and zeroj-usecases
   (VM and Yaci DevKit) against a local publish.
 
@@ -250,7 +256,7 @@ through outcome probes (accept / `false` / builtin failure) and checks:
   - **Exit:** I1–I6 asserted by `Groth16SingleDecompressionDifferentialTest`; the module and
     integration suites green; zeroj-usecases green against a local publish; an independent review
     with no open P0–P2.
-- **M2 (r3; implemented against a local JuLC with #241).** Collect the validated points into a
+- **M2 (r4; implemented against a local JuLC with #241).** Collect the validated points into a
   native list and use `bls12_381_G1_multiScalarMul` from 7 inputs.
   - **Entry gate:** JuLC #241 reviewed (Codex and Fable reviews done; JuLC review round r2 in
     progress).
@@ -307,11 +313,20 @@ through outcome probes (accept / `false` / builtin failure) and checks:
   - **F8:** the measurement method for script size is stated.
   - **F9:** memory is reported.
   - **F10:** acceptance before merge is listed as a gate.
-- **r3** (2026-10-11): D3 implemented as milestone M2, using bloxbean/julc#241. A multi-scalar path
-  is used from 7 public inputs, with measured savings of 1.116e9 steps at 9 inputs and 2.676e9 at
-  24. It merges only after a JuLC release.
-- **r4** (2026-10-11; Codex review of `5ffa908`, no V1 violation or accept-set/`vk_x`
-  difference found):
+- **r3** (2026-10-11; responds to the review of `1525e97`, which found no accept-set difference
+  beyond the documented rejection forms and no V1 violation in the implementation):
+  - **F11 (P2):** the structural I6 check matched `ScalarMul`, `MillerLoop` and `FinalVerify`
+    against names such as `Bls12_381_G1_scalarMul`, so it could never fail. It is replaced by
+    whole-evaluation operation counts from a marked cost model, plus a self-test that the guard
+    sees the real `DefaultFun` values and fails on each forbidden operation. Both V1 mutations
+    are caught with the cost check disabled.
+  - **F12 (P3):** the script sizes are those of `1525e97`: 1,203 bytes (blueprint), 1,197
+    (testkit), +144.
+- **r4** (2026-10-11; numbered r3 before PR #86's review round r3): D3 implemented as milestone
+  M2, using bloxbean/julc#241. A multi-scalar path is used from 7 public inputs, with measured
+  savings of 1.116e9 steps at 9 inputs and 2.676e9 at 24. It merges only after a JuLC release.
+- **r5** (2026-10-11; numbered r4 before PR #86's r3; Codex review of `5ffa908`, no V1 violation
+  or accept-set/`vk_x` difference found):
   - **F1 (P2):** the threshold and degenerate scalars were untested. Adds 6- and 7-input proofs,
     a 9-input proof with a zero input, the degenerate-scalar vectors, and the operation counts
     that pin the threshold; moving it to 8 now fails.
@@ -319,10 +334,10 @@ through outcome probes (accept / `false` / builtin failure) and checks:
     "non-empty and equal" against Plutus' and Julc's truncating `zip`, and why neither is
     reachable here.
   - **F3 (P3):** the V1 order check was a 20-builtin suffix. I6 now counts operations over the
-    whole evaluation.
+    whole evaluation (the same guard as r3, extended to the multi-scalar path).
   - **F4 (P3):** I5 states the current window and separates M1 and M2 measurements; the pins are
     recentred on the measured values (they were 5.2e6 high).
-- **r4** (also responds to Fable's review of `5ffa908`, which found no V1 violation and, over the
+- **r5** (also responds to Fable's review of `5ffa908`, which found no V1 violation and, over the
   whole suite forced onto the multi-scalar path and a Scalus cross-run, no accept-set or `vk_x`
   difference):
   - **F1 (P2):** as Codex F4 above; the 7-input pin is added.
