@@ -65,6 +65,14 @@ public final class JubjubPoint {
         void scheduleStarted(int iterations);
         void addition();
         void doubling();
+
+        /**
+         * A variable-time multiplication started: {@link #scalarMul} or
+         * {@code FastJubjubPoint.scalarMulPublic}. Both are meant for public scalars only; tests
+         * use this to prove that a secret path never reaches them (ADR-0055 I13).
+         */
+        default void publicMultiplication() {
+        }
     }
 
     static void installSecretScheduleObserverForTesting(SecretScheduleObserver observer) {
@@ -73,6 +81,12 @@ public final class JubjubPoint {
             throw new IllegalStateException("a secret-schedule observer is already installed");
         }
         SECRET_SCHEDULE_OBSERVER.set(observer);
+    }
+
+    /** Reports a variable-time public multiplication on another path (see {@link FastJubjubPoint}). */
+    static void notePublicMultiplication() {
+        SecretScheduleObserver observer = SECRET_SCHEDULE_OBSERVER.get();
+        if (observer != null) observer.publicMultiplication();
     }
 
     static void clearSecretScheduleObserverForTesting() {
@@ -263,6 +277,8 @@ public final class JubjubPoint {
      */
     public JubjubPoint scalarMul(BigInteger k) {
         Objects.requireNonNull(k, "k");
+        SecretScheduleObserver observer = SECRET_SCHEDULE_OBSERVER.get();
+        if (observer != null) observer.publicMultiplication();
         if (k.signum() == 0) return IDENTITY;
         boolean negate = k.signum() < 0;
         BigInteger scalar = negate ? k.negate() : k;
@@ -541,6 +557,7 @@ public final class JubjubPoint {
         for (int i = 0; i < effLen; i++) {
             out[i] = be[be.length - 1 - i];
         }
+        Arrays.fill(be, (byte) 0); // the coordinate may be secret (a shared secret's encoding)
         return out;
     }
 

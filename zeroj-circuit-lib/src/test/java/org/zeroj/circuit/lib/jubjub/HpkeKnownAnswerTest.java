@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import javax.crypto.Cipher;
 import javax.crypto.KDF;
 import javax.crypto.spec.HKDFParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.InputStream;
@@ -270,7 +269,7 @@ class HpkeKnownAnswerTest {
     // ---------------------------------------------------------------- ChaCha20-Poly1305
 
     @Test
-    @DisplayName("RFC 8439 §2.8.2 and Wycheproof chacha20_poly1305_test.json through the JDK cipher Hpke uses")
+    @DisplayName("RFC 8439 §2.8.2 and Wycheproof chacha20_poly1305_test.json through Aead, the JDK cipher Hpke and confidential notes use")
     void chacha20Poly1305() throws Exception {
         // RFC 8439 §2.8.2.
         byte[] key = HEX.parseHex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
@@ -294,9 +293,9 @@ class HpkeKnownAnswerTest {
                 String result = t.get("result").asText();
                 String id = "tcId " + t.get("tcId").asInt();
                 if (iv.length != Hpke.N_N || k.length != Hpke.N_K) {
-                    // HPKE only ever uses 32-byte keys and 12-byte nonces; other sizes must be refused.
+                    // HPKE and the note profile only ever use 32-byte keys and 12-byte nonces; Aead refuses other sizes.
                     assertEquals("invalid", result, id);
-                    assertThrows(GeneralSecurityException.class, () -> chacha(Cipher.DECRYPT_MODE, k, iv, a, ctTag), id);
+                    assertThrows(IllegalArgumentException.class, () -> chacha(Cipher.DECRYPT_MODE, k, iv, a, ctTag), id);
                     continue;
                 }
                 run++;
@@ -313,10 +312,7 @@ class HpkeKnownAnswerTest {
     }
 
     private static byte[] chacha(int mode, byte[] key, byte[] nonce, byte[] aad, byte[] input) throws GeneralSecurityException {
-        Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305");
-        cipher.init(mode, new SecretKeySpec(key, "ChaCha20"), new IvParameterSpec(nonce));
-        if (aad.length > 0) cipher.updateAAD(aad);
-        return cipher.doFinal(input);
+        return Aead.chacha20Poly1305(mode, key, nonce, aad, input);
     }
 
     // ---------------------------------------------------------------- HKDF-SHA256

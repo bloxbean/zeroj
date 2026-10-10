@@ -4,7 +4,6 @@ import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
 import javax.crypto.KDF;
 import javax.crypto.spec.HKDFParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -413,10 +412,7 @@ final class Hpke {
             byte[] nonce = baseNonce.clone();
             byte[] seqBytes = i2osp(seq, N_N);
             for (int i = 0; i < N_N; i++) nonce[i] ^= seqBytes[i];
-            Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305");
-            cipher.init(mode, new SecretKeySpec(key, "ChaCha20"), new IvParameterSpec(nonce));
-            if (aad.length > 0) cipher.updateAAD(aad);
-            return cipher.doFinal(input);
+            return Aead.chacha20Poly1305(mode, key, nonce, aad, input);
         }
 
         void destroy() {

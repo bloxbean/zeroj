@@ -363,6 +363,50 @@ The construction rests on a stated assumption: that encryption can replace the p
 of the GJKR07 proof. That assumption, and the delivery argument, await external review. See the
 spec `docs/specs/dkg-share-delivery-hpke-v1.md`.
 
+**Confidential notes: delivering openings on-chain.** A note's amount lives in a
+`pedersen-jubjub-v1` commitment, and its holder needs the opening `(v, r)` to spend it.
+`confidential-note-jubjub-v1` (ADR-0055, experimental) delivers that opening on-chain, in the note
+itself, to each of its readers: the owner, and any auditors the application requires. It uses
+Zcash Sapling's key agreement on Jubjub, its BLAKE2b-256 KDF (with ZeroJ's personalization) and
+ChaCha20-Poly1305, with a fresh ephemeral key per reader. Recipients and auditors recover every
+note from chain data alone.
+
+```java
+// Sender: one delivery per reader, in the application's order (owner first, then auditors).
+NoteOpening opening = NoteOpening.random(amount, random);
+JubjubPoint c = opening.commitment();                      // goes in the note's datum
+List<byte[]> deliveries = ConfidentialNotes.seal(opening, List.of(ownerKey, auditorKey), random);
+
+// Reader: open only your own position; check the owner credential yourself.
+NoteScanner scanner = NoteScanner.of(viewingKey);          // runs an AEAD self-test once
+Optional<NoteOpening> mine = scanner.open(deliveries.get(0), datumU, datumV);
+```
+
+These rules are not optional:
+- **Accept only what opens.** `open` returns an opening only after it recomputes `[v]·G + [r]·H`
+  and compares it with the note's commitment. Everything else, from a wrong key to a tampered byte,
+  is the same "not mine" result. A crypto-provider fault throws instead: retry later, never treat
+  it as "not mine".
+- **Check the owner yourself.** The profile does not know your owner credential. Count a note as
+  yours only if its owner field is yours and it sits at your application's address with its token;
+  otherwise a copied commitment and delivery in someone else's output would look like yours.
+- **Report unopenable owned notes.** `scan` lists owned notes that do not open. That is value you
+  own but cannot spend, and evidence of a misbehaving sender; show it to the user.
+- **Keys.** Generate viewing keys with `NoteViewingKey.generate`; never reuse an ElGamal, EdDSA,
+  spending or Zcash key. Register auditor keys with their possession proof, once. Ciphertexts on
+  chain are kept forever: a leaked viewing key opens every note ever delivered to it.
+- **Scan in your own process.** Decryption multiplies attacker-chosen points by your viewing key
+  with variable-time arithmetic. Never run it as a shared or network-facing service.
+
+Without a proof, a validator can check only that each required reader has a delivery of the right
+length, not that it decrypts. ADR-0055's D3a closes that for the **amount** an auditor needs: the
+transfer's Groth16 proof also encrypts each created note's amount to the auditor's
+`elgamal-jubjub-v1` key in two 32-bit limbs. It measured within the per-transaction budget in a test-only
+reference validator (73.4% of the step limit for a two-output transfer with one auditor, 55.2% for
+a redeem, 47.3% with the hash-compressed layout); your application measures its own complete
+transaction. It covers notes created by proof-enforced transitions only; issued notes rest on the
+issuer.
+
 :::caution[Offline trustee and encryption operations]
 Key generation, encryption, decryption shares and the DKG handle secrets with variable-time
 Java `BigInteger` arithmetic, through the blinded best-effort schedule used for Pedersen.
@@ -417,6 +461,7 @@ authorization or replay rules.
 | ElGamal encryption and trustee proofs (in-circuit) | BLS12-381 only | Experimental |
 | ElGamal host API, threshold key generation | Jubjub | Experimental; secret operations offline or isolated only |
 | Encrypted DKG share delivery (`dkg-share-delivery-hpke-v1`) | X25519 HPKE | Experimental; Assumption A1 and the delivery contract await external review |
+| Confidential notes (`confidential-note-jubjub-v1`) | Jubjub | Experimental; secret operations offline or isolated only; assumptions A1–A3 await external review |
 | BLAKE2b, CIP-1852 derivation | Field-agnostic | Ready on BLS12-381 Groth16 |
 | SHA-512, HMAC-SHA512, BIP32-Ed25519 | Field-agnostic | Ready as building blocks |
 | Poseidon MPF/JMT authenticated state | BLS12-381 Poseidon profile | Experimental (separate modules) |

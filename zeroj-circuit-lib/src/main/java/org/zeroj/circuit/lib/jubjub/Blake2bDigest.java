@@ -1,18 +1,30 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Host BLAKE2b ([RFC 7693]): unkeyed, no salt or personalisation, digest length 1–64 bytes.
- * Used for the {@code elgamal-jubjub-threshold-v1} session identifier and transcript digest
- * (BLAKE2b-256). The JDK ships no BLAKE2. The in-circuit gadget is
- * {@code org.zeroj.circuit.lib.hash.Blake2b}.
+ * Host BLAKE2b ([RFC 7693]): unkeyed, sequential, digest length 1–64 bytes, with an optional
+ * 16-byte personalization ([BLAKE2] §2.8, parameter-block bytes 48–63). The salt is always zero.
+ * The JDK ships no BLAKE2. The in-circuit gadget is {@code org.zeroj.circuit.lib.hash.Blake2b}.
  *
- * <p>A straight transcription of RFC 7693 §3. It hashes public data only. Checked against the
- * RFC's Appendix A vector, BouncyCastle and Cardano's {@code Blake2bUtil} in
- * {@code Blake2bDigestTest}.
+ * <p>Uses:
+ * <ul>
+ *   <li>the {@code elgamal-jubjub-threshold-v1} session identifier and transcript digest
+ *       (BLAKE2b-256, public data);</li>
+ *   <li>the {@code confidential-note-jubjub-v1} KDF (personalised BLAKE2b-256 over a
+ *       Diffie–Hellman shared secret, ADR-0055 D5). That input is <b>secret</b>.</li>
+ * </ul>
+ *
+ * <p>A straight transcription of RFC 7693 §3. The compression function is add, xor and rotate
+ * on {@code long}s. It has no branch or table lookup that depends on the input bytes; branches
+ * depend only on the public input length. The message words, working vector and chaining state
+ * are zeroed before returning (best effort: the JIT may keep copies). Checked against the RFC's
+ * Appendix A vector, BouncyCastle (with and without personalization) and Cardano's
+ * {@code Blake2bUtil} in {@code Blake2bDigestTest}.
  *
  * [RFC 7693]: https://www.rfc-editor.org/rfc/rfc7693
+ * [BLAKE2]: https://www.blake2.net/blake2.pdf
  */
 final class Blake2bDigest {
 
@@ -43,38 +55,72 @@ final class Blake2bDigest {
         return digest(input, 32);
     }
 
+    /** The personalization length for BLAKE2b ([BLAKE2] §2.8). */
+    static final int PERSONALIZATION_LENGTH = 16;
+
     /** Unkeyed BLAKE2b with an {@code outLength}-byte digest, {@code 1 ≤ outLength ≤ 64}. */
     static byte[] digest(byte[] input, int outLength) {
+        return digest(input, outLength, null);
+    }
+
+    /**
+     * Unkeyed BLAKE2b with an {@code outLength}-byte digest and a 16-byte personalization
+     * ({@code null} for none, which equals all zero bytes). This is the Zcash protocol
+     * specification's {@code BLAKE2b-ℓ(p, x)} (§5.4.1.2).
+     */
+    static byte[] digest(byte[] input, int outLength, byte[] personalization) {
         Objects.requireNonNull(input, "input");
         if (outLength < 1 || outLength > 64) {
             throw new IllegalArgumentException("BLAKE2b output length must be 1..64 bytes");
         }
+        if (personalization != null && personalization.length != PERSONALIZATION_LENGTH) {
+            throw new IllegalArgumentException("BLAKE2b personalization must be 16 bytes");
+        }
         long[] h = IV.clone();
-        h[0] ^= 0x01010000L ^ outLength; // key length 0
+        h[0] ^= 0x01010000L ^ outLength; // key length 0, fanout 1, depth 1
+        if (personalization != null) {
+            // Parameter-block words 6 and 7 (bytes 48–63), little-endian.
+            h[6] ^= littleEndianLong(personalization, 0);
+            h[7] ^= littleEndianLong(personalization, 8);
+        }
         long[] m = new long[16];
         long[] v = new long[16];
-        int blocks = blockCount(input.length);
-        // The last block starts at (blocks − 1)·128 ≤ 2^31 − 128, so offset + 127 ≤ Integer.MAX_VALUE.
-        for (int b = 0; b < blocks; b++) {
-            boolean last = b == blocks - 1;
-            int offset = b * BLOCK;
-            int length = Math.min(BLOCK, input.length - offset);
-            for (int i = 0; i < 16; i++) {
-                m[i] = 0;
-                for (int byteIndex = 7; byteIndex >= 0; byteIndex--) {
-                    int pos = offset + i * 8 + byteIndex;
-                    int value = pos < offset + length ? input[pos] & 0xFF : 0;
-                    m[i] = (m[i] << 8) | value;
+        try {
+            int blocks = blockCount(input.length);
+            // The last block starts at (blocks − 1)·128 ≤ 2^31 − 128, so offset + 127 ≤ Integer.MAX_VALUE.
+            for (int b = 0; b < blocks; b++) {
+                boolean last = b == blocks - 1;
+                int offset = b * BLOCK;
+                int length = Math.min(BLOCK, input.length - offset);
+                for (int i = 0; i < 16; i++) {
+                    m[i] = 0;
+                    for (int byteIndex = 7; byteIndex >= 0; byteIndex--) {
+                        int pos = offset + i * 8 + byteIndex;
+                        int value = pos < offset + length ? input[pos] & 0xFF : 0;
+                        m[i] = (m[i] << 8) | value;
+                    }
                 }
+                long counter = last ? input.length : (long) (b + 1) * BLOCK;
+                compress(h, m, v, counter, last);
             }
-            long counter = last ? input.length : (long) (b + 1) * BLOCK;
-            compress(h, m, v, counter, last);
+            byte[] out = new byte[outLength];
+            for (int i = 0; i < outLength; i++) {
+                out[i] = (byte) (h[i >>> 3] >>> (8 * (i & 7)));
+            }
+            return out;
+        } finally {
+            Arrays.fill(m, 0L);
+            Arrays.fill(v, 0L);
+            Arrays.fill(h, 0L);
         }
-        byte[] out = new byte[outLength];
-        for (int i = 0; i < outLength; i++) {
-            out[i] = (byte) (h[i >>> 3] >>> (8 * (i & 7)));
+    }
+
+    private static long littleEndianLong(byte[] bytes, int offset) {
+        long value = 0;
+        for (int i = 7; i >= 0; i--) {
+            value = (value << 8) | (bytes[offset + i] & 0xFF);
         }
-        return out;
+        return value;
     }
 
     /**

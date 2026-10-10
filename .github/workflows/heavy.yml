@@ -1,0 +1,59 @@
+name: Heavy tests
+
+# Offline tests too large for the default task (`excludeTags 'heavy'` in
+# zeroj-integration-tests/build.gradle): large circuits whose Groth16 setup and proving take
+# minutes. Today that is ADR-0055 M5a's hash-compressed D3a layout. Its test is the only regression
+# coverage of the layout's soundness on the real circuit: the serialization binding (foreign and
+# little-endian bytes, the non-canonical `c + p` alias, swapped and flipped digest halves), the
+# agreement between the circuit's bytes and the validator's canonical blake2b_256 serialization,
+# and the invalid witnesses. Validator-only tests would not cover the circuit binding.
+#
+# It runs nightly and on demand, so a change anywhere (prover, Julc, gadgets) is caught, and on
+# pull requests that touch the sources it exercises most directly.
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'zeroj-integration-tests/src/test/java/org/zeroj/examples/notes/**'
+      - 'zeroj-integration-tests/build.gradle'
+      - 'zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/**'
+      - 'zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/jubjub/**'
+      - '.github/workflows/heavy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  heavy:
+    name: Heavy offline tests (ADR-0055 compressed D3a layout)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 25 (GraalVM)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The task's default heap is 12g, sized for a developer machine. A peak of about 3.0 GB of heap
+      # (2.8 GB live) was measured with four processors, 7 minutes on an Apple M4 Max, so 8g fits the
+      # 16 GB runner with headroom.
+      - name: Run the heavy tests
+        run: ./gradlew :zeroj-integration-tests:heavyTest -PheavyTestHeap=8g -PskipSigning=true --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: heavy-test-reports
+          path: 'zeroj-integration-tests/build/reports/tests/heavyTest/'
+          retention-days: 14

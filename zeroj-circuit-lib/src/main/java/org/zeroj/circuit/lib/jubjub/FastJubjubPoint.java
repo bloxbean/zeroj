@@ -104,6 +104,7 @@ final class FastJubjubPoint {
      */
     FastJubjubPoint scalarMulPublic(BigInteger k) {
         Objects.requireNonNull(k, "k");
+        JubjubPoint.notePublicMultiplication();
         if (k.signum() < 0) {
             throw new IllegalArgumentException("public scalar must be non-negative");
         }
@@ -119,6 +120,7 @@ final class FastJubjubPoint {
 
     /** {@code [k]·this} for a small public multiplier. */
     FastJubjubPoint scalarMulPublic(long k) {
+        JubjubPoint.notePublicMultiplication();
         if (k < 0) {
             throw new IllegalArgumentException("public scalar must be non-negative");
         }
