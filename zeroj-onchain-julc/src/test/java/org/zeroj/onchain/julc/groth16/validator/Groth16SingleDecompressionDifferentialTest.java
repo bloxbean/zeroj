@@ -60,7 +60,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
     enum Outcome { ACCEPT, FALSE, ERROR }
 
-    record Run(Outcome outcome, long cpu) {}
+    record Run(Outcome outcome, long cpu, List<String> lastBuiltins) {}
 
     record Vector(String label, SnarkjsToCardano.VkCompressed vk, List<byte[]> ic,
                   SnarkjsToCardano.ProofCompressed proof, BigInteger[] inputs) {}
@@ -68,13 +68,27 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     record TestProof(SnarkjsToCardano.VkCompressed vk, SnarkjsToCardano.ProofCompressed proof, BigInteger[] inputs) {}
 
     /**
-     * The only outcome differences ADR-0056 allows: the IC byte checks (length, infinity) run over
-     * the whole list before any IC entry is decompressed, so a wrong-length entry after an
-     * undecodable one returns {@code false} where the reference failed at the undecodable entry.
-     * Both reject the transaction.
+     * The only outcome difference ADR-0056 allows (I4), as a class: the IC byte checks (length,
+     * infinity) run over the whole list before any IC entry is decompressed, so an entry that
+     * {@code uncompress} rejects, at any position, followed by a wrong-length or infinity entry
+     * returns {@code false} where the reference failed at the undecodable entry. Both reject the
+     * transaction. Instances pinned here: an undecodable entry first and later, then a wrong-length
+     * and an infinity entry.
      */
     private static final Map<String, List<Outcome>> DIVERGENCES = Map.of(
-            "IC[0] flag cleared, then IC[last] 49 bytes", List.of(Outcome.ERROR, Outcome.FALSE));
+            "IC[0] flag cleared, then IC[last] 49 bytes", List.of(Outcome.ERROR, Outcome.FALSE),
+            "IC[0] flag cleared, then IC[last] infinity", List.of(Outcome.ERROR, Outcome.FALSE),
+            "IC[1] flag cleared, then IC[last] 49 bytes", List.of(Outcome.ERROR, Outcome.FALSE));
+
+    /**
+     * A rejection may cost no more than the reference's plus this much: room for the IC byte
+     * checks and the count walk (about 2.7e6 steps per entry). It catches gross extra work, such
+     * as multiplying when the counts disagree. Premature multiplication before a later IC entry
+     * fails is checked structurally instead (see {@link #assertNoMultiplicationBeforeIcFailure}).
+     */
+    private static long rejectionSlack(int icEntries) {
+        return 3_000_000L * icEntries + 5_000_000L;
+    }
 
     private static final Map<Class<?>, CompileResult> COMPILED = new HashMap<>();
     private static final Map<String, TestProof> PROOFS = new LinkedHashMap<>();
@@ -89,6 +103,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         PROOFS.put("linear (3 inputs)", linearProof(3));
         PROOFS.put("linear (4 inputs)", linearProof(4));
         PROOFS.put("linear (9 inputs)", linearProof(9));
+        PROOFS.put("linear (24 inputs)", linearProof(24));
         PROOFS.put("zero input (3 inputs, p1 = 0)", linearProof(3, 1));
     }
 
@@ -103,9 +118,11 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 Run optimized = run(Groth16VerifyOutcomeProbe.class, v);
                 Run reference = run(Groth16VerifyOutcomeProbeReference.class, v);
                 assertExpected(v.label(), reference.outcome(), optimized.outcome());
+                assertRejectionCost(v, reference, optimized);
+                assertNoMultiplicationBeforeIcFailure(v, optimized);
                 if (v.label().endsWith(": honest")) {
                     assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
-                    assertSaving(v.label(), tp.inputs().length + 4, reference.cpu() - optimized.cpu());
+                    assertSaving(v.label(), tp.inputs().length + 4, v.ic().size(), reference.cpu() - optimized.cpu());
                 }
                 outcomes.merge(optimized.outcome(), 1, Integer::sum);
                 vectors++;
@@ -141,20 +158,52 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
             Run optimized = run(Groth16VerifyFourOutcomeProbe.class, v);
             Run reference = run(Groth16VerifyFourOutcomeProbeReference.class, v);
             assertEquals(reference.outcome(), optimized.outcome(), v.label());
+            assertRejectionCost(v, reference, optimized);
+            assertNoMultiplicationBeforeIcFailure(v, optimized);
             if (v.label().endsWith(": honest")) {
                 assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
-                assertSaving(v.label(), 8, reference.cpu() - optimized.cpu());
+                assertSaving(v.label(), 8, v.ic().size(), reference.cpu() - optimized.cpu());
             }
         }
         System.out.printf("[issue #84] verifyFour: %d vectors, identical outcomes%n", four.size());
     }
 
-    /** Exactly the {@code g1} G1 decompressions (A, C, alpha and the IC entries) and 4 G2 (B, beta, gamma, delta) removed. */
-    private static void assertSaving(String label, int g1, long saved) {
+    /**
+     * Exactly the {@code g1} G1 decompressions (A, C, alpha and the IC entries) and 4 G2 (B, beta,
+     * gamma, delta) removed, less the new code's per-IC-entry overhead (the byte checks, about
+     * 1.1e6 to 1.2e6 steps per entry; verifyFour, which drops a recursion, saves up to 4e6 more).
+     * The window {@code [expected - 1.3e6 per IC entry - 3e6, expected + 5e6]} is narrower than one
+     * G1 decompression (52.9e6) up to 33 public inputs, so up to there one decompression more or
+     * fewer fails.
+     */
+    private static void assertSaving(String label, int g1, int icEntries, long saved) {
         long expected = g1 * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
+        long lower = expected - 1_300_000L * icEntries - 3_000_000L;
+        long upper = expected + 5_000_000L;
+        assertTrue(upper - lower < G1_UNCOMPRESS, label + ": the window must stay narrower than one decompression");
         System.out.printf("[issue #84] %s: %,d steps saved (removed decompressions: %,d)%n", label, saved, expected);
-        assertTrue(Math.abs(saved - expected) < G1_UNCOMPRESS / 2,
-                label + ": saved " + saved + " steps, expected " + expected + " (" + g1 + " G1 + 4 G2)");
+        assertTrue(saved >= lower && saved <= upper,
+                label + ": saved " + saved + " steps, expected " + expected + " (" + g1 + " G1 + 4 G2) less the byte checks");
+    }
+
+    /**
+     * ADR-0045 V1, structurally: when the script fails on an IC entry, none of the builtins it ran
+     * just before the failure (the VM keeps the last 20) is a scalar multiplication or a pairing. A
+     * walk that multiplied each validated entry before checking the next one would show one there.
+     */
+    private static void assertNoMultiplicationBeforeIcFailure(Vector v, Run optimized) {
+        if (optimized.outcome() != Outcome.ERROR || !v.label().contains("IC[")) return;
+        for (String fun : optimized.lastBuiltins()) {
+            assertTrue(!fun.contains("ScalarMul") && !fun.contains("MillerLoop") && !fun.contains("FinalVerify"),
+                    v.label() + ": " + fun + " ran before the IC failure: " + optimized.lastBuiltins());
+        }
+    }
+
+    /** A rejected vector costs the new library at most the reference's cost plus {@link #rejectionSlack}. */
+    private static void assertRejectionCost(Vector v, Run reference, Run optimized) {
+        if (reference.outcome() == Outcome.ACCEPT) return;
+        assertTrue(optimized.cpu() <= reference.cpu() + rejectionSlack(v.ic().size()),
+                v.label() + ": rejection costs " + optimized.cpu() + " steps, reference " + reference.cpu());
     }
 
     /** The same outcome as the reference, or exactly a listed divergence. */
@@ -169,9 +218,54 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     }
 
     @Test
+    @DisplayName("Raw boundaries: a non-bytes IC entry and a non-integer input fail the same way in both libraries")
+    void rawDataBoundaries() {
+        TestProof tp = PROOFS.get("linear (3 inputs)");
+        List<PlutusData> ic = new ArrayList<>();
+        for (byte[] b : tp.vk().ic()) ic.add(PlutusData.bytes(b));
+        List<PlutusData> in = new ArrayList<>();
+        for (BigInteger x : tp.inputs()) in.add(PlutusData.integer(x));
+        Map<String, List<List<PlutusData>>> cases = new LinkedHashMap<>();
+        cases.put("IC[0] is an integer", List.of(with(ic, 0, PlutusData.integer(BigInteger.ONE)), in));
+        cases.put("IC[last] is an integer", List.of(with(ic, ic.size() - 1, PlutusData.integer(BigInteger.ONE)), in));
+        cases.put("IC[last] is an integer, one input too many", List.of(with(ic, ic.size() - 1, PlutusData.integer(BigInteger.ONE)),
+                appendData(in, PlutusData.integer(BigInteger.ONE))));
+        cases.put("input 1 is bytes", List.of(ic, with(in, 1, PlutusData.bytes(new byte[]{1}))));
+        for (var c : cases.entrySet()) {
+            Outcome reference = runRaw(Groth16VerifyOutcomeProbeReference.class, tp, c.getValue().get(0), c.getValue().get(1));
+            Outcome optimized = runRaw(Groth16VerifyOutcomeProbe.class, tp, c.getValue().get(0), c.getValue().get(1));
+            assertEquals(reference, optimized, c.getKey());
+            assertEquals(Outcome.ERROR, optimized, c.getKey());
+        }
+    }
+
+    private Outcome runRaw(Class<?> probe, TestProof tp, List<PlutusData> ic, List<PlutusData> inputs) {
+        CompileResult compiled = COMPILED.computeIfAbsent(probe, c -> compileValidator(c, Path.of("src/test/java")));
+        Program program = compiled.program().applyParams(
+                PlutusData.bytes(tp.vk().alpha()), PlutusData.bytes(tp.vk().beta()),
+                PlutusData.bytes(tp.vk().gamma()), PlutusData.bytes(tp.vk().delta()),
+                PlutusData.list(ic.toArray(new PlutusData[0])));
+        boolean[] ok = new boolean[2];
+        for (int expect = 0; expect <= 1; expect++) {
+            PlutusData redeemer = PlutusData.constr(0, PlutusData.bytes(tp.proof().piA()), PlutusData.bytes(tp.proof().piB()),
+                    PlutusData.bytes(tp.proof().piC()), PlutusData.integer(BigInteger.valueOf(expect)));
+            var ctx = spendingContext(TestDataBuilder.randomTxOutRef_typed(), PlutusData.list(inputs.toArray(new PlutusData[0])))
+                    .redeemer(redeemer).buildPlutusData();
+            ok[expect] = evaluate(program, ctx) instanceof EvalResult.Success;
+        }
+        return ok[1] ? Outcome.ACCEPT : ok[0] ? Outcome.FALSE : Outcome.ERROR;
+    }
+
+    private static List<PlutusData> appendData(List<PlutusData> list, PlutusData value) {
+        List<PlutusData> copy = new ArrayList<>(list);
+        copy.add(value);
+        return copy;
+    }
+
+    @Test
     @DisplayName("Pairing-preserving infinity (review F1): with inputs 0 and every IC entry G the pairing holds, so only the infinity check refuses each point")
     void pairingPreservingInfinity() {
-        for (int inputs : new int[]{3, 4}) {
+        for (int inputs : new int[]{0, 3, 4}) {
             boolean four = inputs == 4;
             Class<?> optimized = four ? Groth16VerifyFourOutcomeProbe.class : Groth16VerifyOutcomeProbe.class;
             Class<?> reference = four ? Groth16VerifyFourOutcomeProbeReference.class : Groth16VerifyOutcomeProbeReference.class;
@@ -313,6 +407,12 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 proof(flag(p.piA(), 0x7F, 0), p.piB(), p.piC()), in));
         out.add(new Vector(name + ": IC[0] flag cleared, then IC[last] 49 bytes", vk,
                 with(with(ic, 0, flag(ic.get(0), 0x7F, 0)), last, Arrays.copyOf(ic.get(last), 49)), p, in));
+        out.add(new Vector(name + ": IC[0] flag cleared, then IC[last] infinity", vk,
+                with(with(ic, 0, flag(ic.get(0), 0x7F, 0)), last, infinityG1()), p, in));
+        if (last > 1) {
+            out.add(new Vector(name + ": IC[1] flag cleared, then IC[last] 49 bytes", vk,
+                    with(with(ic, 1, flag(ic.get(1), 0x7F, 0)), last, Arrays.copyOf(ic.get(last), 49)), p, in));
+        }
 
         // An infinity IC entry whose input is 0 adds nothing to vk_x, so the pairing still holds:
         // only the explicit infinity check (ADR-0045 V1) refuses it.
@@ -338,9 +438,10 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         boolean t = expectTrue instanceof EvalResult.Success;
         boolean f = expectFalse instanceof EvalResult.Success;
         if (t && f) fail(v.label() + ": both expectations succeeded");
-        if (t) return new Run(Outcome.ACCEPT, expectTrue.budgetConsumed().cpuSteps());
-        if (f) return new Run(Outcome.FALSE, expectFalse.budgetConsumed().cpuSteps());
-        return new Run(Outcome.ERROR, 0);
+        if (t) return new Run(Outcome.ACCEPT, expectTrue.budgetConsumed().cpuSteps(), List.of());
+        if (f) return new Run(Outcome.FALSE, expectFalse.budgetConsumed().cpuSteps(), List.of());
+        List<String> last = expectTrue.builtinTrace().stream().map(e -> e.fun().name()).toList();
+        return new Run(Outcome.ERROR, expectTrue.budgetConsumed().cpuSteps(), last);
     }
 
     private PlutusData context(Vector v, int expect) {

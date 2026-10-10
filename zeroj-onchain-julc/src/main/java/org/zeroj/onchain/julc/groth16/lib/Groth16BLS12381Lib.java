@@ -109,9 +109,12 @@ public class Groth16BLS12381Lib {
         }
 
         // ADR-0056: every IC entry is decompressed once and fully validated before any scalar
-        // multiplication (ADR-0045 V1); the counts are compared afterwards, as before.
-        JulcG1 vkX = icSum(inputsCursor, icCursor);
-        if (!matchingLengths(inputsCursor, Builtins.tailList(icCursor))) {
+        // multiplication (ADR-0045 V1). The count comparison is a pure list walk (it cannot fail),
+        // so it is evaluated first only to skip every multiplication when the counts disagree: the
+        // walk still validates each entry, and the result is the same as before, false.
+        boolean countsMatch = matchingLengths(inputsCursor, Builtins.tailList(icCursor));
+        JulcG1 vkX = icSum(inputsCursor, icCursor, countsMatch);
+        if (!countsMatch) {
             return false;
         }
         return verifyWithComputedVkX(vkX, piA, piB, piC, vkAlpha, vkBeta, vkGamma, vkDelta);
@@ -255,35 +258,43 @@ public class Groth16BLS12381Lib {
      * down, so every entry is validated before the first scalar multiplication, which happens on
      * the way back up (ADR-0045 V1). An entry that fails here fails the script; the byte checks of
      * {@link #icEncodingsWellFormed} have already returned {@code false} for length and infinity.
-     * Inputs beyond the IC list are ignored and IC entries beyond the inputs add nothing: the
-     * caller compares the counts afterwards.
+     * With {@code multiply} false (the counts disagree) every entry is still validated, but nothing
+     * is multiplied; the caller then returns {@code false}.
      */
-    private static JulcG1 icSum(PlutusData inputsCursor, PlutusData icCursor) {
+    private static JulcG1 icSum(PlutusData inputsCursor, PlutusData icCursor, boolean multiply) {
         JulcG1 base = validatedIcPoint(icCursor);
         PlutusData rest = Builtins.tailList(icCursor);
         if (Builtins.nullList(rest)) {
             return base;
         }
-        return icTerms(inputsCursor, rest, base);
+        return icTerms(inputsCursor, rest, base, multiply);
     }
 
     /**
-     * {@code base + Σ inputs[i] · ic[i]} over the common prefix. The rest of {@code ic} is validated
-     * (by the recursive call) before this entry's scalar multiplication.
+     * {@code base + Σ inputs[i] · ic[i]} over the common prefix (nothing is added unless
+     * {@code multiply}). The rest of {@code ic} is validated (by the recursive call) before this
+     * entry's scalar multiplication. The call is not in tail position: each level keeps its point
+     * until the levels below return, one pending level per IC entry.
      */
-    private static JulcG1 icTerms(PlutusData inputsCursor, PlutusData icCursor, JulcG1 base) {
+    private static JulcG1 icTerms(PlutusData inputsCursor, PlutusData icCursor, JulcG1 base, boolean multiply) {
         JulcG1 point = validatedIcPoint(icCursor);
         PlutusData rest = Builtins.tailList(icCursor);
         PlutusData nextInputs = Builtins.nullList(inputsCursor) ? inputsCursor : Builtins.tailList(inputsCursor);
-        JulcG1 later = Builtins.nullList(rest) ? base : icTerms(nextInputs, rest, base);
-        if (Builtins.nullList(inputsCursor)) {
+        JulcG1 later = Builtins.nullList(rest) ? base : icTerms(nextInputs, rest, base, multiply);
+        if (!multiply || Builtins.nullList(inputsCursor)) {
             return later;
         }
         return Builtins.bls12_381_G1_add(later,
                 Builtins.bls12_381_G1_scalarMul(Builtins.asInteger(Builtins.headList(inputsCursor)), point));
     }
 
-    /** The head IC entry, decompressed once and checked canonical and not infinity; otherwise the script fails. */
+    /**
+     * The head IC entry, decompressed once and checked canonical and not infinity; otherwise the
+     * script fails. Through {@code verify} the branch is defense in depth: the byte checks have
+     * already refused infinity, and the evaluator's {@code uncompress} (blst) refuses the other
+     * non-canonical encodings. CIP-0381 does not define those rejections normatively, so the check
+     * stays (ADR-0056 I4).
+     */
     private static JulcG1 validatedIcPoint(PlutusData icCursor) {
         byte[] encoded = Builtins.unBData(Builtins.headList(icCursor));
         JulcG1 point = Builtins.bls12_381_G1_uncompress(encoded);
