@@ -17,6 +17,11 @@ name: Publish snapshot to the BloxBean Maven repository
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Stage and verify only (any branch; no repository upload)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,11 +35,64 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Exercise the real publications and staging verifier from a PR branch without bucket credentials.
+  # Uploads the checked local repository as a workflow artifact for review.
+  validate:
+    if: inputs.dry_run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GROUP_PATH: org/zeroj
+      STAGING_DIR: ${{ github.workspace }}/build/bloxbean-maven
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Java 25 (GraalVM)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+      - name: Resolve the snapshot version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(./gradlew -q :zeroj-api:properties -PskipSigning=true | awk '/^version:/ { print $2 }')
+          if [[ "$VERSION" != *"-${GITHUB_SHA:0:7}-SNAPSHOT" ]]; then
+            echo "::error::Expected a snapshot of commit ${GITHUB_SHA:0:7}. Got: $VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Discover and stage the Maven publications
+        id: discover
+        run: bash .github/scripts/bloxbean-maven.sh discover -PskipSigning=true
+      - name: Verify the staged repository
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACTS: ${{ steps.discover.outputs.artifacts }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No seed in a dry run: this checks a first publication without accessing the bucket.
+          # shellcheck disable=SC2086 # one argument per artifactId
+          python3 .github/scripts/verify-maven-staging.py "$STAGING_DIR" "$RUNNER_TEMP/maven-seed" "$GROUP_PATH" \
+            "$VERSION" $ARTIFACTS
+      - name: Upload the checked repository for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-staging-${{ steps.version.outputs.version }}
+          path: build/bloxbean-maven/
+          retention-days: 7
+
   publish:
     # The bucket credentials are secrets of this environment, which only accepts main, release/** and v* tags.
     # Skip other branches rather than fail on the environment's branch policy.
     if: >-
-      github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+      !inputs.dry_run &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     environment: release-staging
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -68,7 +126,7 @@ jobs:
           CI_WORKFLOWS: ci.yml assurance.yml
         run: bash .github/scripts/require-green-ci.sh
       - name: Set up Java 25 (GraalVM)
-        uses: graalvm/setup-graalvm@0426e2e191540e8514dff98dc52a5f5146a2a276 # v1.6.6
+        uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
           distribution: 'graalvm'
@@ -82,9 +140,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION=$(./gradlew -q properties -PskipSigning=true | awk '/^version:/ { print $2; exit }')
-          if [[ "$VERSION" != *-SNAPSHOT ]]; then
-            echo "::error::Snapshot publishing requires a -SNAPSHOT version. Got: $VERSION" >&2
+          # The root keeps the base version; published subprojects include the checked-out commit id.
+          VERSION=$(./gradlew -q :zeroj-api:properties -PskipSigning=true | awk '/^version:/ { print $2 }')
+          if [[ "$VERSION" != *"-${GITHUB_SHA:0:7}-SNAPSHOT" ]]; then
+            echo "::error::Expected a snapshot of commit ${GITHUB_SHA:0:7}. Got: $VERSION" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
