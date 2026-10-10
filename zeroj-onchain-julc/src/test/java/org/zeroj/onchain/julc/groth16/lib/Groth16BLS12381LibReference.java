@@ -10,10 +10,12 @@ import org.julclang.stdlib.annotation.OnchainLibrary;
 import java.math.BigInteger;
 
 /**
- * Reusable on-chain Groth16 verifier logic for BLS12-381 proofs.
+ * Test-only copy of {@code Groth16BLS12381Lib} as of {@code 458bfb1} (before issue #84), kept as
+ * the differential reference: the optimized library must accept, reject and fail exactly where this
+ * one does, while decompressing each point once instead of twice.
  */
 @OnchainLibrary
-public class Groth16BLS12381Lib {
+public class Groth16BLS12381LibReference {
 
     /*
      * One builder per public-input count. Julc compiles overloads by name, not signature
@@ -176,11 +178,6 @@ public class Groth16BLS12381Lib {
                 vkAlpha, vkBeta, vkGamma, vkDelta);
     }
 
-    /**
-     * Each proof and key point is checked in order (length, decompression, canonical non-infinity
-     * encoding) and the decompressed point is then used in the pairing: one decompression per point
-     * (issue #84), the same checks and the same order as before.
-     */
     private static boolean verifyWithComputedVkX(JulcG1 computedVkX,
                                                  byte[] piA,
                                                  byte[] piB,
@@ -189,27 +186,24 @@ public class Groth16BLS12381Lib {
                                                  byte[] vkBeta,
                                                  byte[] vkGamma,
                                                  byte[] vkDelta) {
-        if (Builtins.lengthOfByteString(piA) != 48) return false;
+        if (!isCanonicalNonInfinityG1(piA)
+                || !isCanonicalNonInfinityG2(piB)
+                || !isCanonicalNonInfinityG1(piC)
+                || !isCanonicalNonInfinityG1(vkAlpha)
+                || !isCanonicalNonInfinityG2(vkBeta)
+                || !isCanonicalNonInfinityG2(vkGamma)
+                || !isCanonicalNonInfinityG2(vkDelta)) {
+            return false;
+        }
+
         JulcG1 a = Builtins.bls12_381_G1_uncompress(piA);
-        if (!canonicalNonInfinityG1(piA, a)) return false;
-        if (Builtins.lengthOfByteString(piB) != 96) return false;
         JulcG2 b = Builtins.bls12_381_G2_uncompress(piB);
-        if (!canonicalNonInfinityG2(piB, b)) return false;
-        if (Builtins.lengthOfByteString(piC) != 48) return false;
         JulcG1 c = Builtins.bls12_381_G1_uncompress(piC);
-        if (!canonicalNonInfinityG1(piC, c)) return false;
-        if (Builtins.lengthOfByteString(vkAlpha) != 48) return false;
+
         JulcG1 alpha = Builtins.bls12_381_G1_uncompress(vkAlpha);
-        if (!canonicalNonInfinityG1(vkAlpha, alpha)) return false;
-        if (Builtins.lengthOfByteString(vkBeta) != 96) return false;
-        JulcG2 beta = Builtins.bls12_381_G2_uncompress(vkBeta);
-        if (!canonicalNonInfinityG2(vkBeta, beta)) return false;
-        if (Builtins.lengthOfByteString(vkGamma) != 96) return false;
+        JulcG2 beta  = Builtins.bls12_381_G2_uncompress(vkBeta);
         JulcG2 gamma = Builtins.bls12_381_G2_uncompress(vkGamma);
-        if (!canonicalNonInfinityG2(vkGamma, gamma)) return false;
-        if (Builtins.lengthOfByteString(vkDelta) != 96) return false;
         JulcG2 delta = Builtins.bls12_381_G2_uncompress(vkDelta);
-        if (!canonicalNonInfinityG2(vkDelta, delta)) return false;
 
         JulcG1 negAlpha = Builtins.bls12_381_G1_neg(alpha);
         JulcMlResult lhs = Builtins.bls12_381_mulMlResult(
@@ -292,19 +286,12 @@ public class Groth16BLS12381Lib {
         return isCanonicalG1(compressed) && !isCompressedInfinityG1(compressed);
     }
 
-    /**
-     * {@code encoded} is the canonical compressed encoding of {@code point} (it re-compresses to the
-     * same bytes) and not the compressed point at infinity. {@code point} is
-     * {@code uncompress(encoded)}, already computed by the caller.
-     */
-    private static boolean canonicalNonInfinityG1(byte[] encoded, JulcG1 point) {
-        return Builtins.equalsByteString(Builtins.bls12_381_G1_compress(point), encoded)
-                && !isCompressedInfinityG1(encoded);
-    }
-
-    private static boolean canonicalNonInfinityG2(byte[] encoded, JulcG2 point) {
-        return Builtins.equalsByteString(Builtins.bls12_381_G2_compress(point), encoded)
-                && !isCompressedInfinityG2(encoded);
+    private static boolean isCanonicalNonInfinityG2(byte[] compressed) {
+        return Builtins.lengthOfByteString(compressed) == 96
+                && Builtins.equalsByteString(
+                        Builtins.bls12_381_G2_compress(Builtins.bls12_381_G2_uncompress(compressed)),
+                        compressed)
+                && !isCompressedInfinityG2(compressed);
     }
 
     private static boolean isCompressedInfinityG1(byte[] compressed) {
