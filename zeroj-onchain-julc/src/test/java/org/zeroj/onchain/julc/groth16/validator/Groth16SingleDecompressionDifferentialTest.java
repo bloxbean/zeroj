@@ -36,12 +36,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Issue #84: {@code Groth16BLS12381Lib} decompresses every proof and key point once instead of
- * twice. This differential test runs the optimized library and the pre-change reference copy
- * ({@code Groth16BLS12381LibReference}, test sources) on the same honest and adversarial vectors
- * and requires the same outcome for each: accept, {@code false}, or a builtin failure (told apart
- * by the probe validators' expected-result redeemer). On accepted proofs, the optimized library
- * must save the cost of the removed decompressions: {@code (n + 4)} G1 and 4 G2 points.
+ * Issue #84: {@code Groth16BLS12381Lib} decompresses each proof and key point (A, B, C, alpha,
+ * beta, gamma, delta) once instead of twice. The IC points keep their separate validation pass,
+ * which ADR-0045 V1 requires before any scalar multiplication. This differential test runs the
+ * library and the pre-change reference copy ({@code Groth16BLS12381LibReference}, test sources) on
+ * the same honest and adversarial vectors and requires the same outcome for each: accept,
+ * {@code false}, or a builtin failure (told apart by the probe validators' expected-result
+ * redeemer). An accepted proof must save exactly the removed decompressions, 3 G1 and 4 G2, to
+ * within half a G1 decompression, so one decompression more or less fails the test.
  */
 class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
@@ -73,10 +75,11 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         PROOFS.put("linear (3 inputs)", linearProof(3));
         PROOFS.put("linear (4 inputs)", linearProof(4));
         PROOFS.put("linear (9 inputs)", linearProof(9));
+        PROOFS.put("zero input (3 inputs, p1 = 0)", linearProof(3, 1));
     }
 
     @Test
-    @DisplayName("verify: same outcome as the reference on every vector; each accepted proof saves (n + 4) G1 + 4 G2 decompressions")
+    @DisplayName("verify: same outcome as the reference on every vector; each accepted proof saves exactly 3 G1 + 4 G2 decompressions")
     void verifyMatchesReference() {
         int vectors = 0;
         Map<Outcome, Integer> outcomes = new EnumMap<>(Outcome.class);
@@ -88,7 +91,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 assertEquals(reference.outcome(), optimized.outcome(), v.label());
                 if (v.label().endsWith(": honest")) {
                     assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
-                    assertSaving(v.label(), tp.inputs().length, reference.cpu() - optimized.cpu());
+                    assertSaving(v.label(), reference.cpu() - optimized.cpu());
                 }
                 outcomes.merge(optimized.outcome(), 1, Integer::sum);
                 vectors++;
@@ -100,7 +103,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     }
 
     @Test
-    @DisplayName("verifyFour: same outcome as the reference on every vector; an accepted proof saves 8 G1 + 4 G2 decompressions")
+    @DisplayName("verifyFour: same outcome as the reference on every vector; an accepted proof saves exactly 3 G1 + 4 G2 decompressions")
     void verifyFourMatchesReference() {
         TestProof tp = PROOFS.get("linear (4 inputs)");
         List<Vector> four = new ArrayList<>(vectors("four", tp));
@@ -110,23 +113,34 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         List<byte[]> six = new ArrayList<>(ic);
         six.add(ic.get(1));
         four.add(new Vector("four: IC has 6 entries", tp.vk(), six, tp.proof(), tp.inputs()));
+        // The count checks come before any IC point is decompressed.
+        four.add(new Vector("four: IC has 4 entries, the last flag-cleared", tp.vk(),
+                with(ic.subList(0, 4), 3, flag(ic.get(3), 0x7F, 0)), tp.proof(), tp.inputs()));
+        List<byte[]> sixBad = new ArrayList<>(six);
+        sixBad.set(2, flag(ic.get(2), 0x7F, 0));
+        four.add(new Vector("four: IC has 6 entries, one flag-cleared", tp.vk(), sixBad, tp.proof(), tp.inputs()));
+        TestProof zero = linearProof(4, 2);
+        four.add(new Vector("four, zero input: honest", zero.vk(), zero.vk().ic(), zero.proof(), zero.inputs()));
+        four.add(new Vector("four, zero input: IC[3] infinity", zero.vk(), with(zero.vk().ic(), 3, infinityG1()),
+                zero.proof(), zero.inputs()));
         for (Vector v : four) {
             Run optimized = run(Groth16VerifyFourOutcomeProbe.class, v);
             Run reference = run(Groth16VerifyFourOutcomeProbeReference.class, v);
             assertEquals(reference.outcome(), optimized.outcome(), v.label());
             if (v.label().endsWith(": honest")) {
                 assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
-                assertSaving(v.label(), 4, reference.cpu() - optimized.cpu());
+                assertSaving(v.label(), reference.cpu() - optimized.cpu());
             }
         }
         System.out.printf("[issue #84] verifyFour: %d vectors, identical outcomes%n", four.size());
     }
 
-    private static void assertSaving(String label, int publicInputs, long saved) {
-        long expected = (publicInputs + 4L) * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
+    /** Exactly the 3 G1 (A, C, alpha) and 4 G2 (B, beta, gamma, delta) decompressions removed. */
+    private static void assertSaving(String label, long saved) {
+        long expected = 3L * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
         System.out.printf("[issue #84] %s: %,d steps saved (removed decompressions: %,d)%n", label, saved, expected);
-        assertTrue(saved >= expected * 9 / 10 && saved <= expected * 11 / 10,
-                label + ": saved " + saved + " steps, expected about " + expected);
+        assertTrue(Math.abs(saved - expected) < G1_UNCOMPRESS / 2,
+                label + ": saved " + saved + " steps, expected " + expected + " (3 G1 + 4 G2)");
     }
 
     // ------------------------------------------------------------------ vectors
@@ -195,6 +209,32 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 with(ic, last, flag(ic.get(last), 0x7F, 0)), p, with(in, 0, FR)));
         out.add(new Vector(name + ": too many inputs and A flag cleared", vk, ic,
                 proof(flag(p.piA(), 0x7F, 0), p.piB(), p.piC()), append(in, BigInteger.ONE)));
+
+        // Check order across points: an early false must win over a later malformed point, and an
+        // early malformed point must fail even when a later point would be false.
+        byte[] zeroG2 = new byte[96];
+        out.add(new Vector(name + ": A 47 bytes, then B all zero", vk, ic, proof(Arrays.copyOf(p.piA(), 47), zeroG2, p.piC()), in));
+        out.add(new Vector(name + ": A infinity, then B flag cleared", vk, ic,
+                proof(infinityG1(), flag(p.piB(), 0x7F, 0), p.piC()), in));
+        out.add(new Vector(name + ": A flag cleared, then B 95 bytes", vk, ic,
+                proof(flag(p.piA(), 0x7F, 0), Arrays.copyOf(p.piB(), 95), p.piC()), in));
+        out.add(new Vector(name + ": C infinity, then alpha flag cleared", key(vk, flag(vk.alpha(), 0x7F, 0), vk.beta(),
+                vk.gamma(), vk.delta()), ic, proof(p.piA(), p.piB(), infinityG1()), in));
+        out.add(new Vector(name + ": gamma flag cleared, then delta 95 bytes", key(vk, vk.alpha(), vk.beta(),
+                flag(vk.gamma(), 0x7F, 0), Arrays.copyOf(vk.delta(), 95)), ic, p, in));
+        out.add(new Vector(name + ": beta infinity, then gamma all zero", key(vk, vk.alpha(), infinityG2(), zeroG2,
+                vk.delta()), ic, p, in));
+        out.add(new Vector(name + ": IC[1] infinity, then A flag cleared", vk, with(ic, 1, infinityG1()),
+                proof(flag(p.piA(), 0x7F, 0), p.piB(), p.piC()), in));
+
+        // An infinity IC entry whose input is 0 adds nothing to vk_x, so the pairing still holds:
+        // only the explicit infinity check (ADR-0045 V1) refuses it.
+        for (int i = 0; i < in.length; i++) {
+            if (in[i].signum() == 0) {
+                out.add(new Vector(name + ": IC[" + (i + 1) + "] infinity for a zero input", vk,
+                        with(ic, i + 1, infinityG1()), p, in));
+            }
+        }
         return out;
     }
 
@@ -303,7 +343,12 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
     /** {@code p_0 · x + p_1 + … + p_{n-2} = p_{n-1}} with a secret {@code x}: n public inputs. */
     private static TestProof linearProof(int n) {
-        var builder = CircuitBuilder.create("linear-" + n);
+        return linearProof(n, -1);
+    }
+
+    /** As {@link #linearProof(int)}, with public input {@code zero} (1 to n - 2) set to 0. */
+    private static TestProof linearProof(int n, int zero) {
+        var builder = CircuitBuilder.create("linear-" + n + "-" + zero);
         for (int i = 0; i < n; i++) builder = builder.publicVar("p" + i);
         builder = builder.secretVar("x");
         var circuit = builder.define(api -> {
@@ -318,8 +363,9 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         BigInteger total = BigInteger.valueOf(3).multiply(x);
         values.put("p0", List.of(BigInteger.valueOf(3)));
         for (int i = 1; i < n - 1; i++) {
-            values.put("p" + i, List.of(BigInteger.valueOf(10L + i)));
-            total = total.add(BigInteger.valueOf(10L + i));
+            BigInteger value = i == zero ? BigInteger.ZERO : BigInteger.valueOf(10L + i);
+            values.put("p" + i, List.of(value));
+            total = total.add(value);
         }
         values.put("p" + (n - 1), List.of(total));
         values.put("x", List.of(x));
