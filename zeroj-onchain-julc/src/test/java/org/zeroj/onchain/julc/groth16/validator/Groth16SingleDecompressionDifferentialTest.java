@@ -14,6 +14,8 @@ import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.crypto.groth16.Groth16ProverBLS381;
 import org.zeroj.crypto.setup.Groth16SetupBLS381;
 import org.zeroj.crypto.setup.PowersOfTauBLS381;
+import org.zeroj.bls12381.ec.JacobianG1BLS381;
+import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.onchain.julc.groth16.codec.ProverToCardano;
 import org.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 
@@ -36,14 +38,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Issue #84: {@code Groth16BLS12381Lib} decompresses each proof and key point (A, B, C, alpha,
- * beta, gamma, delta) once instead of twice. The IC points keep their separate validation pass,
- * which ADR-0045 V1 requires before any scalar multiplication. This differential test runs the
+ * Issue #84, ADR-0056: {@code Groth16BLS12381Lib} decompresses every point once instead of twice:
+ * the proof and key points (A, B, C, alpha, beta, gamma, delta) and every IC entry, which is still
+ * fully validated before any scalar multiplication (ADR-0045 V1). This differential test runs the
  * library and the pre-change reference copy ({@code Groth16BLS12381LibReference}, test sources) on
  * the same honest and adversarial vectors and requires the same outcome for each: accept,
  * {@code false}, or a builtin failure (told apart by the probe validators' expected-result
- * redeemer). An accepted proof must save exactly the removed decompressions, 3 G1 and 4 G2, to
- * within half a G1 decompression, so one decompression more or less fails the test.
+ * redeemer), except for the divergences listed in {@link #DIVERGENCES}, which only swap
+ * {@code false} and a builtin failure on malformed key data. An accepted proof must save exactly
+ * the removed decompressions, (n + 4) G1 and 4 G2, to within half a G1 decompression.
+ * Pairing-preserving vectors (all inputs zero, every IC entry the generator) isolate each proof
+ * and key point's infinity check, with explicit expected outcomes.
  */
 class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
@@ -62,6 +67,15 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
     record TestProof(SnarkjsToCardano.VkCompressed vk, SnarkjsToCardano.ProofCompressed proof, BigInteger[] inputs) {}
 
+    /**
+     * The only outcome differences ADR-0056 allows: the IC byte checks (length, infinity) run over
+     * the whole list before any IC entry is decompressed, so a wrong-length entry after an
+     * undecodable one returns {@code false} where the reference failed at the undecodable entry.
+     * Both reject the transaction.
+     */
+    private static final Map<String, List<Outcome>> DIVERGENCES = Map.of(
+            "IC[0] flag cleared, then IC[last] 49 bytes", List.of(Outcome.ERROR, Outcome.FALSE));
+
     private static final Map<Class<?>, CompileResult> COMPILED = new HashMap<>();
     private static final Map<String, TestProof> PROOFS = new LinkedHashMap<>();
 
@@ -79,7 +93,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     }
 
     @Test
-    @DisplayName("verify: same outcome as the reference on every vector; each accepted proof saves exactly 3 G1 + 4 G2 decompressions")
+    @DisplayName("verify: same outcome as the reference on every vector (listed divergences aside); each accepted proof saves exactly (n + 4) G1 + 4 G2 decompressions")
     void verifyMatchesReference() {
         int vectors = 0;
         Map<Outcome, Integer> outcomes = new EnumMap<>(Outcome.class);
@@ -88,22 +102,22 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
             for (Vector v : vectors(entry.getKey(), tp)) {
                 Run optimized = run(Groth16VerifyOutcomeProbe.class, v);
                 Run reference = run(Groth16VerifyOutcomeProbeReference.class, v);
-                assertEquals(reference.outcome(), optimized.outcome(), v.label());
+                assertExpected(v.label(), reference.outcome(), optimized.outcome());
                 if (v.label().endsWith(": honest")) {
                     assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
-                    assertSaving(v.label(), reference.cpu() - optimized.cpu());
+                    assertSaving(v.label(), tp.inputs().length + 4, reference.cpu() - optimized.cpu());
                 }
                 outcomes.merge(optimized.outcome(), 1, Integer::sum);
                 vectors++;
             }
         }
-        System.out.printf("[issue #84] verify: %d vectors, identical outcomes %s%n", vectors, outcomes);
+        System.out.printf("[issue #84] verify: %d vectors, identical outcomes except the listed divergences %s%n", vectors, outcomes);
         // Every outcome class is exercised, so agreement is not vacuous.
         for (Outcome o : Outcome.values()) assertTrue(outcomes.getOrDefault(o, 0) > 0, "no vector yields " + o);
     }
 
     @Test
-    @DisplayName("verifyFour: same outcome as the reference on every vector; an accepted proof saves exactly 3 G1 + 4 G2 decompressions")
+    @DisplayName("verifyFour: same outcome as the reference on every vector; an accepted proof saves exactly 8 G1 + 4 G2 decompressions")
     void verifyFourMatchesReference() {
         TestProof tp = PROOFS.get("linear (4 inputs)");
         List<Vector> four = new ArrayList<>(vectors("four", tp));
@@ -129,18 +143,89 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
             assertEquals(reference.outcome(), optimized.outcome(), v.label());
             if (v.label().endsWith(": honest")) {
                 assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
-                assertSaving(v.label(), reference.cpu() - optimized.cpu());
+                assertSaving(v.label(), 8, reference.cpu() - optimized.cpu());
             }
         }
         System.out.printf("[issue #84] verifyFour: %d vectors, identical outcomes%n", four.size());
     }
 
-    /** Exactly the 3 G1 (A, C, alpha) and 4 G2 (B, beta, gamma, delta) decompressions removed. */
-    private static void assertSaving(String label, long saved) {
-        long expected = 3L * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
+    /** Exactly the {@code g1} G1 decompressions (A, C, alpha and the IC entries) and 4 G2 (B, beta, gamma, delta) removed. */
+    private static void assertSaving(String label, int g1, long saved) {
+        long expected = g1 * G1_UNCOMPRESS + 4L * G2_UNCOMPRESS;
         System.out.printf("[issue #84] %s: %,d steps saved (removed decompressions: %,d)%n", label, saved, expected);
         assertTrue(Math.abs(saved - expected) < G1_UNCOMPRESS / 2,
-                label + ": saved " + saved + " steps, expected " + expected + " (3 G1 + 4 G2)");
+                label + ": saved " + saved + " steps, expected " + expected + " (" + g1 + " G1 + 4 G2)");
+    }
+
+    /** The same outcome as the reference, or exactly a listed divergence. */
+    private static void assertExpected(String label, Outcome reference, Outcome optimized) {
+        String key = label.substring(label.indexOf(": ") + 2);
+        List<Outcome> divergence = DIVERGENCES.get(key);
+        if (divergence != null) {
+            assertEquals(divergence, List.of(reference, optimized), label + " (listed divergence)");
+        } else {
+            assertEquals(reference, optimized, label);
+        }
+    }
+
+    @Test
+    @DisplayName("Pairing-preserving infinity (review F1): with inputs 0 and every IC entry G the pairing holds, so only the infinity check refuses each point")
+    void pairingPreservingInfinity() {
+        for (int inputs : new int[]{3, 4}) {
+            boolean four = inputs == 4;
+            Class<?> optimized = four ? Groth16VerifyFourOutcomeProbe.class : Groth16VerifyOutcomeProbe.class;
+            Class<?> reference = four ? Groth16VerifyFourOutcomeProbeReference.class : Groth16VerifyOutcomeProbeReference.class;
+            for (int position = -1; position < 7; position++) {
+                Vector v = pairingPreserving(inputs, position);
+                Outcome expected = position < 0 ? Outcome.ACCEPT : Outcome.FALSE;
+                assertEquals(expected, run(reference, v).outcome(), "reference: " + v.label());
+                assertEquals(expected, run(optimized, v).outcome(), v.label());
+            }
+        }
+    }
+
+    /**
+     * Generators G, H; every IC entry G and every input 0, so {@code vk_x = G}. With
+     * {@code A = a·G, B = b·H, C = c·G, alpha = α·G, beta = β·H, gamma = γ·H, delta = δ·H} the
+     * equation {@code e(A, B) = e(alpha, beta) · e(vk_x, gamma) · e(C, delta)} holds iff
+     * {@code a·b = α·β + γ + c·δ}. {@code position} 0 to 6 sets that point to infinity (its
+     * exponent 0) with the others chosen so the equation still holds; -1 is the all-nonzero
+     * baseline {@code (3, 1, 1, 1, 1, 1, 1)}.
+     */
+    private static Vector pairingPreserving(int inputs, int position) {
+        long[][] exponents = {
+                {0, 1, -2, 1, 1, 1, 1},  // A
+                {1, 0, -2, 1, 1, 1, 1},  // B
+                {2, 1, 0, 1, 1, 1, 1},   // C
+                {2, 1, 1, 0, 1, 1, 1},   // alpha
+                {2, 1, 1, 1, 0, 1, 1},   // beta
+                {2, 1, 1, 1, 1, 0, 1},   // gamma
+                {2, 1, 1, 1, 1, 1, 0}};  // delta
+        long[] e = position < 0 ? new long[]{3, 1, 1, 1, 1, 1, 1} : exponents[position];
+        String[] names = {"A", "B", "C", "alpha", "beta", "gamma", "delta"};
+        byte[] g = g1(1);
+        List<byte[]> ic = new ArrayList<>();
+        for (int i = 0; i <= inputs; i++) ic.add(g);
+        var vk = new SnarkjsToCardano.VkCompressed(g1(e[3]), g2(e[4]), g2(e[5]), g2(e[6]), ic);
+        var proof = proof(g1(e[0]), g2(e[1]), g1(e[2]));
+        BigInteger[] zeros = new BigInteger[inputs];
+        Arrays.fill(zeros, BigInteger.ZERO);
+        String label = "pairing-preserving (" + inputs + " inputs): " + (position < 0 ? "baseline" : names[position] + " infinity");
+        return new Vector(label, vk, ic, proof, zeros);
+    }
+
+    /** {@code k·G} compressed; {@code 0} gives the compressed point at infinity. */
+    private static byte[] g1(long k) {
+        if (k == 0) return infinityG1();
+        var p = JacobianG1BLS381.GENERATOR.scalarMul(BigInteger.valueOf(Math.abs(k)));
+        return ProverToCardano.g1Compress((k < 0 ? p.negate() : p).toAffine());
+    }
+
+    /** {@code k·H} compressed; {@code 0} gives the compressed point at infinity. */
+    private static byte[] g2(long k) {
+        if (k == 0) return infinityG2();
+        var p = JacobianG2BLS381.GENERATOR.scalarMul(BigInteger.valueOf(Math.abs(k)));
+        return ProverToCardano.g2Compress((k < 0 ? p.negate() : p).toAffine());
     }
 
     // ------------------------------------------------------------------ vectors
@@ -226,6 +311,8 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 vk.delta()), ic, p, in));
         out.add(new Vector(name + ": IC[1] infinity, then A flag cleared", vk, with(ic, 1, infinityG1()),
                 proof(flag(p.piA(), 0x7F, 0), p.piB(), p.piC()), in));
+        out.add(new Vector(name + ": IC[0] flag cleared, then IC[last] 49 bytes", vk,
+                with(with(ic, 0, flag(ic.get(0), 0x7F, 0)), last, Arrays.copyOf(ic.get(last), 49)), p, in));
 
         // An infinity IC entry whose input is 0 adds nothing to vk_x, so the pairing still holds:
         // only the explicit infinity check (ADR-0045 V1) refuses it.
