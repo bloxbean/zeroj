@@ -126,11 +126,21 @@ negative below that. It will be a separate revision once Julc provides the API.
   entry (the byte checks and the count walk). No scalar multiplication runs when the counts
   disagree, or before an IC entry that fails. This is checked in two ways:
   - **Cost:** asserted on every rejected vector.
-  - **Structure:** when the script fails on an IC entry, the last 20 builtins before the failure
-    contain no scalar multiplication or pairing.
+  - **Whole-evaluation operation counts (r3, review F11).** Each vector of the library under test
+    is also evaluated under the PV11 cost model with the CPU intercepts of G1 `scalarMul`, G1
+    `multiScalarMul`, `millerLoop` and `finalVerify` set to 10^11, 10^13, 10^15 and 10^17, so the
+    consumed CPU spells out how many of each ran. The test checks the original values at those
+    parameter indices before marking them. Every vector refused by its IC entries, its input
+    count or an input out of range, whether by `false` or by a builtin failure, runs none of the
+    four. Every accepted proof runs one scalar multiplication per input, 4 Miller loops and one
+    final verification. A self-test ties the counts to the real `DefaultFun` values in an honest
+    run's trace, and requires the guard to fail on each forbidden operation, with a passing
+    control. (r2 matched builtin names in the last 20 trace entries with the wrong case, so that
+    check could never fail.)
 
-  The cost check catches a mutation that multiplies before the recursion: it costs an extra
-  8.4e7 steps.
+  Mutation checks, each caught by the operation counts alone with the cost check disabled:
+  multiplying when the counts disagree, and multiplying before the recursion. The cost check
+  also catches the second (an extra 8.4e7 steps).
 
 ## Consequences
 - **Savings per verification** compared with `main`: 0.61e9 steps at 2 inputs, 0.98e9 at 9, and
@@ -138,10 +148,11 @@ negative below that. It will be a separate revision once Julc provides the API.
   - For zeroj-usecases (mainnet prices, 0.0000721 lovelace per step) this means about 0.071 ADA
     per auction bid (9 inputs) and about 0.126 ADA per confidential-note transfer (24 inputs).
   - It also frees 6–18% of the step budget for larger circuits.
-- **Script hashes** of every validator using the library change. The script size grows by 127
-  bytes compared with `458bfb1`. Measured as the blueprint's `compiledCode` bytes,
-  `Groth16BLS12381Verifier` goes from 1,059 to 1,186; Julc testkit's `scriptSizeBytes()` gives
-  1,053 to 1,180.
+- **Script hashes** of every validator using the library change. The script size grows by 144
+  bytes compared with `458bfb1`. Measured at `1525e97` (r2; r3 changes only tests and this ADR)
+  as the blueprint's `compiledCode` bytes, `Groth16BLS12381Verifier` goes from 1,059 to 1,203;
+  Julc testkit's `scriptSizeBytes()` gives 1,053 to 1,197 (review F12). r1's 1,186 predates r2's
+  count check.
 - **Memory units rise slightly.** The pending recursion levels and the byte checks add CEK steps.
   Measured on zeroj-usecases transactions against PR #85: auction bid +2.1%, settlement of 3
   bids +3.9%, registry rotation (two 7-input proofs) +6.2%. In fee terms the step saving
@@ -164,6 +175,8 @@ through outcome probes (accept / `false` / builtin failure) and checks:
   `verify` and `verifyFour`.
 - **Equality:** outcomes are equal except the pinned I4 instances, and the I5 saving is asserted
   exactly.
+- **Operation counts (I6, r3)** for every vector of the library under test, and a self-test of
+  that guard.
 - **Suites:** the `:zeroj-onchain-julc` and `:zeroj-integration-tests` suites, and zeroj-usecases
   (VM and Yaci DevKit) against a local publish.
 
@@ -219,3 +232,12 @@ through outcome probes (accept / `false` / builtin failure) and checks:
   - **F8:** the measurement method for script size is stated.
   - **F9:** memory is reported.
   - **F10:** acceptance before merge is listed as a gate.
+- **r3** (2026-10-11; responds to the review of `1525e97`, which found no accept-set difference
+  beyond the documented rejection forms and no V1 violation in the implementation):
+  - **F11 (P2):** the structural I6 check matched `ScalarMul`, `MillerLoop` and `FinalVerify`
+    against names such as `Bls12_381_G1_scalarMul`, so it could never fail. It is replaced by
+    whole-evaluation operation counts from a marked cost model, plus a self-test that the guard
+    sees the real `DefaultFun` values and fails on each forbidden operation. Both V1 mutations
+    are caught with the cost check disabled.
+  - **F12 (P3):** the script sizes are those of `1525e97`: 1,203 bytes (blueprint), 1,197
+    (testkit), +144.

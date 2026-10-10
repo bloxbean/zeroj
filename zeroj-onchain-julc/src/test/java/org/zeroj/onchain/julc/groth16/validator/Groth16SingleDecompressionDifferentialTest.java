@@ -1,14 +1,19 @@
 package org.zeroj.onchain.julc.groth16.validator;
 
 import org.julclang.compiler.CompileResult;
+import org.julclang.core.DefaultFun;
 import org.julclang.core.PlutusData;
 import org.julclang.core.Program;
 import org.julclang.testkit.ContractTest;
 import org.julclang.testkit.TestDataBuilder;
+import org.julclang.vm.EvalOptions;
 import org.julclang.vm.EvalResult;
+import org.julclang.vm.JulcVm;
+import org.julclang.vm.PlutusLanguage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.opentest4j.AssertionFailedError;
 import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.crypto.groth16.Groth16ProverBLS381;
@@ -34,6 +39,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -60,7 +66,33 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
 
     enum Outcome { ACCEPT, FALSE, ERROR }
 
-    record Run(Outcome outcome, long cpu, List<String> lastBuiltins) {}
+    /** {@code ops} is counted for the library under test only, {@code null} for the reference. */
+    record Run(Outcome outcome, long cpu, Ops ops) {}
+
+    /**
+     * How many scalar multiplications and pairing steps one whole evaluation ran, read off a run
+     * under {@link #COUNTING}: the PV11 cost model with the CPU intercepts of
+     * {@code bls12_381_G1_scalarMul}, {@code bls12_381_G1_multiScalarMul},
+     * {@code bls12_381_millerLoop} and {@code bls12_381_finalVerify} set to 10^11, 10^13, 10^15 and
+     * 10^17. Everything else one evaluation costs stays below 10^11 and each count below 100, so
+     * the digit pairs of the consumed CPU are the counts.
+     */
+    record Ops(long scalarMul, long msm, long millerLoop, long finalVerify) {
+        static final Ops NONE = new Ops(0, 0, 0, 0);
+
+        static Ops of(long cpu) {
+            return new Ops(cpu / SCALAR_MUL_MARK % 100, cpu / MSM_MARK % 100, cpu / MILLER_LOOP_MARK % 100,
+                    cpu / FINAL_VERIFY_MARK % 100);
+        }
+    }
+
+    private static final long SCALAR_MUL_MARK = 100_000_000_000L;
+    private static final long MSM_MARK = SCALAR_MUL_MARK * 100;
+    private static final long MILLER_LOOP_MARK = MSM_MARK * 100;
+    private static final long FINAL_VERIFY_MARK = MILLER_LOOP_MARK * 100;
+    /** Indices in the canonical PV11 Plutus V3 parameter list, with the values found there. */
+    private static final int SCALAR_MUL_CPU = 208, FINAL_VERIFY_CPU = 229, MILLER_LOOP_CPU = 231, MSM_CPU = 313;
+    private static final JulcVm COUNTING = JulcVm.create();
 
     record Vector(String label, SnarkjsToCardano.VkCompressed vk, List<byte[]> ic,
                   SnarkjsToCardano.ProofCompressed proof, BigInteger[] inputs) {}
@@ -84,7 +116,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
      * A rejection may cost no more than the reference's plus this much: room for the IC byte
      * checks and the count walk (about 2.7e6 steps per entry). It catches gross extra work, such
      * as multiplying when the counts disagree. Premature multiplication before a later IC entry
-     * fails is checked structurally instead (see {@link #assertNoMultiplicationBeforeIcFailure}).
+     * fails is checked by counting operations instead (see {@link #assertOps}).
      */
     private static long rejectionSlack(int icEntries) {
         return 3_000_000L * icEntries + 5_000_000L;
@@ -105,6 +137,24 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         PROOFS.put("linear (9 inputs)", linearProof(9));
         PROOFS.put("linear (24 inputs)", linearProof(24));
         PROOFS.put("zero input (3 inputs, p1 = 0)", linearProof(3, 1));
+
+        long[] costs;
+        try (InputStream in = JulcVm.class.getResourceAsStream("/cost-model/plutus-v3-pv11-costs-v1.params")) {
+            assertNotNull(in, "PV11 cost-model parameters");
+            costs = new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .filter(line -> !line.isBlank() && !line.startsWith("#"))
+                    .mapToLong(Long::parseLong).toArray();
+        }
+        assertEquals(350, costs.length);
+        assertEquals(76_433_006L, costs[SCALAR_MUL_CPU]);
+        assertEquals(333_849_714L, costs[FINAL_VERIFY_CPU]);
+        assertEquals(254_006_273L, costs[MILLER_LOOP_CPU]);
+        assertEquals(321_837_444L, costs[MSM_CPU]);
+        costs[SCALAR_MUL_CPU] = SCALAR_MUL_MARK;
+        costs[MSM_CPU] = MSM_MARK;
+        costs[MILLER_LOOP_CPU] = MILLER_LOOP_MARK;
+        costs[FINAL_VERIFY_CPU] = FINAL_VERIFY_MARK;
+        COUNTING.setCostModelParams(costs, PlutusLanguage.PLUTUS_V3, 11, 0);
     }
 
     @Test
@@ -119,7 +169,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
                 Run reference = run(Groth16VerifyOutcomeProbeReference.class, v);
                 assertExpected(v.label(), reference.outcome(), optimized.outcome());
                 assertRejectionCost(v, reference, optimized);
-                assertNoMultiplicationBeforeIcFailure(v, optimized);
+                assertOps(v, optimized, false);
                 if (v.label().endsWith(": honest")) {
                     assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
                     assertSaving(v.label(), tp.inputs().length + 4, v.ic().size(), reference.cpu() - optimized.cpu());
@@ -159,7 +209,7 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
             Run reference = run(Groth16VerifyFourOutcomeProbeReference.class, v);
             assertEquals(reference.outcome(), optimized.outcome(), v.label());
             assertRejectionCost(v, reference, optimized);
-            assertNoMultiplicationBeforeIcFailure(v, optimized);
+            assertOps(v, optimized, true);
             if (v.label().endsWith(": honest")) {
                 assertEquals(Outcome.ACCEPT, optimized.outcome(), v.label());
                 assertSaving(v.label(), 8, v.ic().size(), reference.cpu() - optimized.cpu());
@@ -187,16 +237,60 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
     }
 
     /**
-     * ADR-0045 V1, structurally: when the script fails on an IC entry, none of the builtins it ran
-     * just before the failure (the VM keeps the last 20) is a scalar multiplication or a pairing. A
-     * walk that multiplied each validated entry before checking the next one would show one there.
+     * ADR-0045 V1 over the whole evaluation (review F11): a vector refused for its IC entries, its
+     * input count or an input outside {@code [0, r)} runs no scalar multiplication and no pairing
+     * step at all, whether it ends in {@code false} or a builtin failure. An accepted proof runs
+     * one scalar multiplication per input, four Miller loops and one final verification.
+     * (r2 matched builtin names in the last 20 trace entries with the wrong case, so it could
+     * never fail.)
      */
-    private static void assertNoMultiplicationBeforeIcFailure(Vector v, Run optimized) {
-        if (optimized.outcome() != Outcome.ERROR || !v.label().contains("IC[")) return;
-        for (String fun : optimized.lastBuiltins()) {
-            assertTrue(!fun.contains("ScalarMul") && !fun.contains("MillerLoop") && !fun.contains("FinalVerify"),
-                    v.label() + ": " + fun + " ran before the IC failure: " + optimized.lastBuiltins());
+    private static void assertOps(Vector v, Run optimized, boolean four) {
+        if (refusedBeforeVkX(v.label())) {
+            assertEquals(Ops.NONE, optimized.ops(), v.label() + " (" + optimized.outcome() + ")");
+        } else if (optimized.outcome() == Outcome.ACCEPT) {
+            assertEquals(new Ops(v.inputs().length, 0, 4, 1), optimized.ops(), v.label());
         }
+    }
+
+    /** Vectors refused by the IC, count or scalar checks, which all precede the IC sum. */
+    private static boolean refusedBeforeVkX(String label) {
+        String what = label.substring(label.indexOf(": ") + 2);
+        boolean icRefused = what.contains("IC[") && !what.contains("negated");
+        return icRefused || what.contains("IC has") || what.contains("too few inputs") || what.contains("too many inputs")
+                || what.equals("empty IC") || what.startsWith("input = r") || what.equals("input = -1");
+    }
+
+    @Test
+    @DisplayName("The operation guard (review F11): it sees the real builtins and fails on each forbidden one")
+    void operationGuardSeesTheRealBuiltins() {
+        TestProof tp = PROOFS.get("linear (3 inputs)");
+        Vector honest = new Vector("guard: honest", tp.vk(), tp.vk().ic(), tp.proof(), tp.inputs());
+        // The counts come from the builtins themselves: the honest run's trace holds the real enum
+        // values, and the counting run reports them.
+        CompileResult compiled = COMPILED.computeIfAbsent(Groth16VerifyOutcomeProbe.class,
+                c -> compileValidator(c, Path.of("src/test/java")));
+        EvalResult traced = evaluate(applied(compiled, honest), context(honest, 1));
+        List<DefaultFun> trace = traced.builtinTrace().stream().map(e -> e.fun()).toList();
+        assertTrue(traced instanceof EvalResult.Success, "honest proof");
+        assertTrue(trace.contains(DefaultFun.Bls12_381_millerLoop) && trace.contains(DefaultFun.Bls12_381_finalVerify),
+                "trace: " + trace);
+        Run run = run(Groth16VerifyOutcomeProbe.class, honest);
+        assertEquals(new Ops(3, 0, 4, 1), run.ops());
+        assertOps(honest, run, false);
+        assertThrows(AssertionFailedError.class, () -> assertOps(honest, new Run(Outcome.ACCEPT, 0, new Ops(2, 0, 4, 1)), false));
+
+        // A refused vector: no count passes but zero, for each forbidden builtin.
+        Vector refused = new Vector("guard: IC[last] flag cleared", tp.vk(), tp.vk().ic(), tp.proof(), tp.inputs());
+        assertOps(refused, new Run(Outcome.ERROR, 0, Ops.NONE), false);
+        for (Ops forbidden : List.of(new Ops(1, 0, 0, 0), new Ops(0, 1, 0, 0), new Ops(0, 0, 1, 0), new Ops(0, 0, 0, 1))) {
+            for (Outcome outcome : List.of(Outcome.ERROR, Outcome.FALSE)) {
+                assertThrows(AssertionFailedError.class, () -> assertOps(refused, new Run(outcome, 0, forbidden), false),
+                        forbidden + " " + outcome);
+            }
+        }
+        // The counts decode the marks exactly.
+        long cpu = 3 * SCALAR_MUL_MARK + 4 * MILLER_LOOP_MARK + FINAL_VERIFY_MARK + 99_999_999_999L;
+        assertEquals(new Ops(3, 0, 4, 1), Ops.of(cpu));
     }
 
     /** A rejected vector costs the new library at most the reference's cost plus {@link #rejectionSlack}. */
@@ -438,10 +532,22 @@ class Groth16SingleDecompressionDifferentialTest extends ContractTest {
         boolean t = expectTrue instanceof EvalResult.Success;
         boolean f = expectFalse instanceof EvalResult.Success;
         if (t && f) fail(v.label() + ": both expectations succeeded");
-        if (t) return new Run(Outcome.ACCEPT, expectTrue.budgetConsumed().cpuSteps(), List.of());
-        if (f) return new Run(Outcome.FALSE, expectFalse.budgetConsumed().cpuSteps(), List.of());
-        List<String> last = expectTrue.builtinTrace().stream().map(e -> e.fun().name()).toList();
-        return new Run(Outcome.ERROR, expectTrue.budgetConsumed().cpuSteps(), last);
+        Outcome outcome = t ? Outcome.ACCEPT : f ? Outcome.FALSE : Outcome.ERROR;
+        EvalResult decisive = f ? expectFalse : expectTrue;
+        Ops ops = null;
+        if (!probe.getSimpleName().endsWith("Reference")) {
+            EvalResult counted = COUNTING.evaluateWithArgs(program, compiled.target().ledgerTarget(),
+                    List.of(context(v, f ? 0 : 1)), null, EvalOptions.DEFAULT);
+            assertEquals(decisive instanceof EvalResult.Success, counted instanceof EvalResult.Success, v.label());
+            ops = Ops.of(counted.budgetConsumed().cpuSteps());
+        }
+        return new Run(outcome, decisive.budgetConsumed().cpuSteps(), ops);
+    }
+
+    private static Program applied(CompileResult compiled, Vector v) {
+        return compiled.program().applyParams(
+                PlutusData.bytes(v.vk().alpha()), PlutusData.bytes(v.vk().beta()),
+                PlutusData.bytes(v.vk().gamma()), PlutusData.bytes(v.vk().delta()), icData(v.ic()));
     }
 
     private PlutusData context(Vector v, int expect) {
