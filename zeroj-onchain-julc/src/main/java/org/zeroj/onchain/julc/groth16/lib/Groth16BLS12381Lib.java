@@ -296,9 +296,9 @@ public class Groth16BLS12381Lib {
 
     /**
      * The smallest number of public inputs for which {@link #icSumMsm} is used. Measured (Julc VM,
-     * PV11 cost model): one multi-scalar multiplication over n points costs about 52e6 steps less
-     * per input than n scalar multiplications, against a higher fixed cost; it is 116e6 steps dearer
-     * at 4 inputs and 145e6 cheaper at 9, so it pays from 7 (ADR-0056 M2).
+     * PV11 cost model; ADR-0056 D3): one multi-scalar multiplication over n points costs about
+     * 53e6 steps less per input than n scalar multiplications, against a higher fixed cost, and
+     * the two cross between 6 and 7 inputs, so it pays from 7.
      */
     private static int msmMinInputs() {
         return 7;
