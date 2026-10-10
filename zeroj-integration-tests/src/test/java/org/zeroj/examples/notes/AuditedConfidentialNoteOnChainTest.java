@@ -7,7 +7,9 @@ import org.julclang.ledger.Address;
 import org.julclang.ledger.Credential;
 import org.julclang.ledger.OutputDatum;
 import org.julclang.ledger.PolicyId;
+import org.julclang.ledger.PubKeyHash;
 import org.julclang.ledger.ScriptHash;
+import org.julclang.ledger.StakingCredential;
 import org.julclang.ledger.TokenName;
 import org.julclang.ledger.TxInInfo;
 import org.julclang.ledger.TxOut;
@@ -30,6 +32,8 @@ import org.zeroj.circuit.annotation.ZkUInt;
 import org.zeroj.circuit.lib.jubjub.ConfidentialNotes;
 import org.zeroj.circuit.lib.jubjub.ElGamal;
 import org.zeroj.circuit.lib.jubjub.ElGamalCiphertext;
+import org.zeroj.circuit.lib.jubjub.ElGamalEncryption;
+import org.zeroj.circuit.lib.jubjub.ElGamalKeyContext;
 import org.zeroj.circuit.lib.jubjub.ElGamalPublicKey;
 import org.zeroj.circuit.lib.jubjub.ElGamalSecretKey;
 import org.zeroj.circuit.lib.jubjub.JubjubCurve;
@@ -39,7 +43,6 @@ import org.zeroj.circuit.lib.jubjub.NOfNKeyContext;
 import org.zeroj.circuit.lib.jubjub.NoteOpening;
 import org.zeroj.circuit.lib.jubjub.NoteScanner;
 import org.zeroj.circuit.lib.jubjub.NoteViewingKey;
-import org.zeroj.circuit.lib.jubjub.PedersenCommitment;
 import org.zeroj.circuit.lib.jubjub.RawElGamalCiphertext;
 import org.zeroj.circuit.lib.zk.ZkBlake2b;
 import org.zeroj.circuit.lib.zk.ZkElGamal;
@@ -83,6 +86,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The direct layout (spec §8.2) runs in the default test task. The hash-compressed layout
  * (spec §8.3) runs a BLAKE2b gadget of about 3×10^5 constraints and is tagged {@code heavy}; run it
  * with {@code ./gradlew :zeroj-integration-tests:heavyTest --tests '*AuditedConfidentialNote*'}.
+ * CI runs it in the {@code Heavy tests} workflow ({@code .github/workflows/heavy.yml}).
  */
 class AuditedConfidentialNoteOnChainTest extends ContractTest {
 
@@ -116,6 +120,27 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
 
     /** One limb encryption {@code A = [k]·G}, {@code B = [m]·G + [k]·PK}, with its opening. */
     record Limb(BigInteger m, BigInteger k, List<BigInteger> coordinates) {
+        /**
+         * An honest limb through the approved {@code elgamal-jubjub-v1} path:
+         * {@link ElGamal#encryptWithOpening} draws {@code k} and runs every secret multiplication
+         * on the blinded best-effort schedule (ADR-0039 compatibility/offline class). This is the
+         * construction a wallet's prover uses (ADR-0055 M3).
+         */
+        static Limb encrypt(long m, ElGamalKeyContext auditor) {
+            ElGamalEncryption e = ElGamal.encryptWithOpening(auditor, BigInteger.valueOf(m), 32, RANDOM);
+            ElGamalCiphertext ct = e.ciphertext();
+            return new Limb(e.message(), e.randomness(), List.of(ct.handle().affineU(), ct.handle().affineV(),
+                    ct.blinded().affineU(), ct.blinded().affineV()));
+        }
+
+        /**
+         * <b>Test fixture only; never copy into wallet code.</b> Builds a limb from a chosen
+         * {@code m} and {@code k} with {@link JubjubPoint#scalarMul}, the unblinded variable-time
+         * multiplication meant for public scalars. Here {@code k} and {@code m} are secrets, so
+         * this would leak them through timing. The negative tests need it to choose {@code k}
+         * (reused randomness, a retired key, limbs that do not recombine); honest limbs use
+         * {@link #encrypt}.
+         */
         static Limb of(BigInteger m, BigInteger k, JubjubPoint pk) {
             JubjubPoint g = JubjubPoint.SUBGROUP_GENERATOR;
             JubjubPoint a = g.scalarMul(k).normalized();
@@ -143,6 +168,7 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
         final Layout layout;
         final Shape shape;
         final ElGamalSecretKey auditor = ElGamalSecretKey.generate(RANDOM);
+        final NOfNKeyContext auditorContext = NOfNKeyContext.singleKey(auditor);
         final NoteViewingKey auditorView = NoteViewingKey.generate(RANDOM);
         final NoteViewingKey ownerView = NoteViewingKey.generate(RANDOM);
         final NoteViewingKey recipientView = NoteViewingKey.generate(RANDOM);
@@ -197,10 +223,9 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
 
         Note note(byte[] owner, long amount, NoteViewingKey ownerKey) {
             NoteOpening opening = NoteOpening.random(BigInteger.valueOf(amount), RANDOM);
-            BigInteger v = opening.value();
             List<Limb> limbs = List.of(
-                    Limb.of(v.mod(TWO_32), PedersenCommitment.randomBlinding(RANDOM), pk()),
-                    Limb.of(v.shiftRight(32), PedersenCommitment.randomBlinding(RANDOM), pk()));
+                    Limb.encrypt(amount & 0xffff_ffffL, auditorContext),
+                    Limb.encrypt(amount >>> 32, auditorContext));
             List<byte[]> deliveries = ConfidentialNotes.seal(opening,
                     List.of(ownerKey.readerKey(), auditorView.readerKey()), RANDOM);
             return new Note(owner, amount, opening, opening.commitment().normalized(), limbs, deliveries);
@@ -387,6 +412,7 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
         invalidWitnesses(f);
         reusedRandomnessRejected(f);
         retiredEntryAloneIsTheRegistrysObligation(f);
+        stakeVariantOutputIsTheApplicationsAddressPolicy(f);
     }
 
     @Test
@@ -427,7 +453,6 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
         // Every created note, from the datum alone: the auditor decrypts the amount from the limbs
         // and opens its delivery; the owner opens its delivery.
         JubjubDiscreteLog table = JubjubDiscreteLog.forBound(TWO_32.longValueExact() - 1);
-        NOfNKeyContext auditorContext = NOfNKeyContext.singleKey(f.auditor);
         for (Note n : f.outs) {
             List<BigInteger> audit = n.audit();
             long amount = 0;
@@ -435,7 +460,7 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
                 RawElGamalCiphertext raw = RawElGamalCiphertext.fromAffine(
                         audit.get(4 * j), audit.get(4 * j + 1), audit.get(4 * j + 2), audit.get(4 * j + 3));
                 // Admitted on the strength of the spend proof just verified, which proves R_enc(32).
-                ElGamalCiphertext ct = ElGamal.admit(raw, auditorContext, 32, statement -> true);
+                ElGamalCiphertext ct = ElGamal.admit(raw, f.auditorContext, 32, statement -> true);
                 amount = (amount << 32) | ElGamal.decryptWithSecret(ct, f.auditor, TWO_32.longValueExact() - 1, table);
             }
             assertEquals(n.amount(), amount, "the auditor recovers the amount from the limbs");
@@ -532,6 +557,24 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
     }
 
     /**
+     * The limit of the output match (ADR-0055 implementation note 12). The validator counts its
+     * inputs by payment credential but its continuing outputs by full address. An extra output
+     * under the script's payment credential with another stake credential is therefore not a
+     * continuing output: the validator neither counts nor checks it, and accepts the spend. The
+     * same extra output at the exact script address is refused ({@code EXTRA_OUTPUT}). Such an
+     * output is unproved issuance, as is any output paid to the script; the application defines
+     * and enforces its address policy and authenticates its notes (M3).
+     */
+    private void stakeVariantOutputIsTheApplicationsAddressPolicy(Fixture f) {
+        Address staked = new Address(SCRIPT_ADDRESS.credential(), Optional.of(new StakingCredential.StakingHash(
+                new Credential.PubKeyCredential(PubKeyHash.of(filled(28, (byte) 0x5a))))));
+        Note unproved = f.outs.get(0);
+        TxOut extra = txOut(staked, NOTE_VALUE, noteDatum(unproved, unproved.audit(), unproved.deliveries()));
+        assertTrue(evaluate(f.program, context(f, f.outs, f.proof, Mutation.NONE, null, extra)) instanceof EvalResult.Success,
+                "an output under the script's payment credential with another stake credential is not counted");
+    }
+
+    /**
      * The compressed layout's serialization binding (spec §8.3; ADR-0055 implementation note 7).
      * <ul>
      *   <li>Bytes that are not the coordinate (another ciphertext's, little-endian, a flipped
@@ -611,11 +654,16 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
     }
 
     private PlutusData context(Fixture f, List<Note> outs, SnarkjsToCardano.ProofCompressed proof, Mutation m) {
-        return context(f, outs, proof, m, null);
+        return context(f, outs, proof, m, null, null);
     }
 
     private PlutusData context(Fixture f, List<Note> outs, SnarkjsToCardano.ProofCompressed proof, Mutation m,
                                TxInInfo extraReference) {
+        return context(f, outs, proof, m, extraReference, null);
+    }
+
+    private PlutusData context(Fixture f, List<Note> outs, SnarkjsToCardano.ProofCompressed proof, Mutation m,
+                               TxInInfo extraReference, TxOut extraOutput) {
         TxOutRef ownRef = TestDataBuilder.randomTxOutRef_typed();
         PlutusData inDatum = noteDatum(f.input, f.input.audit(), f.input.deliveries());
         byte[] piA = m == Mutation.TAMPERED_PROOF ? flipped(proof.piA()) : proof.piA();
@@ -659,6 +707,7 @@ class AuditedConfidentialNoteOnChainTest extends ContractTest {
         }
         if (m == Mutation.EXTRA_OUTPUT) builder.output(txOut(SCRIPT_ADDRESS, NOTE_VALUE,
                 noteDatum(outs.get(0), outs.get(0).audit(), outs.get(0).deliveries())));
+        if (extraOutput != null) builder.output(extraOutput);
 
         if (m == Mutation.REGISTRY_SECOND_ENTRY_BEFORE) builder.referenceInput(retiredEntry());
         if (m != Mutation.REGISTRY_MISSING) {

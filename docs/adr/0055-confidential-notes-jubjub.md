@@ -79,6 +79,15 @@ host operation here is **compatibility/offline** class.
   still treated Q5 or Q9 as pending now states the decision: Status, D3, D3a, D10, M5, M5a and
   the production gates. D3 is blocked pending a dedicated, accepted follow-up ADR for a pinned
   and analysed construction. The demo uses trusted issuance (Q9 (a)).
+- **r7** (2026-10-10; follow-ups from the implementation review of `a093c9e`). None changes the
+  design, a wire format, the maturity or a gate:
+  - **A3:** a conditional heuristic for the equal-plaintext case, with its assumptions and
+    limits. A3 stays unproved, with its external-review gate.
+  - **Implementation note 12:** the reference validator's address match, the approved prover
+    path for D3a limbs, and scheduled CI for the compressed layout.
+  - **M3:** gains two exit criteria, an address policy and the approved limb-encryption path.
+  - **Spec §5 notation** (editorial): the commitment's coordinates are now `(C_u, C_v)`.
+  - **[LGR2021]:** its abstract has been fetched.
 
 ## Risk classification
 - **R3:** D2 (viewing keys and key agreement), D5 (the ciphersuite: key agreement, KDF and
@@ -208,6 +217,25 @@ native field.
     does not commit to the reader's key. Acceptance outcomes are local to the wallet. **If A3
     holds**, a wallet that acts visibly on them (for example by spending at once) gives an
     observer at most this one-key outcome.
+
+    **A conditional heuristic for the equal-plaintext case** (r7; from the implementation review,
+    and not a proof). It does not discharge A3, gives A3 no concrete security level, and leaves
+    A3's external-review gate in place.
+    - **Assumptions.** Two distinct readers give distinct shared secrets and so distinct KDF
+      inputs, since `[8·e]·P_1 ≠ [8·e]·P_2` for `P_1 ≠ P_2` in `𝔾`. Assume also that the two
+      derived keys differ, and that ChaCha20 keystreams under distinct keys behave as independent
+      random strings.
+    - **The estimate.** Then a fixed pair of keys agrees on the 41 keystream bytes with
+      probability `2^-328`. It is a per-attempt figure under idealised keystreams. It excludes KDF
+      collisions, in which the two keys are equal and the keystreams agree trivially.
+    - **What a sender controls matters.** If one target reader's key is fixed and the sender
+      chooses the other, a KDF collision for a given `E` means matching one fixed BLAKE2b-256
+      output (a second-preimage-style search). If the model lets the sender choose **both**
+      reader keys (for example, by registering both), the sender can run a birthday search for a
+      collision. The heuristic says nothing about either beyond naming them.
+    - **Why A3 still needs review.** Ordinary AEAD security does not make ChaCha20-Poly1305 key
+      committing. [LGR2021] builds key multi-collisions against it. So any argument for A3 has to
+      rest on the binding of `C` and on the KDF, not on the AEAD.
 - **What it does not give:**
   - **No forward secrecy with respect to the reader's key.** Anyone who later obtains a viewing
     key decrypts every note ever delivered to it.
@@ -279,8 +307,11 @@ native field.
   - [RFC7693] (fetched 2026-10-09) specifies BLAKE2 but says personalization and salt "use fields
     in the parameter block that are not defined in this document". It is cited for the core
     function and its Appendix A vector only.
-- **[LGR2021]** J. Len, P. Grubbs, T. Ristenpart, *Partitioning Oracle Attacks*, USENIX Security
-  2021. Cited through [ZcashSpec] §8.7; not fetched (**unverified** directly).
+- **[LGR2021]** J. Len, P. Grubbs, T. Ristenpart, *Partitioning Oracle Attacks*, 30th USENIX
+  Security Symposium, 2021, pp. 195–212. Also cited by [ZcashSpec] §8.7. The abstract was fetched
+  on 2026-10-10 from the USENIX page (the full paper was not read): "Partitioning oracles can
+  arise when encryption schemes are not committing with respect to their keys". It names
+  ChaCha20/Poly1305 among the AEADs attacked through key multi-collisions.
 - **[RFC8439]** Y. Nir, A. Langley, *ChaCha20 and Poly1305 for IETF Protocols*, June 2018. It
   obsoletes RFC 7539, which [ZcashSpec] cites. Fetched 2026-10-09.
   - §2.8 (the AEAD).
@@ -809,7 +840,7 @@ Each invariant names the decisions it constrains. Tests in M0–M2 check each on
 | M0 | Normative spec `docs/specs/confidential-note-jubjub-v1.md`. An independent Python reference, written from the spec and [ZcashSpec] with no Java read. The vendored [ZTV] file, pinned by commit and SHA-256. | ADR accepted; Q1–Q4 and Q6–Q8 decided | The reference reproduces all 10 [ZTV] vectors (I10) and the [BLAKE2]/RFC 7693 Appendix A vectors. It emits replayable cases: good deliveries for 1–4 readers; every D6 failure (wrong key; tampered `E`/`ct`; `E` non-canonical, small-order, outside `𝔾` or the identity; wrong length; bad lead byte; `r ≥ l`; an opening that does not match `C`); a repeated `e_i` (shown to leak the plaintext XOR); and the copied-note case for D6 step 5. If Q5 (D) is adopted: D3a's public-input order and, for the hash-compressed variant, its serialization, digest split and vectors (r4). Byte-identical output on rerun. |
 | M1 | Host primitives: personalised BLAKE2b; `KA`, `KDF`, `Sym` on JDK ChaCha20-Poly1305; the fault classification. | M0 | [ZTV] KATs (I10); a BLAKE2b differential with personalization against BouncyCastle in tests; negatives for every malformed input; a native-image probe with identical output (as ADR-0054 M1). |
 | M2 | Note API: viewing keys with the possession statement; sealing for a reader list; scanning and opening with D6's checks; the unopenable report. | M1 | Every reference case replays (I1–I9). An API-surface test: final classes, redacted secrets, no public ephemeral seam (I2, I6). The acceptance-path schedule regression test (I13). |
-| M3 | zeroj-usecases: migrate the confidential-points demo to on-chain delivery with one auditor, on Yaci DevKit (solvency optional), in a separate usecases PR. | M2 released or snapshot-pinned | DevKit E2E: issue, transfer and redeem with recovery from chain data by owner and auditor. Validator mutation tests: missing auditor delivery, wrong lengths, extra deliveries. A garbage delivery is reported as unopenable. |
+| M3 | zeroj-usecases: migrate the confidential-points demo to on-chain delivery with one auditor, on Yaci DevKit (solvency optional), in a separate usecases PR. | M2 released or snapshot-pinned | DevKit E2E: issue, transfer and redeem with recovery from chain data by owner and auditor. Validator mutation tests: missing auditor delivery, wrong lengths, extra deliveries. A garbage delivery is reported as unopenable. Added in r7 (note 12): **(a)** the demo defines and enforces its address policy, covering how continuing outputs are matched (payment credential, stake credential) and how notes are authenticated. Its mutations include an extra output under the script's payment credential with another stake credential. **(b)** The wallet's prover encrypts limbs with `ElGamal.encryptWithOpening`, under a key context from a possession-verified registry key. It never uses the reference test's variable-time fixture. |
 | M4 | Docs: support matrix, gadget/guide section with the D6, D7 and D9 MUSTs, benchmark doc. | M2 | Experimental status. Seal cost measured. Scan cost measured separately for a failed trial decryption and for a full acceptance. |
 | M5a | D3a circuit (auditor amount escrow) on the points demo: transfer (both outputs) and redeem (change note). Both the specified layout and the hash-compressed variant are evaluated. | M2 (Q5 (D) is adopted conditionally, gated by this milestone) | Constraints and prover time measured. On-chain CPU and memory measured in the Plutus VM for the **complete** transaction against the aggregate per-transaction limits, within D3a's gate (decided, Q5: ≤ 80%). I12's invalid-witness and mutation tests, including either output's audit data absent, wrong or unbound. The auditor decrypts every note that transfer and redeem create, from chain data. Validator mutation tests: a key not from the registry; ciphertext coordinates not from the datum; for the variant, a mutated serialization, order or digest half. Issuance is out of scope: the demo uses trusted issuance (Q9 (a)). An application that chooses Q9 (b) must also show that an authorized issuer supplying a wrong audit ciphertext is rejected. If neither layout fits, D3a is recorded as deferred. |
 | M5 | D3 circuit profile. | **Blocked** pending a dedicated, accepted follow-up ADR for a pinned, analysed construction (Q5 (A)) | Defined by that ADR. |
@@ -1003,7 +1034,7 @@ came from the independent reference (its findings S1–S6) and from implementati
 1. **Step numbering** (reference S1). The spec numbers acceptance steps 1–7. D6's steps 1–5 group
    them, and spec §5 maps one to the other.
 2. **The commitment's coordinates are canonical, with no reduction** (reference S3; spec §5 step
-   7). A reader takes `C` as the affine `(u, v)` the note carries. Coordinates outside `[0, p)`,
+   7). A reader takes `C` as the affine `(C_u, C_v)` the note carries. Coordinates outside `[0, p)`,
    or off the curve, are "not mine". Before this, a reader that reduced mod `p` and one that did
    not could disagree. `NoteScanner.open(delivery, u, v)` checks this before any secret work.
 3. **An AEAD known-answer self-test before use** (as ADR-0054 note 7). The platform's
@@ -1091,6 +1122,35 @@ came from the independent reference (its findings S1–S6) and from implementati
       off-subgroup `E` row and states that runs are single-shot.
     - **Docs** (R-4, R-8, R-9). D3a's scope is stated: proof-enforced transitions only, test-only
       reference validator, no library API. The reference README is aligned with spec §9.1.
+12. **Implementation review follow-ups** (2026-10-10, after approval at `a093c9e`). None changes
+    behaviour, a format or a claim.
+    - **The reference validator's address match.** `AuditedConfidentialNoteValidator` counts its
+      inputs by payment credential, but it treats as continuing only the outputs at the spent
+      note's full address (payment and stake credential), as `ConfidentialNoteValidator` does.
+      An output under the script's payment credential with another stake credential is neither
+      counted nor checked, and the spend is accepted. A test shows this; `EXTRA_OUTPUT` covers
+      the exact address only.
+      - Such an output is unproved issuance. This reference validator already has no issuance
+        control: anyone can pay a note to the script.
+      - The rule is not changed here. Matching outputs by payment credential would refuse such
+        outputs. It would also change the measured cost slightly, and it is an application
+        policy.
+      - M3 must define and enforce the demo's address policy and authenticate its notes (M3,
+        criterion (a)).
+    - **Limb encryption in a wallet.** The reference test now builds honest limbs with
+      `ElGamal.encryptWithOpening`. That call draws `k` and runs every secret multiplication on
+      the blinded best-effort schedule (ADR-0039 compatibility/offline, with its documented
+      limits). The fixture's `Limb.of` remains, for negative tests that must choose `k`. It uses
+      the variable-time `scalarMul` on the secrets `m` and `k`, and is marked test-only: a
+      wallet must not copy it (M3, criterion (b)).
+    - **Ongoing coverage of the compressed layout.** The `Heavy tests` workflow
+      (`.github/workflows/heavy.yml`) runs `heavyTest`:
+      - nightly and on demand;
+      - on pull requests that change the notes tests, the validator or the gadgets they use.
+
+      It covers the `c + p` alias, swapped and flipped digest halves, foreign and little-endian
+      bytes, and agreement with the validator's canonical serialization, all on the real
+      circuit.
 
 ## Implementation status
 
@@ -1100,6 +1160,6 @@ came from the independent reference (its findings S1–S6) and from implementati
 | M1 | Done | `Blake2bDigest` personalization, `Aead`, `SaplingNoteCrypto`, the AEAD self-test. `ConfidentialNoteKnownAnswerTest` covers all 10 Zcash vectors (Agree both ways, KDF, encryption and decryption), decoding refusals and fault classification. Also run: the personalised BLAKE2b differential against BouncyCastle 1.83, and Wycheproof ChaCha20-Poly1305 through `Aead`. `NoteNativeProbe` gives output identical to the JVM in a GraalVM native image. |
 | M2 | Done | `NoteViewingKey`, `NoteReaderKey`, `NoteOpening`, `ConfidentialNotes`, `NoteScanner`. Tests: `ConfidentialNotesTest` (I1–I11, platform faults, API surface), `NoteScheduleTest` (I13) and `ConfidentialNoteReferenceVectorsTest` (every reference vector, byte for byte, including sealing). Eight guards were each reverted to confirm a test fails. |
 | M4 | Done | Benchmark `docs/benchmarks/confidential-note-jubjub-2026-10-09.md`. A failed trial decryption costs about 1.7 ms and an acceptance about 5 ms; scanning runs at about 5,000 notes/s on 16 threads (runs varied by up to about 40%). README, support matrix and gadget-guide rows and section, with the D6, D7 and D9 rules. |
-| M5a | Done on the reference validator; **D3a within the gate**; application total pending M3 | `AuditedConfidentialNoteOnChainTest` and `AuditedConfidentialNoteValidator` (Plutus V3, Julc VM cost model PV11). The datum carries deliveries; the auditor key comes from exactly one registry entry; limb handles must be distinct. Transfer, direct: 24 public inputs, 7.34e9 steps (73.4%). Redeem, direct: 15 inputs, 5.52e9 (55.2%). Transfer, hash-compressed: 10 inputs, 4.73e9 (47.3%). I12's invalid witnesses (both layouts), the compressed layout's serialization binding (foreign, little-endian and `c + p` bytes; swapped or flipped digest halves), reused randomness and every validator mutation are rejected. Owner and auditor recover every created note from the datum. The compressed test is `heavy` (excluded from CI's default task). |
-| M3 | Not started | A separate zeroj-usecases PR: the points demo on Yaci DevKit, with its minting policy in the measured total. |
+| M5a | Done on the reference validator; **D3a within the gate**; application total pending M3 | `AuditedConfidentialNoteOnChainTest` and `AuditedConfidentialNoteValidator` (Plutus V3, Julc VM cost model PV11). The datum carries deliveries; the auditor key comes from exactly one registry entry; limb handles must be distinct. Transfer, direct: 24 public inputs, 7.34e9 steps (73.4%). Redeem, direct: 15 inputs, 5.52e9 (55.2%). Transfer, hash-compressed: 10 inputs, 4.73e9 (47.3%). I12's invalid witnesses (both layouts), the compressed layout's serialization binding (foreign, little-endian and `c + p` bytes; swapped or flipped digest halves), reused randomness and every validator mutation are rejected. Owner and auditor recover every created note from the datum. The compressed test is `heavy`: it is excluded from CI's default task, and the `Heavy tests` workflow runs it nightly, on demand, and on pull requests that touch its sources (note 12). |
+| M3 | Not started | A separate zeroj-usecases PR: the points demo on Yaci DevKit, with its minting policy in the measured total, its own address policy and the approved limb-encryption path (note 12). |
 | M5 | Blocked | Q5 (A): pending a dedicated, accepted follow-up ADR. |

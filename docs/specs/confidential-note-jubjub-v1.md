@@ -6,8 +6,9 @@
 
 This document pins every value, encoding and rule that a second implementation needs to seal
 and open `confidential-note-jubjub-v1` deliveries, and to build the D3a auditor relation.
-Anything not written here is not part of the profile. Any change needs a new profile
-identifier (`-v2`), not an edit to this file.
+Anything not written here is not part of the profile. Any change to an algorithm, a value or an
+encoding needs a new profile identifier (`-v2`), not an edit to this file. Editorial
+clarifications that change none of them are listed under "Editorial changes" at the end.
 
 **Conventions:**
 - `‖` is byte concatenation.
@@ -20,6 +21,8 @@ identifier (`-v2`), not an edit to this file.
 - `G` and `H` are the `pedersen-jubjub-v1` §2 bases.
 - `encode`/`decode` are the 32-byte point encoding of `pedersen-jubjub-v1` §4.
 - `x[a..b]` is bytes `a` through `b` of `x`, inclusive and 0-based.
+- `v` is always a note's value (§3.1). A commitment's affine coordinates are `(C_u, C_v)`, and
+  a point `X`'s are `X.u`, `X.v`.
 - Index bases: deliveries and readers are numbered from 0 (§3.3); in §8, created notes and
   auditors are numbered from 1, and limbs are 0 and 1.
 
@@ -102,10 +105,10 @@ read the notes delivered to it. Restoring requires exactly 32 bytes encoding `1 
 AEAD output (41 bytes of ciphertext followed by the 16-byte Poly1305 tag).
 
 ### 3.3 Notes (informative)
-A note carries `C` (as affine `(u, v)` coordinates, `pedersen-jubjub-v1` §5) and one delivery
+A note carries `C` (as affine coordinates `(C_u, C_v)`, `pedersen-jubjub-v1` §5) and one delivery
 per reader, in the order the application fixes: the owner first, then the application's
 auditors in registry order. The on-chain container (for example a Plutus datum
-`Note(owner, u, v, [delivery_0, …, delivery_k])`) is the application's. This profile fixes
+`Note(owner, C_u, C_v, [delivery_0, …, delivery_k])`) is the application's. This profile fixes
 only the bytes of each delivery and the meaning of their order.
 
 ---
@@ -139,7 +142,7 @@ use, best effort.
 ## 5. Opening and acceptance
 
 Input: a viewing key `sk`, one delivery (the reader's position in the note), and the note's
-commitment `C`, given as the affine coordinates `(u, v)` the note carries. A note is
+commitment `C`, given as the affine coordinates `(C_u, C_v)` the note carries. A note is
 **accepted** for this reader only if every step succeeds, in order:
 
 1. The delivery is exactly 89 bytes. Split it into `E` (bytes 0–31) and `ct` (bytes 32–88).
@@ -150,8 +153,8 @@ commitment `C`, given as the affine coordinates `(u, v)` the note carries. A not
 5. `pt = ChaCha20-Poly1305-Decrypt(K, nonce = 0^12, aad = empty, ct)` succeeds (the tag
    verifies).
 6. `pt[0] = 0x01`. Let `v = OS2IP(pt[1..8])` and `r = OS2IP(pt[9..40])`; require `r < l`.
-7. The note's coordinates satisfy `0 ≤ u < p` and `0 ≤ v < p`, with no reduction, and
-   `[v]·G + [r]·H` is the point `(u, v)`.
+7. The note's coordinates satisfy `0 ≤ C_u < p` and `0 ≤ C_v < p`, with no reduction, and
+   `[v]·G + [r]·H` is the point `(C_u, C_v)`.
 
 The output is `(v, r)`.
 
@@ -340,3 +343,12 @@ They are replayed against the library at every build.
 - **[RFC 7693]** The BLAKE2 Cryptographic Hash and Message Authentication Code, Appendix A.
 - **[RFC 8439]** ChaCha20 and Poly1305 for IETF Protocols, §2.8, §2.8.2, §4.
 - ZeroJ: ADR-0055; `pedersen-jubjub-v1` (§1–§5); `elgamal-jubjub-v1` (§2, §3.3, §8, §9.1).
+
+---
+
+## Editorial changes
+
+These change no algorithm, value or encoding. Vectors and implementations are unaffected.
+
+- **2026-10-10.** The commitment's coordinates are written `(C_u, C_v)` (§3.3, §5). Before,
+  §5 wrote them `(u, v)`, so `v` meant both the value and a coordinate.

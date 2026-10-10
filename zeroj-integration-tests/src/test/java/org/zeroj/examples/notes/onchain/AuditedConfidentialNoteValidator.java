@@ -65,6 +65,14 @@ import java.math.BigInteger;
  * under this payment credential; the continuing outputs read in output order; every coordinate
  * canonical. Its limits (no issuance control; proofs bound to commitments rather than outputs)
  * apply unchanged.
+ *
+ * <p><b>Address match.</b> Inputs are counted by payment credential, but continuing outputs are
+ * those at the spent note's <b>full</b> address (payment and stake credential). An output under
+ * this payment credential with another stake credential is not a continuing output: it is neither
+ * counted nor checked, and the spend is accepted. Like any output paid to the script, such a note
+ * is unproved issuance, which this validator does not control. An application defines and
+ * enforces its own address policy and authenticates its notes (ADR-0055 implementation note 12,
+ * M3).
  */
 @SpendingValidator
 public class AuditedConfidentialNoteValidator {
