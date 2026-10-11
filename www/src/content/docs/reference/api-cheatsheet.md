@@ -1,6 +1,6 @@
 ---
 title: API cheat sheet
-description: One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification and BBS.
+description: One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification, BBS, commitments and encryption.
 sidebar:
   order: 2
 ---
@@ -136,6 +136,35 @@ bind the proof to the transaction in your own validator.
 | `BbsPresentationCodec.encode(p)` · `decode(bytes)` | `BbsPresentationCodec` (`org.zeroj.bbs`) |
 | `new BbsPublicKey(bytes, BbsCiphersuite.BLS12381_SHA256)` · `pk.bytes()` | `BbsPublicKey` (`org.zeroj.bbs`) |
 | `BbsToCardano.verifierParams(pk, header, messageCount)` · `BbsToCardano.onChainProof(p)` | `BbsToCardano` (`org.zeroj.bbs.cardano`) |
+
+## Commitments & encryption
+
+New in 0.1.0-pre13; everything here is in `zeroj-circuit-lib`, in `org.zeroj.circuit.lib.jubjub`
+(host side) or `org.zeroj.circuit.lib.zk` (in circuits). Secret operations (creating commitments,
+encrypting, decrypting, sealing notes, DKG) are offline/isolated only. See
+[Commitments & encryption, explained](/learn/commitments-and-encryption/).
+
+| Call | Class (package) |
+|---|---|
+| `BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom())` · `JubjubPoint c = PedersenCommitment.commit(v, r)` | `PedersenCommitment`, `JubjubPoint` (`…lib.jubjub`) |
+| `PedersenCommitment.verify(c, v, r)` · `PedersenCommitment.decode(bytes)` (canonical + subgroup check; not `JubjubPoint.fromBytes`) | `PedersenCommitment` (`…lib.jubjub`) |
+| In a circuit: `ZkPedersen.commit(zk, value, blinding).assertAffineEquals(zk, u, v)` (blinding `@Secret @UInt(bits = 252)`) | `ZkPedersen` (`…lib.zk`) |
+| `ZkPedersenCommitment.commit(zk, value, blinding)` · `ZkPedersen.assertBalanced(zk, List.of(Term.of(in)), List.of(Term.of(out), Term.amount(fee)))` | `ZkPedersenCommitment`, `ZkPedersen.Term` (`…lib.zk`) |
+| `ZkPedersenVector.commit(zk, ZkPedersenVector.bindSchema(zk, schema, schemaDigest), values, blinding)` | `ZkPedersenVector` (`…lib.zk`), `PedersenVectorSchema` (`…lib.jubjub`) |
+| `ElGamal.encrypt(keyContext, m, width, rng)` · `ElGamal.encryptWithOpening(keyContext, m, width, rng)` (width 1–64) | `ElGamal`, `ElGamalCiphertext`, `ElGamalEncryption` (`…lib.jubjub`) |
+| `ElGamalCiphertext.sum(ciphertexts)` · `ct.add(other)` (bounds add up) | `ElGamalCiphertext` (`…lib.jubjub`) |
+| `ElGamal.admit(RawElGamalCiphertext.decode(bytes), keyContext, width, statement -> verifyEncryptionProof(…))` | `ElGamal`, `RawElGamalCiphertext` (`…lib.jubjub`) |
+| `ElGamal.decryptWithSecret(ct, secretKey, maxPlaintext, JubjubDiscreteLog.forBound(maxPlaintext))` | `ElGamal`, `JubjubDiscreteLog` (`…lib.jubjub`) |
+| `ElGamalPublicKey.aggregate(List.of(VerifiedKeyShare.verify(keyBytes, statement -> verifyPossessionProof(…))))` | `ElGamalPublicKey`, `VerifiedKeyShare`, `NOfNKeyContext` (`…lib.jubjub`) |
+| `ElGamal.decryptionShare(share, total)` · `VerifiedDecryptionShare.verify(…)` · `ElGamal.decrypt(total, verifiedShares, maxPlaintext)` | `ElGamal`, `VerifiedDecryptionShare` (`…lib.jubjub`) |
+| `DkgConfig.create(t, n, roster, appContext, attempt)` (any `t + 1` decrypt; `2t + 1 ≤ n ≤ 64`) | `DkgConfig` (`…lib.jubjub`) |
+| `DkgParticipant.create(config, id, rng)` → `start()`, `receiveBroadcast`, `receivePrivate`, `closeRound()`, `result()` | `DkgParticipant`, `ThresholdKeyShare` (`…lib.jubjub`) |
+| `ThresholdKeyContext.admit(config, transcript, roundClosure, confirmations, verifier)` (an outsider admits the joint key) | `ThresholdKeyContext` (`…lib.jubjub`) |
+| `DkgShareDelivery.start(participant, directory, keys, rng)` · `DkgShareDelivery.closeRound1(participant, directory, keys, finalWindow, verifier)` | `DkgShareDelivery`, `DkgKeyDirectory`, `DkgShareDeliveryKeys` (`…lib.jubjub`) |
+| `NoteViewingKey vk = NoteViewingKey.generate(rng)` · `vk.readerKey().encode()` (32 bytes to publish) | `NoteViewingKey`, `NoteReaderKey` (`…lib.jubjub`) |
+| `ConfidentialNotes.seal(NoteOpening.random(v, rng), List.of(ownerReaderKey, auditorReaderKey), rng)` (89 bytes per reader; `NoteReaderKey`s, owner first) | `ConfidentialNotes`, `NoteOpening` (`…lib.jubjub`) |
+| `NoteScanner.of(vk).open(delivery, u, v)` · `NoteScanner.of(vk).scan(candidates)` → `opened()`, `unopenableOwned()` | `NoteScanner` (`…lib.jubjub`) |
+| In a circuit: `ZkElGamal.encrypt(zk, amount, randomness, ZkElGamalPublicKey.fromVerifierFixedPublic(zk, pkU, pkV)).assertAffineEquals(zk, aU, aV, bU, bV)` | `ZkElGamal`, `ZkElGamalPublicKey` (`…lib.zk`) |
 
 ## PlonK (experimental)
 

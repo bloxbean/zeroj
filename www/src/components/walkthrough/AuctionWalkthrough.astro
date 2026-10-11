@@ -1,0 +1,431 @@
+---
+// Sealed-bid auction with enforced disclosure, step by step:
+//   open the lot -> sealed bids -> bidding closes -> settle with a proof -> payouts -> a cheat.
+// Values follow the zeroj-usecases demo (auction-data.ts). Ciphertexts and keys are illustrative
+// stand-ins (fakeHash), not curve points. Three views: Alice (a bidder), the auctioneer, the public.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { BIDDERS, BID_RANGE, DEPOSIT, ITEM, RESERVE, ada, bidOk, settle } from './auction-data';
+
+const auctioneerKey = fakeHash('auctioneer-pk');
+const s = settle(BIDDERS.map((b) => b.bid));
+const winner = s.kind === 'win' ? BIDDERS[s.winner] : undefined;
+const price = s.kind === 'win' ? s.price : 0;
+const cheat = s.kind === 'win' ? `${BIDDERS[s.cheat.bidder].name} wins at ${ada(s.cheat.price)}` : 'someone won';
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Sealed-bid auction, step by step">
+  <div class="zw zsb" data-total="6" data-view="bidder">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Sealed-bid auction · step <b data-counter>1 / 6</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="bidder" aria-pressed="true">Alice's view</button>
+          <button type="button" data-view-btn="auctioneer" aria-pressed="false">Auctioneer's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- bidders -->
+      <section class="zw-actor" data-hl="2" aria-label="Bidders">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Bidders</span>
+          <span class="zw-actor-sub">each knows only its own bid</span>
+        </div>
+        {BIDDERS.map((b, i) => (
+          <div class="zw-row zsb-bid" data-kind="secret" data-mine={i === 0 ? '' : undefined} data-bidder={i} data-show="2-6">
+            <span class="k">{b.name}'s bid</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real" data-bid-out={i}>{ada(b.bid)}</span><span class="mask">████████</span></span>
+            <span class={bidOk(b.bid) ? 'zw-check' : 'zw-check no'} data-bid-proof={i}>
+              {bidOk(b.bid) ? `proof: ${RESERVE} ≤ bid ≤ ${DEPOSIT}, sealed to the auctioneer` : 'no bid proof exists: refused'}
+            </span>
+          </div>
+        ))}
+        <p class="zw-note" data-show="1">Alice, Bob and Carol each have {ada(DEPOSIT)} ready for the deposit.</p>
+        <p class="zw-note" data-show="3-6">Nobody can withdraw a bid or refuse to reveal it: the auctioneer can already read it.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="2,5" aria-hidden="true">
+        <span class="arrow" data-show="2">→</span>
+        <span class="arrow" data-show="5">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">sealed bid + π + deposit</span>
+        <span class="zw-msg" data-show="5">payouts</span>
+      </div>
+
+      <!-- the lot on Cardano -->
+      <section class="zw-actor zsb-chain" data-hl="1,3,5" data-bad="6" aria-label="Lot on Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Lot on Cardano</span>
+          <span class="zw-actor-sub"><code>SealedBidAuction</code></span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">item · deposit · reserve</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap">{ITEM} · {ada(DEPOSIT)} · {ada(RESERVE)}</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">auctioneer key (from its registry)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{auctioneerKey}</span>
+        </div>
+        <div class="zw-box" data-show="2-4">
+          <span class="zw-box-title">Bids in the lot datum</span>
+          <ul class="zsb-list" data-lot-bids>
+            {BIDDERS.map((b, i) => (
+              <li data-lot-bid={i} hidden={!bidOk(b.bid)}>
+                <span>{b.name}</span><code data-ct={i}>{fakeHash(`bid:${b.id}:${b.bid}`)}</code>
+              </li>
+            ))}
+          </ul>
+          <span class="zw-note" data-locked>{ada(DEPOSIT * BIDDERS.filter((b) => bidOk(b.bid)).length)} of deposits locked</span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title">Settle redeemer</span>
+          <span class="zw-check" data-settle-check>
+            {winner ? `winner = ${winner.name}, price = ${ada(price)}: proof valid` : 'no bids: the seller takes the item back'}
+          </span>
+          <span class="zw-note">Only the winner and the price become public. Losing bids never do.</span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">Payouts, all checked by the validator</span>
+          <ul class="zsb-pay" data-payouts></ul>
+        </div>
+        <div class="zw-box" data-show="6">
+          <span class="zw-box-title">A dishonest settle</span>
+          <span class="zw-check no" data-cheat-check>no settlement proof exists: rejected</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1,4" data-bad="6" aria-hidden="true">
+        <span class="arrow" data-show="1">←</span>
+        <span class="arrow" data-show="4,6">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">public key</span>
+        <span class="zw-msg" data-show="4">w, p, π</span>
+        <span class="zw-msg" data-show="6">a false claim</span>
+      </div>
+
+      <!-- auctioneer -->
+      <section class="zw-actor" data-hl="1,4" data-bad="6" aria-label="Auctioneer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Auctioneer</span>
+          <span class="zw-actor-sub">reads every bid, can't fake the result</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">secret key</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{fakeHash('auctioneer-sk')}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-box" data-show="4-6">
+          <span class="zw-box-title">Decrypted, privately</span>
+          {BIDDERS.map((b, i) => (
+            <div class="zw-row" data-kind="secret" data-dec={i} hidden={!bidOk(b.bid)}>
+              <span class="k">{b.name}</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real" data-dec-out={i}>{ada(b.bid)}</span><span class="mask">████████</span></span>
+            </div>
+          ))}
+        </div>
+        <div class="zsb-proving" data-show="4" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Proving "the earliest highest bid wins"</span>
+        </div>
+        <div class="zw-proof" data-show="4-5">
+          <span class="pi">π</span><span>settlement proof</span><small>over every bid</small>
+        </div>
+        <div class="zw-box" data-show="6">
+          <span class="zw-box-title">Tries to claim</span>
+          <span class="zsb-claim" data-cheat-claim>{cheat}</span>
+          <span class="zw-check no">the decryptions say otherwise: no proof can be made</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zsb-try" data-when="insider">
+      <span class="zsb-try-title">Try other bids</span>
+      {BIDDERS.map((b, i) => (
+        <label class="zsb-slider">
+          <span>{b.name} <b data-slider-out={i}>{ada(b.bid)}</b></span>
+          <input
+            type="range"
+            min={BID_RANGE.min}
+            max={BID_RANGE.max}
+            step={BID_RANGE.step}
+            value={b.bid}
+            data-slider={i}
+            aria-label={`${b.name}'s bid in ADA`}
+          />
+        </label>
+      ))}
+      <span class="zw-note">Valid bids are {ada(RESERVE)} to {ada(DEPOSIT)}. Ties go to the earlier bid.</span>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Open the lot</p>
+        <p>The seller locks the {ITEM} in a lot on Cardano, with a deposit of {ada(DEPOSIT)} and a reserve of {ada(RESERVE)}. The lot names the auctioneer's public key, taken from the auctioneer's on-chain key registry.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Sealed bids</p>
+        <p>Each bidder encrypts its bid so that only the auctioneer's key opens it, proves the hidden bid is between the reserve and the deposit, and locks the {ada(DEPOSIT)} deposit. Drag a bid outside that range below: no proof exists, so the bid can't be placed.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Bidding closes</p>
+        <p>After the deadline the lot accepts no more bids. Everyone can see who bid and how many deposits are locked, but not one amount. Unlike commit-and-reveal, there's no reveal phase for a losing bidder to skip.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Settle with a proof</p>
+        <p>The auctioneer decrypts every bid privately and proves, over all the bids in the lot, that <span data-narr-winner>{winner ? `${winner.name}'s bid of ${ada(price)}` : 'no bid'}</span> is the earliest highest. Only the winner and the price are published.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Payouts</p>
+        <p>The validator checks every payout in the settle transaction: the seller gets the price, the winner gets the item and the rest of its deposit, and every other bidder gets its whole deposit back. If nobody settles in time, anyone can trigger a full refund.</p>
+      </div>
+      <div data-show="6">
+        <p class="zw-narr-title">6. A cheating auctioneer</p>
+        <p>The auctioneer can read the bids but can't change the result: a proof for any other winner or price doesn't exist. Copying another bidder's ciphertext fails too, because each bid proof is bound to its bidder's key.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Open</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Bid</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Close</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Settle</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Payouts</button></li>
+        <li><button type="button" data-goto="6"><span>6</span>Cheat</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> visible only in the views allowed to see it</span>
+      <span><em class="zw-tag public">PUBLIC</em> on-chain for anyone</span>
+      <span>Keys and ciphertexts are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { fakeHash, initWalkthrough } from './engine';
+  import { BIDDERS, DEPOSIT, ITEM, RESERVE, ada, bidOk, settle } from './auction-data';
+
+  document.querySelectorAll<HTMLElement>('.zsb').forEach((root) => {
+    initWalkthrough(root);
+    const bids = BIDDERS.map((b) => b.bid);
+    const q = (sel: string) => root.querySelector<HTMLElement>(sel);
+    const text = (sel: string, value: string) => {
+      const el = q(sel);
+      if (el) el.textContent = value;
+    };
+
+    const render = () => {
+      const s = settle(bids);
+      const accepted = bids.filter(bidOk).length;
+      bids.forEach((b, i) => {
+        const ok = bidOk(b);
+        text(`[data-bid-out="${i}"]`, ada(b));
+        text(`[data-slider-out="${i}"]`, ada(b));
+        text(`[data-dec-out="${i}"]`, ada(b));
+        text(`[data-ct="${i}"]`, fakeHash(`bid:${BIDDERS[i].id}:${b}`));
+        const proof = q(`[data-bid-proof="${i}"]`);
+        if (proof) {
+          proof.textContent = ok
+            ? `proof: ${RESERVE} ≤ bid ≤ ${DEPOSIT}, sealed to the auctioneer`
+            : `${ada(b)} is outside ${RESERVE}–${DEPOSIT}: no bid proof exists, refused`;
+          proof.classList.toggle('no', !ok);
+        }
+        q(`[data-bidder="${i}"]`)?.toggleAttribute('data-refused', !ok);
+        q(`[data-lot-bid="${i}"]`)?.toggleAttribute('hidden', !ok);
+        q(`[data-dec="${i}"]`)?.toggleAttribute('hidden', !ok);
+      });
+      text('[data-locked]', `${ada(DEPOSIT * accepted)} of deposits locked`);
+
+      const payouts = q('[data-payouts]');
+      if (s.kind === 'none') {
+        text('[data-settle-check]', 'no bids: the seller reclaims the item (NoBids)');
+        text('[data-narr-winner]', 'there is no bid, so nothing');
+        text('[data-cheat-claim]', 'someone won');
+        text('[data-cheat-check]', 'no bids to settle: only NoBids or Refund is possible');
+        if (payouts) payouts.innerHTML = '';
+        payouts?.append(li(`Seller: the ${ITEM} back`));
+        return;
+      }
+      const w = BIDDERS[s.winner];
+      text('[data-settle-check]', `winner = ${w.name}, price = ${ada(s.price)}: proof valid`);
+      text('[data-narr-winner]', `${w.name}'s bid of ${ada(s.price)}`);
+      const c = BIDDERS[s.cheat.bidder];
+      text('[data-cheat-claim]', `${c.name} wins at ${ada(s.cheat.price)}`);
+      text('[data-cheat-check]', `"${c.name} wins at ${ada(s.cheat.price)}": no settlement proof exists, rejected`);
+      if (payouts) {
+        payouts.innerHTML = '';
+        payouts.append(li(`Seller: ${ada(s.price)}`));
+        payouts.append(li(`${w.name}: the ${ITEM} + ${ada(DEPOSIT - s.price)} change`));
+        bids.forEach((b, i) => {
+          if (i !== s.winner && bidOk(b)) payouts.append(li(`${BIDDERS[i].name}: ${ada(DEPOSIT)} deposit back`));
+        });
+      }
+    };
+
+    function li(t: string) {
+      const el = document.createElement('li');
+      el.textContent = t;
+      return el;
+    }
+
+    root.querySelectorAll<HTMLInputElement>('[data-slider]').forEach((input) =>
+      input.addEventListener('input', () => {
+        bids[Number(input.dataset.slider)] = Number(input.value);
+        render();
+      }),
+    );
+    render();
+  });
+</script>
+
+<style>
+  /* Lane heads with a code-name subtitle: wrap the subtitle onto its own line, don't split it. */
+  .zsb .zw-actor-head {
+    flex-wrap: wrap;
+  }
+
+  /* Long proof captions: let the caption wrap under the label instead of leaving the lane. */
+  .zsb .zw-proof {
+    flex-wrap: wrap;
+  }
+
+  .zsb .zw-proof > span:not(.pi) {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  /* Alice's view: other bidders' secrets are masked, as in the public view. */
+  .zw[data-view='bidder'] [data-kind='secret']:not([data-mine]) :global(.real),
+  .zw[data-view='bidder'] [data-kind='secret']:not([data-mine]) > :global(.zw-tag .vis) {
+    display: none;
+  }
+
+  .zw[data-view='bidder'] [data-kind='secret']:not([data-mine]) :global(.mask),
+  .zw[data-view='bidder'] [data-kind='secret']:not([data-mine]) > :global(.zw-tag .hid) {
+    display: inline;
+  }
+
+  .zw[data-view='bidder'] [data-kind='secret']:not([data-mine]) :global(.mask) {
+    letter-spacing: -1px;
+    color: var(--zw-secret);
+    opacity: 0.6;
+  }
+
+  .zw[data-view='bidder'] [data-kind='secret']:not([data-mine]) > :global(.zw-tag) {
+    color: var(--zw-muted);
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--zw-line);
+  }
+
+  /* A refused bid stays visible to its bidder, struck through. */
+  .zsb-bid[data-refused] {
+    border-color: var(--zw-bad);
+  }
+
+  .zsb-bid .zw-check {
+    flex-basis: 100%;
+    margin-top: 0.2em;
+    font-size: 0.74em;
+  }
+
+  .zw[data-view='public'] .zsb-bid .zw-check,
+  .zw[data-view='bidder'] .zsb-bid:not([data-mine]) .zw-check {
+    display: none;
+  }
+
+  .zsb-list,
+  .zsb-pay {
+    display: grid;
+    gap: 0.2em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: 500 0.76em var(--zw-mono);
+  }
+
+  .zsb-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5em;
+    color: var(--zw-text-2);
+  }
+
+  .zsb-list code {
+    font-size: 1em;
+    color: var(--zw-public-ink);
+    background: none;
+  }
+
+  .zsb-pay :global(li)::before {
+    content: '→ ';
+    color: var(--zw-public);
+  }
+
+  .zsb-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zsb-claim {
+    font: 600 0.8em var(--zw-mono);
+    color: var(--zw-bad-ink);
+    text-decoration: line-through;
+  }
+
+  .zsb-try {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em 1.1em;
+    padding: 0.65em 1em;
+    border-top: 1px solid var(--zw-line);
+    background: var(--zw-panel);
+  }
+
+  .zsb-try-title {
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zsb-slider {
+    display: grid;
+    gap: 0.15em;
+    min-width: 9em;
+    flex: 1 1 9em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zsb-slider input {
+    width: 100%;
+    accent-color: var(--zw-secret);
+    cursor: pointer;
+  }
+
+  .zsb-try .zw-note {
+    flex-basis: 100%;
+  }
+</style>

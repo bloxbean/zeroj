@@ -1,0 +1,215 @@
+---
+// Exponential ElGamal on Jubjub, step by step: key -> encrypt -> add -> decrypt -> split the key.
+// Ciphertext values are illustrative stand-ins (fakeHash), not curve points.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { SENDERS, THRESHOLD, TRUSTEES, ctLabel, fmt } from './encryption-data';
+
+const total = SENDERS.reduce((s, x) => s + x.amount, 0);
+const pk = fakeHash('elgamal-pk');
+---
+
+<figure class="zw-frame not-content" aria-label="Encryption to a key, step by step">
+  <div class="zw zee" data-total="5" data-view="insider" data-quorum="0">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Encryption · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Key holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Everyone else</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <section class="zw-actor" data-hl="2,3" aria-label="Senders">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Senders</span>
+          <span class="zw-actor-sub">encrypt to the public key</span>
+        </div>
+        {SENDERS.map((s, i) => (
+          <div class="zw-row" data-kind="secret" data-show={i === 0 ? '2-5' : '3-5'}>
+            <span class="k">{s.name}'s amount</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{fmt(s.amount)}</span><span class="mask">████████</span></span>
+          </div>
+        ))}
+        <p class="zw-note" data-show="1">Anyone can encrypt with the public key. Only the secret key opens the result.</p>
+        <button type="button" class="zw-btn zee-again" data-again data-show="2">Encrypt again</button>
+      </section>
+
+      <div class="zw-wire" data-hl="2,3" aria-hidden="true">
+        <span class="arrow" data-show="2-3">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2-3">ciphertext</span>
+      </div>
+
+      <section class="zw-actor" data-hl="1,3" aria-label="The public ledger">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Public ledger</span>
+          <span class="zw-actor-sub">anyone can read it</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">public key PK</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{pk}</span>
+        </div>
+        {SENDERS.map((s, i) => (
+          <div class="zw-row" data-kind="public" data-show={i === 0 ? '2-5' : '3-5'}>
+            <span class="k">Enc({s.name}) = (A, B)</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-ct={i}>{ctLabel(s.amount, s.nonce)}</span>
+          </div>
+        ))}
+        <div class="zw-row zee-sum" data-kind="public" data-show="3-5">
+          <span class="k">sum of ciphertexts</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{ctLabel(total, SENDERS.reduce((s, x) => s + x.nonce, 0))}</span>
+        </div>
+        <p class="zw-note" data-show="3">Adding ciphertexts adds the amounts inside. Nobody had to decrypt anything.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="4,5" aria-hidden="true">
+        <span class="arrow" data-show="4-5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4-5">sum</span>
+      </div>
+
+      <section class="zw-actor zee-holder" data-hl="1,4,5" aria-label="Key holder">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name" data-show="1-4">Auditor</span>
+          <span class="zw-actor-name" data-show="5">Trustees</span>
+          <span class="zw-actor-sub" data-show="1-4">holds the secret key</span>
+          <span class="zw-actor-sub" data-show="5">each holds one share</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="1-4">
+          <span class="k">secret key sk</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{fakeHash('elgamal-sk')}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title">Decrypt the sum</span>
+          <span class="zw-check">B − sk·A = {fmt(total)}·G</span>
+          <span class="zw-check">look up {fmt(total)} in a table of small numbers</span>
+          <span class="zw-note">Only small amounts (up to 2³² here) can be looked up, so values are kept small or split into limbs.</span>
+        </div>
+        <div class="zw-box zee-trustees" data-show="5">
+          <span class="zw-box-title">Pick who takes part (need {THRESHOLD} of {TRUSTEES.length})</span>
+          <div class="zee-pick" role="group" aria-label="Participating trustees">
+            {TRUSTEES.map((t) => (
+              <button type="button" data-trustee={t} aria-pressed="false">{t}</button>
+            ))}
+          </div>
+          <span class="zw-check no" data-quorum-out>0 of {TRUSTEES.length}: not enough shares, nothing decrypts</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Key</p>
+        <p>An auditor makes a key pair and publishes the public key. Think of a lockbox with a slot: anyone can drop something in, only the auditor has the key.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Encrypt</p>
+        <p>Alice encrypts her amount to the auditor's public key and publishes the ciphertext. Each encryption uses fresh randomness, so encrypting the same amount twice gives unrelated ciphertexts. Press "Encrypt again".</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Add</p>
+        <p>Bob does the same. Because this is <em>exponential</em> ElGamal, adding two ciphertexts gives a ciphertext of the sum. A ledger can keep a running encrypted total that nobody can read.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Decrypt</p>
+        <p>The auditor uses the secret key to recover the total. Decryption ends in a lookup, which is why encrypted amounts must be small numbers, such as votes or 32-bit limbs.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Split the key</p>
+        <p>To stop any one party reading the ciphertexts, trustees run a distributed key generation: nobody ever holds the whole secret key. Decrypting needs {THRESHOLD} of {TRUSTEES.length} trustees to cooperate. Pick trustees to try it.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Key</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Encrypt</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Add</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Decrypt</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Split the key</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> only its owner knows it</span>
+      <span><em class="zw-tag public">PUBLIC</em> anyone can see it</span>
+      <span>Key and ciphertext values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { SENDERS, THRESHOLD, TRUSTEES, ctLabel, fmt } from './encryption-data';
+
+  const total = SENDERS.reduce((s, x) => s + x.amount, 0);
+
+  document.querySelectorAll<HTMLElement>('.zee').forEach((root) => {
+    initWalkthrough(root);
+    const picked = new Set<string>();
+    const out = root.querySelector<HTMLElement>('[data-quorum-out]');
+
+    root.querySelectorAll<HTMLButtonElement>('[data-trustee]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const t = b.dataset.trustee ?? '';
+        if (picked.has(t)) picked.delete(t);
+        else picked.add(t);
+        b.setAttribute('aria-pressed', String(picked.has(t)));
+        const ok = picked.size >= THRESHOLD;
+        root.dataset.quorum = ok ? '1' : '0';
+        if (out) {
+          out.textContent = ok
+            ? `${picked.size} of ${TRUSTEES.length}: shares combine, the total is ${fmt(total)}`
+            : `${picked.size} of ${TRUSTEES.length}: not enough shares, nothing decrypts`;
+          out.classList.toggle('no', !ok);
+        }
+      }),
+    );
+
+    let nonce = 0;
+    root.querySelector('[data-again]')?.addEventListener('click', () => {
+      nonce += 1;
+      const el = root.querySelector('[data-ct="0"]');
+      if (el) el.textContent = ctLabel(SENDERS[0].amount, SENDERS[0].nonce + nonce * 7919);
+    });
+  });
+</script>
+
+<style>
+  .zee-again {
+    justify-self: start;
+    font-size: 0.78em;
+  }
+
+  .zee-sum .v {
+    color: var(--zw-public-ink);
+  }
+
+  .zee-pick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+  }
+
+  .zee-pick button {
+    padding: 0.3em 0.75em;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 999px;
+  }
+
+  .zee-pick button[aria-pressed='true'] {
+    color: var(--zw-secret);
+    border-color: var(--zw-secret);
+  }
+</style>

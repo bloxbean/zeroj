@@ -1,0 +1,224 @@
+---
+title: Confidential payroll
+description: Pay salaries on Cardano without publishing them, while the tax authority reads every salary from the chain and the employer can't under-report one.
+sidebar:
+  order: 11
+---
+
+import SinceNotice from '../../../components/SinceNotice.astro';
+import PayrollWalkthrough from '../../../components/walkthrough/PayrollWalkthrough.astro';
+
+Paying salaries on a public ledger is fast and cheap, but it publishes everyone's pay to everyone:
+colleagues, competitors and anyone curious. Hiding the amounts fixes that, and creates a new
+problem. The tax authority, and often an auditor or a regulator, must still see every salary, and
+they shouldn't have to take the employer's word for it. An employer that reports a smaller number
+than it paid shouldn't be able to.
+
+This demo pays salaries as **confidential notes**: the chain stores the amount sealed, the employee
+can open their own payslip, and the tax authority can read every salary. A zero-knowledge proof
+makes the tax authority's copy match the real amount.
+
+<SinceNotice since="0.1.0-pre13" />
+
+<PayrollWalkthrough />
+
+## The zero-knowledge idea
+
+**With each pay run the employer proves "every salary note I'm creating hides some amount, and the
+copy of that amount encrypted to the tax authority's registered key is the same amount", without
+revealing any salary.**
+
+A salary note has three parts:
+
+- **A commitment.** A Pedersen commitment is a single curve point that hides a number, like a sealed
+  envelope. Everyone can see it, nobody can read it, and nobody can later claim it held a different
+  number. See [Commitments & encryption](/learn/commitments-and-encryption/).
+- **The amount for the tax authority.** The amount is encrypted with exponential ElGamal to the tax
+  authority's public key. Decrypting ElGamal ends in a search over small numbers, so the 64-bit
+  amount is split into two 32-bit pieces, called **limbs**: `amount = limb0 + 2³²·limb1`. Each limb
+  is encrypted separately.
+- **Sealed openings.** The opening is the amount plus the random blinding that hides it. It is
+  encrypted once for the employee and once for the tax authority. Each reader decrypts their copy
+  with a **viewing key**, a key that only reads notes and can't spend them.
+
+The proof ties the first two together. Without it, an employer could commit to 5,000 and encrypt
+3,000 for the tax authority. With it, the ledger refuses to mint a salary note unless the limbs
+recombine to the committed amount. The openings are a convenience for readers: anyone who opens one
+checks it against the commitment, so a wrong opening is detected, not trusted.
+
+## What stays private, what's public
+
+| Value | Employer | Employee | Tax authority | Public |
+|---|---|---|---|---|
+| Each salary amount | Knows it | Their own, from their payslip | Every one, from the limbs | Hidden |
+| Blinding (the random part of the commitment) | Knows it | Their own, from their payslip | From its copy of the opening | Hidden |
+| Employee's viewing key | No | Yes | No | No |
+| Tax authority's secret key | No | No | Yes | No |
+| Note owner (the employee's key hash) | Yes | Yes | Yes | **Public** |
+| Commitment, limb ciphertexts, sealed openings | Yes | Yes | Yes | **Public**, but unreadable |
+| Issuance proof | Yes | Yes | Yes | **Public** |
+| Tax authority's public key | Yes | Yes | Yes | **Public**, in the registry |
+
+Owners are public in this demo, so the transfer graph (who paid whom) is visible. The amounts are
+not.
+
+## How it works
+
+1. **Register the tax key.** The tax authority publishes its keys in an on-chain registry, with
+   zero-knowledge proofs that it holds the matching secret keys. The payroll ledger reads the key
+   from the registry, so the employer can't substitute one it controls.
+2. **Pay run.** The employer builds one note per salary, one or two salaries per transaction, and
+   proves the limb relation for each. The ledger validator verifies the proof against the
+   commitments and limbs in the new notes' datums and the key in the registry.
+3. **Payslips.** Each employee scans the chain with their viewing key, opens their note and checks
+   that the opening recomputes the commitment. A note that is theirs but won't open is reported, not
+   ignored.
+4. **Spend.** An employee can transfer part of a salary to a colleague, or cash out at the employer
+   for a public amount. Both are proved: the amounts balance, and every new note's limbs are
+   encrypted to the current tax key.
+5. **Tax view.** The tax authority decrypts the limbs of every note in the ledger's mint history,
+   including notes already spent, and totals them per employee. Each amount is
+   **proof-enforced**.
+
+## The circuit
+
+This is the demo's `NoteIssueProof` simplified to a single salary. The demo version handles one or
+two notes per pay run with `@CircuitParam` arrays, and keeps the limb relation in a shared
+`AuditLimbs` helper.
+
+```java title="SalaryNoteProof.java"
+import org.zeroj.circuit.annotation.*;
+import org.zeroj.circuit.lib.zk.ZkElGamal;
+import org.zeroj.circuit.lib.zk.ZkElGamalPublicKey;
+import org.zeroj.circuit.lib.zk.ZkPedersenCommitment;
+
+import java.math.BigInteger;
+
+@ZKCircuit(name = "salary-note", version = 1)
+public class SalaryNoteProof {
+    private static final BigInteger TWO_32 = BigInteger.ONE.shiftLeft(32);
+
+    @Prove
+    void prove(ZkContext zk,
+               @Public ZkField noteU, @Public ZkField noteV,   // the note's commitment
+               @Public ZkField pkU, @Public ZkField pkV,       // the tax key, from the registry
+               @Public @FixedSize(8) ZkArray<ZkField> audit,  // limb 0 then limb 1: A.u, A.v, B.u, B.v
+               @Secret @UInt(bits = 64) ZkUInt amount,
+               @Secret @UInt(bits = 252) ZkUInt blinding,
+               @Secret @UInt(bits = 32) ZkUInt limb0,
+               @Secret @UInt(bits = 32) ZkUInt limb1,
+               @Secret @UInt(bits = 252) ZkUInt k0,
+               @Secret @UInt(bits = 252) ZkUInt k1) {
+        // The note's commitment opens to (amount, blinding)
+        ZkPedersenCommitment.commit(zk, amount, blinding).assertAffineEquals(zk, noteU, noteV);
+
+        // The two 32-bit limbs recombine to the same amount
+        limb0.asField().add(limb1.asField().mul(zk.constant(TWO_32))).assertEqual(amount.asField());
+
+        // Each limb is an ElGamal encryption to the tax key, matching the public ciphertexts
+        var taxKey = ZkElGamalPublicKey.fromVerifierFixedPublic(zk, pkU, pkV);
+        ZkElGamal.encrypt(zk, limb0, k0, taxKey)
+                .assertAffineEquals(zk, audit.get(0), audit.get(1), audit.get(2), audit.get(3));
+        ZkElGamal.encrypt(zk, limb1, k1, taxKey)
+                .assertAffineEquals(zk, audit.get(4), audit.get(5), audit.get(6), audit.get(7));
+    }
+}
+```
+
+Every public input comes from data the validator can see: the commitment and the limbs from the new
+note's datum, and the key from the registry entry. The blinding is a full 252-bit secret, and each
+limb uses its own fresh 252-bit randomness, as the ElGamal profile requires.
+
+The demo's transfer proof (`note-transfer`) adds the balance rule, input = output 1 + output 2, with
+`ZkPedersen.assertBalanced`, and the same limb relation for both new notes.
+
+## On Cardano
+
+The demo deploys one `NoteLedger` multi-validator for payroll, with token `SAL` and proved issuance
+switched on. In this mode the plain `Issue` redeemer is refused, so `SAL` can't be minted without
+a proof. A `ProvedIssue` must:
+
+- carry a `NoteIssueProof` that verifies over the new notes' commitments, the registry key and their
+  limbs, taken from the transaction itself;
+- use pairwise-distinct handles `A` across every limb ciphertext in the transaction, which catches
+  exact reuse of encryption randomness within the transaction (reused randomness would reveal the
+  difference between two limbs);
+- place each note at the ledger's exact address, with the exact datum shape and exactly one token;
+- be signed by the employer.
+
+Transfers and cash-outs use the same ledger's `Transfer` and `Redeem` paths, also proved, and require
+the note owner's signature.
+
+| Transaction (demo) | Circuit size | Script budget (steps) | Fee |
+|---|---|---|---|
+| Pay run, one salary | 15,890 constraints | 50.5% (JuLC VM) | — |
+| Pay run, two salaries | 31,773 constraints | 71.3% (Yaci DevKit) | 1.111 ADA |
+| Transfer | 34,184 constraints | 75.8% (Yaci DevKit) | 1.163 ADA |
+| Cash-out | 18,366 constraints | 57.8% (Yaci DevKit) | 0.984 ADA |
+
+Budgets are shares of the per-transaction step limit, from zeroj-usecases ADR-0007 (r3). Fees were
+measured on Yaci DevKit with mainnet protocol parameters after the demo's fee optimization (commit
+`814b2f0`). The demo is pinned to a ZeroJ snapshot from before ZeroJ PRs #85 and #86, which lowered
+the cost of the on-chain Groth16 verifier, so current ZeroJ should come in somewhat lower.
+
+A valid proof is not authorization. The ledger also checks the employer's signature, the owner's
+signature on spends, the registry reference input and the exact output shape. See
+[Application security](/guides/verifying/application-security/).
+
+## Security considerations
+
+- **Supply is still trusted.** The proof stops the employer under-reporting what it pays. It doesn't
+  stop the employer paying salaries that don't exist, or paying nobody. Payroll truth outside the
+  chain is still the employer's.
+- **Openings are only length-checked on-chain.** A validator can't decrypt a sealed opening, so a
+  garbage payslip is accepted. The employee sees an unopenable note, and should treat that as
+  evidence against the sender. The tax authority's amount comes from the proved limbs, so it is
+  unaffected.
+- **The tax key is trusted for confidentiality.** Whoever holds the tax authority's secret key reads
+  every salary, past and future. Key rotation stops new notes using a retired key, but doesn't hide
+  old ones.
+- **Demo custody.** The demo server holds every wallet's spending and viewing keys and the tax
+  authority's secrets, and scans the chain for everyone. A real deployment scans inside each user's
+  own wallet and never ships viewing keys to a server.
+- **Unreviewed assumptions.** The confidential-note profile's assumptions A1–A3 (ZeroJ ADR-0055)
+  and the demo's protocol haven't had external review.
+- **Trusted setup.** The demo uses a single-party development setup, so whoever ran it could forge
+  proofs. Production keys need a multi-party ceremony
+  ([Trusted setup, explained](/learn/trusted-setup/)).
+- **Not audited.** This is a blueprint of a protocol pattern, not a production payroll system.
+
+## Try it
+
+:::note[The demo isn't merged yet]
+The payroll demo is in zeroj-usecases
+[PR #9](https://github.com/bloxbean/zeroj-usecases/pull/9), which is still open. Until it is merged,
+use the branch
+[`feat/confidential-notes-m3`](https://github.com/bloxbean/zeroj-usecases/tree/feat/confidential-notes-m3/pedersen-commitments).
+It builds against a ZeroJ development snapshot.
+:::
+
+With Yaci DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)) and Java 25:
+
+```bash
+git clone -b feat/confidential-notes-m3 https://github.com/bloxbean/zeroj-usecases
+cd zeroj-usecases
+./gradlew -p pedersen-commitments bootRun -PwithFrontend
+# open http://localhost:8093 and choose "Confidential payroll"
+```
+
+The first start runs development setups for every circuit and takes several minutes; later starts
+reuse the cached keys. In the payroll tab, pay a salary, open payslips, transfer and cash out, and
+watch the tax authority's table fill in. Then try the cheats: under-report a salary (no proof
+exists), send a garbage payslip (unopenable for the employee, still readable by the tax authority)
+and use the tax authority's key after a rotation (refused).
+
+## Related
+
+- [Commitments & encryption, explained](/learn/commitments-and-encryption/)
+- [Choose how to disclose](/selective-disclosure/): payroll is one point on the map
+- [Share with chosen readers](/selective-disclosure/share-with-chosen-readers/) and
+  [Encrypt for an auditor](/selective-disclosure/encrypt-for-an-auditor/)
+- [Confidential notes guide](/guides/confidential/confidential-notes/) and
+  [ElGamal guide](/guides/confidential/elgamal/)
+- [Confidential loyalty points](/use-cases/confidential-points/): the same ledger with *trusted*
+  issuance, where the under-report succeeds and is only flagged

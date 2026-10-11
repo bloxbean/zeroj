@@ -67,10 +67,13 @@ Numbers ZeroJ has measured and published (they depend on hardware and JVM):
 | Groth16 VK, compressed, one public input | 432 bytes |
 | Off-chain verification in the JVM | about 115 ms (113–119 ms across runs) |
 | Proving circuits of about 10k–74k constraints | about 2.9–4.6 s median |
-| On-chain verification, generic verifier, one public input (JuLC VM, full `ScriptContext`) | 2,627,770,348 CPU steps, 177,749 memory units |
+| On-chain verification, generic verifier, one public input (JuLC VM, full `ScriptContext`) | 2,052,276,435 CPU steps, 138,837 memory units |
 
-The proving, off-chain verification and on-chain figures come from the Poseidon MPF/JMT
-benchmarks. Each extra public input adds about 0.2 billion CPU steps on-chain, and your
+The proving and off-chain verification figures come from the Poseidon MPF/JMT benchmarks; the
+on-chain figure was re-measured at commit `6a89f8a` (JuLC 0.1.0-pre18) with the same
+`PoseidonMpfCardanoArtifactTest` bundles, after the
+verifier started decompressing each point once
+([ADR-0056](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0056-groth16-onchain-ic-single-decompression.md)). Each extra public input adds about 0.14 billion CPU steps on-chain, and your
 validator's own checks add more; see
 [Verify proofs on Cardano](/guides/verifying/on-chain/#budgets-and-script-size). Circuits with
 millions of constraints can be proved within commodity memory using the store-backed keys; see
@@ -193,7 +196,7 @@ ZeroJ's interop tests pin snarkjs 0.7.6. See [Bring circom & snarkjs circuits](/
 
 - Measure first: run the validator in the JuLC VM, and use `ScriptBudgetEstimator` for rough
   numbers (it counts only the BLS12-381 builtins, so real validators cost more). The generic
-  one-input Groth16 verifier measured about 2.63 billion CPU steps.
+  one-input Groth16 verifier measured about 2.05 billion CPU steps.
 - Each public input costs an extra scalar multiplication on-chain. Keep the count low.
 - Keep other heavy logic out of the same script execution, and compare with the network's
   *current* protocol parameters.

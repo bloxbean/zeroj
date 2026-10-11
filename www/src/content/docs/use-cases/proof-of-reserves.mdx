@@ -69,6 +69,14 @@ custodian (private)                  public
 customer: my leaf + Merkle path ───▶ hashes up to liabilitiesRoot? ✓
 ```
 
+:::tip[Hide the total too]
+This design publishes `totalLiabilities`. If the total is sensitive as well,
+[Proof of solvency with hidden balances](/use-cases/private-solvency/) commits to each balance with
+a Pedersen commitment, proves the hidden total fits under reserves locked for an attestation period,
+and lets each customer open their own entry from an encrypted on-chain delivery. An auditor opens
+only the total.
+:::
+
 ## The circuit
 
 This is simplified from the demo's `SolvencyProof`: constructor validation is trimmed, and the demo
@@ -190,3 +198,5 @@ Design notes:
 - [Verify your proof on Cardano](/tutorials/verify-on-cardano/): lock and unlock with a proof on
   Yaci DevKit
 - [Performance](/guides/proving/performance/): sizing larger circuits
+- [Proof of solvency with hidden balances](/use-cases/private-solvency/): the same question with
+  Pedersen commitments, hiding the total as well

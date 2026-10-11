@@ -1,0 +1,334 @@
+---
+// One salary, disclosed six ways: for each option, what Carol, a landlord (a verifier), the tax
+// authority and everyone else learn. A "help me choose" question tree picks an option.
+// Data and wording live in disclosure-options-data.ts.
+import './walkthrough.css';
+import { OPTIONS, QUESTIONS, SALARY, THRESHOLD } from './disclosure-options-data';
+
+const lanes = [
+  { key: 'carol', name: 'Carol', sub: 'the employee' },
+  { key: 'landlord', name: 'Landlord', sub: `asks "earns at least ${THRESHOLD.toLocaleString('en-US')}?"` },
+  { key: 'tax', name: 'Tax authority', sub: 'an auditor' },
+  { key: 'everyone', name: 'Everyone else', sub: 'the public chain' },
+] as const;
+const tagText = { value: 'SEES IT', proof: 'PROVEN', sealed: 'SEALED', none: 'NOTHING' };
+const first = OPTIONS[0];
+---
+
+<figure class="zw-frame zdo not-content" aria-label="One salary, six ways to disclose it">
+  <div class="zdo-head">
+    <span class="zw-eyebrow">One salary, six ways · Carol earns {SALARY.toLocaleString('en-US')} a month</span>
+    <button type="button" class="zw-btn" data-choose-toggle aria-expanded="false">Help me choose</button>
+  </div>
+
+  <div class="zdo-quiz" data-quiz hidden>
+    {QUESTIONS.map((q, i) => (
+      <div class="zdo-q" data-q={q.id} hidden={i !== 0}>
+        <p class="zdo-q-text">{q.text}</p>
+        <div class="zdo-q-choices">
+          {q.choices.map((c) => (
+            <button type="button" class="zw-btn" data-next={c.next} data-pick={c.pick}>{c.text}</button>
+          ))}
+        </div>
+      </div>
+    ))}
+    <p class="zdo-q-result" data-result hidden></p>
+    <button type="button" class="zdo-restart" data-restart hidden>Start again</button>
+  </div>
+
+  <div class="zw-modes zdo-tabs" role="tablist" aria-label="Disclosure options">
+    {OPTIONS.map((o, i) => (
+      <button
+        type="button"
+        role="tab"
+        id={`zdo-tab-${o.id}`}
+        aria-controls="zdo-panel"
+        aria-selected={i === 0 ? 'true' : 'false'}
+        tabindex={i === 0 ? 0 : -1}
+        data-option={o.id}
+      >
+        {o.label}<small>{o.tech}</small>
+      </button>
+    ))}
+  </div>
+
+  <div class="zdo-panel" id="zdo-panel" role="tabpanel" aria-labelledby={`zdo-tab-${first.id}`}>
+    <p class="zdo-summary" data-summary>{first.summary}</p>
+    <div class="zdo-lanes">
+      {lanes.map((l) => (
+        <section class="zw-actor zdo-lane" data-lane={l.key} data-kind={first[l.key].kind} aria-label={l.name}>
+          <div class="zw-actor-head">
+            <span class="zw-actor-name">{l.name}</span>
+            <span class="zw-actor-sub">{l.sub}</span>
+          </div>
+          <em class="zw-tag zdo-tag" data-tag>{tagText[first[l.key].kind]}</em>
+          <span class="zdo-seen" data-seen>{first[l.key].text}</span>
+        </section>
+      ))}
+    </div>
+    <dl class="zdo-facts">
+      <div><dt>Needs</dt><dd data-needs>{first.needs}</dd></div>
+      <div><dt>On Cardano</dt><dd data-onchain>{first.onchain}</dd></div>
+      <div><dt>Maturity</dt><dd data-maturity>{first.maturity}</dd></div>
+    </dl>
+    <a class="zdo-more" data-href href={first.href}>How to use it <span aria-hidden="true">→</span></a>
+  </div>
+
+  <div class="zw-legend">
+    <span><em class="zw-tag public">SEES IT</em> learns the salary</span>
+    <span><em class="zw-tag zdo-proof">PROVEN</em> learns only a checked fact</span>
+    <span><em class="zw-tag secret">SEALED</em> sees a commitment or ciphertext</span>
+  </div>
+</figure>
+
+<script>
+  import { OPTIONS } from './disclosure-options-data';
+
+  const TAG = { value: 'SEES IT', proof: 'PROVEN', sealed: 'SEALED', none: 'NOTHING' } as const;
+
+  document.querySelectorAll<HTMLElement>('.zdo').forEach((root) => {
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-option]')];
+    const panel = root.querySelector<HTMLElement>('.zdo-panel');
+    const set = (sel: string, text: string) => {
+      const el = root.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+
+    const select = (id: string, focus = false) => {
+      const o = OPTIONS.find((x) => x.id === id);
+      if (!o) return;
+      tabs.forEach((t) => {
+        const on = t.dataset.option === id;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        if (on && focus) t.focus();
+      });
+      panel?.setAttribute('aria-labelledby', `zdo-tab-${id}`);
+      set('[data-summary]', o.summary);
+      set('[data-needs]', o.needs);
+      set('[data-onchain]', o.onchain);
+      set('[data-maturity]', o.maturity);
+      const more = root.querySelector<HTMLAnchorElement>('[data-href]');
+      if (more) more.href = o.href;
+      root.querySelectorAll<HTMLElement>('[data-lane]').forEach((lane) => {
+        const seen = o[lane.dataset.lane as 'carol' | 'landlord' | 'tax' | 'everyone'];
+        lane.dataset.kind = seen.kind;
+        const tag = lane.querySelector('[data-tag]');
+        if (tag) tag.textContent = TAG[seen.kind];
+        const text = lane.querySelector('[data-seen]');
+        if (text) text.textContent = seen.text;
+      });
+    };
+
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(t.dataset.option ?? ''));
+      t.addEventListener('keydown', (e) => {
+        const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        select(tabs[(i + step + tabs.length) % tabs.length].dataset.option ?? '', true);
+      });
+    });
+
+    // Help me choose
+    const quiz = root.querySelector<HTMLElement>('[data-quiz]');
+    const toggle = root.querySelector<HTMLButtonElement>('[data-choose-toggle]');
+    const result = root.querySelector<HTMLElement>('[data-result]');
+    const restart = root.querySelector<HTMLButtonElement>('[data-restart]');
+    const showQuestion = (id: string | null) => {
+      root.querySelectorAll<HTMLElement>('[data-q]').forEach((q) => (q.hidden = q.dataset.q !== id));
+    };
+    const reset = () => {
+      showQuestion('exact');
+      if (result) result.hidden = true;
+      if (restart) restart.hidden = true;
+    };
+    toggle?.addEventListener('click', () => {
+      if (!quiz) return;
+      quiz.hidden = !quiz.hidden;
+      toggle.setAttribute('aria-expanded', String(!quiz.hidden));
+      if (!quiz.hidden) reset();
+    });
+    root.querySelectorAll<HTMLButtonElement>('.zdo-q-choices button').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (b.dataset.next) return showQuestion(b.dataset.next);
+        const o = OPTIONS.find((x) => x.id === b.dataset.pick);
+        if (!o) return;
+        showQuestion(null);
+        select(o.id);
+        if (result) {
+          result.hidden = false;
+          result.textContent = `Start with "${o.label}" (${o.tech}). It's selected below.`;
+        }
+        if (restart) restart.hidden = false;
+      }),
+    );
+    restart?.addEventListener('click', reset);
+  });
+</script>
+
+<style>
+  .zdo-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em 1em;
+    padding: 0.75em 1em;
+    background: var(--zw-panel);
+    border-bottom: 1px solid var(--zw-line);
+  }
+
+  .zdo-quiz {
+    display: grid;
+    gap: 0.6em;
+    padding: 0.85em 1em;
+    border-bottom: 1px solid var(--zw-line);
+  }
+
+  .zdo-q-text {
+    margin: 0 0 0.5em;
+    font-weight: 600;
+  }
+
+  .zdo-q-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+  }
+
+  .zdo-q-result {
+    margin: 0;
+    color: var(--zw-public-ink);
+    font-weight: 600;
+  }
+
+  .zdo-restart {
+    justify-self: start;
+    padding: 0;
+    font-size: 0.8em;
+    color: var(--zw-muted);
+    text-decoration: underline;
+    background: none;
+    border: 0;
+  }
+
+  .zdo-tabs button {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .zdo-panel {
+    display: grid;
+    gap: 0.9em;
+    padding: 1em;
+  }
+
+  .zdo-summary {
+    margin: 0;
+    color: var(--zw-text-2);
+  }
+
+  .zdo-lanes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6em;
+  }
+
+  @container (max-width: 640px) {
+    .zdo-lanes {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @container (max-width: 380px) {
+    .zdo-lanes {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .zdo-lane {
+    align-content: start;
+  }
+
+  .zdo-tag {
+    justify-self: start;
+    align-self: flex-start;
+    width: fit-content;
+  }
+
+  .zdo-seen {
+    font-size: 0.85em;
+    overflow-wrap: anywhere;
+  }
+
+  .zdo-lane[data-kind='value'] .zdo-tag {
+    color: var(--zw-public);
+    background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+  }
+
+  .zdo-lane[data-kind='value'] {
+    border-color: var(--zw-public);
+  }
+
+  .zdo-lane[data-kind='sealed'] .zdo-tag {
+    color: var(--zw-secret);
+    background: color-mix(in srgb, var(--zw-secret) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-secret) 40%, transparent);
+  }
+
+  .zdo-lane[data-kind='proof'] .zdo-tag,
+  .zdo-proof {
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border: 1px solid color-mix(in srgb, var(--zw-warn-ink) 40%, transparent);
+  }
+
+  .zdo-lane[data-kind='none'] {
+    opacity: 0.6;
+  }
+
+  .zdo-lane[data-kind='none'] .zdo-tag {
+    color: var(--zw-muted);
+    border: 1px dashed var(--zw-line);
+  }
+
+  .zdo-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6em;
+    margin: 0;
+  }
+
+  @container (max-width: 480px) {
+    .zdo-facts {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .zdo-facts dt {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--zw-muted);
+  }
+
+  .zdo-facts dd {
+    margin: 0.15em 0 0;
+    font-size: 0.85em;
+  }
+
+  .zdo-more {
+    justify-self: start;
+    font-weight: 600;
+    color: var(--zw-public-ink);
+    text-decoration: none;
+  }
+
+  .zdo-more:hover {
+    text-decoration: underline;
+  }
+</style>

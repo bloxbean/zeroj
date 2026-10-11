@@ -75,6 +75,26 @@ function readRelease() {
   return release;
 }
 
+// Orders release versions such as 0.1.0-pre12 < 0.1.0-pre13 < 0.1.0. A pre-release sorts before
+// the plain release of the same x.y.z.
+export function compareVersions(a, b) {
+  const parse = (v) => {
+    const [core, pre] = v.split('-');
+    const pr = pre?.match(/^pre(\d+)$/);
+    return [...core.split('.').map(Number), pre ? (pr ? Number(pr[1]) : 0) : Infinity];
+  };
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i < 4; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+  return 0;
+}
+
+// True when the published release (release.json, and only once it is on Maven Central) contains
+// features first shipped in `since`. Pages use it through <SinceNotice since="…" />.
+export function releasedSince(since) {
+  return ZEROJ_RELEASED && compareVersions(ZEROJ_VERSION, since) >= 0;
+}
+
 export const VERSION_TOKENS = {
   '%ZEROJ_VERSION%': ZEROJ_VERSION,
   '%JULC_VERSION%': JULC_VERSION,

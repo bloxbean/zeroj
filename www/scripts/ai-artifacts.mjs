@@ -27,6 +27,7 @@ import {
   ZEROJ_DEV_VERSION,
   ZEROJ_RELEASED,
   ZEROJ_VERSION,
+  releasedSince,
   replaceVersionTokens,
   sourceRevision,
 } from '../site.config.mjs';
@@ -37,10 +38,12 @@ export const SECTIONS = [
   { dir: 'start', title: 'Start here' },
   { dir: 'learn', title: 'Learn zero-knowledge (concepts)' },
   { dir: 'tutorials', title: 'Tutorials' },
+  { dir: 'selective-disclosure', title: 'Selective disclosure: what to use when' },
   { dir: 'guides/circuits', title: 'Guides: circuits' },
   { dir: 'guides/proving', title: 'Guides: proving' },
   { dir: 'guides/verifying', title: 'Guides: verifying' },
   { dir: 'guides/credentials', title: 'Guides: credentials & state' },
+  { dir: 'guides/confidential', title: 'Guides: commitments & encryption' },
   { dir: 'use-cases', title: 'Use cases' },
   { dir: 'reference', title: 'Reference' },
   { dir: 'ai', title: 'Build with AI' },
@@ -190,6 +193,11 @@ export function toPlainMarkdown(body, { mdx }) {
         ZEROJ_RELEASED
           ? ''
           : `> **Caution:** ZeroJ ${ZEROJ_VERSION} isn't on Maven Central yet, so these snippets won't resolve until it's published. Build from source with \`./gradlew publishToMavenLocal\` meanwhile (local versions are \`${ZEROJ_VERSION}-<commit>-SNAPSHOT\`).`,
+      )
+      .replace(/<SinceNotice\s+since="([^"]+)"\s*\/>/g, (_, since) =>
+        releasedSince(since)
+          ? ''
+          : `> **Note:** the APIs on this page are new in ZeroJ ${since} and not in a release on Maven Central yet (the latest is ${ZEROJ_VERSION}). Use a development snapshot (\`${since}-<commit>-SNAPSHOT\`) from https://repo.bloxbean.org/maven/snapshots to try them.`,
       )
       .replace(/<\/?(Steps|Tabs|CardGrid|FileTree|Card|TabItem|Aside)(\s[^>]*)?>/g, '');
   }

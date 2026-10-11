@@ -1,0 +1,445 @@
+---
+// Confidential loyalty points with an auditor, step by step:
+//   register auditor -> issue -> transfer -> redeem -> wallets recover from chain -> auditor view.
+// Values follow the pedersen-commitments demo's points tab (points-data.ts). Two cheat toggles
+// switch the run: a garbage owner delivery on bob's transfer note, and an issuer that under-reports
+// the issuance to the auditor. Commitments are illustrative stand-ins (fakeHash).
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { ISSUED, NOTES, PRICE, TRANSFERRED, UNDER_REPORTED, commitment, pts } from './points-data';
+
+const [, , n3, n4] = NOTES;
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Confidential loyalty points, step by step">
+  <div class="zw zcp" data-total="6" data-view="insider" data-garbage="0" data-under="0">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Points · step <b data-counter>1 / 6</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Alice &amp; Bob</button>
+          <button type="button" data-view-btn="auditor" aria-pressed="false">Auditor</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zcp-cheats" role="group" aria-label="Try to cheat">
+      <span class="zcp-cheats-title">Try to cheat</span>
+      <label><input type="checkbox" data-cheat="garbage" /> Alice sends Bob a garbage delivery</label>
+      <label><input type="checkbox" data-cheat="under" /> Retailer tells the auditor {pts(UNDER_REPORTED)}, not {pts(ISSUED)}</label>
+    </div>
+
+    <div class="zw-stage">
+      <!-- retailer and wallets -->
+      <section class="zw-actor" data-hl="2,3,4,5" aria-label="Retailer and wallets">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Wallets</span>
+          <span class="zw-actor-sub">retailer · Alice · Bob</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Retailer (issuer)</span>
+          <span class="zcp-line" data-show="1">Ready to issue points.</span>
+          <span class="zcp-line" data-show="2-3">Issued {pts(ISSUED)} to Alice.</span>
+          <span class="zcp-line" data-show="4-6" data-if="honest">Received Bob's {pts(PRICE)}: receipt token.</span>
+          <span class="zcp-line" data-show="4-6" data-if="garbage">Nothing redeemed yet.</span>
+          <span class="zw-check warn" data-show="2-6" data-if="under" data-when="insider">told the auditor {pts(UNDER_REPORTED)}</span>
+        </div>
+        <div class="zw-row zcp-hs" data-kind="secret" data-show="2-6" data-hl="2,3,5">
+          <span class="k">Alice's balance</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v">
+            <span class="real">
+              <span data-show="2">{pts(ISSUED)}</span>
+              <span data-show="3-6">{pts(n3.amount)}</span>
+            </span><span class="mask">████████</span>
+          </span>
+        </div>
+        <div class="zw-row zcp-hs" data-kind="secret" data-show="3-6" data-hl="3,4,5">
+          <span class="k">Bob's balance</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v">
+            <span class="real">
+              <span data-if="honest"><span data-show="3">{pts(TRANSFERRED)}</span><span data-show="4-6">{pts(n4.amount)}</span></span>
+              <span data-if="garbage">0 pts spendable</span>
+            </span><span class="mask">████████</span>
+          </span>
+        </div>
+        <span class="zw-check no" data-show="3-6" data-if="garbage">Bob owns a note he can't open: unopenable, reported</span>
+        <span class="zw-check" data-show="5" data-if="honest">both wallets rebuilt their balances from chain data alone</span>
+        <span class="zw-check" data-show="5" data-if="garbage">Alice rebuilt hers from chain data; Bob's scan flags the bad note</span>
+        <div class="zw-proof" data-show="3">
+          <span class="pi">π</span>
+          <span class="zcp-pt">{ISSUED.toLocaleString('en-US')} = {TRANSFERRED} + {n3.amount}</span>
+          <small>Groth16</small>
+        </div>
+        <div class="zw-proof" data-show="4" data-if="honest">
+          <span class="pi">π</span>
+          <span class="zcp-pt">{TRANSFERRED} = {PRICE} + {n4.amount}</span>
+          <small>Groth16</small>
+        </div>
+        <div class="zcp-proving" data-show="3" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Alice's wallet proves the split and the auditor limbs</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="2,3,4,5" aria-hidden="true">
+        <span class="arrow" data-show="2-4">→</span>
+        <span class="arrow" data-show="5">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">issue</span>
+        <span class="zw-msg" data-show="3">transfer + π</span>
+        <span class="zw-msg" data-show="4" data-if="honest">redeem + π</span>
+        <span class="zw-msg" data-show="4" data-if="garbage">no spend</span>
+        <span class="zw-msg" data-show="5">scan</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor" data-hl="1,2,3,4" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub"><code>NoteLedger</code> UTxOs</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">AuditorRegistry · generation 0</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">PK {fakeHash('auditor-pk')}</span>
+        </div>
+        <span class="zw-check" data-show="1">both possession proofs verified on-chain</span>
+        {NOTES.map((n) => (
+          <div
+            class="zw-box zcp-note"
+            data-note={n.id}
+            data-show={`${n.createdAt}-6`}
+            data-spent-at={n.spentAt ?? ''}
+            data-if={n.id === 'N4' ? 'honest' : undefined}
+          >
+            <span class="zw-box-title">{n.id} · {n.owner} · {n.how}<span class="zcp-spent"> · spent</span></span>
+            <span class="zcp-kv" data-kind="public"><span class="k">C</span><span class="v">{commitment(n)}</span></span>
+            <span class="zcp-kv" data-kind="secret">
+              <span class="k">amount</span><span class="v"><span class="real">{pts(n.amount)}</span><span class="mask">██████</span></span>
+            </span>
+            <span class="zcp-meta">
+              <span class={n.id === 'N2' ? 'zcp-deliv' : ''}>owner</span> + auditor deliveries · 2 audit limbs
+            </span>
+          </div>
+        ))}
+        <span class="zw-check warn" data-show="3-6" data-if="garbage">N2's owner delivery is random bytes. The ledger only checks its length.</span>
+      </section>
+
+      <div class="zw-wire" data-hl="1,6" aria-hidden="true">
+        <span class="arrow" data-show="1">←</span>
+        <span class="arrow" data-show="6">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">keys</span>
+        <span class="zw-msg" data-show="6">read limbs</span>
+      </div>
+
+      <!-- auditor -->
+      <section class="zw-actor" data-hl="1,6" aria-label="Auditor">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Auditor</span>
+          <span class="zw-actor-sub">regulator or retailer's audit desk</span>
+        </div>
+        <div class="zw-row zcp-as" data-kind="secret">
+          <span class="k">ElGamal key + viewing key</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{fakeHash('auditor-sk')}</span><span class="mask">████████</span></span>
+        </div>
+        <p class="zw-note" data-show="1-5">Registers once. Every note that follows carries its amount encrypted to this key.</p>
+        <div class="zw-box zcp-audit" data-show="6">
+          <span class="zw-box-title">Every note, read from chain</span>
+          {NOTES.map((n) => (
+            <div class="zw-row zcp-as" data-kind="secret" data-if={n.id === 'N4' ? 'honest' : undefined}>
+              <span class="k">{n.id} · {n.owner}</span>
+              <em class={`zcp-origin ${n.origin === 'proof-enforced' ? 'ok' : 'claim'}`}>{n.origin}</em>
+              <span class="v wrap">
+                <span class="real">
+                  {n.id === 'N1' ? (
+                    <>
+                      <span data-if="honest-issue">{pts(n.amount)}</span>
+                      <span data-if="under">{pts(UNDER_REPORTED)} (delivery: {pts(n.amount)})</span>
+                    </>
+                  ) : (
+                    pts(n.amount)
+                  )}
+                </span><span class="mask">████████</span>
+              </span>
+            </div>
+          ))}
+          <span class="zw-check warn" data-if="under">N1 mismatch: the limbs and the auditor's own delivery disagree</span>
+          <span class="zw-check" data-if="garbage">N2 still reads {pts(TRANSFERRED)}: the limbs are what the proof enforces</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Register the auditor</p>
+        <p>The auditor publishes two keys in a one-of-a-kind registry UTxO: an ElGamal key for amounts and a viewing key for deliveries. The registry validator checks a proof that the auditor really holds each key.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Issue</p>
+        <p>The retailer issues {pts(ISSUED)} to Alice as a <em>note</em>: a Pedersen commitment, its opening sealed for Alice and for the auditor, and the amount encrypted to the auditor. Issuance is trusted for points, so nothing proves the auditor's copy is right. <span data-if="under">Here the retailer lies and encrypts {pts(UNDER_REPORTED)}. The ledger accepts it.</span></p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Transfer</p>
+        <p>Alice sends Bob {pts(TRANSFERRED)}. Her wallet spends N1 and creates N2 for Bob and N3 as her change. The proof shows {pts(ISSUED)} = {pts(TRANSFERRED)} + {pts(n3.amount)} without showing any amount, and that each new note's encrypted limbs hold its real amount. <span data-if="garbage">Alice puts random bytes where Bob's delivery belongs. The ledger can't tell.</span></p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Redeem</p>
+        <p data-if="honest">Bob spends {pts(PRICE)} at the shop. The price is public; the rest of his note, {pts(n4.amount)}, comes back as a new hidden note.</p>
+        <p data-if="garbage">Bob can't open N2, so he can't build a proof to spend it. The points are his on-chain but stuck.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Recover from chain</p>
+        <p>No server keeps balances. Each wallet scans the ledger's UTxOs and opens the deliveries addressed to its viewing key, keeping only notes that name it as owner and that open to their commitment. <span data-if="garbage">A note Bob owns but can't open is reported, not ignored: it's evidence against the sender.</span></p>
+      </div>
+      <div data-show="6">
+        <p class="zw-narr-title">6. Audit</p>
+        <p>The auditor decrypts every note's limbs and cross-checks its own delivery. Notes created by a transfer or redeem are <em>proof-enforced</em>; the issued note is <em>issuer-claimed</em>. <span data-if="under">The lie shows up as a mismatch, but only because the retailer's delivery told the truth; the ledger didn't stop it. Payroll uses proved issuance to close that gap.</span></p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Register</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Issue</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Transfer</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Redeem</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Recover</button></li>
+        <li><button type="button" data-goto="6"><span>6</span>Audit</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> readable only with the right key</span>
+      <span><em class="zw-tag public">PUBLIC</em> on the chain for anyone</span>
+      <span>"Alice &amp; Bob" combines both wallets: each one reads only its own notes.</span>
+      <span>Commitment and key values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zcp').forEach((root) => {
+    const notes = [...root.querySelectorAll<HTMLElement>('[data-spent-at]')];
+    const markSpent = () => {
+      const step = Number(root.dataset.step);
+      const garbage = root.dataset.garbage === '1';
+      notes.forEach((n) => {
+        let at = Number(n.dataset.spentAt) || 0;
+        // With a garbage delivery Bob can't spend N2, so it stays unspent.
+        if (garbage && n.dataset.note === 'N2') at = 0;
+        n.toggleAttribute('data-spent', at > 0 && step >= at);
+      });
+    };
+    root.addEventListener('zw:step', markSpent);
+    initWalkthrough(root);
+
+    root.querySelectorAll<HTMLInputElement>('[data-cheat]').forEach((box) =>
+      box.addEventListener('change', () => {
+        root.dataset[box.dataset.cheat === 'garbage' ? 'garbage' : 'under'] = box.checked ? '1' : '0';
+        markSpent();
+      }),
+    );
+    // The engine's view switch sets data-view to insider, auditor or public; the generic CSS
+    // covers insider and public, and the auditor view is styled below.
+  });
+</script>
+
+<style>
+  /* cheat toggles: which branch of the run is visible */
+  .zcp[data-garbage='1'] [data-if='honest'],
+  .zcp:not([data-garbage='1']) [data-if='garbage'],
+  .zcp[data-under='1'] [data-if='honest-issue'],
+  .zcp:not([data-under='1']) [data-if='under'] {
+    display: none !important;
+  }
+
+  .zcp-cheats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em 1.1em;
+    padding: 0.55em 1em;
+    font-size: 0.82em;
+    color: var(--zw-text-2);
+    background: var(--zw-panel);
+    border-bottom: 1px solid var(--zw-line);
+  }
+
+  .zcp-cheats-title {
+    font: 600 0.85em var(--zw-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--zw-bad-ink);
+  }
+
+  .zcp-cheats label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    cursor: pointer;
+  }
+
+  .zcp-cheats input {
+    accent-color: var(--zw-bad);
+  }
+
+  .zcp-line {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zcp-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zcp-audit,
+  .zcp-note {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zcp-note {
+    gap: 0.25em;
+    transition: opacity 0.3s;
+  }
+
+  .zcp-note[data-spent] > :not(.zw-box-title) {
+    display: none;
+  }
+
+  .zcp-kv {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.5em;
+    font-size: 0.8em;
+  }
+
+  .zcp-kv .k {
+    font: 500 0.9em var(--zw-mono);
+    color: var(--zw-muted);
+  }
+
+  .zcp-kv .v {
+    font: 600 0.95em var(--zw-mono);
+    overflow-wrap: anywhere;
+  }
+
+  .zcp-kv[data-kind='public'] .v {
+    color: var(--zw-public-ink);
+  }
+
+  .zcp-kv[data-kind='secret'] .v {
+    color: var(--zw-secret);
+  }
+
+  .zcp-kv .mask {
+    display: none;
+  }
+
+  .zw[data-view='public'] .zcp-kv[data-kind='secret'] .mask {
+    display: inline;
+    letter-spacing: -1px;
+    opacity: 0.6;
+  }
+
+  .zw .zw-proof > span.zcp-pt {
+    white-space: normal;
+    min-width: 0;
+  }
+
+  .zcp-spent {
+    display: none;
+    color: var(--zw-muted);
+  }
+
+  .zcp-note[data-spent] {
+    opacity: 0.5;
+  }
+
+  .zcp-note[data-spent] .zcp-spent {
+    display: inline;
+  }
+
+  .zcp-meta {
+    font: 500 0.7em var(--zw-mono);
+    color: var(--zw-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .zcp[data-garbage='1'][data-step='3'] .zcp-deliv,
+  .zcp[data-garbage='1'][data-step='4'] .zcp-deliv,
+  .zcp[data-garbage='1'][data-step='5'] .zcp-deliv,
+  .zcp[data-garbage='1'][data-step='6'] .zcp-deliv {
+    color: var(--zw-bad-ink);
+    text-decoration: line-through;
+  }
+
+  .zcp-origin {
+    margin-left: auto;
+    padding: 0.1em 0.45em;
+    font: 600 0.62em var(--zw-mono);
+    font-style: normal;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .zcp-origin.ok {
+    color: var(--zw-public);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+  }
+
+  .zcp-origin.claim {
+    color: var(--zw-warn-ink);
+    border: 1px solid color-mix(in srgb, var(--sl-color-orange) 50%, transparent);
+  }
+
+  /* Auditor's view: the holders' balances are hidden from the auditor (it sees note amounts).
+     Holders' view: the auditor's keys and table are hidden from the holders. */
+  .zcp[data-view='auditor'] .zcp-hs .real,
+  .zcp[data-view='auditor'] .zcp-hs > .zw-tag .vis,
+  .zcp[data-view='insider'] .zcp-as .real,
+  .zcp[data-view='insider'] .zcp-as > .zw-tag .vis {
+    display: none;
+  }
+
+  .zcp[data-view='auditor'] .zcp-hs .mask,
+  .zcp[data-view='auditor'] .zcp-hs > .zw-tag .hid,
+  .zcp[data-view='insider'] .zcp-as .mask,
+  .zcp[data-view='insider'] .zcp-as > .zw-tag .hid {
+    display: inline;
+    letter-spacing: -1px;
+    color: var(--zw-secret);
+    opacity: 0.6;
+  }
+
+  .zcp[data-view='auditor'] .zcp-hs > .zw-tag,
+  .zcp[data-view='insider'] .zcp-as > .zw-tag {
+    color: var(--zw-muted);
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--zw-line);
+  }
+
+  .zcp[data-view='public'] .zcp-origin {
+    opacity: 0.5;
+  }
+</style>

@@ -1,0 +1,457 @@
+---
+title: Pedersen commitments
+description: Commit to a hidden number, open it later, add commitments together, and prove facts about the hidden value in a Groth16 circuit, with ZeroJ's pedersen-jubjub-v1 profile.
+sidebar:
+  order: 1
+---
+
+import SinceNotice from '../../../../components/SinceNotice.astro';
+import CommitmentExplainer from '../../../../components/walkthrough/CommitmentExplainer.astro';
+
+A **Pedersen commitment** is a sealed envelope for a number. You publish the envelope, a 32-byte
+curve point, and keep the number and a random **blinding** value to yourself. Later you can open
+it to someone you choose, or prove facts about the number while it stays sealed: "at least 500",
+"these inputs equal these outputs", "this total is covered by our reserves".
+
+ZeroJ implements commitments on the Jubjub curve, whose arithmetic is cheap inside BLS12-381
+circuits, so a Groth16 proof about a committed value costs a few thousand constraints. The
+profile is [`pedersen-jubjub-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-jubjub-v1.md),
+designed in [ADR-0051](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0051-pedersen-commitment-profiles.md).
+
+New to commitments? Read [Commitments & encryption, explained](/learn/commitments-and-encryption/)
+first. Not sure a commitment is what you need? [Choose how to disclose](/selective-disclosure/)
+compares it with BBS, predicates, encrypted deliveries and threshold decryption.
+
+<SinceNotice since="0.1.0-pre13" />
+
+<CommitmentExplainer />
+
+## Status
+
+| Area | Status |
+|---|---|
+| In-circuit commitment (`ZkPedersen`, `ZkPedersenCommitment`) | **Ready on BLS12-381 Groth16, pending external review** |
+| In-circuit homomorphic API (`ZkPedersen.assertBalanced`, `ZkPedersenCommitment.add`/`subtract`, subgroup checks) | **Experimental**, pending review and external review |
+| Vector commitments (`ZkPedersenVector`, `PedersenVectorCommitment`) | **Experimental**, pending spec and external review |
+| Creating commitments off-circuit (`PedersenCommitment.commit`, `randomBlinding`) | **Offline/isolated only**: variable-time arithmetic on secrets |
+| Verifying a disclosed opening (`PedersenCommitment.verify`, `decode`) | Fine anywhere: the opening is no longer secret to that verifier |
+
+"Offline/isolated only" restricts *where* you run the secret-handling code: on the user's device or
+in a separate process, never in a service an attacker can time. It doesn't weaken the commitment's
+hiding or binding.
+
+## Add the dependency
+
+Every Pedersen class is in `zeroj-circuit-lib`. Add it next to the modules from the
+[quickstart](/start/quickstart/):
+
+```groovy title="build.gradle"
+dependencies {
+    implementation platform('org.zeroj:zeroj-bom-core:<version>')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:<version>')
+
+    implementation 'org.zeroj:zeroj-circuit-annotation-api'
+    annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
+    implementation 'org.zeroj:zeroj-circuit-dsl'
+    implementation 'org.zeroj:zeroj-circuit-lib'          // PedersenCommitment, ZkPedersen, ...
+    implementation 'org.zeroj:zeroj-crypto'
+    implementation 'org.zeroj:zeroj-codec'
+    implementation 'org.zeroj:zeroj-verifier-groth16'
+}
+```
+
+Use a `0.1.0-pre13` snapshot for `<version>` until the release is out (see the note above).
+
+## 1. Commit and open
+
+```java title="CommitAndOpen.java"
+import org.zeroj.circuit.lib.jubjub.JubjubCurve;
+import org.zeroj.circuit.lib.jubjub.JubjubPoint;
+import org.zeroj.circuit.lib.jubjub.PedersenCommitment;
+
+import java.math.BigInteger;
+import java.security.SecureRandom;
+import java.util.HexFormat;
+
+public class CommitAndOpen {
+
+    public static void main(String[] args) {
+        // --- Committer (offline) ---
+        BigInteger value = BigInteger.valueOf(1_000);                                   // the secret
+        BigInteger blinding = PedersenCommitment.randomBlinding(new SecureRandom());   // fresh, never reused
+
+        JubjubPoint commitment = PedersenCommitment.commit(value, blinding);
+        byte[] published = commitment.toBytes();                                       // 32 bytes
+        System.out.println("Commitment (32 bytes): " + HexFormat.of().formatHex(published));
+
+        // --- Verifier, later: receives the bytes, then the opening (value, blinding) ---
+        // decode() rejects non-canonical encodings and points outside the prime-order subgroup.
+        JubjubPoint received = PedersenCommitment.decode(published);
+
+        System.out.println("Opens to (1000, r)?   " + PedersenCommitment.verify(received, value, blinding));
+        System.out.println("Opens to (1001, r)?   "
+                + PedersenCommitment.verify(received, BigInteger.valueOf(1_001), blinding));
+        System.out.println("Opens to (1000, r+1)? "
+                + PedersenCommitment.verify(received, value, blinding.add(BigInteger.ONE)));
+
+        // (0, -1) is on the curve but has order 2: never a valid commitment.
+        BigInteger minusOne = JubjubCurve.BASE_FIELD_PRIME.subtract(BigInteger.ONE);
+        byte[] lowOrder = JubjubPoint.fromAffine(BigInteger.ZERO, minusOne).toBytes();
+        try {
+            PedersenCommitment.decode(lowOrder);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Low-order point rejected: " + e.getMessage());
+        }
+    }
+}
+```
+
+```text
+Commitment (32 bytes): dd6ad5a52e940bdf5754476f42d1bab89df3391c1282fc26d37ca553d4f21291
+Opens to (1000, r)?   true
+Opens to (1001, r)?   false
+Opens to (1000, r+1)? false
+Low-order point rejected: Pedersen commitment is not in the prime-order subgroup
+```
+
+The commitment bytes change on every run because the blinding is random. That's the point:
+committing to 1,000 twice gives two unrelated envelopes.
+
+:::caution[Decode received commitments with `PedersenCommitment.decode`]
+`JubjubPoint.fromBytes` only checks that the bytes are a point on the curve. It does **not** check
+the prime-order subgroup that commitments live in. Use `PedersenCommitment.decode` for any
+commitment you receive.
+:::
+
+## 2. Add commitments
+
+Anyone can add two commitments: `C(30, r1) + C(12, r2) = C(42, r1 + r2)`. There's no
+`PedersenCommitment.add`; you add the points with `JubjubPoint.add`.
+
+```java title="Homomorphic.java"
+import org.zeroj.circuit.lib.jubjub.JubjubCurve;
+import org.zeroj.circuit.lib.jubjub.JubjubPoint;
+import org.zeroj.circuit.lib.jubjub.PedersenCommitment;
+
+import java.math.BigInteger;
+import java.security.SecureRandom;
+
+public class Homomorphic {
+
+    public static void main(String[] args) {
+        SecureRandom random = new SecureRandom();
+        BigInteger v1 = BigInteger.valueOf(30), r1 = PedersenCommitment.randomBlinding(random);
+        BigInteger v2 = BigInteger.valueOf(12), r2 = PedersenCommitment.randomBlinding(random);
+
+        JubjubPoint c1 = PedersenCommitment.commit(v1, r1);
+        JubjubPoint c2 = PedersenCommitment.commit(v2, r2);
+
+        JubjubPoint sum = c1.add(c2);
+        System.out.println("Sum opens to (42, r1 + r2)? "
+                + PedersenCommitment.verify(sum, BigInteger.valueOf(42), r1.add(r2)));
+
+        // The arithmetic is modulo the group order l, not over the integers.
+        BigInteger l = JubjubCurve.SUBGROUP_ORDER;
+        JubjubPoint wrapped = PedersenCommitment.commit(l.subtract(BigInteger.ONE), r1)
+                .add(PedersenCommitment.commit(BigInteger.ONE, r2));
+        System.out.println("C(l-1, r1) + C(1, r2) opens to (0, r1 + r2)? "
+                + PedersenCommitment.verify(wrapped, BigInteger.ZERO, r1.add(r2)));
+    }
+}
+```
+
+```text
+Sum opens to (42, r1 + r2)? true
+C(l-1, r1) + C(1, r2) opens to (0, r1 + r2)? true
+```
+
+The second line is the most important thing on this page. Commitment arithmetic **wraps around**
+at a 252-bit number `l`. A huge "value" plus 1 can look like 0, so a cheat could hide a negative
+amount inside a sum. A sum of commitments proves nothing about real-world totals unless every
+value is range-bounded. That's what the circuit gadgets below do for you.
+
+## 3. Prove a fact without opening
+
+This circuit proves "the value inside this public commitment is at least the public threshold".
+The commitment enters as two public inputs, its affine coordinates `(u, v)`.
+
+```java title="CommittedThreshold.java"
+import org.zeroj.circuit.annotation.Prove;
+import org.zeroj.circuit.annotation.Public;
+import org.zeroj.circuit.annotation.Secret;
+import org.zeroj.circuit.annotation.UInt;
+import org.zeroj.circuit.annotation.ZKCircuit;
+import org.zeroj.circuit.annotation.ZkBool;
+import org.zeroj.circuit.annotation.ZkContext;
+import org.zeroj.circuit.annotation.ZkField;
+import org.zeroj.circuit.annotation.ZkUInt;
+import org.zeroj.circuit.lib.zk.ZkPedersen;
+
+@ZKCircuit(name = "committed-threshold", version = 1)
+public class CommittedThreshold {
+    @Prove
+    ZkBool prove(ZkContext zk,
+                 @Public ZkField commitmentU,                 // the commitment, as affine (u, v)
+                 @Public ZkField commitmentV,
+                 @Public @UInt(bits = 64) ZkUInt threshold,
+                 @Secret @UInt(bits = 64) ZkUInt value,       // never revealed
+                 @Secret @UInt(bits = 252) ZkUInt blinding) { // must be exactly 252 bits
+        // 1. Recompute C = [value]G + [blinding]H and pin it to the public (u, v).
+        ZkPedersen.commit(zk, value, blinding).assertAffineEquals(zk, commitmentU, commitmentV);
+        // 2. The statement about the hidden value.
+        return value.gte(threshold);
+    }
+}
+```
+
+The program below commits to 1,000, proves "at least 500", and plays the verifier. It uses a
+**development-only** setup, as the quickstart does, so run it with
+`-Dzeroj.allowInsecureTrustedSetup=true`.
+
+```java title="ThresholdProof.java"
+import org.zeroj.api.CircuitId;
+import org.zeroj.api.CurveId;
+import org.zeroj.api.ProofSystemId;
+import org.zeroj.api.PublicInputs;
+import org.zeroj.api.VerificationMaterial;
+import org.zeroj.circuit.lib.jubjub.JubjubPoint;
+import org.zeroj.circuit.lib.jubjub.PedersenCommitment;
+import org.zeroj.codec.SnarkjsJsonCodec;
+import org.zeroj.crypto.groth16.Groth16Keys;
+import org.zeroj.crypto.groth16.Groth16ProofBLS381;
+import org.zeroj.crypto.setup.PowersOfTauBLS381;
+import org.zeroj.crypto.snarkjs.SnarkjsGroth16Json;
+import org.zeroj.verifier.groth16.bls12381.Groth16BLS12381PureJavaVerifier;
+
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+
+public class ThresholdProof {
+
+    public static void main(String[] args) {
+        // 1. Committer (offline): commit to a balance and publish the 32-byte commitment.
+        BigInteger balance = BigInteger.valueOf(1_000);
+        BigInteger blinding = PedersenCommitment.randomBlinding(new SecureRandom());
+        byte[] published = PedersenCommitment.commit(balance, blinding).toBytes();
+
+        // 2. Compile, then a DEV-ONLY trusted setup (this process knows tau).
+        var circuit = CommittedThresholdCircuit.build();
+        var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+        BigInteger tau = PowersOfTauBLS381.generate(4).tauScalar();   // only tau is used
+        try (var keys = Groth16Keys.setupInMemory(
+                r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), tau)) {
+            String vkJson = SnarkjsGroth16Json.verificationKeyJson(keys);
+
+            // 3. Prover: knows (balance, blinding) and proves "balance >= 500".
+            JubjubPoint c = PedersenCommitment.decode(published);
+            var inputs = CommittedThresholdCircuit.inputs()
+                    .commitmentU(c.affineU())
+                    .commitmentV(c.affineV())
+                    .threshold(500)
+                    .value(balance)        // secret
+                    .blinding(blinding);   // secret
+            BigInteger[] witness = inputs.calculateWitness(circuit, CurveId.BLS12_381);
+            Groth16ProofBLS381 proof = keys.prove(witness, r1cs.constraints());
+            String proofJson = SnarkjsGroth16Json.proofJson(proof);
+            String publicJson = SnarkjsGroth16Json.publicJson(inputs.publicValues().toArray(new BigInteger[0]));
+
+            // 4. Verifier: has the published commitment and its own threshold, never the balance.
+            System.out.println("Accepted (balance >= 500)? " + accept(vkJson, proofJson, publicJson, published, 500));
+            System.out.println("Accepted as proof of >= 900? " + accept(vkJson, proofJson, publicJson, published, 900));
+
+            // 5. A false claim can't even produce a witness.
+            try {
+                inputs.threshold(2_000).calculateWitness(circuit, CurveId.BLS12_381);
+            } catch (ArithmeticException e) {
+                System.out.println("Witness for balance >= 2000 refused");
+            }
+        }
+    }
+
+    /** Rebuild the statement from data the verifier trusts, then check the proof. */
+    static boolean accept(String vkJson, String proofJson, String publicJson,
+                          byte[] publishedCommitment, long requiredThreshold) {
+        JubjubPoint c = PedersenCommitment.decode(publishedCommitment);
+        PublicInputs expected = CommittedThresholdCircuit.inputs()
+                .commitmentU(c.affineU())
+                .commitmentV(c.affineV())
+                .threshold(requiredThreshold)
+                .toPublicInputs();
+        if (!expected.equals(SnarkjsJsonCodec.parsePublicInputs(publicJson))) {
+            return false;   // the proof is about a different commitment or threshold
+        }
+        CircuitId id = CommittedThresholdCircuit.circuitId();
+        var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(proofJson, vkJson, publicJson, id);
+        var material = VerificationMaterial.of(vkJson.getBytes(StandardCharsets.UTF_8),
+                ProofSystemId.GROTH16, CurveId.BLS12_381, id);
+        return new Groth16BLS12381PureJavaVerifier().verify(envelope, material).proofValid();
+    }
+}
+```
+
+```text
+Accepted (balance >= 500)? true
+Accepted as proof of >= 900? false
+Witness for balance >= 2000 refused
+```
+
+The circuit has 2,671 constraints. Two details carry the security:
+
+- **The verifier rebuilds the public inputs** from the commitment it already holds and the
+  threshold it requires. Comparing them with the proof's public inputs is what stops a prover
+  from submitting a valid proof about a *different* commitment or a lower threshold.
+- **The blinding is declared `@Secret @UInt(bits = 252)`.** ZeroJ refuses to build a circuit
+  whose blinding is narrower, public or a constant: `CommittedThresholdCircuit.build()` throws
+  `IllegalArgumentException`. A 16-bit blinding could be brute-forced, which would reveal the
+  value. The guard can't tell whether *your* blinding is random, though, so always use
+  `randomBlinding(new SecureRandom())`.
+
+## 4. Prove that amounts balance
+
+To move value privately, prove that the hidden inputs equal the hidden outputs plus any public
+fee. `ZkPedersen.assertBalanced` does this, and it refuses layouts that could wrap around `l`.
+
+```java title="ConfidentialTransfer.java"
+import org.zeroj.circuit.annotation.Prove;
+import org.zeroj.circuit.annotation.Public;
+import org.zeroj.circuit.annotation.Secret;
+import org.zeroj.circuit.annotation.UInt;
+import org.zeroj.circuit.annotation.ZKCircuit;
+import org.zeroj.circuit.annotation.ZkContext;
+import org.zeroj.circuit.annotation.ZkField;
+import org.zeroj.circuit.annotation.ZkUInt;
+import org.zeroj.circuit.lib.zk.ZkPedersen;
+import org.zeroj.circuit.lib.zk.ZkPedersenCommitment;
+
+import java.util.List;
+
+/** "The hidden input amount equals the hidden output amount plus the public fee." */
+@ZKCircuit(name = "confidential-transfer", version = 1)
+public class ConfidentialTransfer {
+    @Prove
+    void prove(ZkContext zk,
+               @Public ZkField inU, @Public ZkField inV,          // input commitment (u, v)
+               @Public ZkField outU, @Public ZkField outV,        // output commitment (u, v)
+               @Public @UInt(bits = 32) ZkUInt fee,
+               @Secret @UInt(bits = 64) ZkUInt inAmount,
+               @Secret @UInt(bits = 252) ZkUInt inBlinding,
+               @Secret @UInt(bits = 64) ZkUInt outAmount,
+               @Secret @UInt(bits = 252) ZkUInt outBlinding) {
+        var in = ZkPedersenCommitment.commit(zk, inAmount, inBlinding);
+        var out = ZkPedersenCommitment.commit(zk, outAmount, outBlinding);
+        in.assertAffineEquals(zk, inU, inV);
+        out.assertAffineEquals(zk, outU, outV);
+        // in = out + fee over the integers. 64 + 32-bit terms can't reach l, so nothing wraps;
+        // assertBalanced checks that when the circuit is built.
+        ZkPedersen.assertBalanced(zk,
+                List.of(ZkPedersen.Term.of(in)),
+                List.of(ZkPedersen.Term.of(out), ZkPedersen.Term.amount(fee)));
+    }
+}
+```
+
+Driven the same way as the threshold example (sending 5,000 as 4,750 plus a 250 fee), it gives:
+
+```text
+Transfer accepted (fee 250)? true
+Transfer accepted (fee 200)? false
+Unbalanced witness refused: Constraint violation: inAmount(w6)=5000 != w17753=5001
+Wrapping layout refused: the left side of this balance can reach 1fff…fffe (hex), which is not below
+the subgroup order l. A relation mod l would not imply integer conservation; narrow the declared
+widths or coefficients (ADR-0051 D3a).
+```
+
+The last line comes from a variant whose amounts are declared 252 bits wide. `build()` refuses it
+before any proof exists. The rules `assertBalanced` enforces:
+
+- every term has a declared width, through `@UInt(bits = …)`;
+- coefficients are positive constants (move a subtraction to the other side);
+- the largest possible total on each side stays below `l`.
+
+The circuit has 4,886 constraints. The [confidential loyalty points](/use-cases/confidential-points/)
+demo uses the same pattern for a 1-in, 2-out transfer.
+
+## 5. Commit to several values at once
+
+A **vector commitment** seals up to 16 values in one point, for example a credit profile of
+income, score, birth year and country. A proof can then check a rule over some fields and keep all
+of them hidden:
+
+```java title="CreditProfileCheck.java (core)"
+import org.zeroj.circuit.lib.zk.ZkPedersenVector;
+
+// SCHEMA lists the fields and their widths: income/64, credit_score/16, birth_year/16, country/16.
+var binding = ZkPedersenVector.bindSchema(zk, SCHEMA, schemaDigest);   // schemaDigest is @Public
+ZkPedersenVector.commit(zk, binding, List.of(income, creditScore, birthYear, country), blinding)
+        .assertAffineEquals(zk, u, v);
+income.gte(minIncome).assertTrue();
+creditScore.gte(minScore).assertTrue();
+```
+
+Vector commitments need two extra checks that single commitments don't:
+
+- **The point doesn't record its layout.** `C([a], r)` equals `C([a, 0], r)`, so every proof binds a
+  public **schema digest** with `bindSchema`, and the verifier checks it against a trusted
+  `PedersenSchemaRegistry`.
+- **A commitment proves nothing about who issued it.** Accept a received commitment only with an
+  authenticated issuance record, and fail closed without one.
+
+The full worked example is `AnnotatedVectorCommitment` in
+[`zeroj-integration-tests`](https://github.com/bloxbean/zeroj/tree/main/zeroj-integration-tests/src/test/java/org/zeroj/examples/annotation),
+and the [credit gate](/selective-disclosure/prove-a-rule/#over-a-committed-credential) shows it on
+Cardano.
+
+## Commitments you didn't make
+
+If your circuit receives a commitment whose opening it doesn't know, for example another party's
+balance, there are three ways in. Pick by who checks the point:
+
+| Situation | API | Who checks the point |
+|---|---|---|
+| The circuit knows the opening | `ZkPedersenCommitment.commit(zk, value, blinding)` + `assertAffineEquals` | The circuit recomputes it |
+| The opening is unknown, the point is a witness | `ZkPedersenCommitment.witnessInSubgroup(zk, u, v)` | The circuit (about 5,500 extra constraints) |
+| The opening is unknown, the point is public | `ZkPedersenCommitment.fromVerifierCheckedPublic(zk, u, v)` | **Your verifier** must `PedersenCommitment.decode` it first |
+
+On Cardano, a validator can't run the Jubjub subgroup check, so on-chain consumers use the first
+two rows.
+
+## Rules to follow
+
+- **Fresh random blinding, every time.** `PedersenCommitment.randomBlinding(new SecureRandom())`;
+  never reuse one, never derive it from public data.
+- **Commit offline.** `commit` and `randomBlinding` use variable-time arithmetic on secrets. Run
+  them on the user's device or in an isolated process.
+- **Decode with `PedersenCommitment.decode`**, never `JubjubPoint.fromBytes`, for received bytes.
+- **Range-bound every value that means a number.** Commitments bind values *modulo* `l`:
+  `commit(v, r)` equals `commit(v + l, r)`. Integer meaning comes only from declared widths and
+  `assertBalanced`. Off-circuit point sums carry no such check.
+- **Rebuild public inputs on the verifier side.** A commitment is two public inputs, `u` then `v`.
+- **The identity point is a valid commitment** (to 0 with blinding 0). Check `isIdentity()` if
+  your application must exclude it.
+- **A proof is not a permission.** Replay protection, nullifiers and binding to the spending
+  transaction are still your job. See [Application security](/guides/verifying/application-security/).
+
+## Cost
+
+| Circuit | Constraints | Source |
+|---|---|---|
+| Commitment with public `(u, v)`, 64-bit value | 2,410 | `zeroj-circuit-lib` README |
+| Same, 252-bit value | 4,042 | `zeroj-circuit-lib` README |
+| "At least a threshold" (example 3) | 2,671 | measured for this page |
+| 1-in, 1-out transfer with a fee (example 4) | 4,886 | measured for this page |
+| Vector commitment, 1 / 4 / 16 values | 2,411 / 3,581 / 8,261 | [vector benchmark](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/pedersen-vector-2026-10-03.md) |
+
+Pure-Java proving for circuits this size took about 1.2 to 1.5 seconds per proof in the
+[vector benchmark](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/pedersen-vector-2026-10-03.md)
+(2,400 to 8,300 constraints, one Apple M4 Max laptop), most of it fixed overhead. On Cardano, the proof is checked by ZeroJ's ordinary Groth16 verifier, and the
+commitment is just two of its public inputs. See [Verify proofs on Cardano](/guides/verifying/on-chain/).
+
+## Next steps
+
+- [Confidential notes](/guides/confidential/confidential-notes/): deliver the opening on-chain to
+  the owner and an auditor
+- [ElGamal encryption](/guides/confidential/elgamal/): encrypt an amount so an auditor can read it
+- [Hide a number, prove facts about it](/selective-disclosure/hide-a-number/): the pattern, with use cases
+- Use cases: [Proof of solvency with hidden balances](/use-cases/private-solvency/),
+  [Confidential loyalty points](/use-cases/confidential-points/)

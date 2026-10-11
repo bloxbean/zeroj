@@ -1,0 +1,311 @@
+---
+// A Pedersen commitment, step by step: seal -> hiding -> open (binding) -> add -> prove a range.
+// Commitment values are illustrative stand-ins (fakeHash), not Jubjub points. The "add" step shows
+// the real rule: C(a, r) + C(b, s) is the commitment to (a + b, r + s).
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { ALICE, BOB, MIN_DEPOSIT, commitLabel, fmt } from './commitment-data';
+
+const cAlice = commitLabel(ALICE.amount, ALICE.blinding);
+const cAliceAgain = commitLabel(ALICE.amount, ALICE.blinding2);
+const cBob = commitLabel(BOB.amount, BOB.blinding);
+const cSum = commitLabel(ALICE.amount + BOB.amount, ALICE.blinding + BOB.blinding);
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="A Pedersen commitment, step by step">
+  <div class="zw zce" data-total="5" data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Commitment · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Alice's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Everyone else</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <section class="zw-actor" data-hl="1,2,3,5" aria-label="Alice">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Alice</span>
+          <span class="zw-actor-sub">commits to an amount</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">amount v</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-amount-out>{fmt(ALICE.amount)}</span><span class="mask">████████</span></span>
+          <input
+            type="range"
+            min="0"
+            max="10000"
+            step="100"
+            value={ALICE.amount}
+            data-amount
+            data-when="insider"
+            aria-label="Alice's amount"
+          />
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">blinding r (random, 252 bits)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-blinding-out>{fakeHash(`r:${ALICE.blinding}`)}</span><span class="mask">████████</span></span>
+          <button type="button" class="zw-btn zce-roll" data-roll data-when="insider">New blinding</button>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">Proves, without opening</span>
+          <span class="zw-check" data-range-ok>the amount in C is at least {fmt(MIN_DEPOSIT)}</span>
+          <div class="zce-proving" aria-hidden="true">
+            <svg class="zw-rings" viewBox="0 0 128 128">
+              {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+            </svg>
+            <span>Groth16 proof over (v, r)</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1,3,5" aria-hidden="true">
+        <span class="arrow" data-show="1-2,5">→</span>
+        <span class="arrow" data-show="3">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1-2">C</span>
+        <span class="zw-msg" data-show="3">opening (v, r)</span>
+        <span class="zw-msg" data-show="5">π</span>
+      </div>
+
+      <section class="zw-actor" data-hl="1,2,4" aria-label="The public ledger">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Public ledger</span>
+          <span class="zw-actor-sub">anyone can read it</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">C = v·G + r·H</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-c-out>{cAlice}</span>
+        </div>
+        <div class="zw-box" data-show="2">
+          <span class="zw-box-title">Same amount, new blinding</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">C′ (also {fmt(ALICE.amount)})</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-c2-out>{cAliceAgain}</span>
+          </div>
+          <span class="zw-check">C and C′ look unrelated: nobody can tell they hide the same amount</span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title">Bob commits too</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">D (Bob)</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{cBob}</span>
+          </div>
+          <div class="zw-row zce-sum" data-kind="public">
+            <span class="k">C + D</span><em class="zw-tag">PUBLIC</em>
+            <span class="v" data-sum-out>{cSum}</span>
+          </div>
+          <span class="zw-note">Anyone can add the points. Only someone who knows both openings can open the sum.</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="3,4,5" aria-hidden="true">
+        <span class="arrow" data-show="3-5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3">check</span>
+        <span class="zw-msg" data-show="4">total</span>
+        <span class="zw-msg" data-show="5">verify</span>
+      </div>
+
+      <section class="zw-actor" data-hl="3,4,5" aria-label="Verifier">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Verifier</span>
+          <span class="zw-actor-sub">an auditor, a validator, a counterparty</span>
+        </div>
+        <p class="zw-note" data-show="1-2">Sees only C. Learns nothing about the amount.</p>
+        <div class="zw-box" data-show="3">
+          <span class="zw-box-title">Alice opens C to the verifier</span>
+          <label class="zce-claim">
+            <span>Alice claims the amount is</span>
+            <input type="number" min="0" max="10000" step="100" value={ALICE.amount} data-claim aria-label="Claimed amount" />
+          </label>
+          <span class="zw-check" data-claim-result>commit({fmt(ALICE.amount)}, r) = C: accepted</span>
+          <span class="zw-note">Try another number. No blinding makes a different amount match C.</span>
+        </div>
+        <div class="zw-box" data-show="4">
+          <span class="zw-box-title">Opening the total</span>
+          <span class="zw-check" data-sum-check>C + D opens to {fmt(ALICE.amount + BOB.amount)} with blinding r + s</span>
+          <span class="zw-note">The verifier learns the total, not who put in what.</span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">Checks π against C</span>
+          <span class="zw-check" data-verdict>proof valid: at least {fmt(MIN_DEPOSIT)}, amount still hidden</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Seal</p>
+        <p>Alice picks an amount and a fresh random blinding and publishes one curve point, <code>C = v·G + r·H</code>. Think of a sealed envelope: everyone can see it, nobody can read it. Drag the amount or roll a new blinding and watch C change.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Hiding</p>
+        <p>Commit to the same amount again with a new blinding, and you get a completely different point. Because the blinding is random, C reveals nothing about the amount, not even whether two commitments hide the same one.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Open (binding)</p>
+        <p>Later, Alice can hand the opening <code>(v, r)</code> to someone she chooses. They recompute the point and compare it with C. She can't find a second opening for a different amount, so C locks her in. Type another amount to see it fail.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Add</p>
+        <p>Commitments add up: <code>C + D</code> is the commitment to the sum of the amounts, with the sum of the blindings. A ledger can total balances, or check that inputs equal outputs, without seeing any single amount.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Prove without opening</p>
+        <p>A zero-knowledge proof can show a fact about the hidden amount, such as "at least {fmt(MIN_DEPOSIT)}", while C stays sealed. Drag Alice's amount below {fmt(MIN_DEPOSIT)} and no valid proof exists.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Seal</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Hiding</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Open</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Add</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Prove</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> only Alice knows it</span>
+      <span><em class="zw-tag public">PUBLIC</em> anyone can see it</span>
+      <span>Point values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+  import { ALICE, BOB, MIN_DEPOSIT, commitLabel, fmt } from './commitment-data';
+
+  document.querySelectorAll<HTMLElement>('.zce').forEach((root) => {
+    initWalkthrough(root);
+    const slider = root.querySelector<HTMLInputElement>('[data-amount]');
+    const claim = root.querySelector<HTMLInputElement>('[data-claim]');
+    const set = (sel: string, text: string) => {
+      const el = root.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+    let amount = Number(slider?.value ?? 0);
+    let blinding = ALICE.blinding;
+    const roll = () => crypto.getRandomValues(new Uint32Array(1))[0];
+
+    const render = () => {
+      set('[data-amount-out]', fmt(amount));
+      set('[data-blinding-out]', fakeHash(`r:${blinding}`));
+      set('[data-c-out]', commitLabel(amount, blinding));
+      set('[data-c2-out]', commitLabel(amount, blinding ^ 0x5bd1e995));
+      root.querySelectorAll('[data-c2-out]').forEach((el) => {
+        const k = el.closest('.zw-row')?.querySelector('.k');
+        if (k) k.textContent = `C′ (also ${fmt(amount)})`;
+      });
+      set('[data-sum-out]', commitLabel(amount + BOB.amount, blinding + BOB.blinding));
+      set('[data-sum-check]', `C + D opens to ${fmt(amount + BOB.amount)} with blinding r + s`);
+
+      const claimed = Number(claim?.value ?? amount);
+      const ok = claimed === amount;
+      const result = root.querySelector<HTMLElement>('[data-claim-result]');
+      if (result) {
+        result.textContent = ok
+          ? `commit(${fmt(claimed)}, r) = C: accepted`
+          : `commit(${fmt(claimed)}, r) ≠ C: rejected`;
+        result.classList.toggle('no', !ok);
+      }
+
+      const inRange = amount >= MIN_DEPOSIT;
+      const rangeOk = root.querySelector<HTMLElement>('[data-range-ok]');
+      if (rangeOk) {
+        rangeOk.textContent = inRange
+          ? `the amount in C is at least ${fmt(MIN_DEPOSIT)}`
+          : `${fmt(amount)} is below ${fmt(MIN_DEPOSIT)}: no valid proof exists`;
+        rangeOk.classList.toggle('no', !inRange);
+      }
+      const verdict = root.querySelector<HTMLElement>('[data-verdict]');
+      if (verdict) {
+        verdict.textContent = inRange
+          ? `proof valid: at least ${fmt(MIN_DEPOSIT)}, amount still hidden`
+          : 'no proof to check: rejected';
+        verdict.classList.toggle('no', !inRange);
+      }
+      root.querySelector('.zw-actor[aria-label="Verifier"]')?.toggleAttribute(
+        'data-bad-on',
+        (root.dataset.step === '3' && !ok) || (root.dataset.step === '5' && !inRange),
+      );
+    };
+
+    slider?.addEventListener('input', () => {
+      amount = Number(slider.value);
+      if (claim) claim.value = String(amount);
+      render();
+    });
+    claim?.addEventListener('input', render);
+    root.querySelector('[data-roll]')?.addEventListener('click', () => {
+      blinding = roll();
+      render();
+    });
+    root.addEventListener('zw:step', render);
+    render();
+  });
+</script>
+
+<style>
+  .zce .zw-row input[type='range'] {
+    flex-basis: 100%;
+    width: 100%;
+    margin: 0.35em 0 0.1em;
+    accent-color: var(--zw-secret);
+    cursor: pointer;
+  }
+
+  .zce-roll {
+    flex: 0 0 auto;
+    margin-top: 0.3em;
+    padding: 0.2em 0.65em;
+    font-size: 0.75em;
+    white-space: nowrap;
+  }
+
+  .zce-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zce-claim {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em 0.6em;
+    font-size: 0.82em;
+    color: var(--zw-text-2);
+  }
+
+  .zce-claim input {
+    width: 7.5em;
+    padding: 0.25em 0.45em;
+    font: 600 1em var(--zw-mono);
+    color: var(--zw-text);
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 6px;
+  }
+
+  .zce-sum .v {
+    color: var(--zw-public-ink);
+  }
+</style>

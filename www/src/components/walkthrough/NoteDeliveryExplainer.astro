@@ -1,0 +1,307 @@
+---
+// A confidential note's opening delivered on-chain, step by step:
+// seal -> publish -> open (owner / auditor / stranger) -> a garbage delivery -> wallet scan.
+// Points and bytes are illustrative stand-ins (fakeHash), not Jubjub points or real ciphertexts.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { AMOUNT, HOLDERS, SCAN, commitment, delivery } from './note-delivery-data';
+---
+
+<figure class="zw-frame not-content" aria-label="A confidential note delivery, step by step">
+  <div class="zw znd" data-total="5" data-view="insider" data-holder="owner" data-garbage="0">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Confidential note · step <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Key holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- sender -->
+      <section class="zw-actor" data-hl="1" aria-label="Sender">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Sender</span>
+          <span class="zw-actor-sub">creates the note</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">amount v</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{AMOUNT}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">blinding r</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{fakeHash('note-r')}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-box" data-show="1">
+          <span class="zw-box-title">Seals the opening (v, r) once per reader</span>
+          <span class="znd-env">✉ to the owner's reader key, fresh one-time key</span>
+          <span class="znd-env">✉ to the auditor's reader key, fresh one-time key</span>
+        </div>
+        <p class="zw-note" data-show="2-5">Done. The sender can go offline; nothing is sent privately.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="1,2" aria-hidden="true">
+        <span class="arrow" data-show="1-2">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1-2">note</span>
+      </div>
+
+      <!-- chain -->
+      <section class="zw-actor znd-chain" data-hl="2,4" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">the note's datum</span>
+        </div>
+        <p class="zw-note" data-show="1">Waiting for the note.</p>
+        <div class="zw-row" data-kind="public" data-show="2-5">
+          <span class="k">commitment C</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{commitment}</span>
+        </div>
+        <div class="zw-row znd-d0" data-kind="public" data-show="2-5">
+          <span class="k">delivery 0 · owner · 89 bytes</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-d0>{delivery(0)}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2-5">
+          <span class="k">delivery 1 · auditor · 89 bytes</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{delivery(1)}</span>
+        </div>
+        <label class="znd-toggle" data-show="3-5">
+          <input type="checkbox" data-garbage-toggle />
+          <span>Sender puts 89 random bytes in delivery 0</span>
+        </label>
+        <p class="zw-note" data-show="2-5">The validator can only check each delivery's length. It can't tell whether one decrypts.</p>
+      </section>
+
+      <div class="zw-wire" data-hl="3,4,5" aria-hidden="true">
+        <span class="arrow" data-show="3-5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="3-4">open</span>
+        <span class="zw-msg" data-show="5">scan</span>
+      </div>
+
+      <!-- key holder -->
+      <section class="zw-actor znd-holder" data-hl="3,4,5" aria-label="Key holder">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">You hold the…</span>
+          <span class="zw-choice" role="group" aria-label="Which viewing key you hold">
+            {HOLDERS.map((h, i) => (
+              <button type="button" data-pick={h.id} aria-pressed={i === 0 ? 'true' : 'false'}>{h.label}</button>
+            ))}
+          </span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k" data-key-label>owner's viewing key</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-key-value>{fakeHash('vk:owner')}</span><span class="mask">████████</span></span>
+        </div>
+        <p class="zw-note" data-show="1-2">Each reader published a 32-byte reader key earlier; the viewing key never leaves the wallet.</p>
+        <div class="zw-box" data-show="3-4">
+          <span class="zw-box-title" data-open-title>Opens delivery 0 (its own position)</span>
+          <span class="zw-check" data-open-1>decrypts to (v = {AMOUNT}, r)</span>
+          <span class="zw-check" data-open-2>commit({AMOUNT}, r) = C: accepted</span>
+        </div>
+        <div class="zw-box" data-show="5">
+          <span class="zw-box-title">Wallet scan, owner's key</span>
+          <ul class="znd-scan">
+            {SCAN.map((n, i) => (
+              <li data-scan={i}><span>{n.label}</span><span class="res">…</span></li>
+            ))}
+          </ul>
+          <span class="zw-note">Notes are matched by the owner field first; only those are opened.</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Seal</p>
+        <p>The sender commits to {AMOUNT} with a random blinding, then encrypts the opening <code>(v, r)</code> separately for each reader: the owner first, then the auditor. Each copy uses a fresh one-time key, as Zcash notes do.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Publish</p>
+        <p>The note goes on-chain: the commitment plus one 89-byte delivery per reader. The public sees a point and random-looking bytes. Switch to the public view to compare.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Open</p>
+        <p>A reader decrypts the delivery at <em>its own</em> position and accepts the opening only if it recomputes C. Pick the owner, the auditor or a stranger. A stranger's key opens nothing.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. A bad delivery</p>
+        <p>A careless or hostile sender can write garbage into a delivery, and the ledger can't notice. The owner's wallet finds a note it owns but can't open, and <strong>reports</strong> it instead of hiding it. The auditor's copy is separate, so the auditor still reads {AMOUNT}. Untick the box to compare.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Recover from the chain</p>
+        <p>A wallet with only its viewing key can rebuild its balance by scanning the ledger: open the notes it owns, skip everyone else's, and flag owned notes that don't open. No private messages are needed.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Seal</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Publish</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Open</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Bad delivery</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Scan</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> only its holder knows it</span>
+      <span><em class="zw-tag public">PUBLIC</em> on-chain, anyone can see it</span>
+      <span>Point and byte values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+  import { AMOUNT, HOLDERS, SCAN, delivery, type Holder } from './note-delivery-data';
+
+  document.querySelectorAll<HTMLElement>('.znd').forEach((root) => {
+    initWalkthrough(root);
+    const toggle = root.querySelector<HTMLInputElement>('[data-garbage-toggle]');
+    const holderPane = root.querySelector<HTMLElement>('.znd-holder');
+    let holder: Holder = 'owner';
+
+    const set = (sel: string, text: string, bad?: boolean) => {
+      const el = root.querySelector<HTMLElement>(sel);
+      if (!el) return;
+      el.textContent = text;
+      if (bad !== undefined) {
+        el.hidden = text === '';
+        el.classList.toggle('no', bad);
+      }
+    };
+
+    const render = () => {
+      const garbage = !!toggle?.checked;
+      root.dataset.garbage = garbage ? '1' : '0';
+      root.dataset.holder = holder;
+      set('[data-d0]', delivery(0, garbage));
+
+      const info = HOLDERS.find((h) => h.id === holder)!;
+      set('[data-key-label]', `${info.label.toLowerCase()}'s viewing key`);
+      set('[data-key-value]', fakeHash(`vk:${holder}`));
+
+      let failed = false;
+      if (info.position === null) {
+        set('[data-open-title]', 'Tries every delivery');
+        set('[data-open-1]', 'delivery 0: does not decrypt (not my key)', true);
+        set('[data-open-2]', 'delivery 1: does not decrypt (not my key)', true);
+      } else if (info.position === 0 && garbage) {
+        set('[data-open-title]', 'Opens delivery 0 (its own position)');
+        set('[data-open-1]', 'does not decrypt: random bytes', true);
+        set('[data-open-2]', 'owned but unopenable: reported, never dropped', true);
+        failed = true;
+      } else {
+        set('[data-open-title]', `Opens delivery ${info.position} (its own position)`);
+        set('[data-open-1]', `decrypts to (v = ${AMOUNT}, r)`, false);
+        set('[data-open-2]', `commit(${AMOUNT}, r) = C: accepted`, false);
+      }
+      const step = root.dataset.step;
+      holderPane?.toggleAttribute('data-bad-on', (step === '3' || step === '4') && failed);
+
+      SCAN.forEach((n, i) => {
+        const li = root.querySelector<HTMLElement>(`[data-scan="${i}"]`);
+        const res = li?.querySelector<HTMLElement>('.res');
+        if (!li || !res) return;
+        const opens = n.opens && !(i === 0 && garbage);
+        let text: string;
+        let kind: string;
+        if (!n.mine) [text, kind] = ['not mine: skipped', 'skip'];
+        else if (opens) [text, kind] = [`opened: ${n.amount}`, 'ok'];
+        else [text, kind] = ['owned, unopenable: reported', 'bad'];
+        res.textContent = text;
+        li.dataset.kind = kind;
+      });
+    };
+
+    root.querySelectorAll<HTMLButtonElement>('[data-pick]').forEach((b, _, all) =>
+      b.addEventListener('click', () => {
+        holder = b.dataset.pick as Holder;
+        all.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        render();
+      }),
+    );
+    toggle?.addEventListener('change', render);
+    root.addEventListener('zw:step', (e) => {
+      const step = (e as CustomEvent<number>).detail;
+      // Step 4 is about the bad delivery, so it starts with the garbage on; earlier steps start clean.
+      if (toggle && step === 4) toggle.checked = true;
+      if (toggle && step <= 3 && step !== Number(root.dataset.lastStep ?? 0)) toggle.checked = false;
+      root.dataset.lastStep = String(step);
+      render();
+    });
+    render();
+  });
+</script>
+
+<style>
+  /* The key picker doesn't fit beside the lane title in a three-lane row: give it its own line. */
+  .znd-holder .zw-actor-head {
+    flex-wrap: wrap;
+  }
+
+  .znd-holder .zw-choice {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .znd-env {
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .znd-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+    cursor: pointer;
+  }
+
+  .znd-toggle input {
+    margin-top: 0.2em;
+    accent-color: var(--zw-bad);
+  }
+
+  .zw[data-garbage='1'] .znd-d0 .v {
+    color: var(--zw-bad-ink);
+  }
+
+  .znd-scan {
+    display: grid;
+    gap: 0.2em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: 500 0.76em var(--zw-mono);
+  }
+
+  .znd-scan li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.2em 0.6em;
+    color: var(--zw-text-2);
+  }
+
+  .znd-scan li[data-kind='ok'] .res {
+    color: var(--zw-public-ink);
+  }
+
+  .znd-scan li[data-kind='bad'] .res {
+    color: var(--zw-bad-ink);
+  }
+
+  .znd-scan li[data-kind='skip'] .res {
+    color: var(--zw-muted);
+  }
+</style>
