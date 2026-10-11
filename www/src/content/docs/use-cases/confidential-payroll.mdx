@@ -158,8 +158,8 @@ the note owner's signature.
 
 Budgets are shares of the per-transaction step limit, from zeroj-usecases ADR-0007 (r3). Fees were
 measured on Yaci DevKit with mainnet protocol parameters after the demo's fee optimization (commit
-`814b2f0`). The demo is pinned to a ZeroJ snapshot from before ZeroJ PRs #85 and #86, which lowered
-the cost of the on-chain Groth16 verifier, so current ZeroJ should come in somewhat lower.
+`814b2f0`). They were measured before ZeroJ PRs #85 and #86 lowered the cost of the on-chain Groth16
+verifier, so ZeroJ 0.1.0-pre13 and later should come in somewhat lower.
 
 A valid proof is not authorization. The ledger also checks the employer's signature, the owner's
 signature on spends, the registry reference input and the exact output shape. See
@@ -189,22 +189,16 @@ signature on spends, the registry reference input and the exact output shape. Se
 
 ## Try it
 
-:::note[The demo isn't merged yet]
-The payroll demo is in zeroj-usecases
-[PR #9](https://github.com/bloxbean/zeroj-usecases/pull/9), which is still open. Until it is merged,
-use the branch
-[`feat/confidential-notes-m3`](https://github.com/bloxbean/zeroj-usecases/tree/feat/confidential-notes-m3/pedersen-commitments).
-It builds against a ZeroJ development snapshot.
-:::
-
-With Yaci DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)) and Java 25:
+The demo is the **Confidential payroll** tab of the [`pedersen-commitments`](https://github.com/bloxbean/zeroj-usecases/tree/main/pedersen-commitments) app in zeroj-usecases. With Yaci DevKit
+running (see [Run the demos](/use-cases/overview/#run-the-demos)):
 
 ```bash
-git clone -b feat/confidential-notes-m3 https://github.com/bloxbean/zeroj-usecases
-cd zeroj-usecases
-./gradlew -p pedersen-commitments bootRun -PwithFrontend
-# open http://localhost:8093 and choose "Confidential payroll"
+./demo.sh pedersen
+# opens http://localhost:8093; choose "Confidential payroll"
 ```
+
+To run it without Docker, use Java 25 and `./gradlew -p pedersen-commitments bootRun -PwithFrontend`
+from the repository root.
 
 The first start runs development setups for every circuit and takes several minutes; later starts
 reuse the cached keys. In the payroll tab, pay a salary, open payslips, transfer and cash out, and

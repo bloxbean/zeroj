@@ -177,8 +177,8 @@ commit `814b2f0`):
 | Settle, 3 bids | 60.7% | about 1.03 ADA |
 | Refund | 4.1% | about 0.53 ADA |
 
-The demo is pinned to a ZeroJ snapshot from before ZeroJ PRs #85 and #86, which cut the cost of the
-on-chain Groth16 verifier. Bids and settlements cost less on current ZeroJ.
+These were measured before ZeroJ PRs #85 and #86 cut the cost of the on-chain Groth16 verifier, so
+bids and settlements cost less on ZeroJ 0.1.0-pre13 and later.
 
 ## Security considerations
 
@@ -201,18 +201,16 @@ on-chain Groth16 verifier. Bids and settlements cost less on current ZeroJ.
 
 ## Try it
 
-The demo is the "Sealed-bid auction" tab of the `pedersen-commitments` app. It's in
-[zeroj-usecases PR #9](https://github.com/bloxbean/zeroj-usecases/pull/9), which isn't merged yet, so
-check out its branch,
-[`feat/confidential-notes-m3`](https://github.com/bloxbean/zeroj-usecases/tree/feat/confidential-notes-m3/pedersen-commitments).
-With Yaci DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)):
+The demo is the **Sealed-bid auction** tab of the [`pedersen-commitments`](https://github.com/bloxbean/zeroj-usecases/tree/main/pedersen-commitments) app in zeroj-usecases. With Yaci DevKit
+running (see [Run the demos](/use-cases/overview/#run-the-demos)):
 
 ```bash
-git clone -b feat/confidential-notes-m3 https://github.com/bloxbean/zeroj-usecases
-cd zeroj-usecases
-./gradlew -p pedersen-commitments bootRun -PwithFrontend
-# then open http://localhost:8093 and pick the "Sealed-bid auction" tab
+./demo.sh pedersen
+# opens http://localhost:8093; pick the "Sealed-bid auction" tab
 ```
+
+To run it without Docker, use Java 25 and `./gradlew -p pedersen-commitments bootRun -PwithFrontend`
+from the repository root.
 
 The first start runs development setups for every circuit, which takes several minutes; later
 starts reuse the cached keys. In the tab you can open a lot (default: "Painting", 100 ADA deposit,

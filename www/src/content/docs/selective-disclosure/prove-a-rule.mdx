@@ -102,7 +102,7 @@ income.gte(minIncome).assertTrue();
 creditScore.gte(minScore).assertTrue();
 ```
 
-The pedersen-commitments demo in [zeroj-usecases PR #8](https://github.com/bloxbean/zeroj-usecases/pull/8)
+The [pedersen-commitments demo](https://github.com/bloxbean/zeroj-usecases/tree/main/pedersen-commitments)
 uses this as a **credit gate**: a bureau commits to Alice's profile (income 85,000, score 720), and
 she proves "income ≥ 50,000 and score ≥ 650" to a lender, who mints her a badge on-chain. If Mallory
 copies Alice's commitment and proof, the validator refuses, because the bureau's issuance record

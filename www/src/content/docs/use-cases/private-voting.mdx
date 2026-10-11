@@ -1,11 +1,13 @@
 ---
 title: Private voting
-description: Let each eligible member vote exactly once without revealing which member cast which ballot, using Merkle membership, nullifiers and Groth16 on Cardano.
+description: Let each eligible member vote exactly once, keep every choice secret, and publish only the total, using Merkle membership, nullifiers, ElGamal-encrypted ballots and Groth16 on Cardano.
 sidebar:
   order: 2
 ---
 
 import SinceNotice from '../../../components/SinceNotice.astro';
+import TextOnly from '../../../components/TextOnly.astro';
+import BallotPrivacyExplainer from '../../../components/walkthrough/BallotPrivacyExplainer.astro';
 import TallyWalkthrough from '../../../components/walkthrough/TallyWalkthrough.astro';
 import VotingWalkthrough from '../../../components/walkthrough/VotingWalkthrough.astro';
 
@@ -13,39 +15,63 @@ DAOs, community treasuries and project councils increasingly vote on-chain, and 
 every ballot is tied to an address. That invites vote buying ("show me your transaction and I'll
 pay you"), social pressure from peers and employers, and whales watching the count before they
 decide. What you want is a vote where eligibility and one-person-one-vote can be checked by
-anyone, but the link between a person and their ballot cannot.
+anyone, but nobody can tell who voted for what, and only the final result is ever revealed.
+
+<SinceNotice since="0.1.0-pre13" />
 
 <VotingWalkthrough />
 
 ## The zero-knowledge idea
 
 **The voter proves "I'm on the eligible-voter list, this is my one nullifier for this election,
-and this commitment records a valid yes/no vote", without revealing who they are.**
+and this encrypted ballot holds a 0 or a 1", without revealing who they are or how they voted.**
 
-Three values make this work:
+Four pieces make this work:
 
 - **Voter list.** Each voter's public key is `Poseidon(secretKey, 0)`. The organizer puts all public
   keys into a Merkle tree and publishes only the root.
 - **Nullifier.** `Poseidon(secretKey, electionId)`. It's deterministic, so the same voter in the same
   election always produces the same value, and a second vote is caught. A different `electionId`
   gives an unrelated nullifier, so a voter's ballots can't be linked across elections.
-- **Commitment.** `Poseidon(vote, nullifier)`: the ballot record used for the tally.
+- **Encrypted ballot.** The vote, encrypted with exponential **ElGamal** to an **election key** that
+  three trustees hold together. Nobody can open a single ballot, but ballots can be **added up while
+  still encrypted**.
+- **Tally.** After voting closes, the trustees decrypt only the **total**, once, and prove they did
+  it honestly.
 
-The circuit ties all three to one secret key. A voter who switches keys to get a fresh nullifier
-isn't in the tree, and a voter who keeps their key gets the same nullifier again.
+The circuit ties the first three to one secret key. A voter who switches keys to get a fresh
+nullifier isn't in the tree, and a voter who keeps their key gets the same nullifier again.
 
-:::caution[This design hides who voted, not how they voted]
-The ballot record `Poseidon(vote, nullifier)` has no randomness in it. The nullifier is public and
-the vote is either 0 or 1, so anyone can hash both choices and see which one matches: every vote
-can be read from public data. That's how the demo on zeroj-usecases `main` counts votes, and it was
-reported as [issue #7](https://github.com/bloxbean/zeroj-usecases/issues/7). Adding a random salt
-alone doesn't fix it, because then nobody could count the votes at all.
+If ElGamal is new to you, [Commitments & encryption, explained](/learn/commitments-and-encryption/)
+introduces it with an interactive lockbox.
 
-The fix replaces the ballot with an **encrypted vote** that can be added up while still encrypted,
-so only the final total is ever decrypted. It's described [below](#keep-the-choice-secret-too-an-encrypted-tally)
-and implemented in [zeroj-usecases PR #8](https://github.com/bloxbean/zeroj-usecases/pull/8) (open,
-not merged yet).
-:::
+## Why not just hash the vote?
+
+A hash looks like a natural way to hide a vote: publish `Poseidon(vote, nullifier)` and nobody can
+undo the hash. The first version of this demo did exactly that, and it doesn't work. **The
+nullifier is public and a vote is only 0 or 1, so anyone can hash both choices and see which one
+matches.** Hiding a value with a hash only works when there are far too many possible values to
+try. A yes/no vote, an age or a small amount can always be guessed this way.
+
+<BallotPrivacyExplainer />
+
+<TextOnly>
+
+| Ballot | Can an observer read one vote? | Can the votes be counted? |
+|---|---|---|
+| `Poseidon(vote, nullifier)` | Yes: hash 0 and 1 and compare | Yes, by reading every vote, which is the problem |
+| `Poseidon(vote, nullifier, salt)` | No, the salt is secret | Only after every voter reveals their salt, and with it their vote |
+| ElGamal ciphertext `(A, B)` | No: fresh randomness, and only the trustees together hold the key | Yes: ciphertexts add up, and only the total is decrypted |
+
+</TextOnly>
+
+A secret random salt stops the guessing, but then nobody can count the votes without every voter
+coming back to reveal their salt, which reveals their vote at the end. Encryption solves both
+problems at once: each ballot uses fresh randomness, so it can't be matched by guessing, and
+ElGamal ciphertexts can be added, so the total can be decrypted without opening any ballot. The
+hash version was reported as [issue #7](https://github.com/bloxbean/zeroj-usecases/issues/7) and
+replaced with the encrypted ballot described on this page
+([ADR-0005](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0005-private-ballot-homomorphic-tally.md)).
 
 ## What stays private, what's public
 
@@ -53,174 +79,133 @@ not merged yet).
 |---|---|---|
 | `secretKey` | Secret | The voter's identity; it derives both the public key and the nullifier |
 | Merkle path (`siblings`, `pathBits`) | Secret | The path would reveal the voter's position in the list |
-| `vote` | Secret (witness) | Constrained to 0 or 1; see the note above on decodability |
-| `electionId` | Public | Scopes the nullifier to this election |
-| `voterRoot` | Public | The published list of eligible voters |
+| `vote` | Secret | Inside the ciphertext; the proof limits it to 0 or 1 |
+| `randomness` (252 bits) | Secret | Fresh for every ballot; it's what makes two ballots for the same choice look unrelated |
+| `electionId`, `voterRoot` | Public | The election and its list of eligible voters, fixed in the on-chain script |
+| Election key `PK` (`PK.u`, `PK.v`) | Public | The trustees' combined key, also fixed in the script |
 | `nullifier` | Public | Recorded on-chain to block a second vote |
-| `commitment` | Public | The ballot record the tally reads |
+| Ballot `(A, B)` (`A.u`, `A.v`, `B.u`, `B.v`) | Public | The encrypted vote; it reveals nothing without the trustees |
 
 ## How it works
 
-1. **Register.** The organizer collects each voter's public key `Poseidon(secretKey, 0)`, builds
-   the Merkle tree and publishes `voterRoot` and `electionId`.
-2. **Prove.** The voter computes their Merkle path, nullifier and commitment and generates a
-   Groth16 proof with ZeroJ's pure-Java prover. In a real deployment this runs on the voter's own
-   device, so the secret key never leaves it. The demo proves server-side for convenience.
-3. **Submit.** A transaction mints one token whose name is the nullifier. The minting policy
-   verifies the proof on-chain, and the nullifier is inserted into an on-chain sorted list.
-4. **Reject repeats.** A second vote from the same key has the same nullifier. The list already
+1. **Trustee keys.** Each of the three trustees generates a key pair and publishes its public key
+   with a zero-knowledge *proof of possession* (a DLEQ proof that it knows the matching secret).
+   Without that proof, a dishonest trustee could choose its key to cancel the others' and read
+   every ballot alone. The election key is the sum of the three public keys.
+2. **Register.** The organizer collects each voter's public key `Poseidon(secretKey, 0)`, builds
+   the Merkle tree and publishes `voterRoot`. The election ID, the root, the election key and the
+   voting deadline become parameters of the on-chain scripts.
+3. **Encrypt and prove.** The voter encrypts their vote `v` with fresh randomness `k`:
+   `A = [k]·G`, `B = [v]·G + [k]·PK`. A Groth16 proof, made with ZeroJ's pure-Java prover, shows
+   that the voter is on the list, that the nullifier is theirs, and that `(A, B)` encrypts a 0 or
+   a 1 under `PK`. A ballot that tries to count twice (`v = 2`) has no valid proof. In a real
+   deployment this runs on the voter's own device; the demo proves server-side for convenience.
+4. **Submit.** A transaction mints one token whose name is the nullifier and creates a list node
+   that holds the ballot. The minting policy verifies the proof on-chain before the deadline, and
+   the nullifier is inserted into an on-chain sorted list.
+5. **Reject repeats.** A second vote from the same key has the same nullifier. The list already
    contains it, so the insert fails.
-5. **Tally.** Anyone reads the commitments on-chain and counts them.
+6. **Add up.** Anyone can add the ballots: `(ΣA, ΣB)` is an encryption of the number of YES votes.
+7. **Decryption shares.** After the deadline, each trustee publishes `D_j = [sk_j]·ΣA` together with
+   a DLEQ proof that it used the same secret as its registered key. A wrong share fails its proof.
+8. **Count.** `ΣB − (D₁ + D₂ + D₃) = [YES]·G`. The number of YES votes is small, so a short search
+   recovers it. Anyone can repeat every check from chain data and the published election manifest.
 
 ```text
-voter (off-chain)                        Cardano
-─────────────────                        ───────
-secretKey, vote, Merkle path  ──prove──▶  tx: redeemer = proof + 4 public inputs
-                                          ├─ minting policy: Groth16 check, mint 1 token named <nullifier>
-                                          └─ list validator: insert <nullifier> between sorted neighbours
+voter (off-chain)                              Cardano
+─────────────────                              ───────
+secretKey, Merkle path,                        tx: redeemer = proof; new list node = (nullifier, A, B)
+vote, randomness  ──encrypt + prove──▶          ├─ minting policy: Groth16 check, deadline, mint 1 token named <nullifier>
+                                                └─ list validator: insert <nullifier> between sorted neighbours
+after the deadline: anyone adds the ballots ─▶ trustees post verified shares ─▶ YES count
 ```
 
-## The circuit
+The trustees decrypt the total exactly once, after the deadline. Decrypting a running total twice
+would let anyone subtract the two results and learn the votes cast in between.
 
-This is lightly simplified from the demo's `PrivateVoteProof`: constructor validation is trimmed
-and the statements are reordered for reading.
+## Counting without opening a ballot
 
-```java title="PrivateVoteProof.java"
+Step through the tally. Switch to **Public view** to see what an observer gets: encrypted ballots,
+nullifiers, the trustees' shares, and the total.
+
+<TallyWalkthrough />
+
+## The ballot circuit
+
+Lightly simplified from the demo's `PrivateBallotProof`: constructor validation is trimmed.
+`ZkElGamal.encrypt` is ZeroJ's `elgamal-jubjub-v1` encryption relation, so the demo doesn't
+implement any ElGamal itself.
+
+```java title="PrivateBallotProof.java"
 import org.zeroj.circuit.annotation.*;
 import org.zeroj.circuit.lib.poseidon.PoseidonParams;
 import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
+import org.zeroj.circuit.lib.zk.ZkElGamal;
+import org.zeroj.circuit.lib.zk.ZkElGamalPublicKey;
 import org.zeroj.circuit.lib.zk.ZkMerkle;
 import org.zeroj.circuit.lib.zk.ZkPoseidon;
 
-@ZKCircuit(name = "private-vote",
-           nameTemplate = "private-vote-d{treeDepth}-bls-poseidon", version = 1)
-public class PrivateVoteProof {
+@ZKCircuit(name = "private-ballot",
+           nameTemplate = "private-ballot-d{treeDepth}-jubjub-elgamal", version = 3)
+public class PrivateBallotProof {
     private static final PoseidonParams POSEIDON = PoseidonParamsBLS12_381T3.INSTANCE;
 
-    public PrivateVoteProof(@CircuitParam("treeDepth") int treeDepth) {}
+    public PrivateBallotProof(@CircuitParam("treeDepth") int treeDepth) {}
 
     @Prove
-    ZkBool prove(ZkContext zk,
-                 @Public ZkField electionId,
-                 @Public ZkField voterRoot,
-                 @Public ZkField nullifier,
-                 @Public ZkField commitment,
-                 @Secret ZkBool vote,                  // ZkBool: constrained to 0 or 1
-                 @Secret ZkField secretKey,
-                 @Secret @FixedSize(param = "treeDepth") ZkArray<ZkField> siblings,
-                 @Secret @FixedSize(param = "treeDepth") ZkArray<ZkBool> pathBits) {
+    void prove(ZkContext zk,
+               @Public ZkField electionId,
+               @Public ZkField voterRoot,
+               @Public ZkField electionKeyU, @Public ZkField electionKeyV,   // PK
+               @Public ZkField nullifier,
+               @Public ZkField handleU, @Public ZkField handleV,           // A
+               @Public ZkField ballotU, @Public ZkField ballotV,           // B
+               @Secret @UInt(bits = 1) ZkUInt vote,                        // 0 or 1
+               @Secret @UInt(bits = 252) ZkUInt randomness,
+               @Secret ZkField secretKey,
+               @Secret @FixedSize(param = "treeDepth") ZkArray<ZkField> siblings,
+               @Secret @FixedSize(param = "treeDepth") ZkArray<ZkBool> pathBits) {
 
-        var publicKey = ZkPoseidon.hash(zk, POSEIDON, secretKey, zk.constant(0));
-        ZkMerkle.verifyProofPoseidon(zk, POSEIDON, publicKey, voterRoot, siblings, pathBits);
+        // Eligibility, and one nullifier per voter and election.
+        ZkPoseidon.hash(zk, POSEIDON, secretKey, electionId).assertEqual(nullifier);
+        var voterKey = ZkPoseidon.hash(zk, POSEIDON, secretKey, zk.constant(0));
+        ZkMerkle.verifyProofPoseidon(zk, POSEIDON, voterKey, voterRoot, siblings, pathBits);
 
-        var computedNullifier  = ZkPoseidon.hash(zk, POSEIDON, secretKey, electionId);
-        var computedCommitment = ZkPoseidon.hash(zk, POSEIDON, vote.asField(), nullifier);
-
-        return computedNullifier.isEqual(nullifier)
-                .and(computedCommitment.isEqual(commitment));
+        // The ballot: an encryption of a 1-bit vote under the election key.
+        var electionKey = ZkElGamalPublicKey.fromVerifierFixedPublic(zk, electionKeyU, electionKeyV);
+        ZkElGamal.encrypt(zk, vote, randomness, electionKey)
+                .assertAffineEquals(zk, handleU, handleV, ballotU, ballotV);
     }
 }
 ```
 
-The annotation processor generates a `PrivateVoteProofCircuit` companion that you compile to R1CS
-and prove with Groth16. Before you trust a circuit like this, test it with invalid witnesses: a key
-that isn't in the tree, a nullifier from another election, a vote of 2. It should reject every one.
-See [Testing circuits](/guides/circuits/testing-circuits/).
+The `@UInt(bits = 1)` on `vote` is what limits a ballot to 0 or 1. The circuit has 9,477
+constraints at tree depth 10. The annotation processor generates a `PrivateBallotProofCircuit`
+companion that you compile to R1CS and prove with Groth16. Before you trust a circuit like this,
+test it with invalid witnesses: a key that isn't in the tree, a nullifier from another election, a
+vote of 2, a ballot encrypted to another key. It should reject every one. See
+[Testing circuits](/guides/circuits/testing-circuits/).
 
 ## On Cardano
 
 The demo uses two Plutus V3 scripts written in Java with JuLC:
 
-- **`VoteZkMintingPolicy`** composes `Groth16BLS12381Lib.verifyFour(...)` from `zeroj-onchain-julc`.
-  The verification key is baked in as script parameters. The redeemer carries the three proof
-  points plus the four public inputs. The policy also requires exactly one token to be minted and
-  its name to equal the nullifier.
-- **`VoteListValidator`** keeps nullifiers in a **sorted linked list**, one UTxO per nullifier.
-  Inserting between two neighbours proves the new nullifier wasn't there before. Votes that land in
-  different parts of the list touch different UTxOs, so they don't contend. Each node locks a small
-  min-UTxO deposit that can be reclaimed after the election.
+- **`VoteZkMintingPolicy`** verifies the ballot proof with `Groth16BLS12381Lib.verify(...)` from
+  `zeroj-onchain-julc`. The redeemer carries only the proof. Every one of the nine public inputs
+  comes from the script's parameters (`electionId`, `voterRoot`, the election key, and the
+  verification key) or from the ledger: the nullifier is the name of the single token minted, and
+  the ballot is read from the inline datum of the list node that receives it. The transaction must
+  also be valid only up to the voting deadline.
+- **`VoteListValidator`** keeps nullifiers in a **sorted linked list**, one UTxO per nullifier, each
+  holding its ballot. Inserting between two neighbours proves the new nullifier wasn't there
+  before. Votes that land in different parts of the list touch different UTxOs, so they don't
+  contend. Each node locks about 2 ADA.
 
-A valid proof is not authorization. The proof only says "some eligible voter produced this
-nullifier for *this* `electionId` and `voterRoot`". For simplicity the demo policy takes both values
-from the redeemer. A real deployment must pin them to the election's state, as script parameters or
-via a reference input, or a voter could prove membership in a tree they built themselves. See
-[On-chain verification](/guides/verifying/on-chain/).
+A valid proof is not authorization, which is why the election's values are script parameters and
+not redeemer fields: otherwise a voter could prove membership in a tree they built themselves, or
+encrypt to a key they hold. See [On-chain verification](/guides/verifying/on-chain/).
 
-## Keep the choice secret too: an encrypted tally
-
-<SinceNotice since="0.1.0-pre13" />
-
-The version of the demo in [PR #8](https://github.com/bloxbean/zeroj-usecases/pull/8) keeps the
-voter list and the nullifier exactly as above, and changes what a ballot is. Instead of a hash of
-the vote, each ballot is an **exponential ElGamal ciphertext** of 0 or 1, encrypted to an election
-key that three **trustees** hold together. Ciphertexts of this kind can be added while still
-encrypted, so the chain can total the ballots without opening any of them. After voting closes,
-the trustees decrypt the **total**, once, and prove they did it honestly.
-
-<TallyWalkthrough />
-
-If ElGamal is new to you, [Commitments & encryption, explained](/learn/commitments-and-encryption/)
-introduces it with an interactive lockbox.
-
-### What changes in the ballot
-
-| Input | Visibility | Why |
-|---|---|---|
-| `vote` | Secret | Now hidden from everyone: it's inside the ciphertext |
-| `randomness` (252 bits) | Secret | Fresh for every ballot; without it the ciphertext can't be opened |
-| `secretKey`, Merkle path | Secret | Unchanged: eligibility and the nullifier |
-| `electionId`, `voterRoot` | Public | Unchanged, and now script parameters, so a voter can't pick their own |
-| Election key `PK` (`PK.u`, `PK.v`) | Public | The trustees' combined key, also a script parameter |
-| `nullifier` | Public | Unchanged: blocks a second vote |
-| Ballot `(A, B)` (`A.u`, `A.v`, `B.u`, `B.v`) | Public | The encrypted vote. It reveals nothing without the trustees' keys |
-
-### How it works
-
-1. **Trustee keys.** Each trustee generates a key pair and publishes its public key with a
-   zero-knowledge *proof of possession* (a DLEQ proof that it knows the matching secret). Without
-   that proof, a dishonest trustee could choose its key to cancel the others' and read every
-   ballot alone. The election key is the sum of the three public keys.
-2. **Encrypt and prove.** The voter encrypts their vote `v` with fresh randomness `k`:
-   `A = [k]·G`, `B = [v]·G + [k]·PK`. The ballot proof shows that the voter is eligible, that the
-   nullifier is theirs, and that `(A, B)` encrypts a 0 or a 1 under `PK`. A ballot that tries to
-   count twice (`v = 2`) has no valid proof.
-3. **Submit.** As before, the minting policy verifies the proof on-chain and mints the nullifier
-   token, and the list validator refuses a second node with the same nullifier. The transaction is
-   only valid before the voting deadline.
-4. **Add up.** Anyone can add the ballots: `(ΣA, ΣB)` is an encryption of the number of YES votes.
-5. **Decryption shares.** After the deadline, each trustee publishes `D_j = [sk_j]·ΣA` together with
-   a DLEQ proof that it used the same secret as its registered key. A wrong share fails its proof.
-6. **Count.** `ΣB − (D₁ + D₂ + D₃) = [YES]·G`. The number of YES votes is small, so a short search
-   recovers it. Anyone can repeat every check from chain data and the published election manifest.
-
-The trustees decrypt the total exactly once, after the deadline. Decrypting a running total twice
-would let anyone subtract the two results and learn the votes cast in between.
-
-### The ballot circuit
-
-The core of `PrivateBallotProof` in PR #8. The nullifier and Merkle lines are the same as before;
-the last two lines are new. `ZkElGamal.encrypt` is ZeroJ's `elgamal-jubjub-v1` encryption
-relation, so the demo doesn't implement any ElGamal itself.
-
-```java title="PrivateBallotProof.java (core)"
-// Public: electionId, voterRoot, electionKeyU/V, nullifier, handleU/V (A), ballotU/V (B)
-// Secret: vote (@UInt(bits = 1)), randomness (@UInt(bits = 252)), secretKey, siblings, pathBits
-
-// Eligibility, and one nullifier per voter and election.
-ZkPoseidon.hash(zk, POSEIDON, secretKey, electionId).assertEqual(nullifier);
-var voterKey = ZkPoseidon.hash(zk, POSEIDON, secretKey, zk.constant(0));
-ZkMerkle.verifyProofPoseidon(zk, POSEIDON, voterKey, voterRoot, siblings, pathBits);
-
-// The ballot: an encryption of a 1-bit vote under the election key.
-var electionKey = ZkElGamalPublicKey.fromVerifierFixedPublic(zk, electionKeyU, electionKeyV);
-ZkElGamal.encrypt(zk, vote, randomness, electionKey)
-        .assertAffineEquals(zk, handleU, handleV, ballotU, ballotV);
-```
-
-The `@UInt(bits = 1)` on `vote` is what limits a ballot to 0 or 1. The circuit has 9,477
-constraints at tree depth 10.
-
-### Counting the votes
+## Counting the votes in code
 
 Off-chain, the tally uses ZeroJ's ElGamal API. Simplified from the demo's `TallyService`, with one
 trustee's secret shown for brevity (each trustee computes its own share on its own machine):
@@ -251,7 +236,7 @@ long yes = ElGamal.decrypt(total, List.of(share1, share2, share3), total.bound()
 total's bound is the number of ballots, so the final search is tiny. See the
 [ElGamal guide](/guides/confidential/elgamal/) for the full API.
 
-### Limits of the encrypted tally
+## Limits
 
 - **Every trustee is needed, and all of them together could read any ballot.** The demo's key is
   *n-of-n*: if one trustee disappears, nothing can be decrypted, and the three together could
@@ -262,55 +247,48 @@ total's bound is the number of ballots, so the final search is tiny. See the
 - **The demo server knows every vote.** For convenience it holds every voter's and trustee's secret
   and proves on their behalf. In a real election each voter proves on their own device and each
   trustee keeps its own key.
-- **No receipt-freeness.** A voter can still prove to a vote buyer how they voted, by handing over
-  the randomness `k`. Coercion resistance needs designs such as MACI.
 - **Small or unanimous results reveal votes.** If all three ballots are YES, everyone knows how each
   voter voted. The total is always public.
-- **Transactions can still link voters.** If voters pay fees from their own wallets, the fee input
-  ties them to their nullifier. Use a relayer, as the demo's single service wallet does.
-- **Development trusted setup**, as for the rest of the demo.
+- **The vote list is public.** Anyone can see how many ballots were cast and when.
 
 ## Security considerations
 
 - **The voter list is a trust point.** Whoever builds the tree decides who can vote. Publish the
   leaves so members can check their inclusion and spot keys that shouldn't be there.
-- **Pin the election's public inputs** (`electionId`, `voterRoot`) on-chain, as described above.
+- **Check the trustees' key proofs.** The election key is only as good as the possession proofs
+  behind it; the manifest publishes every key with its proof so anyone can rebuild it.
 - **Watch transaction-level metadata.** In the demo a service wallet submits and pays for every
   vote. If voters pay fees from their own wallets, the fee input links them to their ballot. Use a
   relayer and be mindful of timing.
-- **No coercion resistance.** A voter can hand their secret key to a vote buyer, who recomputes the
-  nullifier and checks the commitment. Anti-collusion designs such as MACI address this. This demo
-  doesn't.
+- **No receipt-freeness or coercion resistance.** A voter can prove to a vote buyer how they voted
+  by handing over the randomness `k`, or hand over their secret key entirely. Anti-collusion
+  designs such as MACI address this. This demo doesn't.
 - **Key theft is vote theft.** Anyone who learns a voter's secret key can vote in their place.
-- **Trusted setup.** The demo uses a single-party development setup. A real election needs keys from
-  a multi-party ceremony ([Trusted setup, explained](/learn/trusted-setup/)).
+- **Trusted setup.** The demo uses a single-party development setup for both its circuits. A real
+  election needs keys from a multi-party ceremony ([Trusted setup, explained](/learn/trusted-setup/)).
 
 ## Try it
 
 The demo lives in
-[`private-voting`](https://github.com/bloxbean/zeroj-usecases/tree/main/private-voting). On `main`
-it's the hash-ballot version described first on this page. The encrypted-tally version is on the
-`feat/pedersen-private-ballot-and-demos` branch of
-[PR #8](https://github.com/bloxbean/zeroj-usecases/pull/8) until that's merged; check out the branch
-to run it. It builds against a ZeroJ development snapshot, because the ElGamal APIs aren't in a
-release yet. With Yaci DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)):
+[`private-voting`](https://github.com/bloxbean/zeroj-usecases/tree/main/private-voting). With Yaci
+DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)):
 
 ```bash
 ./demo.sh voting --run
 ```
 
-At startup the app creates an election with five funded test voters. With `--run`, `voter1` votes
-yes and `voter2` votes no. Each vote is proven in pure Java and verified on-chain, and then the
-tally is printed. To see double-vote protection, vote again as `voter1` from the UI, or run:
+At startup the app creates an election with five funded test voters and three trustees, and opens
+voting for 10 minutes. With `--run`, `voter1` votes yes and `voter2` votes no. Each ballot is
+encrypted and proven in pure Java and verified on-chain. To see double-vote protection, vote again
+as `voter1` from the UI, or run:
 
 ```bash
 curl -X POST http://localhost:8086/api/vote \
   -H "Content-Type: application/json" -d '{"voterLabel":"voter1","vote":0}'
 ```
 
-The second vote is rejected because `voter1`'s nullifier is already in the on-chain list.
-
-On the PR #8 branch, cast a third vote (`voter3` yes) and then fetch the tally:
+The second vote is rejected because `voter1`'s nullifier is already in the on-chain list. Cast a
+third vote (`voter3` yes) and fetch the tally:
 
 ```bash
 curl http://localhost:8086/api/results
@@ -338,5 +316,3 @@ Design notes:
   ciphertext is and why ciphertexts add up
 - [Split trust between parties](/selective-disclosure/split-trust/): when no single party should be
   able to decrypt
-- [ElGamal encryption guide](/guides/confidential/elgamal/) and
-  [Threshold ElGamal guide](/guides/confidential/threshold-elgamal/): the APIs behind the tally

@@ -225,20 +225,16 @@ the reserves came from or that every customer was included. Those gaps are liste
 
 ## Try it
 
-The demo is tab "C. Hidden-liability solvency" in the `pedersen-commitments` app of
-[zeroj-usecases](https://github.com/bloxbean/zeroj-usecases). It is in
-[pull request #9](https://github.com/bloxbean/zeroj-usecases/pull/9), which isn't merged yet, on the
-branch
-[`feat/confidential-notes-m3`](https://github.com/bloxbean/zeroj-usecases/tree/feat/confidential-notes-m3/pedersen-commitments).
-It needs Java 25 and a running Yaci DevKit (see [Run the demos](/use-cases/overview/#run-the-demos)):
+The demo is tab "C. Hidden-liability solvency" in the [`pedersen-commitments`](https://github.com/bloxbean/zeroj-usecases/tree/main/pedersen-commitments) app in zeroj-usecases. With Yaci
+DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)):
 
 ```bash
-git clone https://github.com/bloxbean/zeroj-usecases
-cd zeroj-usecases
-git checkout feat/confidential-notes-m3
-./gradlew -p pedersen-commitments bootRun -PwithFrontend
-# open http://localhost:8093 and pick the solvency tab
+./demo.sh pedersen
+# opens http://localhost:8093; pick the solvency tab
 ```
+
+To run it without Docker, use Java 25 and `./gradlew -p pedersen-commitments bootRun -PwithFrontend`
+from the repository root.
 
 The first start compiles the circuits and runs development setups, which takes a few minutes. In the
 tab you can edit the book, attest with locked reserves for a period that starts about 45 seconds
@@ -246,8 +242,8 @@ later and lasts 180 seconds, run each customer's check, and let the auditor open
 cheat: lock less than the book (no proof exists), give one customer a garbage delivery (their check
 reports `UNOPENABLE`), or attest again or release inside the period (the vault rejects it).
 
-Design notes: ADR-0006 (demo C) and ADR-0007 (on-chain deliveries) in the zeroj-usecases `docs/adr`
-directory on the same branch.
+Design notes: ADR-0006 (demo C) and ADR-0007 (on-chain deliveries) in the zeroj-usecases
+[`docs/adr`](https://github.com/bloxbean/zeroj-usecases/tree/main/docs/adr) directory.
 
 ## Related
 

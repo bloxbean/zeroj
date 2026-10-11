@@ -70,8 +70,7 @@ alternative to Groth16, and these docs make no correctness or readiness claims f
 
 ### Commitments & encryption
 
-New in 0.1.0-pre13 (before that release is on Maven Central, use a [snapshot](/start/installation/#snapshots)). All of
-these live in `zeroj-circuit-lib`.
+New in 0.1.0-pre13. All of these live in `zeroj-circuit-lib`.
 
 | Area | Modules | Status |
 |------|---------|--------|

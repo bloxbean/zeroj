@@ -57,8 +57,8 @@ Treat them as blueprints to learn from, not as systems for real identities, vote
 ## Confidential values
 
 Balances, salaries and bids kept private on a public ledger, with Pedersen commitments, ElGamal
-encryption and confidential notes. These demos are new in ZeroJ 0.1.0-pre13 and live on open
-[zeroj-usecases](https://github.com/bloxbean/zeroj-usecases) pull requests until they merge.
+encryption and confidential notes. These demos are new in ZeroJ 0.1.0-pre13 and all run in one
+app, `pedersen-commitments`, with a tab per use case.
 
 <CardGrid>
   <LinkCard
@@ -179,14 +179,9 @@ cd zeroj-usecases
 
 `demo.sh` tops up a devnet-only demo wallet, starts the app, opens its UI and, with `--run`, runs
 the happy path. The demo names are `proof-of-reserves`, `identity-kyc`, `nft-ownership`, `voting`,
-`airdrop`, `dpp`, `selective-disclosure` and `reusable-kyc`. The account-ownership demo ships
+`airdrop`, `dpp`, `selective-disclosure`, `reusable-kyc` and `pedersen` (the confidential-values app:
+payroll, auction, points, credit gate and solvency tabs). The account-ownership demo ships
 separately as a desktop app and CLI; see [its page](/use-cases/account-recovery/#try-it).
-
-The confidential-values demos (one `pedersen-commitments` app with payroll, auction, points, credit
-gate and solvency tabs) and the encrypted voting tally are on open pull requests
-[#8](https://github.com/bloxbean/zeroj-usecases/pull/8) and
-[#9](https://github.com/bloxbean/zeroj-usecases/pull/9). Each use-case page's "Try it" section
-explains how to run them from the branch until they merge.
 
 The demos use a single-party development trusted setup (they run with
 `-Dzeroj.allowInsecureTrustedSetup=true`, and cached setup files are generated the same way). Real
