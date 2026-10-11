@@ -1,7 +1,8 @@
 // Data for ReservesWalkthrough, shared by its server render and its client script.
 // Values follow the zeroj-usecases proof-of-reserves demo: the eight accounts seeded by
-// AccountService.init(), zk.tree-depth 4 (16 slots, unused ones padded with balance 0) in
-// application.yml, and `./demo.sh proof-of-reserves --run`, which proves against 10,000 ADA.
+// AccountService.init(), zk.tree-depth 4 (16 slots, unused ones padded with a random id and
+// balance 0) and reserves.period-ms 300000 in application.yml, and
+// `./demo.sh proof-of-reserves --run`, which proves against 10,000 ADA.
 
 export const ACCOUNTS = [
   { id: 'alice', name: 'Alice', ada: 500 },
@@ -18,9 +19,12 @@ export const TREE_DEPTH = 4;
 export const SLOTS = 1 << TREE_DEPTH;
 export const TOTAL_LIABILITIES = ACCOUNTS.reduce((sum, a) => sum + a.ada, 0);
 export const DECLARED_RESERVES = 10_000;
+// Attestation period length in the demo (reserves.period-ms): one attestation token per period.
+export const PERIOD_MINUTES = 300_000 / 60_000;
 export const RESERVE_RANGE = { min: 6_000, max: 12_000, step: 500 };
 
 export const ada = (n: number) => `${n.toLocaleString('en-US')} ADA`;
 
-// The circuit proves isSolvent == (totalReserves >= totalLiabilities); the validator requires 1.
+// The circuit proves isSolvent == (totalReserves >= totalLiabilities); the attestation minting
+// policy verifies the proof with isSolvent fixed to 1.
 export const isSolvent = (reserves: number) => reserves >= TOTAL_LIABILITIES;

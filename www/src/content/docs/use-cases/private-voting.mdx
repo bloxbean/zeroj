@@ -247,6 +247,11 @@ total's bound is the number of ballots, so the final search is tiny. See the
 - **The demo server knows every vote.** For convenience it holds every voter's and trustee's secret
   and proves on their behalf. In a real election each voter proves on their own device and each
   trustee keeps its own key.
+- **Demo voter keys are random and kept.** The test voters' secret keys come from `SecureRandom`
+  and are stored, owner-only, in the demo's data directory. Earlier versions used small fixed
+  numbers (`10000 + i`), so anyone could compute each voter's nullifier, match ballots to
+  voters, or vote for a voter who hadn't voted yet. Voting "as Alice" by label in the demo is the operator acting for that voter, not the
+  voter signing in.
 - **Small or unanimous results reveal votes.** If all three ballots are YES, everyone knows how each
   voter voted. The total is always public.
 - **The vote list is public.** Anyone can see how many ballots were cast and when.

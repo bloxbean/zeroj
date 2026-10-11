@@ -56,10 +56,15 @@ also the upper limit: a bid can never exceed what the bidder has locked.
 | Deposit, reserve, deadlines, item | Public | Public | Public | Public |
 | Bid ciphertexts and bid proofs | Public | Public | Public | Public |
 | Winner and winning price | Public after settlement | Proves them | Public after settlement | Public after settlement |
-| Losing bid amounts | Only its own | Decrypts them | Never published | Never published |
+| Losing bid amounts | Only its own | Decrypts them | Bounded, never published | Bounded, never published |
 
 The winning price is public by design: the seller is paid in ADA, so the amount shows up in the
 settlement transaction anyway.
+
+Losing bids never appear on-chain in the clear, but they aren't fully hidden either. Every bid is
+proved to lie between the reserve and the deposit, and settlement proves the winner is the earliest
+highest bid. So once the price is public, everyone knows each losing bid lies in `[reserve, price]`,
+and a losing bid placed before the winner's lies strictly below the price.
 
 ## How it works
 
@@ -185,6 +190,10 @@ bids and settlements cost less on ZeroJ 0.1.0-pre13 and later.
 - **The auctioneer sees every bid.** It's trusted for confidentiality, not for the outcome. It could
   leak bids to a favoured bidder while bidding is open, and nothing here prevents that. Removing
   that trust needs a different design, such as a key split among several trustees.
+- **Demo custody.** The demo server holds the auctioneer's decryption key, and `GET /api/auction`
+  returns the auctioneer's view (`auctioneerView`, every decrypted bid) to anyone who calls it.
+  That is the demo operator's view. Privacy here holds against chain and mempool observers, not
+  against the demo server.
 - **No forward secrecy.** The ciphertexts stay on-chain. Whoever holds the auctioneer's secret key,
   now or in the future, can read every bid ever placed in its lots.
 - **The auctioneer can refuse to settle.** Bidders then wait until the settlement deadline and

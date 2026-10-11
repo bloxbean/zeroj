@@ -1,156 +1,285 @@
 ---
 title: Digital product passport
-description: Prove a product meets carbon, recycled-content and origin thresholds without exposing the supplier data behind them, anchored on Cardano.
+description: An auditor commits to each product measurement with a Pedersen commitment; the manufacturer proves carbon, recycled-content, origin and inspection claims against them, and one co-signed Cardano transaction mints a locked passport record.
 sidebar:
   order: 8
 ---
 
+import SinceNotice from '../../../components/SinceNotice.astro';
+import TextOnly from '../../../components/TextOnly.astro';
+import PassportPrivacyExplainer from '../../../components/walkthrough/PassportPrivacyExplainer.astro';
 import ProductPassportWalkthrough from '../../../components/walkthrough/ProductPassportWalkthrough.astro';
 
 The EU's Ecodesign for Sustainable Products Regulation (ESPR) introduces Digital Product Passports:
 verifiable records of a regulated product's materials, carbon footprint, recycled content and
-origin. Regulators, recyclers and consumers need to trust
-those claims. But the exact numbers behind them are commercially sensitive. A precise carbon figure
-reveals manufacturing efficiency, origin data reveals suppliers, and inspection records reveal defect
-rates. The tension is real: *prove it, but don't publish it.*
+origin. Regulators, recyclers and consumers need to trust those claims. But the exact numbers
+behind them are commercially sensitive. A precise carbon figure reveals manufacturing efficiency,
+origin data reveals suppliers, and inspection records reveal defect rates. The tension is real:
+*prove it, but don't publish it.*
+
+<SinceNotice since="0.1.0-pre13" />
 
 <ProductPassportWalkthrough />
 
 ## The zero-knowledge idea
 
-**The manufacturer proves "an auditor committed to this product's measurement, and it meets the
-threshold" (for example carbon ≤ 50 kg CO₂e, or recycled content ≥ 30 %) without revealing the
-measurement.**
+**The auditor seals each measurement in a Pedersen commitment. The manufacturer proves "the value
+in this commitment is at most 50 kg CO₂e" (or "at least 30 % recycled", "an EU country", "three
+approved inspections in order") without opening it.**
 
-The pattern is the same for every claim:
+The flow, in plain terms:
 
-- An **auditor** measures the product and commits to `(productId, measurement)`.
-- The **manufacturer** proves, in zero knowledge, that the committed measurement passes the public
-  threshold.
-- The **proof is tied to one product**, because `productId` is inside the committed hash.
-- **Anyone** can check the proof. Nobody learns the number.
+- **The auditor commits.** It measures the product and, for each claim, computes a
+  `pedersen-jubjub-vector-v1` commitment `C = (u, v)` with a fresh 252-bit random blinding `r`.
+  It gives the opening `(m, r)` (value and blinding) to the manufacturer with its report.
+- **The manufacturer proves.** For each claim, a Groth16 proof shows that the value inside `C`
+  passes the rule. A claim that doesn't hold has no proof at all.
+- **One transaction mints the passport.** The manufacturer builds it, the auditor co-signs it, and
+  the `DppPassport` script mints a passport token into a locked output whose datum holds every
+  commitment the auditor attests.
+- **Anyone reads it.** Customs, a buyer or a regulator finds the passport on-chain and checks each
+  claim's proof against the commitments there. The carbon proof was checked on-chain at mint; the
+  manufacturer publishes the other proofs off-chain (in the demo, its server serves them). Only the
+  auditor can revoke it.
 
-The demo applies this to carbon (≤), recycled content (≥), manufacturing origin (Merkle membership
-in an approved-country set) and an ordered chain of inspections. It covers two scenarios: EV
-batteries with a passport NFT per product, and textiles with one per batch.
+If commitments are new to you, [Hide a number](/selective-disclosure/hide-a-number/) explains them
+with an interactive envelope.
+
+## Why not just hash the measurement?
+
+The first version of this demo published `auditorHash = Poseidon(auditorSecret, Poseidon(productId,
+m))` in the passport datum, where `m` is the measurement. It leaked in two ways:
+
+- **The key was not secret.** `auditorSecret` was an input to the manufacturer's proof, so every
+  manufacturer had to hold it, and the demo hard-coded it (`777777`) in its source.
+- **The value was easy to guess.** Carbon and recycled content are 16-bit numbers, and a country
+  is one of about 250 codes. Anyone could hash all 65,536 candidates and read `m` off the chain.
+  A hash of a small value with a known key hides nothing.
+
+A Pedersen commitment fixes both. The blinding is fresh for each commitment and is never shared
+between manufacturers, and for every possible value there is some blinding that gives the same
+point, so the commitment says nothing about the value. Try the search yourself:
+
+<PassportPrivacyExplainer />
+
+<TextOnly>
+
+| Published in the datum | Can an observer recover the carbon value? |
+|---|---|
+| `auditorHash = Poseidon(auditorSecret, Poseidon(productId, carbon))`, with `auditorSecret = 777777` in the demo source | Yes: hash all 65,536 values and compare |
+| `C = (u, v)`, a `pedersen-jubjub-vector-v1` commitment with a fresh 252-bit blinding | No: every value matches some blinding |
+
+</TextOnly>
+
+The old design had binding gaps too. The minting policy fixed neither the threshold nor
+`auditorHash`, so a manufacturer could prove against a threshold, or a value, of its own choosing.
+The token name was not tied to the product and could be minted again, and the demo's registry and
+`/api/dpp/status` returned every measurement. The demo's `PassportBruteForceTest` runs the
+65,536-value search: it recovers the carbon value from an old datum and nothing from a new
+passport. The redesign is
+[ADR-0009](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0009-privacy-and-binding-hardening-of-the-original-demos.md)
+D1.
 
 ## What stays private, what's public
 
-| Input | Visibility | Why |
+| Value | Visibility | Why |
 |---|---|---|
-| `measurement` | Secret | The exact carbon figure or recycled percentage: the competitive data |
-| `auditorSecret` | Secret | Opens the auditor's commitment |
-| `productId` | Public | Ties the proof to one product or batch |
-| `threshold` | Public | The regulatory or labelling limit |
-| `auditorHash` | Public | The auditor's commitment to `(productId, measurement)` |
-| `isCompliant` | Public | Proven equal to the threshold comparison; the validator requires 1 |
+| Measurements (`carbon_kg`, `recycled_pct`, `country`, inspector ids and times) | Secret | The competitive data; held by the auditor and the manufacturer |
+| Blinding `r` (one per claim, 252 bits) | Secret | Fresh from `SecureRandom`; it's what makes the commitment hide the value |
+| `productId` | Public | The token name and the first datum field; ties the passport to one product |
+| `manufacturerPkh` | Public | In the datum, and fixed by the script |
+| Each claim's `(claim, σ, u, v)` | Public | The commitment `(u, v)` and its schema digest `σ`, in the datum |
+| Threshold (50 kg) and approved-set roots | Public | Fixed by the script (carbon) or by the reader (the other claims) |
 
-## How it works
+`σ` is the digest of the claim's schema. A commitment point doesn't record what its values mean,
+so every proof binds `σ` as a public input, and every verifier takes the expected `σ` from its own
+copy of the schemas.
 
-1. **Register.** Products and batches go into a registry. The demo keeps it in a Merkle Patricia
-   Forestry trie hashed with Poseidon, so its root stays circuit-friendly.
-2. **Audit.** The auditor measures and publishes a commitment per product and claim.
-3. **Prove.** The manufacturer generates one Groth16 proof per claim.
-4. **Mint the passport.** A minting policy checks the manufacturer's signature and the compliance
-   proof, then mints exactly one passport token. The public inputs sit in the output's inline datum.
-5. **Check.** Anyone can read the passport and its public inputs on-chain. A non-compliant product
-   can't mint one.
+## The four claims
 
-```text
-auditor ──commit(productId, measurement)──▶ auditorHash (public)
-manufacturer ──prove(measurement ≤ threshold)──▶ mint DPP token
-                                                 datum: [productId, threshold, auditorHash, isCompliant=1]
-```
+Each claim is one commitment under its own schema. The labels and bit widths are fixed by the
+design:
+
+| Claim (id) | Schema | Circuit | Public inputs, in order | Rule | Constraints |
+|---|---|---|---|---|---|
+| Carbon (0) | `zeroj.demo.dpp.carbon` v1: `carbon_kg`/16 | `CarbonClaimProof` | `σ, u, v, threshold` | `carbon_kg ≤ threshold` | 2,192 |
+| Recycled content (1) | `zeroj.demo.dpp.recycled` v1: `recycled_pct`/16 | `RecycledClaimProof` | `σ, u, v, threshold` | `recycled_pct ≥ threshold` | 2,192 |
+| Origin (2) | `zeroj.demo.dpp.origin` v1: `country`/16 | `OriginClaimProof` | `σ, u, v, countryRoot` | `country` is a leaf of the approved-set tree (depth 5, the 27 EU states) | 3,344 |
+| Inspections (3) | `zeroj.demo.dpp.inspections` v1: `inspector_0`/8, `time_0`/32, … `inspector_2`/8, `time_2`/32 | `InspectionClaimProof` | `σ, u, v, inspectorRoot` | each inspector is a leaf of the approved-inspector tree (depth 3), and `time_0 < time_1 < time_2` | 5,094 |
+
+- **No shared secret, no `isCompliant`.** Every rule is an assertion, so a failing measurement
+  simply can't be proved.
+- **The auditor commits only passed inspections**, so there is no `passed` entry. An inspector may
+  appear at more than one checkpoint.
+- **Tree padding.** Unused leaves hold `2^k`, where `k` is the entry's width (`2^16` for countries,
+  `2^8` for inspectors). A committed value is at most `k` bits, so it can never equal padding. The
+  old trees padded with 0, which made 0 a member of every set.
 
 ## The circuit
 
-The DPP demo deliberately uses the lower-level `CircuitSpec` style instead of annotations. This
-sketch is simplified from its `ComplianceThresholdCircuit`, keeping only the "less than or equal"
-variant used for carbon:
+The carbon claim, as in the demo's `CarbonClaimProof`. It binds the schema, opens the commitment
+in-circuit (which also range-checks `carbon_kg` to 16 bits) and asserts the rule:
 
-```java title="CarbonThresholdCircuit.java"
-import org.zeroj.circuit.CircuitBuilder;
-import org.zeroj.circuit.CircuitSpec;
-import org.zeroj.circuit.Signal;
-import org.zeroj.circuit.SignalBuilder;
-import org.zeroj.circuit.lib.SignalComparators;
-import org.zeroj.circuit.lib.SignalPoseidon;
-import org.zeroj.circuit.lib.poseidon.PoseidonParams;
-import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
+```java title="CarbonClaimProof.java"
+import org.zeroj.circuit.annotation.Prove;
+import org.zeroj.circuit.annotation.Public;
+import org.zeroj.circuit.annotation.Secret;
+import org.zeroj.circuit.annotation.UInt;
+import org.zeroj.circuit.annotation.ZKCircuit;
+import org.zeroj.circuit.annotation.ZkContext;
+import org.zeroj.circuit.annotation.ZkField;
+import org.zeroj.circuit.annotation.ZkUInt;
+import org.zeroj.circuit.lib.jubjub.PedersenVectorSchema;
+import org.zeroj.circuit.lib.jubjub.PedersenVectorSchema.Entry;
+import org.zeroj.circuit.lib.zk.ZkPedersenVector;
 
-public class CarbonThresholdCircuit implements CircuitSpec {
-    private static final PoseidonParams POSEIDON = PoseidonParamsBLS12_381T3.INSTANCE;
+@ZKCircuit(name = "dpp-carbon-claim", version = 1)
+public class CarbonClaimProof {
 
-    @Override
-    public void define(SignalBuilder c) {
-        Signal measurement   = c.privateInput("measurement");     // secret: kg CO2e
-        Signal auditorSecret = c.privateInput("auditorSecret");
-        Signal productId     = c.publicInput("productId");
-        Signal threshold     = c.publicInput("threshold");
-        Signal auditorHash   = c.publicInput("auditorHash");
-        Signal isCompliant   = c.publicOutput("isCompliant");
+    public static final PedersenVectorSchema SCHEMA = PedersenVectorSchema.of("zeroj.demo.dpp.carbon", 1,
+            List.of(new Entry("carbon_kg", 16)));
 
-        // 1. This is the measurement the auditor committed to, for this product
-        Signal claims = SignalPoseidon.hash(c, POSEIDON, productId, measurement);
-        c.assertEqual(SignalPoseidon.hash(c, POSEIDON, auditorSecret, claims), auditorHash);
-
-        // 2. measurement <= threshold (16-bit; the comparator range-checks both sides)
-        c.assertEqual(isCompliant, SignalComparators.lessOrEqual(c, measurement, threshold, 16));
-    }
-
-    public static CircuitBuilder build() {
-        return CircuitBuilder.create("compliance-lte")
-                .publicVar("productId").publicVar("threshold")
-                .publicVar("auditorHash").publicVar("isCompliant")
-                .secretVar("measurement").secretVar("auditorSecret")
-                .defineSignals(new CarbonThresholdCircuit());
+    @Prove
+    void prove(ZkContext zk,
+               @Public ZkField schemaDigest,                     // σ
+               @Public ZkField u,                                // the commitment C = (u, v)
+               @Public ZkField v,
+               @Public @UInt(bits = 16) ZkUInt threshold,
+               @Secret @UInt(bits = 16) ZkUInt carbonKg,          // never revealed
+               @Secret @UInt(bits = 252) ZkUInt blinding) {       // the auditor's fresh blinding
+        var binding = ZkPedersenVector.bindSchema(zk, SCHEMA, schemaDigest);
+        ZkPedersenVector.commit(zk, binding, List.of(carbonKg), blinding).assertAffineEquals(zk, u, v);
+        carbonKg.lte(threshold).assertTrue();
     }
 }
 ```
 
-Each threshold circuit is small, a few hundred constraints. The rest of the flow is the same as
-any other circuit. Compile to R1CS, compute the witness and prove with Groth16. See the
-[Circuit DSL guide](/guides/circuits/circuit-dsl/).
+The auditor's side, lightly simplified from the demo's `ClaimOpening`: one commitment per claim,
+each with its own blinding.
 
-:::caution[A commitment is not a signature]
-In the demo, one service plays both auditor and manufacturer, and the "auditor commitment" is a
-Poseidon hash keyed by a secret the prover also knows. Anyone who knows that secret can commit to
-any number. A real system needs the auditor to **sign** the measurement, with the signature
-verified in-circuit (as the [KYC demos](/use-cases/age-and-kyc/) do with EdDSA-Jubjub). Or it needs
-`auditorHash` published by a registered auditor key that the validator checks.
-:::
+```java title="Auditor: commit to a measurement"
+import org.zeroj.circuit.lib.jubjub.JubjubPoint;
+import org.zeroj.circuit.lib.jubjub.PedersenCommitment;
+import org.zeroj.circuit.lib.jubjub.PedersenVectorCommitment;
+
+BigInteger carbonKg = BigInteger.valueOf(7);
+BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom());   // fresh, 252 bits
+JubjubPoint c = PedersenVectorCommitment.commit(CarbonClaimProof.SCHEMA, List.of(carbonKg), r).point();
+// (c.affineU(), c.affineV()) goes into the passport datum; (carbonKg, r) goes to the manufacturer
+```
+
+The other three circuits follow the same pattern with `ZkMerkle` membership and ordering checks.
+See [Commit to several values at once](/guides/confidential/pedersen/#5-commit-to-several-values-at-once)
+for vector commitments in general.
 
 ## On Cardano
 
-The demo uses two JuLC scripts built on `Groth16BLS12381Lib.verify(...)`:
+`DppPassport` is a JuLC multi-validator built on `Groth16BLS12381Lib.verify(...)`. Its hash is
+both the passport **minting policy** and the passport **address**, so a passport is a public record
+that stays where it was minted, not a tradeable token. Its parameters are `manufacturerPkh`,
+`auditorPkh`, the gated claim (carbon) with its `σ` and threshold (50 kg), and the carbon circuit's
+verification key.
 
-- **`DppMintingPolicy`** mints a passport token only if the manufacturer signed the transaction,
-  exactly one token is minted, the compliance proof over the first output's datum
-  `[productId, threshold, auditorHash, isCompliant]` verifies, and `isCompliant == 1`.
-- **`DppComplianceValidator`** is a compliance-gated spending validator: lock ADA, then unlock it
-  with a proof of compliance.
+It mints one token named `productId` into an output at its own address with the inline datum
 
-A valid proof is not authorization. The manufacturer-signature check is a real `ScriptContext`
-binding, but a production passport also has to tie `auditorHash` to an accredited auditor, pin
-thresholds to the regulation that applies (not to a value the manufacturer picks) and bind
-`productId` to the token being minted. The DPP state machine and an auditor registry held as a
-reference input are covered in the design notes below.
+```text
+Passport(productId: B, manufacturerPkh: B28, claims: List<Claim(claim: I, σ: B32, u: I, v: I)>)
+```
+
+listing every claim the auditor attests (at most 4). The mint redeemer carries only the proof.
+
+**Mint checks:**
+
+- **(a)** the manufacturer and the auditor both sign;
+- **(b)** the mint under this policy is exactly `{productId: 1}`, with a 1–32 byte `productId`;
+- **(c)** exactly one output holds the token: at the passport address with no stake credential,
+  no reference script, only ADA and the token, and an inline datum of exactly the shape above. The
+  product id equals the token name, `manufacturerPkh` equals the parameter, every claim has
+  canonical `u, v` and a 32-byte `σ`, claim ids are distinct, and the carbon claim is present with
+  the parameter `σ`;
+- **(d)** the Groth16 proof verifies against `[σ, u, v, threshold]`, with `u, v` from the carbon
+  entry and `σ`, threshold from the parameters, never from the manufacturer.
+
+**Revoke.** The only way to spend a passport: the auditor signs and the transaction burns exactly
+that passport's token, `{productId: −1}`. A passport is never moved and its datum never changes, so
+the datum a reader sees is the one the mint checked.
+
+**The auditor's co-signature.** Before signing, the auditor's `CoSignGuard` checks the finished
+transaction: the mint and the passport output are exactly as above, the datum is exactly the
+auditor's own commitments for this product and manufacturer, the auditor's key authorises nothing
+else (no input or collateral of its own, no withdrawal, certificate or vote), the transaction has a
+TTL (the demo sets 180 slots), and the policy has never minted this product. It then reserves the
+product for that transaction in one atomic step and only then signs, so concurrent or retried
+requests get at most one signature. A reservation is released only after its TTL has passed, so a
+failed or timed-out mint blocks a retry for that product for up to three minutes.
+
+| Transaction | CPU steps | % CPU | Memory | % memory |
+|---|---|---|---|---|
+| Issue (mint, Groth16 verification, 4 claims) | 2,789,042,135 | 27.9 % | 1,390,848 | 8.4 % |
+| Revoke (spend and burn) | 151,057,197 | 1.5 % | 561,045 | 3.4 % |
+
+Shares of the per-transaction limits, as printed by the demo's `DppPassportVmTest`.
+
+### Reading a passport
+
+Only carbon is checked on-chain. Recycled content, origin and inspections are proved off-chain,
+against the commitments in the passport datum. That datum is the authenticated record of who issued
+the commitments: it exists only at the passport address, minted in a transaction the auditor
+signed. A reader never accepts a commitment from the manufacturer's API. The demo's
+`PassportReader`:
+
+- looks for the passport token at the passport address, and nowhere else;
+- reads the policy's whole mint history for the token and refuses a product with more than one
+  passport ever minted, including a burn followed by a re-mint. If the history is unavailable, it
+  refuses;
+- takes each claim's expected `σ` from its own schema registry and never from the datum;
+- verifies each off-chain claim's proof against `[σ, u, v, threshold or root]`. In the demo the
+  reader endpoint takes those proofs from the manufacturer's records on the same server.
+
+A valid proof is not authorization. The passport's trust comes from the script parameters and the
+auditor's signature, not from the proof alone; see
+[Application security](/guides/verifying/application-security/).
+
+## Who is trusted for what
+
+| Role | Does | Trusted for |
+|---|---|---|
+| **Auditor** | Measures, commits each claim with a fresh blinding, gives the openings to the manufacturer, co-signs the passport transaction after checking it against its report, can revoke | Measuring honestly, keeping measurements confidential, co-signing at most one passport per product |
+| **Manufacturer** | Proves claims from the openings and builds the passport transaction | Nothing about its measurements |
+| **Reader** (customs, buyer, regulator) | Reads the passport from the chain and verifies claim proofs against its commitments | — |
+
+## Limitations
+
+- **The auditor sees every measurement**, could collude with a manufacturer, and alone ensures one
+  passport per product, by co-signing once. A second passport under the same policy would be
+  publicly visible, and readers refuse that product.
+- **The reader's duplicate check needs Yaci Store.** The mint history is read in Yaci Store's
+  format, so the reader's check and the auditor's work on DevKit only. Against Blockfrost they
+  refuse rather than guess.
+- **A passport shows which product has which claims**, but not the values. A very small approved
+  set (one country) would reveal the value.
+- **Custodial demo.** The demo server holds the manufacturer's and the auditor's keys and the
+  openings, and its API is the operator's view. Privacy holds against chain and mempool observers,
+  not against this server. The API returns no measurements outside the panel labelled
+  "manufacturer (private)".
+- **Giving openings to a regulator** is not part of the demo yet; vector openings need their own
+  reviewed design.
+- **Development setup.** The circuit keys come from a single-party setup; production needs an MPC
+  ceremony ([Trusted setup, explained](/learn/trusted-setup/)).
+- **Not externally reviewed.** Vector commitments are experimental in ZeroJ, and the demo hasn't
+  been audited.
 
 ## Security considerations
 
-- **Auditor trust.** ZK proves the audited value passes the threshold, not that the audit was
-  honest. Use independent auditors, spot checks and accountability, the same trust model as today's
-  certification.
-- **Bind every claim to the product and an attestation.** An origin proof that only shows "some
-  country code is in the approved set" proves nothing about *this* product. Each claim needs the
-  product ID and an attested value inside its constraints, and every public input must appear in a
-  constraint.
-- **Thresholds and policy** belong to the verifier: pin them as script parameters or read them from
-  a registry.
+- **Bind every claim to an attested value.** A proof that "some country is in the approved set"
+  proves nothing about *this* product. Here each proof opens a commitment that sits in the
+  product's own passport, which only the auditor could co-sign.
+- **Thresholds and roots belong to the verifier.** The carbon threshold is a script parameter, so
+  a proof for a looser threshold is refused. Off-chain readers use their own thresholds and roots.
+- **Never reuse a blinding.** The same value with the same blinding gives the same point, which
+  links products. The auditor draws a new one for every claim of every product.
 - **Linkability of batches.** Per-batch passports reveal batch sizes and timing. Decide what you're
   willing to publish.
-- **Trusted setup.** The demo uses a single-party development setup; production needs an MPC
-  ceremony ([Trusted setup, explained](/learn/trusted-setup/)).
 
 ## Try it
 
@@ -162,20 +291,33 @@ With Yaci DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos
 ./demo.sh dpp --run
 ```
 
-`--run` generates the compliance proofs for battery `BAT-SN001`, mints its passport token on-chain
-and prints the registry status. In the UI, try `BAT-SN003` (65 kg carbon, 20 % recycled) or textile
-batch `TEX-B2024-003`, which is made outside the approved set. Both come back "NOT COMPLIANT".
+`--run` has the auditor attest battery `BAT-SN001`, the manufacturer prove its claims, mints its
+passport and prints the status. In the UI (port 8088):
 
-Design notes:
+- **`BAT-SN003`** (65 kg, 20 %) has no carbon proof, so no passport. "Skip off-chain check" builds
+  the transaction with a proof for a threshold the manufacturer chose (65,535). The demo runs the
+  script locally before the auditor co-signs; the script refuses it, and nothing is submitted.
+- **Textile batch `TEX-B2024-003`** (made in China, 5 % recycled) gets a passport, because its
+  carbon passes, but its recycled-content and origin claims can't be proved, and the reader shows
+  no proof for them.
+- **Revoke (auditor)** burns a passport. The demo's DevKit end-to-end test also shows that a
+  transfer, or a revoke by the manufacturer, is refused.
+
+The measurements appear only in the "manufacturer (private)" panel. Demo state from the old
+version isn't read: start fresh with `./demo.sh dpp --clean-cache`.
+
+Broader design notes, written before this redesign:
 [Digital product passport — detailed design](https://github.com/bloxbean/zeroj/blob/main/docs/usecases/digital-product-passport.md)
 (multi-party supply chains, lifecycle state machine, comparison with the Cardano Foundation
 blueprint).
 
 ## Related
 
-- [Circuit DSL](/guides/circuits/circuit-dsl/): the `CircuitSpec` style used here
-- [Authenticated state](/guides/credentials/authenticated-state/): Poseidon MPF/JMT registries
-  (experimental)
+- [Hide a number](/selective-disclosure/hide-a-number/): Pedersen commitments, explained
+- [Pedersen commitments guide](/guides/confidential/pedersen/): the API, including vector
+  commitments
+- [Private voting](/use-cases/private-voting/): the same "a hash of a small value hides nothing"
+  lesson, fixed with encryption
 - [Testing circuits](/guides/circuits/testing-circuits/): prove your constraints reject bad
   witnesses
 - [Application security](/guides/verifying/application-security/)

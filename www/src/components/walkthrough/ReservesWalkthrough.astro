@@ -1,12 +1,14 @@
 ---
-// Proof of reserves, step by step: snapshot -> prove -> attest on-chain -> customers verify -> repeat.
-// Values follow the proof-of-reserves demo (reserves-data.ts). Hashes are illustrative stand-ins
-// (see fakeHash), not Poseidon outputs.
+// Proof of reserves, step by step: salted snapshot -> prove -> mint the attestation token ->
+// customers verify against the chain -> next period.
+// Values follow the proof-of-reserves demo (reserves-data.ts). Hashes and salts are illustrative
+// stand-ins (see fakeHash), not Poseidon outputs or real salts.
 import './walkthrough.css';
 import { fakeHash } from './engine';
 import {
   ACCOUNTS,
   DECLARED_RESERVES,
+  PERIOD_MINUTES,
   RESERVE_RANGE,
   SLOTS,
   TOTAL_LIABILITIES,
@@ -17,8 +19,11 @@ import {
 
 const liabilitiesRoot = fakeHash(`liabilities:${ACCOUNTS.map((a) => `${a.id}=${a.ada}`).join(',')}`);
 const alice = ACCOUNTS[0];
-const aliceLeaf = fakeHash(`leaf:${alice.id}:${alice.ada}`);
+const aliceSalt = fakeHash(`salt:${alice.id}:p`);
+const aliceLeaf = fakeHash(`leaf:${alice.id}:${aliceSalt}:${alice.ada}`);
 const solvent = isSolvent(DECLARED_RESERVES);
+const mintOk = 'proof verifies: token minted and locked';
+const mintRefused = 'no solvent proof exists: mint refused';
 const rings = [
   'M116.28 43.93A56 56 0 1 1 29.76 19.69',
   'M45.87 98.53A39 39 0 1 1 94.31 39.46',
@@ -52,16 +57,27 @@ const rings = [
           <span class="v"><span class="real">{ada(alice.ada)}</span><span class="mask">████████</span></span>
         </div>
         <div class="zw-row" data-kind="secret" data-show="4-5" data-hl="4">
-          <span class="k">leaf = Poseidon(accountId, balance)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="k">salt (this snapshot)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{aliceSalt}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="4-5" data-hl="4">
+          <span class="k">leaf = Poseidon(Poseidon(idTag, salt), balance)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
           <span class="v"><span class="real">{aliceLeaf}</span><span class="mask">████████</span></span>
         </div>
         <div class="zw-row" data-kind="secret" data-show="4-5" data-hl="4">
           <span class="k">Merkle path</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
           <span class="v"><span class="real">{TREE_DEPTH} sibling hashes</span><span class="mask">████████</span></span>
         </div>
-        <span class="zw-check" data-show="4-5">hashes up to <code>liabilitiesRoot</code>: counted, at {ada(alice.ada)}</span>
+        <div class="zw-box" data-show="4-5">
+          <span class="zw-box-title">Checked in her browser</span>
+          <span class="zw-check">root recomputed from her leaf and path</span>
+          <span class="zw-check">attestation read from the chain indexer, not the custodian</span>
+          <span class="zw-check">exactly one attestation for this period</span>
+          <span class="zw-check">attested root = her root: counted, at {ada(alice.ada)}</span>
+          <span class="zw-check">balance matches her own records</span>
+        </div>
         <p class="zw-note" data-show="1-3">Her balance is one of the leaves.</p>
-        <p class="zw-note" data-show="4-5">Only customers who check can catch a missing or understated account.</p>
+        <p class="zw-note" data-show="4-5">Her path holds a neighbour's leaf, but without the neighbour's salt she can't guess their balance from it.</p>
       </section>
 
       <div class="zw-wire zrs-w1" data-hl="1,4" aria-hidden="true">
@@ -69,7 +85,7 @@ const rings = [
         <span class="arrow" data-show="4">←</span>
         <span class="zw-wire-line"></span>
         <span class="zw-msg" data-show="1">snapshot</span>
-        <span class="zw-msg" data-show="4">your path</span>
+        <span class="zw-msg" data-show="4">salt + path</span>
       </div>
 
       <!-- custodian -->
@@ -90,7 +106,7 @@ const rings = [
               </li>
             ))}
           </ul>
-          <p class="zw-note">+ {SLOTS - ACCOUNTS.length} empty slots, balance 0</p>
+          <p class="zw-note">Every account gets a fresh 252-bit salt. + {SLOTS - ACCOUNTS.length} padding slots, random id, balance 0.</p>
         </div>
         <div class="zw-row" data-kind="public" data-hl="1">
           <span class="k">liabilitiesRoot</span><em class="zw-tag">PUBLIC</em>
@@ -123,7 +139,7 @@ const rings = [
         </div>
         <div class="zw-box" data-show="2">
           <span class="zw-check">every balance fits in 64 bits (no negatives)</span>
-          <span class="zw-check">the leaves rebuild <code>liabilitiesRoot</code></span>
+          <span class="zw-check">the salted leaves rebuild <code>liabilitiesRoot</code></span>
           <span class="zw-check">they add up to <code>totalLiabilities</code></span>
           <span class={solvent ? 'zw-check' : 'zw-check no'} data-solvent-check>
             {solvent ? 'isSolvent = 1: reserves cover liabilities' : "isSolvent = 0: reserves don't cover liabilities"}
@@ -137,60 +153,63 @@ const rings = [
       <div class="zw-wire zrs-w2" data-hl="3" aria-hidden="true">
         <span class="arrow" data-show="3">→</span>
         <span class="zw-wire-line"></span>
-        <span class="zw-msg" data-show="3">π + datum</span>
+        <span class="zw-msg" data-show="3">mint + π</span>
       </div>
 
       <!-- Cardano -->
       <section class="zw-actor zrs-chain" data-hl="3,5" aria-label="Cardano">
         <div class="zw-actor-head">
           <span class="zw-actor-name">Cardano</span>
-          <span class="zw-actor-sub">attestation UTxO</span>
+          <span class="zw-actor-sub">attestation token</span>
         </div>
-        <p class="zw-note" data-show="1-2">Waiting for an attestation.</p>
+        <p class="zw-note" data-show="1-2">No attestation for this period yet.</p>
         <div class="zw-box" data-show="3-5">
-          <span class="zw-box-title"><code>ReserveAttestationValidator</code></span>
+          <span class="zw-box-title"><code>ReserveAttestation</code> · token <code>I2OSP8(p)</code></span>
           <dl class="zrs-datum">
-            <dt>totalReserves</dt><dd data-datum-reserves>{DECLARED_RESERVES.toLocaleString('en-US')}</dd>
+            <dt>period</dt><dd>p</dd>
             <dt>liabilitiesRoot</dt><dd>{liabilitiesRoot}</dd>
             <dt>totalLiabilities</dt><dd>{TOTAL_LIABILITIES.toLocaleString('en-US')}</dd>
-            <dt>isSolvent</dt><dd data-datum-solvent>{solvent ? '1' : '0'}</dd>
+            <dt>totalReserves</dt><dd data-datum-reserves>{DECLARED_RESERVES.toLocaleString('en-US')}</dd>
           </dl>
-          <span class="zw-check" data-show="3">Groth16 proof valid</span>
+          <span class="zw-check" data-show="3">custodian signed</span>
+          <span class="zw-check" data-show="3">proof checked against this datum, with isSolvent = 1</span>
           <span class={solvent ? 'zw-check' : 'zw-check no'} data-show="3" data-verdict>
-            {solvent ? 'isSolvent = 1: attestation accepted' : 'isSolvent = 0: attestation rejected'}
+            {solvent ? mintOk : mintRefused}
           </span>
+          <span class="zrs-period" data-show="4-5">Locked at the script address; the datum can't change while the token exists.</span>
         </div>
         <div class="zw-box" data-show="5">
-          <span class="zw-box-title">Next period</span>
-          <span class="zrs-period">A fresh snapshot and proof keep the attestation current.</span>
-          <span class="zrs-period">Bind the period on-chain too, or an old proof can be replayed. The demo doesn't.</span>
+          <span class="zw-box-title">Next period, p + 1</span>
+          <span class="zrs-period">New salts, a new tree, a new token. Demo periods are {PERIOD_MINUTES} minutes.</span>
+          <span class="zrs-period">One token per period is the custodian's word; customers refuse a period minted twice.</span>
+          <span class="zrs-period">The proof isn't bound to its period, so an old tree could be re-attested or a future period pre-minted. Customers catch it by checking their balance.</span>
         </div>
         <p class="zw-note zrs-caution" data-show="3-5">
-          Reserves are declared, not proven: check holdings at known addresses, or trust an attestation.
+          Reserves are declared by the custodian, not checked against on-chain holdings.
         </p>
       </section>
     </div>
 
     <div class="zw-narr" aria-live="polite">
       <div data-show="1">
-        <p class="zw-narr-title">1. Snapshot</p>
-        <p>The custodian takes every customer balance at one moment and builds a Poseidon Merkle tree with one leaf per account, <code>Poseidon(accountId, balance)</code>. Only the root is published.</p>
+        <p class="zw-narr-title">1. Salted snapshot</p>
+        <p>The custodian takes every balance at one moment and gives every account a fresh 252-bit salt. Each leaf is <code>Poseidon(Poseidon(idTag, salt), balance)</code>, and only the root is published. Without the salt, anyone holding a neighbour's leaf could hash each plausible balance until one matched.</p>
       </div>
       <div data-show="2">
         <p class="zw-narr-title">2. Prove</p>
         <p>The proof shows that every balance is a non-negative 64-bit number, that the leaves rebuild the published root, that they add up to exactly the total, and whether the declared reserves cover it. Drag the reserves below {ada(TOTAL_LIABILITIES)} to see what changes.</p>
       </div>
       <div data-show="3">
-        <p class="zw-narr-title">3. Attest on-chain</p>
-        <p>The custodian spends an attestation UTxO whose datum holds the four public inputs. The validator verifies the proof and requires <code>isSolvent = 1</code>, so an honest proof of insolvency is rejected. A proof claiming solvency for these balances can't be made.</p>
+        <p class="zw-narr-title">3. Mint the attestation</p>
+        <p>The custodian mints one token for period <code>p</code> into an output at the attestation script's address. The minting policy reads the four values from that output's datum and verifies the proof against them with <code>isSolvent = 1</code>, so only a solvent statement mints. A datum without the token proves nothing.</p>
       </div>
       <div data-show="4">
-        <p class="zw-narr-title">4. Customers verify</p>
-        <p>Alice gets the Merkle path for her own leaf and checks, off-chain, that it hashes up to the published root. If her account had been left out or understated, she would notice. No other balance is revealed to her.</p>
+        <p class="zw-narr-title">4. Customers verify against the chain</p>
+        <p>Alice gets her salt, balance, leaf index and path, and her browser recomputes the root. It reads the period's attestation token from the chain indexer, not from the custodian's API, refuses the period if it was minted more than once, and compares the roots. She also compares the balance with her own records.</p>
       </div>
       <div data-show="5">
-        <p class="zw-narr-title">5. Repeat</p>
-        <p>A fresh proof every period keeps the attestation current. The reserves figure still needs its own evidence, because the proof only shows that the declared number covers the liabilities.</p>
+        <p class="zw-narr-title">5. Next period</p>
+        <p>Each period gets fresh salts and its own token. The period isn't one of the proof's public inputs and the mint doesn't check the time, so a custodian could re-attest an old solvent tree, or mint a future period in advance; customers catch that when their balance looks stale. The reserves figure still needs its own evidence.</p>
       </div>
     </div>
 
@@ -198,9 +217,9 @@ const rings = [
       <ol class="zw-steps" aria-label="Steps">
         <li><button type="button" data-goto="1"><span>1</span>Snapshot</button></li>
         <li><button type="button" data-goto="2"><span>2</span>Prove</button></li>
-        <li><button type="button" data-goto="3"><span>3</span>Attest</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Mint</button></li>
         <li><button type="button" data-goto="4"><span>4</span>Customers verify</button></li>
-        <li><button type="button" data-goto="5"><span>5</span>Repeat</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Next period</button></li>
       </ol>
       <div class="zw-ctrl">
         <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
@@ -209,9 +228,9 @@ const rings = [
       </div>
     </div>
     <div class="zw-legend">
-      <span><em class="zw-tag secret">SECRET</em> stays in the custodian's books</span>
+      <span><em class="zw-tag secret">SECRET</em> stays in the custodian's books, or with the customer</span>
       <span><em class="zw-tag public">PUBLIC</em> in the attestation datum</span>
-      <span>Hash values are illustrative.</span>
+      <span>Hashes and salts are illustrative.</span>
     </div>
   </div>
 </figure>
@@ -226,7 +245,7 @@ const rings = [
     const chain = root.querySelector<HTMLElement>('.zrs-chain');
     const wire = root.querySelector<HTMLElement>('.zrs-w2');
 
-    // An insolvent attestation fails at step 3: the proof is valid, but isSolvent is 0.
+    // An insolvent statement fails at step 3: no proof verifies with isSolvent = 1, so nothing mints.
     const syncRejection = () => {
       const bad = root.dataset.step === '3' && root.dataset.solvent === '0';
       chain?.toggleAttribute('data-bad-on', bad);
@@ -240,8 +259,6 @@ const rings = [
       if (out) out.textContent = ada(reserves);
       const datum = root.querySelector('[data-datum-reserves]');
       if (datum) datum.textContent = reserves.toLocaleString('en-US');
-      const flag = root.querySelector('[data-datum-solvent]');
-      if (flag) flag.textContent = ok ? '1' : '0';
       const check = root.querySelector<HTMLElement>('[data-solvent-check]');
       if (check) {
         check.textContent = ok
@@ -251,7 +268,7 @@ const rings = [
       }
       const verdict = root.querySelector<HTMLElement>('[data-verdict]');
       if (verdict) {
-        verdict.textContent = ok ? 'isSolvent = 1: attestation accepted' : 'isSolvent = 0: attestation rejected';
+        verdict.textContent = ok ? 'proof verifies: token minted and locked' : 'no solvent proof exists: mint refused';
         verdict.classList.toggle('no', !ok);
       }
       syncRejection();
@@ -334,10 +351,6 @@ const rings = [
     margin: 0;
     font-weight: 600;
     text-align: right;
-  }
-
-  .zw[data-solvent='0'] .zrs-datum [data-datum-solvent] {
-    color: var(--zw-bad-ink);
   }
 
   .zrs-period {

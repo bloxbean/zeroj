@@ -50,7 +50,7 @@ checks it against the commitment, so a wrong opening is detected, not trusted.
 
 | Value | Employer | Employee | Tax authority | Public |
 |---|---|---|---|---|
-| Each salary amount | Knows it | Their own, from their payslip | Every one, from the limbs | Hidden |
+| Each salary amount | Knows it | Their own, from their payslip | Every one, from the limbs | Hidden, until it's cashed out (see below) |
 | Blinding (the random part of the commitment) | Knows it | Their own, from their payslip | From its copy of the opening | Hidden |
 | Employee's viewing key | No | Yes | No | No |
 | Tax authority's secret key | No | No | Yes | No |
@@ -60,7 +60,9 @@ checks it against the commitment, so a wrong opening is detected, not trusted.
 | Tax authority's public key | Yes | Yes | Yes | **Public**, in the registry |
 
 Owners are public in this demo, so the transfer graph (who paid whom) is visible. The amounts are
-not.
+not, with one exception: cashing out. A cash-out pays a public amount, so cashing out a whole
+payslip publishes the salary it held. A partial cash-out shows that the note held at least the
+amount cashed out. Transfers between notes reveal no amounts.
 
 ## How it works
 
@@ -170,6 +172,9 @@ signature on spends, the registry reference input and the exact output shape. Se
 - **Supply is still trusted.** The proof stops the employer under-reporting what it pays. It doesn't
   stop the employer paying salaries that don't exist, or paying nobody. Payroll truth outside the
   chain is still the employer's.
+- **Cashing out reveals amounts.** The cash-out amount is public. Cashing out a whole note
+  publishes its amount, which for a fresh payslip is the salary. A partial cash-out bounds it from
+  below.
 - **Openings are only length-checked on-chain.** A validator can't decrypt a sealed opening, so a
   garbage payslip is accepted. The employee sees an unopenable note, and should treat that as
   evidence against the sender. The tax authority's amount comes from the proved limbs, so it is
@@ -178,8 +183,9 @@ signature on spends, the registry reference input and the exact output shape. Se
   every salary, past and future. Key rotation stops new notes using a retired key, but doesn't hide
   old ones.
 - **Demo custody.** The demo server holds every wallet's spending and viewing keys and the tax
-  authority's secrets, and scans the chain for everyone. A real deployment scans inside each user's
-  own wallet and never ships viewing keys to a server.
+  authority's secrets, and scans the chain for everyone. Its API is the operator's view, so the
+  privacy described here holds against chain and mempool observers, not against the demo server. A
+  real deployment scans inside each user's own wallet and never ships viewing keys to a server.
 - **Unreviewed assumptions.** The confidential-note profile's assumptions A1–A3 (ZeroJ ADR-0055)
   and the demo's protocol haven't had external review.
 - **Trusted setup.** The demo uses a single-party development setup, so whoever ran it could forge

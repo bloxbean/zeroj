@@ -1,0 +1,245 @@
+---
+// Why the old passport datum leaked the carbon value, and why a Pedersen commitment doesn't.
+// Step 1: the old auditorHash = Poseidon(777777, Poseidon(productId, carbon)); an observer tries all
+// 65,536 values. Step 2: a pedersen-jubjub-vector-v1 commitment with a fresh 252-bit blinding; the
+// same search finds nothing. Hash and point values are illustrative stand-ins (fakeHash), not
+// Poseidon outputs or Jubjub points; the search really runs over all 65,536 stand-ins.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { OLD_AUDITOR_SECRET } from './product-passport-data';
+
+const PID = 'BAT-SN001';
+const M0 = 7;
+const R0 = 4242;
+const oldHash = (m: number) => fakeHash(`old:${PID}:${m}`);
+const commitment = (m: number, r: number) => fakeHash(`ped:${m}:${r}`);
+---
+
+<figure class="zw-frame not-content" aria-label="Try to guess the carbon value: old hash versus Pedersen commitment">
+  <div class="zw zgx" data-total="2" data-view="insider" data-pid={PID} data-r={R0}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Guess the carbon value · step <b data-counter>1 / 2</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- auditor -->
+      <section class="zw-actor" aria-label="Auditor">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Auditor</span>
+          <span class="zw-actor-sub">measures {PID}</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">carbon (kg, 16 bits)</span><em class="zw-tag">SECRET</em>
+          <span class="v">
+            <input
+              type="number"
+              min="0"
+              max="65535"
+              value={M0}
+              data-carbon
+              aria-label="The auditor's carbon measurement"
+            />
+          </span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="1">
+          <span class="k">auditorSecret</span><em class="zw-tag">PUBLISHED</em>
+          <span class="v">{OLD_AUDITOR_SECRET} (in the demo source)</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="2">
+          <span class="k">blinding r (fresh, 252 bits)</span><em class="zw-tag">SECRET</em>
+          <span class="v" data-r-out>{fakeHash(`r:${R0}`)}</span>
+          <button type="button" class="zw-btn zgx-roll" data-roll>Commit again</button>
+        </div>
+        <p class="zw-note">Change the measurement, then let the observer search.</p>
+      </section>
+
+      <div class="zw-wire" aria-hidden="true">
+        <span class="arrow">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg">datum</span>
+      </div>
+
+      <!-- chain -->
+      <section class="zw-actor" aria-label="On-chain datum">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">On-chain datum</span>
+          <span class="zw-actor-sub">anyone can read it</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">productId</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{PID}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="1">
+          <span class="k">auditorHash = Poseidon(secret, Poseidon(productId, carbon))</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-old-out>{oldHash(M0)}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2">
+          <span class="k">C = [carbon]·G₀ + [r]·H_V</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-c-out>{commitment(M0, R0)}</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" aria-hidden="true">
+        <span class="arrow">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg">try every value</span>
+      </div>
+
+      <!-- observer -->
+      <section class="zw-actor" data-bad="1" aria-label="Observer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Observer</span>
+          <span class="zw-actor-sub">a competitor, anyone</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Search all 65,536 values</span>
+          <button type="button" class="zw-btn" data-search>Try 0 … 65,535</button>
+          <span class="zw-check warn" data-search-out>Not searched yet.</span>
+        </div>
+        <p class="zw-note zgx-verdict" data-verdict>A 16-bit value with a published key hides nothing.</p>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. The old datum: a keyed hash</p>
+        <p>The first version published <code>auditorHash = Poseidon(auditorSecret, Poseidon(productId, carbon))</code>. The manufacturer had to know <code>auditorSecret</code> to prove, so the demo shipped it in its source (<code>777777</code>). Carbon is a 16-bit number, so an observer hashes all 65,536 candidates and keeps the one that matches. Press <b>Try</b>.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. A Pedersen commitment</p>
+        <p>Now the auditor commits with a fresh 252-bit blinding <code>r</code> that only it and the manufacturer know. The same search finds nothing: for every carbon value there is some blinding that gives this exact <code>C</code>, so the point carries no information about the value. Press <b>Commit again</b>: same value, a different commitment.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Keyed hash</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Commitment</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> the auditor and manufacturer know it</span>
+      <span><em class="zw-tag public">PUBLIC</em> anyone can see it</span>
+      <span>Hash and point values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zgx').forEach((root) => {
+    initWalkthrough(root);
+    const pid = root.dataset.pid ?? '';
+    let r = Number(root.dataset.r ?? 1);
+    const input = root.querySelector<HTMLInputElement>('[data-carbon]');
+    const out = root.querySelector<HTMLElement>('[data-search-out]');
+    const verdict = root.querySelector<HTMLElement>('[data-verdict]');
+    const set = (sel: string, text: string) => {
+      const el = root.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+    const carbon = () => {
+      const n = Math.trunc(Number(input?.value ?? 0));
+      return Number.isFinite(n) ? Math.min(Math.max(n, 0), 65535) : 0;
+    };
+    const oldHash = (m: number) => fakeHash(`old:${pid}:${m}`);
+    const commitment = (m: number, blinding: number) => fakeHash(`ped:${m}:${blinding}`);
+
+    const reset = () => {
+      const m = carbon();
+      set('[data-old-out]', oldHash(m));
+      set('[data-c-out]', commitment(m, r));
+      set('[data-r-out]', fakeHash(`r:${r}`));
+      if (out) {
+        out.textContent = 'Not searched yet.';
+        out.className = 'zw-check warn';
+      }
+      if (verdict) {
+        verdict.textContent =
+          root.dataset.step === '1'
+            ? 'A 16-bit value with a published key hides nothing.'
+            : 'Without r, every carbon value is equally possible.';
+        verdict.classList.toggle('bad', root.dataset.step === '1');
+      }
+    };
+
+    // The search runs for real over the stand-ins: step 1 recomputes the keyed hash for every
+    // candidate; step 2 can only try candidates without r (here r = 0), which never match.
+    const search = () => {
+      const m = carbon();
+      const step = root.dataset.step;
+      const target = step === '1' ? oldHash(m) : commitment(m, r);
+      const t0 = performance.now();
+      let found = -1;
+      for (let g = 0; g < 65536; g++) {
+        if ((step === '1' ? oldHash(g) : commitment(g, 0)) === target) {
+          found = g;
+          break;
+        }
+      }
+      const ms = Math.max(1, Math.round(performance.now() - t0));
+      if (!out) return;
+      if (found >= 0) {
+        out.textContent = `Match at ${found} after ${(found + 1).toLocaleString('en-US')} tries (${ms} ms): carbon = ${found} kg.`;
+        out.className = 'zw-check no';
+      } else {
+        out.textContent = `65,536 tries (${ms} ms), no match. The blinding is unknown.`;
+        out.className = 'zw-check';
+      }
+    };
+
+    input?.addEventListener('input', reset);
+    root.querySelector('[data-search]')?.addEventListener('click', search);
+    root.querySelector('[data-roll]')?.addEventListener('click', () => {
+      r = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
+      reset();
+    });
+    root.addEventListener('zw:step', reset);
+    reset();
+  });
+</script>
+
+<style>
+  .zgx .zw-row input[type='number'] {
+    width: 7em;
+    padding: 0.2em 0.45em;
+    font: 600 1em var(--zw-mono);
+    color: var(--zw-text);
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 6px;
+  }
+
+  .zgx-roll {
+    flex: 0 0 auto;
+    margin-top: 0.3em;
+    padding: 0.2em 0.65em;
+    font-size: 0.75em;
+    white-space: nowrap;
+  }
+
+  .zgx .zw-box [data-search] {
+    align-self: flex-start;
+  }
+
+  .zgx-verdict {
+    margin: 0.2em 0 0;
+    font-weight: 600;
+  }
+
+  .zgx-verdict.bad {
+    padding: 0.4em 0.55em;
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border-radius: 8px;
+  }
+</style>

@@ -60,7 +60,9 @@ not from the exchange's say-so. See
 2. **Commit and deliver.** For each customer the exchange builds an entry: a salted id hash
    `blake2b_256(I2OSP2(len(id)) ‖ id ‖ salt)` (the length as two big-endian bytes), the commitment `C_i` to the balance, and the opening
    `(v_i, r_i)` encrypted to the customer's viewing key (89 bytes). It also encrypts the opening of
-   the sum, `(L, Σr_i mod l)`, to the auditor's registered viewing key.
+   the sum, `(L, Σr_i mod l)`, to the auditor's registered viewing key. Every attestation draws a
+   new salt and a new blinding for every customer and shuffles the entries into a fresh random
+   order, which the proof and the deliveries follow too.
 3. **Prove and lock.** The exchange proves `Σ v_i ≤ R` with Groth16. It then locks `R` lovelace in
    the period's vault with the entries as the inline datum, **before the period starts**. The vault
    verifies the proof against the datum's commitments and the locked amount.
@@ -214,11 +216,24 @@ the reserves came from or that every customer was included. Those gaps are liste
   attestations, the auditor would learn each one's total, and an attestation holding one real
   customer plus zero-padding would reveal that customer's balance. The demo makes exactly one
   attestation per period.
-- **Fresh salts.** Reusing a salt links a customer's entries across periods.
+- **Fresh per attestation.** Reusing a salt, a blinding or an entry's position would link a
+  customer's entries across periods. An earlier version of the demo reused every salt and blinding
+  when it re-attested, and kept entries in book order. Now each attestation draws fresh salts and
+  blindings and shuffles the entries with `SecureRandom`, so two attestations of the same book
+  share no id hash, no commitment and no position. A customer finds their entry by this period's
+  salted id hash, never by position.
 - **Outside the period the attestation proves nothing.** It covers `[periodStart, periodEnd]`
   only.
-- **Demo custody.** The demo server holds every wallet's keys and scans the chain on everyone's
-  behalf, and its API is unauthenticated. Real customers scan in their own wallet. The off-circuit
+- **The exchange's key.** The exchange's signature makes an attestation the exchange's, so the
+  demo generates its wallet key randomly and keeps it, owner-only, in the data directory next to its
+  deployment state. If that state exists but the key is missing or doesn't match, the demo stops
+  instead of creating a new key.
+- **Demo custody and operator view.** The demo server holds every wallet's keys and scans the chain
+  on everyone's behalf, and its API is unauthenticated. `GET /api/solvency` is the public view (the
+  period, the vault and its on-chain entries, with no customer ids or balances). `GET
+  /api/solvency/operator` is the exchange's private book, shown in the UI's "Private" panel. That
+  is the demo operator's view: privacy here holds against chain and mempool observers, not against
+  the demo server. Real customers scan in their own wallet. The off-circuit
   commitment and sealing code is for offline, isolated use; see the guides for the exact rules.
 - **Maturity.** ZeroJ's Pedersen and confidential-note APIs are experimental and haven't been
   externally audited. Treat this as a blueprint, not a production system.

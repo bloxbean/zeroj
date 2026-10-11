@@ -47,7 +47,7 @@ each new note's limbs encrypt its amount". The verifier sees only commitments an
 
 | Value | Who can see it | Why |
 |---|---|---|
-| Amount of each note | Owner and auditor | Hidden from the public by the commitment |
+| Amount of each note | Owner and auditor | Hidden from the public by the commitment, until it's redeemed (see below) |
 | Blinding `r` | Owner and auditor | Part of the opening; inside the deliveries |
 | Viewing keys and spending keys | Their holder only | Open deliveries; sign spends |
 | Auditor's ElGamal secret key | Auditor only | Decrypts the limbs |
@@ -59,6 +59,10 @@ each new note's limbs encrypt its amount". The verifier sees only commitments an
 
 Amounts are hidden; the transfer graph is not. Anyone can see that Alice's note was spent in the
 same transaction that created a note owned by Bob.
+
+Redeeming tells observers something about the note it spends, because the price is public.
+Redeeming a whole note (price equal to its amount, no change) publishes the note's amount. A partial
+redemption shows that the note held at least the price.
 
 ## How it works
 
@@ -182,11 +186,14 @@ somewhat lower.
 - **Deliveries are only length-checked on-chain.** A sender can give the recipient a delivery that
   doesn't open. The recipient's wallet reports the note as unopenable, but the points are stuck.
   The auditor's limbs are the part a proof enforces.
+- **Redemptions reveal amounts.** The price is public, so redeeming a whole note publishes its
+  amount, and a partial redemption shows the note held at least the price.
 - **The transfer graph is public.** Owners are key hashes in the datum, so who paid whom is visible
   even though the amounts aren't.
 - **Key custody in the demo.** The demo server holds every wallet's keys and the auditor's keys,
-  and scans on their behalf. A real deployment keeps viewing keys and scanning in each user's
-  wallet, and the auditor's keys with the auditor.
+  and scans on their behalf. Its API is the operator's view, so the privacy described here holds
+  against chain and mempool observers, not against the demo server. A real deployment keeps viewing
+  keys and scanning in each user's wallet, and the auditor's keys with the auditor.
 - **Development trusted setup.** The demo's Groth16 keys come from a single-party setup. Whoever
   ran it could forge proofs. See [Trusted setup, explained](/learn/trusted-setup/).
 - **Unreviewed assumptions.** ZeroJ's confidential-note profile rests on assumptions (A1–A3 in

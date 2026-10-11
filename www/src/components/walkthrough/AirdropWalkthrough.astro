@@ -1,14 +1,23 @@
 ---
-// One claim per person, step by step: enrol -> claim -> mint a receipt -> repeat -> next epoch.
-// Values follow the personhood-airdrop demo: credentials for Alice, Bob, Charlie, Diana and Eve,
-// faucet.current-epoch 1, faucet.ada-per-claim 2, and repeat claims refused by the faucet service's
-// in-memory nullifier set. Hashes are illustrative stand-ins (see fakeHash), not Poseidon outputs.
+// One claim per person, step by step: enrol -> claim -> pay once -> repeat -> next round.
+// Values follow the personhood-airdrop demo after ADR-0009 D3: holders Alice, Bob, Charlie, Diana and Eve
+// each draw their own 252-bit personhoodId, and the issuer signs only Poseidon(personhoodId, 0), once per
+// person. faucet.round 1, faucet.ada-per-claim 2. The epoch is the domain tag policyEpoch of this
+// deployment and round. The faucet records each paid nullifier durably before signing the payout. The
+// recipient shown is an illustrative key hash (the demo pays the faucet admin's address when none is
+// given). Hashes are illustrative stand-ins (see fakeHash), not Poseidon outputs.
+//
+// The interactions: who chooses personhoodId (the holder now, the issuer before, which let the issuer
+// link every claim), and on step 3 a copier swapping the recipient.
 import './walkthrough.css';
 import { fakeHash } from './engine';
 
 const issuerKey = fakeHash('personhood-issuer-pk');
 const personhoodId = fakeHash('pid:Alice');
+const message = fakeHash(`m:${personhoodId}`);
 const signature = fakeHash('sig:Alice');
+const epoch1 = fakeHash('policyEpoch:round-1');
+const epoch2 = fakeHash('policyEpoch:round-2');
 const nullifier1 = fakeHash(`nf:${personhoodId}:1`);
 const nullifier2 = fakeHash(`nf:${personhoodId}:2`);
 const alicePkh = fakeHash('pkh:alice');
@@ -21,7 +30,7 @@ const rings = [
 ---
 
 <figure class="zw-frame not-content" aria-label="One claim per person, step by step">
-  <div class="zw zad" data-total="5" data-view="insider" data-swap="0">
+  <div class="zw zad" data-total="5" data-view="insider" data-swap="0" data-pid="holder">
     <div class="zw-head">
       <span class="zw-eyebrow">One claim per person · step <b data-counter>1 / 5</b></span>
       <div class="zw-tools">
@@ -40,49 +49,74 @@ const rings = [
           <span class="zw-actor-name">Issuer</span>
           <span class="zw-actor-sub">personhood</span>
         </div>
+        <div class="zad-design">
+          <span class="zad-design-label">personhoodId chosen by</span>
+          <span class="zw-choice" role="group" aria-label="Who chooses personhoodId">
+            <button type="button" data-pid-btn="holder" aria-pressed="true">holder</button>
+            <button type="button" data-pid-btn="issuer" aria-pressed="false">issuer</button>
+          </span>
+          <span class="zw-note" data-pidmode="holder">the demo now</span>
+          <span class="zw-note" data-pidmode="issuer">the demo before</span>
+        </div>
         <div class="zw-box">
-          <span class="zw-box-title">Off-chain check</span>
-          <span class="zad-text">one credential per human</span>
+          <span class="zw-box-title">Issued to · one credential per person</span>
+          <ol class="zad-list">
+            <li><code>Alice</code><span class="zad-tagline">recorded, then signed</span></li>
+            <li class="zad-refused" data-show="1"><code>Alice</code><span class="zad-no">again: refused</span></li>
+          </ol>
+          <span class="zw-note">The one-human check happens outside the system.</span>
         </div>
         <div class="zw-row" data-kind="public">
           <span class="k">issuer key</span><em class="zw-tag">PUBLIC</em>
           <span class="v">{issuerKey}</span>
         </div>
         <div class="zw-box">
-          <span class="zw-box-title">EdDSA-Jubjub signature over</span>
-          <code class="zad-formula">Poseidon(personhoodId, 0)</code>
+          <span class="zw-box-title">Signs with EdDSA-Jubjub</span>
+          <code class="zad-formula" data-pidmode="holder">m = Poseidon(personhoodId, 0) <span class="zad-muted">· sees only m</span></code>
+          <code class="zad-formula" data-pidmode="issuer">Poseidon(personhoodId, 0) <span class="zad-muted">· it chose personhoodId</span></code>
         </div>
-        <p class="zw-note">Demo credentials: Alice, Bob, Charlie, Diana, Eve.</p>
+        <div class="zw-box" data-show="3-5">
+          <span class="zw-box-title">Can the issuer link the nullifier to Alice?</span>
+          <span class="zw-check" data-pidmode="holder">no: it never saw <code>personhoodId</code>, so it can't compute any nullifier</span>
+          <span class="zw-check no" data-pidmode="issuer">yes: it hashes every <code>personhoodId</code> it handed out with the epoch and finds Alice</span>
+        </div>
       </section>
 
       <div class="zw-wire" data-hl="1" aria-hidden="true">
-        <span class="arrow" data-show="1">→</span>
+        <span class="arrow" data-show="1">⇄</span>
         <span class="zw-wire-line"></span>
-        <span class="zw-msg" data-show="1">credential</span>
+        <span class="zw-msg" data-show="1" data-pidmode="holder">← m · signature →</span>
+        <span class="zw-msg" data-show="1" data-pidmode="issuer">personhoodId + signature →</span>
       </div>
 
       <!-- holder -->
-      <section class="zw-actor" data-hl="2" data-bad="4" aria-label="Holder">
+      <section class="zw-actor" data-hl="1,2" data-bad="4" aria-label="Holder">
         <div class="zw-actor-head">
           <span class="zw-actor-name" data-when="insider">Alice's wallet</span>
           <span class="zw-actor-name" data-when="public">A claimant</span>
           <span class="zw-actor-sub" data-when="public">identity hidden</span>
         </div>
         <div class="zw-row" data-kind="secret" data-hl="1">
-          <span class="k">personhoodId</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="k" data-pidmode="holder">personhoodId · drawn here, 252-bit</span>
+          <span class="k" data-pidmode="issuer">personhoodId · from the issuer</span>
+          <em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
           <span class="v"><span class="real">{personhoodId}</span><span class="mask">████████</span></span>
         </div>
         <div class="zw-row" data-kind="secret" data-hl="1">
           <span class="k">issuer signature</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
           <span class="v"><span class="real">{signature}</span><span class="mask">████████</span></span>
         </div>
+        <div class="zw-row" data-kind="secret" data-show="1" data-pidmode="holder">
+          <span class="k">m sent to the issuer</span><em class="zw-tag"><span class="vis">TO ISSUER</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{message}</span><span class="mask">████████</span></span>
+        </div>
         <div class="zw-row" data-kind="public" data-hl="2,5">
-          <span class="k">epoch</span><em class="zw-tag">PUBLIC</em>
-          <span class="v"><span data-show="1-4">1</span><span data-show="5">2</span></span>
+          <span class="k"><span data-show="1-4">epoch · round 1</span><span data-show="5">epoch · round 2</span></span><em class="zw-tag">PUBLIC</em>
+          <span class="v"><span data-show="1-4">{epoch1}</span><span data-show="5">{epoch2}</span></span>
         </div>
         <div class="zw-row" data-kind="public" data-hl="2">
           <span class="k">recipient</span><em class="zw-tag">PUBLIC</em>
-          <span class="v wrap">pkh {alicePkh}</span>
+          <span class="v wrap">key hash {alicePkh}</span>
         </div>
         <div class="zad-prove" data-show="2,5" aria-hidden="true">
           <svg class="zw-rings" viewBox="0 0 128 128">
@@ -98,7 +132,7 @@ const rings = [
           <span class="pi">π</span><span>Groth16 proof</span><small>binds recipient</small>
         </div>
         <p class="zw-note zad-again" data-show="4">
-          Second claim in epoch 1: same credential, same epoch, so the <b>same nullifier</b>.
+          Second claim in round 1: same credential, same epoch, so the <b>same nullifier</b>.
         </p>
       </section>
 
@@ -108,7 +142,7 @@ const rings = [
         <span class="zw-msg zad-if-honest" data-show="3">π + 6 inputs</span>
         <span class="zw-msg zad-if-swap zad-msg-bad" data-show="3">copied π</span>
         <span class="zw-msg" data-show="4">same nullifier</span>
-        <span class="zw-msg" data-show="5">π · epoch 2</span>
+        <span class="zw-msg" data-show="5">π · round 2</span>
       </div>
 
       <!-- faucet: service + Cardano policy -->
@@ -127,58 +161,61 @@ const rings = [
         </label>
         <div class="zw-row zad-datum" data-kind="public" data-show="3">
           <span class="k">datum recipient</span><em class="zw-tag">PUBLIC</em>
-          <span class="v wrap"><span class="zad-if-honest">pkh {alicePkh}</span><span class="zad-if-swap">pkh {copierPkh}</span></span>
+          <span class="v wrap"><span class="zad-if-honest">key hash {alicePkh}</span><span class="zad-if-swap">key hash {copierPkh}</span></span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Paid nullifiers · durable record</span>
+          <ol class="zad-list">
+            <li class="zad-if-honest zad-new" data-show="3-4" data-hl="3">
+              <code>{nullifier1}</code><span class="zad-tagline">round 1</span>
+            </li>
+            <li class="zad-new" data-show="5" data-hl="5">
+              <code>{nullifier2}</code><span class="zad-tagline">round 2</span>
+            </li>
+          </ol>
+          <span class="zad-text zad-empty" data-show="1-2">none yet</span>
+          <span class="zad-text zad-empty zad-if-swap" data-show="3">none yet</span>
+          <span class="zw-note zad-if-honest" data-show="3,5">Recorded before the admin key signs the payout.</span>
+          <span class="zw-check no" data-show="4">refused: already paid in round 1</span>
         </div>
         <div class="zw-box" data-show="3,5">
           <span class="zw-box-title"><code>FaucetMintingPolicy</code></span>
           <span class="zw-check">issuer key and epoch match</span>
           <span class="zw-check">eligible = 1</span>
-          <span class="zw-check">1 token named <code>nullifier</code></span>
+          <span class="zw-check">exactly 1 receipt named <code>nullifier</code></span>
+          <span class="zw-check zad-if-honest">≥ 2 ADA to the recipient's key hash</span>
           <span class="zw-check zad-if-honest">Groth16 proof valid</span>
           <span class="zw-check no zad-if-swap">proof fails: not the recipient it binds</span>
-          <span class="zw-note" data-show="5">Epoch 2 is pinned into the policy: a new policy ID.</span>
+          <span class="zw-note" data-show="5">Round 2 is a new epoch: a new policy ID.</span>
         </div>
         <span class="zw-check zad-if-honest" data-show="3,5">claim tx pays 2 ADA</span>
         <span class="zw-check no zad-if-swap" data-show="3">nothing minted or paid</span>
-        <div class="zw-box">
-          <span class="zw-box-title">Used this epoch · faucet service</span>
-          <ol class="zad-list">
-            <li class="zad-if-honest" data-show="3-4" data-hl="3">
-              <code>{nullifier1}</code><span class="zad-tagline">epoch 1</span>
-            </li>
-            <li data-show="5" data-hl="5">
-              <code>{nullifier2}</code><span class="zad-tagline">epoch 2</span>
-            </li>
-          </ol>
-          <span class="zad-text zad-empty" data-show="1-2">none yet</span>
-          <span class="zad-text zad-empty zad-if-swap" data-show="3">none yet</span>
-          <span class="zw-check no" data-show="4">refused: already claimed in epoch 1</span>
-        </div>
-        <p class="zw-note" data-show="4">In the demo this check is off-chain. Cardano would let the policy mint another unit, so production needs an on-chain registry.</p>
-        <p class="zw-note" data-show="3">Demo gap: the policy doesn't yet check that an output pays <code>recipient</code>.</p>
+        <p class="zw-note" data-show="4">Receipt uniqueness on-chain is deferred: a replay with the replayer's own funds could mint a second receipt, but the faucet pays nothing.</p>
       </section>
     </div>
 
     <div class="zw-narr" aria-live="polite">
       <div data-show="1">
         <p class="zw-narr-title">1. Enrol</p>
-        <p>A personhood issuer checks, outside the system, that each human gets exactly one credential. It signs <code>Poseidon(personhoodId, 0)</code> with EdDSA over Jubjub and delivers the credential privately. Zero knowledge can't do this uniqueness check for you.</p>
+        <p data-pidmode="holder">Alice's wallet draws its own <code>personhoodId</code> and sends the issuer only <code>m = Poseidon(personhoodId, 0)</code>. After its one-human check, the issuer records Alice and signs <code>m</code>. A second request for Alice is refused, so nobody gets two credentials.</p>
+        <p data-pidmode="issuer">Before, the issuer chose each <code>personhoodId</code> (a counter or a hash of the name) and handed it out with the signature. That meant the issuer knew every identifier. Watch what that does on step 3.</p>
       </div>
       <div data-show="2">
         <p class="zw-narr-title">2. Claim</p>
-        <p>Alice's wallet computes the nullifier <code>Poseidon(personhoodId, epoch)</code> and proves the issuer signed her credential, with epoch 1 and her chosen recipient as public inputs. Switch to <b>Public view</b>: the personhood ID and signature never leave the wallet.</p>
+        <p>Alice's wallet computes the nullifier <code>Poseidon(personhoodId, epoch)</code> and proves the issuer signed her credential, with this round's epoch and her chosen recipient as public inputs. The epoch is a tag for this deployment and round, not a small number. Switch to <b>Public view</b>: the personhood ID and signature never leave the wallet.</p>
       </div>
       <div data-show="3">
-        <p class="zw-narr-title">3. Mint a receipt</p>
-        <p>The faucet policy checks the issuer key, the epoch and eligible = 1, verifies the proof and mints one receipt named after the nullifier. The claim pays 2 ADA. Flip <b>Swap recipient</b> to see why a proof copied from the mempool can't be redirected.</p>
+        <p class="zw-narr-title">3. Pay once</p>
+        <p data-pidmode="holder">The faucet checks the nullifier hasn't been paid, records it, and signs the payout. The policy verifies the proof, mints one receipt named after the nullifier, and requires 2 ADA to the recipient's key hash. Flip <b>Swap recipient</b> to see why a copied proof can't be redirected.</p>
+        <p data-pidmode="issuer">The claim goes through, but look at the issuer: knowing every <code>personhoodId</code>, it can compute each person's nullifier for this epoch and match this receipt to Alice. That's why the holder now chooses the identifier.</p>
       </div>
       <div data-show="4">
-        <p class="zw-narr-title">4. Repeat in the same epoch</p>
-        <p>Same credential and same epoch give the same nullifier, so the claim is refused. Bob's claim still works, because his credential gives a different nullifier.</p>
+        <p class="zw-narr-title">4. Repeat in the same round</p>
+        <p>Same credential and same epoch give the same nullifier. It's in the faucet's paid record, so the faucet refuses to pay. Bob's claim still works, because his credential gives a different nullifier.</p>
       </div>
       <div data-show="5">
-        <p class="zw-narr-title">5. Next epoch</p>
-        <p>In epoch 2 Alice's credential gives an unrelated nullifier, so she can claim again, and nobody can link her two claims.</p>
+        <p class="zw-narr-title">5. Next round</p>
+        <p>Round 2 gives a new epoch and a new policy. Alice's credential gives an unrelated nullifier, so she can claim again, and nobody, the issuer included, can link her two nullifiers. To keep the claims themselves unlinked, she uses a fresh recipient key each round: the recipient is public, and so are the fee payer and timing.</p>
       </div>
     </div>
 
@@ -186,9 +223,9 @@ const rings = [
       <ol class="zw-steps" aria-label="Steps">
         <li><button type="button" data-goto="1"><span>1</span>Enrol</button></li>
         <li><button type="button" data-goto="2"><span>2</span>Claim</button></li>
-        <li><button type="button" data-goto="3"><span>3</span>Mint</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Pay once</button></li>
         <li><button type="button" data-goto="4"><span>4</span>Repeat</button></li>
-        <li><button type="button" data-goto="5"><span>5</span>Next epoch</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Next round</button></li>
       </ol>
       <div class="zw-ctrl">
         <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
@@ -219,13 +256,36 @@ const rings = [
     root.addEventListener('zw:step', (e) => {
       if ((e as CustomEvent<number>).detail !== 3) setSwap(false);
     });
+    root.querySelectorAll<HTMLButtonElement>('[data-pid-btn]').forEach((b, _, all) =>
+      b.addEventListener('click', () => {
+        root.dataset.pid = b.dataset.pidBtn;
+        all.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      }),
+    );
   });
 </script>
 
 <style>
   .zad:not([data-swap='1']) .zad-if-swap,
-  .zad[data-swap='1'] .zad-if-honest {
+  .zad[data-swap='1'] .zad-if-honest,
+  .zad[data-pid='holder'] [data-pidmode='issuer'],
+  .zad[data-pid='issuer'] [data-pidmode='holder'] {
     display: none !important;
+  }
+
+  .zad-design {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3em 0.5em;
+    padding: 0.4em 0.5em;
+    border: 1px dashed var(--zw-line);
+    border-radius: 8px;
+  }
+
+  .zad-design-label {
+    font: 500 0.75em var(--zw-mono);
+    color: var(--zw-muted);
   }
 
   .zad-text {
@@ -241,6 +301,10 @@ const rings = [
   .zad-formula {
     font-size: 0.74em;
     overflow-wrap: anywhere;
+  }
+
+  .zad-muted {
+    color: var(--zw-muted);
   }
 
   .zad-prove {
@@ -269,13 +333,21 @@ const rings = [
 
   .zad-list li {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 0.4em;
+    gap: 0.2em 0.4em;
     padding: 0.25em 0.5em;
     font-size: 0.8em;
+    overflow-wrap: anywhere;
     border: 1px solid var(--zw-line);
     border-radius: 7px;
+  }
+
+  .zad-list li.zad-refused {
+    color: var(--zw-bad-ink);
+    border-color: var(--zw-bad);
+    border-style: dashed;
   }
 
   .zad-list li[data-hl-on] {
@@ -283,7 +355,7 @@ const rings = [
     animation: zw-in 0.4s ease-out;
   }
 
-  .zw[data-step='4'] .zad-list li:first-child {
+  .zw[data-step='4'] .zad-list li.zad-new:first-child {
     border-color: var(--zw-bad);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--zw-bad) 20%, transparent);
   }
@@ -291,6 +363,11 @@ const rings = [
   .zad-tagline {
     font: 600 0.8em var(--zw-mono);
     color: var(--zw-muted);
+  }
+
+  .zad-no {
+    font: 600 0.8em var(--zw-mono);
+    color: var(--zw-bad-ink);
   }
 
   /* the what-if switch */
