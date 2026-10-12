@@ -166,7 +166,7 @@ dependency. The persistent load and benchmark tools live in the unpublished
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre12'   // or zeroj-jmt-poseidon
+    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre13'   // or zeroj-jmt-poseidon
 }
 ```
 

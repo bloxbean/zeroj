@@ -1,4 +1,4 @@
-<!-- ZeroJ AI Starter Pack · zerojVersion: 0.1.0-pre12 · julcVersion: 0.1.0-pre18 · cclVersion: 0.8.0-pre5 · source: https://zeroj.dev/ai/starter-pack.md -->
+<!-- ZeroJ AI Starter Pack · zerojVersion: 0.1.0-pre13 · julcVersion: 0.1.0-pre18 · cclVersion: 0.8.0-pre5 · source: https://zeroj.dev/ai/starter-pack.md -->
 
 # AI Starter Pack
 
@@ -9,7 +9,7 @@
 
 ## 1. What ZeroJ is
 
-ZeroJ is a **Java-first zero-knowledge proof toolkit for Cardano** (Java 25, Maven group `org.zeroj`, version `0.1.0-pre12`).
+ZeroJ is a **Java-first zero-knowledge proof toolkit for Cardano** (Java 25, Maven group `org.zeroj`, version `0.1.0-pre13`).
 
 - **Define** circuits in Java — annotation style (`@ZKCircuit`, recommended) or the `CircuitSpec`/`SignalBuilder` DSL.
 - **Prove** with a pure-Java **Groth16** prover on **BLS12-381** (no native libraries; optional blst backend).
@@ -33,8 +33,8 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 repositories { mavenCentral() }
 
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     implementation 'org.zeroj:zeroj-circuit-annotation-api'
     annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'

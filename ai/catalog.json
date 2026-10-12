@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "zerojVersion": "0.1.0-pre12",
+  "zerojVersion": "0.1.0-pre13",
   "note": "Extracted from the ZeroJ Java sources at documentation build time. Public members only; the annotation processor also generates a <Name>Circuit companion per @ZKCircuit class.",
   "groups": [
     {

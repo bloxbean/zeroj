@@ -44,8 +44,8 @@ official fixture vectors for both, across the pure-Java and blst providers.
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'   // opt-in, explicit version
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'   // opt-in, explicit version
     implementation 'org.zeroj:zeroj-blst'                  // optional: native provider for issuers
 }
 ```
@@ -54,7 +54,7 @@ dependencies {
 <dependency>
   <groupId>org.zeroj</groupId>
   <artifactId>zeroj-bbs</artifactId>
-  <version>0.1.0-pre12</version>
+  <version>0.1.0-pre13</version>
 </dependency>
 ```
 

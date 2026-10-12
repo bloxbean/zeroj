@@ -27,7 +27,7 @@ yourself for the snarkjs JSON parser, CBOR and hashing helpers.
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
     implementation 'org.zeroj:zeroj-verifier-groth16'
     implementation 'org.zeroj:zeroj-codec'   // SnarkjsJsonCodec, CborEnvelopeCodec, CanonicalHash
 }

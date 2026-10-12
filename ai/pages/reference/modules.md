@@ -25,13 +25,13 @@ mainnet use.
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     implementation 'org.zeroj:zeroj-circuit-dsl'            // core: version from the BOM
     implementation 'org.zeroj:zeroj-crypto'
     implementation 'org.zeroj:zeroj-verifier-groth16'
 
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'    // opt-in: explicit version
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'    // opt-in: explicit version
 }
 ```
 
@@ -41,7 +41,7 @@ dependencies {
     <dependency>
       <groupId>org.zeroj</groupId>
       <artifactId>zeroj-bom-core</artifactId>
-      <version>0.1.0-pre12</version>
+      <version>0.1.0-pre13</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>

@@ -2,17 +2,17 @@
 
 > Every page of the ZeroJ documentation site concatenated into one Markdown file.
 
-zerojVersion: 0.1.0-pre12
+zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: ff124c2dc2f96dd06efa719b2ebcacb5b2c6ed74
+Source revision: e5b195eb609da4e62cb037c9804ade66c4ed0870
 
 ## Key facts
 
 - ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano: define circuits in Java, prove with a pure-Java prover, verify in Java (off-chain) or on Cardano (Plutus V3 via JuLC).
 - Status: experimental research software, not externally audited, not for production or value-bearing/mainnet use. "Beta" components are feature-complete and correctness-tested but not audited.
 - **Groth16 on BLS12-381 is the supported path for the current release.** PlonK (prover, verifier and on-chain validators) is experimental: make no correctness claims about it and do not choose it by default. BN254 is legacy and disabled by default.
-- Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre12. Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre12`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
+- Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre13. Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre13`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
 - Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` carries the blst-java JNI jar for its native verifier, and `VerifierRegistry.withServiceLoader()` lists that verifier first: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path.
 - Write application circuits with annotations: `@ZKCircuit`, `@Prove`, `@Public`/`@Secret`, symbolic types `ZkField`, `ZkBool`, `ZkUInt` (always with `@UInt(bits = N)`), `ZkArray`/`ZkBits`/`ZkBytes` (with `@FixedSize`). The annotation processor generates a `<Name>Circuit` companion. Never use Java `if`, `&&`, `||` on secret values — use `ZkBool.and/or/not/select`.
 - For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). MiMC and the no-params Poseidon overload are BN254-oriented; do not use them for Cardano.
@@ -285,9 +285,9 @@ repositories {
 
 dependencies {
     // One BOM for all core ZeroJ modules
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
     // The BOM must also apply to the annotation processor path
-    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     // Circuits: @ZKCircuit annotations + the generated *Circuit companions
     implementation 'org.zeroj:zeroj-circuit-annotation-api'
@@ -322,9 +322,9 @@ repositories {
 
 dependencies {
     // One BOM for all core ZeroJ modules
-    implementation(platform("org.zeroj:zeroj-bom-core:0.1.0-pre12"))
+    implementation(platform("org.zeroj:zeroj-bom-core:0.1.0-pre13"))
     // The BOM must also apply to the annotation processor path
-    annotationProcessor(platform("org.zeroj:zeroj-bom-core:0.1.0-pre12"))
+    annotationProcessor(platform("org.zeroj:zeroj-bom-core:0.1.0-pre13"))
 
     // Circuits: @ZKCircuit annotations + the generated *Circuit companions
     implementation("org.zeroj:zeroj-circuit-annotation-api")
@@ -347,7 +347,7 @@ dependencies {
 ```xml title="pom.xml"
 <properties>
   <maven.compiler.release>25</maven.compiler.release>
-  <zeroj.version>0.1.0-pre12</zeroj.version>
+  <zeroj.version>0.1.0-pre13</zeroj.version>
 </properties>
 
 <dependencyManagement>
@@ -454,10 +454,10 @@ dependency graph by accident. Give each one an explicit version:
 
 ```groovy
 dependencies {
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'            // BBS selective-disclosure credentials
-    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre12'   // Poseidon MPF authenticated state (experimental)
-    implementation 'org.zeroj:zeroj-jmt-poseidon:0.1.0-pre12'   // Poseidon JMT authenticated state (experimental)
-    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre12' // PlonK verification (experimental)
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'            // BBS selective-disclosure credentials
+    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre13'   // Poseidon MPF authenticated state (experimental)
+    implementation 'org.zeroj:zeroj-jmt-poseidon:0.1.0-pre13'   // Poseidon JMT authenticated state (experimental)
+    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre13' // PlonK verification (experimental)
 }
 ```
 
@@ -465,10 +465,10 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("org.zeroj:zeroj-bbs:0.1.0-pre12")            // BBS selective-disclosure credentials
-    implementation("org.zeroj:zeroj-mpf-poseidon:0.1.0-pre12")   // Poseidon MPF authenticated state (experimental)
-    implementation("org.zeroj:zeroj-jmt-poseidon:0.1.0-pre12")   // Poseidon JMT authenticated state (experimental)
-    implementation("org.zeroj:zeroj-verifier-plonk:0.1.0-pre12") // PlonK verification (experimental)
+    implementation("org.zeroj:zeroj-bbs:0.1.0-pre13")            // BBS selective-disclosure credentials
+    implementation("org.zeroj:zeroj-mpf-poseidon:0.1.0-pre13")   // Poseidon MPF authenticated state (experimental)
+    implementation("org.zeroj:zeroj-jmt-poseidon:0.1.0-pre13")   // Poseidon JMT authenticated state (experimental)
+    implementation("org.zeroj:zeroj-verifier-plonk:0.1.0-pre13") // PlonK verification (experimental)
 }
 ```
 
@@ -804,8 +804,8 @@ is needed; unfamiliar terms are defined in the [Glossary](https://zeroj.dev/lear
    }
 
    dependencies {
-       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
        // @ZKCircuit annotations + the processor that generates SecretMultiplierCircuit
        implementation 'org.zeroj:zeroj-circuit-annotation-api'
@@ -840,7 +840,7 @@ is needed; unfamiliar terms are defined in the [Glossary](https://zeroj.dev/lear
      <version>1.0-SNAPSHOT</version>
 
      <properties>
-       <zeroj.version>0.1.0-pre12</zeroj.version>
+       <zeroj.version>0.1.0-pre13</zeroj.version>
        <maven.compiler.release>25</maven.compiler.release>
        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
      </properties>
@@ -2531,8 +2531,8 @@ moves faster.
    }
 
    dependencies {
-       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
        implementation 'org.zeroj:zeroj-circuit-annotation-api'
        annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
@@ -2966,8 +2966,8 @@ the trapdoor.
    }
 
    dependencies {
-       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
        implementation 'org.zeroj:zeroj-circuit-annotation-api'
        annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
@@ -3482,8 +3482,8 @@ bigger picture.
    }
 
    dependencies {
-       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
        implementation 'org.zeroj:zeroj-circuit-annotation-api'
        annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
@@ -4239,8 +4239,8 @@ java {
 }
 
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     implementation 'org.zeroj:zeroj-circuit-annotation-api'
     annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
@@ -4617,8 +4617,8 @@ You need `zeroj-circuit-annotation-api` on the compile classpath,
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     implementation 'org.zeroj:zeroj-circuit-annotation-api'
     annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'
@@ -6742,7 +6742,7 @@ BLS12-381. This page describes what exists and how to try it, briefly and withou
 explicitly:
 
 ```groovy
-implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre12'
+implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre13'
 ```
 
 BN254 PlonK exists only as a legacy path and is disabled unless you start the JVM with
@@ -6901,7 +6901,7 @@ yourself for the snarkjs JSON parser, CBOR and hashing helpers.
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
     implementation 'org.zeroj:zeroj-verifier-groth16'
     implementation 'org.zeroj:zeroj-codec'   // SnarkjsJsonCodec, CborEnvelopeCodec, CanonicalHash
 }
@@ -7357,7 +7357,7 @@ Dependencies for the off-chain side:
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
     implementation 'org.zeroj:zeroj-onchain-julc'
     implementation "org.julclang:julc-cardano-client-lib:0.1.0-pre18"   // JulcScriptLoader
     implementation "com.bloxbean.cardano:cardano-client-lib:0.8.0-pre5"
@@ -7499,8 +7499,8 @@ annotation processor to your build. The runnable apps in zeroj-usecases use:
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation "org.zeroj:zeroj-onchain-julc:0.1.0-pre12"
-    annotationProcessor "org.zeroj:zeroj-onchain-julc:0.1.0-pre12"
+    implementation "org.zeroj:zeroj-onchain-julc:0.1.0-pre13"
+    annotationProcessor "org.zeroj:zeroj-onchain-julc:0.1.0-pre13"
     implementation "org.julclang:julc-stdlib:0.1.0-pre18"
     annotationProcessor "org.julclang:julc-annotation-processor:0.1.0-pre18"
     testImplementation "org.julclang:julc-testkit:0.1.0-pre18"    // run validators in the JuLC VM
@@ -7512,7 +7512,7 @@ The `annotationProcessor "org.zeroj:zeroj-onchain-julc"` line is required: JuLC 
 library code such as `Groth16BLS12381Lib` from the sources that module ships under
 `META-INF/plutus-sources`, and without it compilation fails with
 `Plutus compilation error: Undefined variable: Groth16BLS12381Lib`. If you use the BOM with
-versionless coordinates, add `annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')`
+versionless coordinates, add `annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')`
 as well. Only the JuLC testkit and VM lines are for running validators locally; loading a compiled
 script and submitting transactions needs just JuLC's `julc-cardano-client-lib` and Cardano Client Lib.
 
@@ -7564,7 +7564,7 @@ circuit.
 ### JuLC version coupling
 
 The compiled UPLC, and therefore the **script hash and address**, is produced by the JuLC compiler.
-ZeroJ 0.1.0-pre12 builds against JuLC 0.1.0-pre18. Treat a JuLC upgrade as a new script:
+ZeroJ 0.1.0-pre13 builds against JuLC 0.1.0-pre18. Treat a JuLC upgrade as a new script:
 recompute the hash, re-measure budgets, and plan how funds locked at the old address move. ZeroJ's
 authenticated-state release tooling binds the compiler version into each release identity for
 exactly this reason. Renaming Java packages alone does not change the hash: the `org.zeroj`
@@ -7909,8 +7909,8 @@ official fixture vectors for both, across the pure-Java and blst providers.
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'   // opt-in, explicit version
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'   // opt-in, explicit version
     implementation 'org.zeroj:zeroj-blst'                  // optional: native provider for issuers
 }
 ```
@@ -7919,7 +7919,7 @@ dependencies {
 <dependency>
   <groupId>org.zeroj</groupId>
   <artifactId>zeroj-bbs</artifactId>
-  <version>0.1.0-pre12</version>
+  <version>0.1.0-pre13</version>
 </dependency>
 ```
 
@@ -8288,7 +8288,7 @@ dependency. The persistent load and benchmark tools live in the unpublished
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre12'   // or zeroj-jmt-poseidon
+    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre13'   // or zeroj-jmt-poseidon
 }
 ```
 
@@ -10181,13 +10181,13 @@ mainnet use.
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     implementation 'org.zeroj:zeroj-circuit-dsl'            // core: version from the BOM
     implementation 'org.zeroj:zeroj-crypto'
     implementation 'org.zeroj:zeroj-verifier-groth16'
 
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'    // opt-in: explicit version
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'    // opt-in: explicit version
 }
 ```
 
@@ -10197,7 +10197,7 @@ dependencies {
     <dependency>
       <groupId>org.zeroj</groupId>
       <artifactId>zeroj-bom-core</artifactId>
-      <version>0.1.0-pre12</version>
+      <version>0.1.0-pre13</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -10964,14 +10964,14 @@ A minimal build after the move:
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform("org.zeroj:zeroj-bom-core:0.1.0-pre12")
+    implementation platform("org.zeroj:zeroj-bom-core:0.1.0-pre13")
 
     implementation 'org.zeroj:zeroj-circuit-dsl'      // version from the BOM
     implementation 'org.zeroj:zeroj-crypto'
     implementation 'org.zeroj:zeroj-verifier-groth16'
 
     // opt-in artifacts stay outside the BOM and carry their own version
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'
 }
 ```
 
@@ -11269,7 +11269,7 @@ Source: https://zeroj.dev/ai/starter-pack/
 
 ### 1. What ZeroJ is
 
-ZeroJ is a **Java-first zero-knowledge proof toolkit for Cardano** (Java 25, Maven group `org.zeroj`, version `0.1.0-pre12`).
+ZeroJ is a **Java-first zero-knowledge proof toolkit for Cardano** (Java 25, Maven group `org.zeroj`, version `0.1.0-pre13`).
 
 - **Define** circuits in Java — annotation style (`@ZKCircuit`, recommended) or the `CircuitSpec`/`SignalBuilder` DSL.
 - **Prove** with a pure-Java **Groth16** prover on **BLS12-381** (no native libraries; optional blst backend).
@@ -11293,8 +11293,8 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 repositories { mavenCentral() }
 
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     implementation 'org.zeroj:zeroj-circuit-annotation-api'
     annotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor'

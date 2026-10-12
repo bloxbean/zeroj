@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "site": "https://zeroj.dev",
-  "zerojVersion": "0.1.0-pre12",
+  "zerojVersion": "0.1.0-pre13",
   "zerojReleased": true,
   "zerojDevelopmentVersion": "0.1.0-pre13",
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "ff124c2dc2f96dd06efa719b2ebcacb5b2c6ed74",
+  "sourceRevision": "e5b195eb609da4e62cb037c9804ade66c4ed0870",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -22,14 +22,14 @@
       "description": "Add ZeroJ to a Gradle or Maven project with the BOM, wire up the annotation processor, and enable the dev-only trusted setup for local runs.",
       "url": "https://zeroj.dev/start/installation/",
       "markdown": "https://zeroj.dev/ai/pages/start/installation.md",
-      "sha256": "b5cfbeff0ab3ad49e8cf69d89539bd230e0ca735915f0abd802d53f6fb886b04"
+      "sha256": "06682f891db7feb1f69bb696c27d6dfe27dea5b2b164b9599a5e45a770d78b88"
     },
     {
       "title": "Quickstart: your first proof",
       "description": "In about ten minutes, prove you know a secret factor without revealing it, then verify the proof in pure Java. Circuit, witness, setup, prove, verify.",
       "url": "https://zeroj.dev/start/quickstart/",
       "markdown": "https://zeroj.dev/ai/pages/start/quickstart.md",
-      "sha256": "828e213742f559c97896be313ca4856ad87bf4012f4d58e750df36d885436035"
+      "sha256": "70b2fe194920dd0e5a16c96afe1bd85408db10a461b5749282a2f85cda17aea0"
     },
     {
       "title": "Status & maturity",
@@ -85,35 +85,35 @@
       "description": "Build a range proof with ZkUInt, see why bit widths matter, test an invalid witness, and verify with nothing but a key, a proof and public inputs.",
       "url": "https://zeroj.dev/tutorials/age-check/",
       "markdown": "https://zeroj.dev/ai/pages/tutorials/age-check.md",
-      "sha256": "ae9f811c25e267c54160ec147ced356762d281d85cf760789536141797b395e7"
+      "sha256": "c52191f8e0cc9ba799f8c2144e0b93d2f7fd4297b90f1c497e745312d810db9b"
     },
     {
       "title": "Private allowlist with a Merkle tree",
       "description": "Prove you're on a list without saying who you are, using a Poseidon Merkle tree, then add a nullifier so each member can act only once per event.",
       "url": "https://zeroj.dev/tutorials/private-allowlist/",
       "markdown": "https://zeroj.dev/ai/pages/tutorials/private-allowlist.md",
-      "sha256": "f02f856163f96218cbc1f437d430643635dd6a60b259e0bdd08cc841fa56f731"
+      "sha256": "1037dd0b4115c55352a83959edf2444bdf103f376e718105a1dc107804696b55"
     },
     {
       "title": "Verify your proof on Cardano",
       "description": "Lock test ADA behind a Groth16 verifier on a local Yaci DevKit devnet, unlock it with a proof, and learn why a bare verifier must never guard real value.",
       "url": "https://zeroj.dev/tutorials/verify-on-cardano/",
       "markdown": "https://zeroj.dev/ai/pages/tutorials/verify-on-cardano.md",
-      "sha256": "c44f7d7210314ad2914251711af65dc8ef6c5841d4d21b98d68c422cbcbb5f3e"
+      "sha256": "deced1e46ed59a0d7aaf7f8ea88b556001904fe1cd6906d33f94e9b72eca68ed"
     },
     {
       "title": "Bring circom & snarkjs circuits",
       "description": "Prove a circom circuit with ZeroJ's pure-Java prover using snarkjs keys, and hand ZeroJ proofs to snarkjs. Groth16 on BLS12-381, both directions.",
       "url": "https://zeroj.dev/tutorials/snarkjs-interop/",
       "markdown": "https://zeroj.dev/ai/pages/tutorials/snarkjs-interop.md",
-      "sha256": "9a9fe0324347be535671baa567dee6865a379fdd492f4690da12ad1073215001"
+      "sha256": "085208c84e62b5ef6dd6a4834b35ab209a761319d078bf3a1fd62c3d13c7c44b"
     },
     {
       "title": "Write circuits with annotations",
       "description": "Author ZeroJ circuits as annotated Java classes, and use the generated companion to build, fill inputs, compute witnesses, and wire proofs.",
       "url": "https://zeroj.dev/guides/circuits/annotations/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/annotations.md",
-      "sha256": "697cef05d042f4a10157ac46703703abea46c32d9c2f0a329de29c62baaac82f"
+      "sha256": "580ffa38cdc6c32f7b9bc2ff299372dc3c14cec5ac35e3fe59f223b5db35584c"
     },
     {
       "title": "CircuitSpec & the Signal DSL",
@@ -162,21 +162,21 @@
       "description": "What ZeroJ's experimental PlonK support contains today, how to try it off-chain, and its known gaps. Groth16 is the supported path.",
       "url": "https://zeroj.dev/guides/proving/plonk/",
       "markdown": "https://zeroj.dev/ai/pages/guides/proving/plonk.md",
-      "sha256": "6a6a2e2176d1df22d52ce888f9fa86d28abe0aa0defe7eec801284dc1994cc37"
+      "sha256": "4e19fa527489756ba42d3f7c06c731712eb64278939092b8db3cab46075822e4"
     },
     {
       "title": "Verify proofs in Java",
       "description": "Verify Groth16 proofs off-chain with ZeroJ's proof model, verifier backends and registries, and build a service that only trusts keys you pinned.",
       "url": "https://zeroj.dev/guides/verifying/off-chain/",
       "markdown": "https://zeroj.dev/ai/pages/guides/verifying/off-chain.md",
-      "sha256": "ce3216373189859bbad17ca0e9978a50f09f0280a0577c11aa85e93570354699"
+      "sha256": "8c846f3bcef69e271bfec23e8de84f307ce293fa1faf6119c2d1febbb1563d10"
     },
     {
       "title": "Verify proofs on Cardano",
       "description": "Run Groth16 verification inside a Plutus V3 validator with zeroj-onchain-julc, bind proofs to the spend, and plan budgets and reference scripts.",
       "url": "https://zeroj.dev/guides/verifying/on-chain/",
       "markdown": "https://zeroj.dev/ai/pages/guides/verifying/on-chain.md",
-      "sha256": "e24c508c23044f626281f01fae494c8aa295b2852adf8f3212151fdd8d60ecb1"
+      "sha256": "846a443bc4b8f5fcd8e455c25f5136ebb75dfbe4b9fc418ec23f63fcbe601b18"
     },
     {
       "title": "Secure your ZK application",
@@ -190,14 +190,14 @@
       "description": "Issue BBS credentials, derive presentations that reveal only chosen attributes, verify them in Java or on Cardano, and bind them against replay.",
       "url": "https://zeroj.dev/guides/credentials/bbs/",
       "markdown": "https://zeroj.dev/ai/pages/guides/credentials/bbs.md",
-      "sha256": "5006b5db0aaf5cde61ea2088631e6ff7452a17a90d3769c6e723158365aaaf2e"
+      "sha256": "20fa02d6c68b30f867482d5fefea4ea0d33aeea6b6af6ef7b5103ef87071eb3e"
     },
     {
       "title": "Large authenticated state (Poseidon MPF/JMT)",
       "description": "Keep millions of entries off-chain, publish one Poseidon root, and prove single-key reads and updates with small Groth16 circuits. Experimental.",
       "url": "https://zeroj.dev/guides/credentials/authenticated-state/",
       "markdown": "https://zeroj.dev/ai/pages/guides/credentials/authenticated-state.md",
-      "sha256": "dae7ea6459ecb98bb932eb0844cfe0d4e7bd0056d1051f62306a2e3b7462ed07"
+      "sha256": "f73854a47b844241d0416b133ce0cd8c6f1d58c54644c36aefab40d2dedef416"
     },
     {
       "title": "Use cases",
@@ -274,7 +274,7 @@
       "description": "Every published ZeroJ artifact with its coordinates, purpose, BOM membership, maturity and main entry-point classes, plus the unpublished support projects.",
       "url": "https://zeroj.dev/reference/modules/",
       "markdown": "https://zeroj.dev/ai/pages/reference/modules.md",
-      "sha256": "ac98388a191d7965223c42ea9fa18d9aaf55044ee456b3c9c8330ec01e5e749f"
+      "sha256": "727e47d2ce257e566012d0c79b29d2147dde86c06b46912f44ef2b11781a0561"
     },
     {
       "title": "API cheat sheet",
@@ -302,7 +302,7 @@
       "description": "Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.",
       "url": "https://zeroj.dev/reference/migration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/migration.md",
-      "sha256": "a609220257b5d5147973a7dd16215fbddeaeb323176d9eea34d0fe0c8ab31e08"
+      "sha256": "4048da5bf38681dda9e0673c8bf03e34ff8bcb079fdf751537a471aef3a2f091"
     },
     {
       "title": "Build with AI",
@@ -316,21 +316,21 @@
       "description": "Everything an AI coding agent needs to write correct ZeroJ code on the first try. Ingest it before generating circuits, proofs or validators.",
       "url": "https://zeroj.dev/ai/starter-pack/",
       "markdown": "https://zeroj.dev/ai/pages/ai/starter-pack.md",
-      "sha256": "1cd6fa76121c072625aadf8e2f85d6f634ec48413a36f5de904031b246cb4696"
+      "sha256": "67135119b7f0e50dd34f4ac9aa28c383e7e91544d0c56af6cb239eef425eaec1"
     }
   ],
   "artifacts": [
     {
       "url": "https://zeroj.dev/llms.txt",
-      "sha256": "100416206c27d811d45adcf7f24c374f1cafd1970a547b2d3e0acf88722a9c1b"
+      "sha256": "c25530488b733ee311d2162150aba68e4eaf8487e7a7745bae0b36d09bf88696"
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "304f6e6932fb0cfbcac52993f12772fa44034ec0d4abab2d89afd52a1c286aed"
+      "sha256": "a46b5d27d09c3ab00356f8f59dd3360b86d964b3baf2263425785647c987fa95"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
-      "sha256": "0be3cceb34b23580c938d2058c67d205078fd5a8f71560f17f8ac20994b75a98"
+      "sha256": "c329b844a17131c350258974fccf8d47085f46e0a6ad99b4a026e33ec9f6f13f"
     },
     {
       "url": "https://zeroj.dev/ai/index.md",
@@ -338,7 +338,7 @@
     },
     {
       "url": "https://zeroj.dev/ai/catalog.json",
-      "sha256": "051f273eb34175710d24feccab662c9cf3facede8866b2eb344998d821b83838"
+      "sha256": "f3b5cfc1a9c04b219c1da9442f079944f3662c901d9af8d8e4b436f0bd32d80d"
     }
   ]
 }

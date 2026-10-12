@@ -56,9 +56,9 @@ repositories {
 
 dependencies {
     // One BOM for all core ZeroJ modules
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
     // The BOM must also apply to the annotation processor path
-    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     // Circuits: @ZKCircuit annotations + the generated *Circuit companions
     implementation 'org.zeroj:zeroj-circuit-annotation-api'
@@ -93,9 +93,9 @@ repositories {
 
 dependencies {
     // One BOM for all core ZeroJ modules
-    implementation(platform("org.zeroj:zeroj-bom-core:0.1.0-pre12"))
+    implementation(platform("org.zeroj:zeroj-bom-core:0.1.0-pre13"))
     // The BOM must also apply to the annotation processor path
-    annotationProcessor(platform("org.zeroj:zeroj-bom-core:0.1.0-pre12"))
+    annotationProcessor(platform("org.zeroj:zeroj-bom-core:0.1.0-pre13"))
 
     // Circuits: @ZKCircuit annotations + the generated *Circuit companions
     implementation("org.zeroj:zeroj-circuit-annotation-api")
@@ -118,7 +118,7 @@ dependencies {
 ```xml title="pom.xml"
 <properties>
   <maven.compiler.release>25</maven.compiler.release>
-  <zeroj.version>0.1.0-pre12</zeroj.version>
+  <zeroj.version>0.1.0-pre13</zeroj.version>
 </properties>
 
 <dependencyManagement>
@@ -225,10 +225,10 @@ dependency graph by accident. Give each one an explicit version:
 
 ```groovy
 dependencies {
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'            // BBS selective-disclosure credentials
-    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre12'   // Poseidon MPF authenticated state (experimental)
-    implementation 'org.zeroj:zeroj-jmt-poseidon:0.1.0-pre12'   // Poseidon JMT authenticated state (experimental)
-    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre12' // PlonK verification (experimental)
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'            // BBS selective-disclosure credentials
+    implementation 'org.zeroj:zeroj-mpf-poseidon:0.1.0-pre13'   // Poseidon MPF authenticated state (experimental)
+    implementation 'org.zeroj:zeroj-jmt-poseidon:0.1.0-pre13'   // Poseidon JMT authenticated state (experimental)
+    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre13' // PlonK verification (experimental)
 }
 ```
 
@@ -236,10 +236,10 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("org.zeroj:zeroj-bbs:0.1.0-pre12")            // BBS selective-disclosure credentials
-    implementation("org.zeroj:zeroj-mpf-poseidon:0.1.0-pre12")   // Poseidon MPF authenticated state (experimental)
-    implementation("org.zeroj:zeroj-jmt-poseidon:0.1.0-pre12")   // Poseidon JMT authenticated state (experimental)
-    implementation("org.zeroj:zeroj-verifier-plonk:0.1.0-pre12") // PlonK verification (experimental)
+    implementation("org.zeroj:zeroj-bbs:0.1.0-pre13")            // BBS selective-disclosure credentials
+    implementation("org.zeroj:zeroj-mpf-poseidon:0.1.0-pre13")   // Poseidon MPF authenticated state (experimental)
+    implementation("org.zeroj:zeroj-jmt-poseidon:0.1.0-pre13")   // Poseidon JMT authenticated state (experimental)
+    implementation("org.zeroj:zeroj-verifier-plonk:0.1.0-pre13") // PlonK verification (experimental)
 }
 ```
 

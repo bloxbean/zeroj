@@ -84,14 +84,14 @@ A minimal build after the move:
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform("org.zeroj:zeroj-bom-core:0.1.0-pre12")
+    implementation platform("org.zeroj:zeroj-bom-core:0.1.0-pre13")
 
     implementation 'org.zeroj:zeroj-circuit-dsl'      // version from the BOM
     implementation 'org.zeroj:zeroj-crypto'
     implementation 'org.zeroj:zeroj-verifier-groth16'
 
     // opt-in artifacts stay outside the BOM and carry their own version
-    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre12'
+    implementation 'org.zeroj:zeroj-bbs:0.1.0-pre13'
 }
 ```
 

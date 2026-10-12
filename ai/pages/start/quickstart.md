@@ -69,8 +69,8 @@ is needed; unfamiliar terms are defined in the [Glossary](https://zeroj.dev/lear
    }
 
    dependencies {
-       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
-       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+       implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
+       annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
        // @ZKCircuit annotations + the processor that generates SecretMultiplierCircuit
        implementation 'org.zeroj:zeroj-circuit-annotation-api'
@@ -105,7 +105,7 @@ is needed; unfamiliar terms are defined in the [Glossary](https://zeroj.dev/lear
      <version>1.0-SNAPSHOT</version>
 
      <properties>
-       <zeroj.version>0.1.0-pre12</zeroj.version>
+       <zeroj.version>0.1.0-pre13</zeroj.version>
        <maven.compiler.release>25</maven.compiler.release>
        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
      </properties>

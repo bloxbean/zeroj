@@ -34,7 +34,7 @@ BLS12-381. This page describes what exists and how to try it, briefly and withou
 explicitly:
 
 ```groovy
-implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre12'
+implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre13'
 ```
 
 BN254 PlonK exists only as a legacy path and is disabled unless you start the JVM with

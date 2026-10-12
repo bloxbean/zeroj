@@ -115,7 +115,7 @@ Dependencies for the off-chain side:
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
     implementation 'org.zeroj:zeroj-onchain-julc'
     implementation "org.julclang:julc-cardano-client-lib:0.1.0-pre18"   // JulcScriptLoader
     implementation "com.bloxbean.cardano:cardano-client-lib:0.8.0-pre5"
@@ -257,8 +257,8 @@ annotation processor to your build. The runnable apps in zeroj-usecases use:
 
 ```groovy title="build.gradle"
 dependencies {
-    implementation "org.zeroj:zeroj-onchain-julc:0.1.0-pre12"
-    annotationProcessor "org.zeroj:zeroj-onchain-julc:0.1.0-pre12"
+    implementation "org.zeroj:zeroj-onchain-julc:0.1.0-pre13"
+    annotationProcessor "org.zeroj:zeroj-onchain-julc:0.1.0-pre13"
     implementation "org.julclang:julc-stdlib:0.1.0-pre18"
     annotationProcessor "org.julclang:julc-annotation-processor:0.1.0-pre18"
     testImplementation "org.julclang:julc-testkit:0.1.0-pre18"    // run validators in the JuLC VM
@@ -270,7 +270,7 @@ The `annotationProcessor "org.zeroj:zeroj-onchain-julc"` line is required: JuLC 
 library code such as `Groth16BLS12381Lib` from the sources that module ships under
 `META-INF/plutus-sources`, and without it compilation fails with
 `Plutus compilation error: Undefined variable: Groth16BLS12381Lib`. If you use the BOM with
-versionless coordinates, add `annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre12')`
+versionless coordinates, add `annotationProcessor platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')`
 as well. Only the JuLC testkit and VM lines are for running validators locally; loading a compiled
 script and submitting transactions needs just JuLC's `julc-cardano-client-lib` and Cardano Client Lib.
 
@@ -322,7 +322,7 @@ circuit.
 ## JuLC version coupling
 
 The compiled UPLC, and therefore the **script hash and address**, is produced by the JuLC compiler.
-ZeroJ 0.1.0-pre12 builds against JuLC 0.1.0-pre18. Treat a JuLC upgrade as a new script:
+ZeroJ 0.1.0-pre13 builds against JuLC 0.1.0-pre18. Treat a JuLC upgrade as a new script:
 recompute the hash, re-measure budgets, and plan how funds locked at the old address move. ZeroJ's
 authenticated-state release tooling binds the compiler version into each release identity for
 exactly this reason. Renaming Java packages alone does not change the hash: the `org.zeroj`
