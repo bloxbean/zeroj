@@ -75,8 +75,8 @@ methods (`inclusion(maxSteps)`, `valueUpdate(maxSteps)`, …) and as `ZkMpf*` / 
 | Deletion | No physical delete yet | Tombstones only; a tombstone is **not** proof of absence |
 
 Both produce the same 192-byte compressed Groth16 proof and a 432-byte compressed VK for one public
-input, so on-chain cost is the same: ZeroJ measured **2,627,770,348 CPU steps and 177,749 memory
-units** in the JuLC VM. The JMT's larger native proof is private prover input and never reaches
+input, so on-chain cost is the same: ZeroJ measured **2,052,276,435 CPU steps and 138,837 memory
+units** in the JuLC VM (JuLC 0.1.0-pre18). The JMT's larger native proof is private prover input and never reaches
 the chain.
 
 The two root profiles (`zeroj-poseidon-mpf-v1`, `zeroj-poseidon-jmt-v1`) are incompatible with

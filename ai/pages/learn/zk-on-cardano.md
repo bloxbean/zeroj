@@ -67,17 +67,18 @@ maximum. Groth16 is the cheapest pairing-based option because its verification w
 apart from one extra scalar multiplication per public input.
 
 In ZeroJ's JuLC VM tests, the reusable Groth16 verifier, run as a spending validator with a full
-`ScriptContext`, measured:
+`ScriptContext`, measured (JuLC 0.1.0-pre18):
 
 | Public inputs | CPU units | Memory units |
 |---------------|-----------|--------------|
-| 1 | about 2.63 billion | about 178,000 |
-| 2 | about 2.82 billion | about 212,000 |
-| 3 | about 3.02 billion | about 246,000 |
+| 1 | about 2.05 billion | about 139,000 |
+| 2 | about 2.19 billion | about 168,000 |
+| 3 | about 2.33 billion | about 197,000 |
 
-That's roughly a quarter to a third of the per-transaction CPU limit of 10 billion units under
-current protocol parameters, leaving room for your own validation logic. Each extra public input
-adds about 0.2 billion CPU units, and transaction fees scale with the units used, so keep public
+That's about a fifth to a quarter of the per-transaction CPU limit of 10 billion units under
+current protocol parameters, leaving room for your own validation logic. (The figures dropped by
+about a fifth when ZeroJ's verifier started decompressing each point once; see
+[ADR-0056](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0056-groth16-onchain-ic-single-decompression.md).) Each extra public input adds about 0.14 billion CPU units, and transaction fees scale with the units used, so keep public
 inputs to what the validator actually needs. Measure your own validator too: its policy checks
 add cost, and a JuLC compiler upgrade can shift the numbers.
 
@@ -98,7 +99,7 @@ transaction metadata using Cardano Client Lib.
 |---|------------------------|-------------------------------------|
 | Who checks the proof | Every Cardano node, as part of consensus | Your verifier, plus anyone who re-checks later |
 | Can an invalid proof move funds? | No; the transaction fails | The chain doesn't check the proof at all, so your off-chain logic must |
-| Cost | Plutus execution units, roughly 2.6 to 3 billion CPU units per proof | Only metadata bytes |
+| Cost | Plutus execution units, roughly 2 to 2.4 billion CPU units per proof | Only metadata bytes |
 | Good for | Unlocking funds, minting, state transitions enforced by the ledger | Audit trails, attestations, batch results, off-chain protocols |
 
 ZeroJ's current release doesn't ship an anchoring helper. You write the metadata yourself with

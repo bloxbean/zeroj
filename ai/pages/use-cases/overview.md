@@ -1,6 +1,6 @@
 # Use cases
 
-> What zero-knowledge proofs unlock on Cardano — nine worked use cases, the building block behind each, and runnable demos.
+> What zero-knowledge proofs, commitments and encryption unlock on Cardano — thirteen worked use cases, the building block behind each, and runnable demos.
 
 Canonical URL: https://zeroj.dev/use-cases/overview/
 
@@ -20,6 +20,15 @@ questions you still have to answer. Most pages also link a runnable demo.
 > Treat them as blueprints to learn from, not as systems for real identities, votes or funds. See
 > [Status & maturity](https://zeroj.dev/start/status/).
 
+> **Note: The demos were hardened**
+>
+> The original demos were reviewed for published values that can be guessed, values that link
+> users, and missing on-chain bindings, and then fixed: salted leaves, random issuer and voter keys,
+> vouchers that pay exactly what they owe. Each page describes the demo as it now behaves and what
+> remains. The demo servers hold users' keys, so privacy is claimed against chain and mempool
+> observers, not the demo server. See
+> [zeroj-usecases ADR-0009](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0009-privacy-and-binding-hardening-of-the-original-demos.md).
+
 ## Identity & compliance
 
   - [Age & KYC eligibility](https://zeroj.dev/use-cases/age-and-kyc/): Prove you're old enough and live in an approved country, using an issuer-signed credential, without revealing either value.
@@ -30,9 +39,20 @@ questions you still have to answer. Most pages also link a runnable demo.
   - [Proof of reserves](https://zeroj.dev/use-cases/proof-of-reserves/): A custodian proves reserves cover all customer balances without publishing any balance.
   - [Private token transfers](https://zeroj.dev/use-cases/private-payments/): A design walkthrough of a shielded pool: deposit, then withdraw to a fresh address that can't be linked to the deposit.
 
+## Confidential values
+
+Balances, salaries and bids kept private on a public ledger, with Pedersen commitments, ElGamal
+encryption and confidential notes. These demos are new in ZeroJ 0.1.0-pre13 and all run in one
+app, `pedersen-commitments`, with a tab per use case.
+
+  - [Confidential payroll](https://zeroj.dev/use-cases/confidential-payroll/): Pay salaries privately on-chain; the tax authority reads every one, and the employer can't under-report.
+  - [Sealed-bid auction](https://zeroj.dev/use-cases/sealed-bid-auction/): Bids are encrypted to the auctioneer with a proof; the earliest highest bid wins and losing bids are never published (only bounded by the price).
+  - [Confidential loyalty points](https://zeroj.dev/use-cases/confidential-points/): Points move privately between customers; holders recover balances from the chain and an auditor reads every amount.
+  - [Proof of solvency with hidden balances](https://zeroj.dev/use-cases/private-solvency/): An exchange proves hidden customer balances are covered by locked reserves; each customer checks their own entry.
+
 ## Governance & communities
 
-  - [Private voting](https://zeroj.dev/use-cases/private-voting/): An eligible member votes exactly once, and nobody can tell which member cast which ballot.
+  - [Private voting](https://zeroj.dev/use-cases/private-voting/): An eligible member votes exactly once, nobody can tell which member cast which ballot, and an encrypted tally keeps choices secret.
   - [One claim per person](https://zeroj.dev/use-cases/sybil-resistant-airdrop/): A Sybil-resistant airdrop: a personhood credential claims once per epoch, and the payout is bound to a recipient.
 
 ## Ownership & assets
@@ -56,9 +76,14 @@ Almost every use case is built from a small set of patterns. Start from what you
 | Allow one action per person, credential or NFT | Nullifier | `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, secret, contextId)`, stored on-chain (sorted list, spent UTxO) |
 | Rely on a fact someone else attested | Issuer signature checked inside the circuit | `ZkEdDSAJubjub.verifyWithRegisteredKey` |
 | Stop a copied proof from paying someone else | Bind the recipient or the spent UTxO into the public inputs | recipient public input; a spend reference computed from `ScriptContext` in your validator |
+| Keep a number private on-chain, but check, add up or open it later | Pedersen commitment + Groth16 | `PedersenCommitment`, `ZkPedersen.commit`, `ZkPedersen.assertBalanced` |
+| Let the owner and an auditor read a hidden amount from the chain | Confidential note | `ConfidentialNotes.seal`, `NoteScanner` |
+| Let an authority read a value, with no way for the sender to lie | ElGamal encryption + a proof | `ElGamal.encryptWithOpening`, `ZkElGamal.encrypt` |
+| Reveal only a total, and only when a quorum agrees | Threshold ElGamal | `DkgParticipant`, `ElGamal.decryptionShare`, `ElGamal.decrypt` |
 | Prove facts about large private state (millions of entries) | Poseidon MPF / JMT (**experimental**) | `zeroj-mpf-poseidon`, `zeroj-jmt-poseidon` |
 
-Groth16 on BLS12-381 is the default proof system for everything above. Circuits use Poseidon with
+Not sure whether to reveal, prove, commit or encrypt? [Choose how to disclose](https://zeroj.dev/selective-disclosure/)
+compares the options on one example. Groth16 on BLS12-381 is the default proof system for everything above. Circuits use Poseidon with
 explicit BLS12-381 parameters. For the concepts behind these patterns, read
 [Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-witnesses/) and
 [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).
@@ -95,7 +120,8 @@ cd zeroj-usecases
 
 `demo.sh` tops up a devnet-only demo wallet, starts the app, opens its UI and, with `--run`, runs
 the happy path. The demo names are `proof-of-reserves`, `identity-kyc`, `nft-ownership`, `voting`,
-`airdrop`, `dpp`, `selective-disclosure` and `reusable-kyc`. The account-ownership demo ships
+`airdrop`, `dpp`, `selective-disclosure`, `reusable-kyc` and `pedersen` (the confidential-values app:
+payroll, auction, points, credit gate and solvency tabs). The account-ownership demo ships
 separately as a desktop app and CLI; see [its page](https://zeroj.dev/use-cases/account-recovery/#try-it).
 
 The demos use a single-party development trusted setup (they run with
@@ -111,21 +137,16 @@ new problems.
 - **Private credit score for lending.** A borrower proves "score ≥ 700" from a credit bureau's
   signed credential. That needs an in-circuit issuer signature (`ZkEdDSAJubjub`), a `ZkUInt.gte`
   range check and a public input bound to the loan UTxO. BBS is an option if revealing a score band
-  is acceptable.
-- **Sealed-bid auctions.** Bidders publish `Poseidon(bid, salt)` during bidding, then prove their
-  bid clears the reserve price without revealing it. ZeroJ's integration tests include sealed-bid
-  example circuits: an annotation-style
-  [`AnnotatedSealedBid`](https://github.com/bloxbean/zeroj/blob/main/zeroj-integration-tests/src/test/java/org/zeroj/examples/annotation/AnnotatedSealedBid.java)
-  and a DSL version with a Yaci DevKit on-chain test. That's a starting point, not a full auction
-  protocol.
+  is acceptable. The pedersen-commitments demo's credit gate does the committed-credential version;
+  see [Prove a rule](https://zeroj.dev/selective-disclosure/prove-a-rule/#over-a-committed-credential).
 - **Anonymous feedback and whistleblowing.** An employee proves membership in a Merkle tree of staff
   keys and publishes one nullifier per topic. The report's hash is bound as a public input, so
   every report is from a real member and nobody can flood a topic. The shape is the
   [private voting](https://zeroj.dev/use-cases/private-voting/) circuit.
-- **Payroll or treasury solvency.** A DAO proves that a batch of private salaries or grants sums to
-  no more than the treasury balance, and that each payment falls within an approved band. That uses
-  `ZkUInt` sums and comparisons plus a Poseidon commitment to the batch, as in
-  [proof of reserves](https://zeroj.dev/use-cases/proof-of-reserves/).
+- **Treasury grants within a budget.** A DAO commits to each private grant, proves each one falls
+  within an approved band, and proves the committed total stays under the treasury balance, with
+  `ZkPedersen.assertBalanced`. Delivering each grant to its recipient and an auditor is the
+  [confidential payroll](https://zeroj.dev/use-cases/confidential-payroll/) pattern.
 
 ## Next steps
 

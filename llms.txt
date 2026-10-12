@@ -42,6 +42,7 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [Groth16, PlonK & BBS](https://zeroj.dev/ai/pages/learn/proof-systems.md): The three proof systems in ZeroJ, how their setup, proof size and verification cost differ, and why Cardano uses the BLS12-381 curve.
 - [Trusted setup, explained](https://zeroj.dev/ai/pages/learn/trusted-setup.md): What a trusted setup is, why its "toxic waste" can forge proofs, how multi-party ceremonies remove the risk, and what ZeroJ provides for dev and production.
 - [ZK on Cardano](https://zeroj.dev/ai/pages/learn/zk-on-cardano.md): How Cardano verifies ZK proofs with Plutus V3 BLS12-381 builtins, how proofs map onto eUTxO, what it costs, and why a valid proof is not authorization.
+- [Commitments & encryption, explained](https://zeroj.dev/ai/pages/learn/commitments-and-encryption.md): Sealed envelopes, lockboxes and shared keys: what Pedersen commitments, ElGamal encryption, confidential notes and threshold decryption do, in plain English.
 - [Glossary](https://zeroj.dev/ai/pages/learn/glossary.md): Short, plain-English definitions of the zero-knowledge, cryptography and Cardano terms used throughout the ZeroJ docs.
 
 ## Tutorials
@@ -50,6 +51,16 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [Private allowlist with a Merkle tree](https://zeroj.dev/ai/pages/tutorials/private-allowlist.md): Prove you're on a list without saying who you are, using a Poseidon Merkle tree, then add a nullifier so each member can act only once per event.
 - [Verify your proof on Cardano](https://zeroj.dev/ai/pages/tutorials/verify-on-cardano.md): Lock test ADA behind a Groth16 verifier on a local Yaci DevKit devnet, unlock it with a proof, and learn why a bare verifier must never guard real value.
 - [Bring circom & snarkjs circuits](https://zeroj.dev/ai/pages/tutorials/snarkjs-interop.md): Prove a circom circuit with ZeroJ's pure-Java prover using snarkjs keys, and hand ZeroJ proofs to snarkjs. Groth16 on BLS12-381, both directions.
+
+## Selective disclosure: what to use when
+
+- [Choose how to disclose](https://zeroj.dev/ai/pages/selective-disclosure.md): Six ways to share private data on Cardano with ZeroJ, and what each party learns: reveal signed values, prove a rule, hide a number, tell chosen readers, encrypt for an auditor, or split the trust.
+- [Reveal the value (BBS)](https://zeroj.dev/ai/pages/selective-disclosure/reveal-attributes.md): Show a verifier some attributes of an issuer-signed credential exactly as issued, and hide the rest, with BBS signatures. No circuit, no trusted setup.
+- [Prove a rule (Groth16 predicates)](https://zeroj.dev/ai/pages/selective-disclosure/prove-a-rule.md): Prove a yes/no fact about private data, such as an age, income or score threshold, from a signed or committed credential, without revealing the data. The verifier learns only the answer.
+- [Hide a number (Pedersen commitments)](https://zeroj.dev/ai/pages/selective-disclosure/hide-a-number.md): Publish a number as a sealed commitment, prove facts about it, add commitments together and open them later, so balances, bids and totals stay private on a public ledger.
+- [Tell chosen readers (confidential notes)](https://zeroj.dev/ai/pages/selective-disclosure/share-with-chosen-readers.md): Put a hidden amount on-chain and seal its opening separately for each reader, such as the owner and an auditor, so they can read it straight from the chain and nobody else can.
+- [Encrypt for an auditor (ElGamal + proof)](https://zeroj.dev/ai/pages/selective-disclosure/encrypt-for-an-auditor.md): Encrypt a value to an auditor's key and prove the ciphertext matches the hidden amount, so the auditor can always read the real value and the sender can't under-report.
+- [Split the trust (threshold decryption)](https://zeroj.dev/ai/pages/selective-disclosure/split-trust.md): Encrypt values to a key that no single party holds, so only a quorum of trustees can decrypt, and agree to decrypt only the result, such as an election tally.
 
 ## Guides: circuits
 
@@ -76,23 +87,34 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [Selective disclosure with BBS](https://zeroj.dev/ai/pages/guides/credentials/bbs.md): Issue BBS credentials, derive presentations that reveal only chosen attributes, verify them in Java or on Cardano, and bind them against replay.
 - [Large authenticated state (Poseidon MPF/JMT)](https://zeroj.dev/ai/pages/guides/credentials/authenticated-state.md): Keep millions of entries off-chain, publish one Poseidon root, and prove single-key reads and updates with small Groth16 circuits. Experimental.
 
+## Guides: commitments & encryption
+
+- [Pedersen commitments](https://zeroj.dev/ai/pages/guides/confidential/pedersen.md): Commit to a hidden number, open it later, add commitments together, and prove facts about the hidden value in a Groth16 circuit, with ZeroJ's pedersen-jubjub-v1 profile.
+- [ElGamal encryption](https://zeroj.dev/ai/pages/guides/confidential/elgamal.md): Encrypt small amounts to someone's public key, add ciphertexts without decrypting them, and prove in a Groth16 circuit what a ciphertext contains, with ZeroJ's elgamal-jubjub-v1 profile.
+- [Threshold decryption](https://zeroj.dev/ai/pages/guides/confidential/threshold-elgamal.md): Split an ElGamal key among trustees so that no single party can decrypt, run the distributed key generation, deliver its private shares over a public board with HPKE, and decrypt only a total.
+- [Confidential notes](https://zeroj.dev/ai/pages/guides/confidential/confidential-notes.md): Put a Pedersen commitment on-chain together with its opening, encrypted separately for the owner and each auditor, then recover notes by scanning the chain with a viewing key.
+
 ## Use cases
 
-- [Use cases](https://zeroj.dev/ai/pages/use-cases/overview.md): What zero-knowledge proofs unlock on Cardano — nine worked use cases, the building block behind each, and runnable demos.
-- [Private voting](https://zeroj.dev/ai/pages/use-cases/private-voting.md): Let each eligible member vote exactly once without revealing which member cast which ballot, using Merkle membership, nullifiers and Groth16 on Cardano.
+- [Use cases](https://zeroj.dev/ai/pages/use-cases/overview.md): What zero-knowledge proofs, commitments and encryption unlock on Cardano — thirteen worked use cases, the building block behind each, and runnable demos.
+- [Private voting](https://zeroj.dev/ai/pages/use-cases/private-voting.md): Let each eligible member vote exactly once, keep every choice secret, and publish only the total, using Merkle membership, nullifiers, ElGamal-encrypted ballots and Groth16 on Cardano.
 - [Proof of reserves](https://zeroj.dev/ai/pages/use-cases/proof-of-reserves.md): A custodian proves its reserves cover every customer balance without publishing any balance, and each customer can check they were counted.
 - [Age & KYC eligibility](https://zeroj.dev/ai/pages/use-cases/age-and-kyc.md): Prove you're old enough and live in an approved country, using an issuer-signed credential, while the validator learns only "eligible".
-- [Private NFT ownership](https://zeroj.dev/ai/pages/use-cases/nft-ownership.md): Prove you hold an NFT from a collection for one-time token-gated access without connecting your wallet, plus the nullifier trade-off that decides privacy.
-- [One claim per person](https://zeroj.dev/ai/pages/use-cases/sybil-resistant-airdrop.md): A Sybil-resistant airdrop where each personhood credential claims once per epoch, anonymously, with the payout bound to a chosen recipient.
+- [Private NFT ownership](https://zeroj.dev/ai/pages/use-cases/nft-ownership.md): Prove you hold an NFT from a collection for one-time token-gated access, without revealing which NFT or which wallet, and see why the nullifier must absorb a holder secret.
+- [One claim per person](https://zeroj.dev/ai/pages/use-cases/sybil-resistant-airdrop.md): A Sybil-resistant airdrop where each personhood credential claims once per round with a nullifier even the issuer can't link to a person, and the payout bound to the proved recipient.
 - [Selective disclosure & reusable KYC](https://zeroj.dev/ai/pages/use-cases/selective-disclosure.md): Do KYC once, then show each service only what it asks for, as Groth16 predicates over hidden fields or BBS presentations verified on Cardano.
-- [Digital product passport](https://zeroj.dev/ai/pages/use-cases/digital-product-passport.md): Prove a product meets carbon, recycled-content and origin thresholds without exposing the supplier data behind them, anchored on Cardano.
+- [Digital product passport](https://zeroj.dev/ai/pages/use-cases/digital-product-passport.md): An auditor commits to each product measurement with a Pedersen commitment; the manufacturer proves carbon, recycled-content, origin and inspection claims against them, and one co-signed Cardano transaction mints a locked passport record.
 - [Prove you own a Cardano account](https://zeroj.dev/ai/pages/use-cases/account-recovery.md): Prove you know the wallet root key behind a Cardano address, without revealing the seed or signing anything, so a refund can reach the real owner.
 - [Private token transfers](https://zeroj.dev/ai/pages/use-cases/private-payments.md): A design walkthrough of a shielded pool on Cardano. Deposit, then withdraw to a fresh address that nobody can link to the deposit. Design only, no demo.
+- [Confidential payroll](https://zeroj.dev/ai/pages/use-cases/confidential-payroll.md): Pay salaries on Cardano without publishing them, while the tax authority reads every salary from the chain and the employer can't under-report one.
+- [Sealed-bid auction](https://zeroj.dev/ai/pages/use-cases/sealed-bid-auction.md): Bids stay hidden from other bidders and the public, every bid is readable by the auctioneer from the moment it's placed, and a zero-knowledge proof makes the auctioneer pick the right winner.
+- [Confidential loyalty points](https://zeroj.dev/ai/pages/use-cases/confidential-points.md): Customers hold and move loyalty points with hidden amounts on Cardano, wallets recover their balances from chain data, and an auditor can still read every amount.
+- [Proof of solvency with hidden balances](https://zeroj.dev/ai/pages/use-cases/private-solvency.md): An exchange proves its locked reserves cover every customer balance while hiding each balance and even the total. Customers and an auditor check their part from on-chain data.
 
 ## Reference
 
 - [Modules](https://zeroj.dev/ai/pages/reference/modules.md): Every published ZeroJ artifact with its coordinates, purpose, BOM membership, maturity and main entry-point classes, plus the unpublished support projects.
-- [API cheat sheet](https://zeroj.dev/ai/pages/reference/api-cheatsheet.md): One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification and BBS.
+- [API cheat sheet](https://zeroj.dev/ai/pages/reference/api-cheatsheet.md): One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification, BBS, commitments and encryption.
 - [Configuration](https://zeroj.dev/ai/pages/reference/configuration.md): Every ZeroJ system property, environment variable, native-library requirement, external tool and contributor Gradle flag, and which ones are dev-only.
 - [FAQ & troubleshooting](https://zeroj.dev/ai/pages/reference/faq.md): Straight answers about ZeroJ's maturity, proof systems, tooling and performance, plus fixes for the errors you are most likely to hit.
 - [Migration notes](https://zeroj.dev/ai/pages/reference/migration.md): Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.

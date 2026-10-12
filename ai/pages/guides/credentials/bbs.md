@@ -15,6 +15,13 @@ officer can still check the government's stamp.
 ZeroJ implements BBS in the opt-in `zeroj-bbs` module, following the IRTF CFRG draft
 **`draft-irtf-cfrg-bbs-signatures-10`**. It is a draft, not yet an RFC.
 
+> **Tip: Is BBS the right tool?**
+>
+> BBS reveals the exact signed values you choose. If a verifier needs only a yes/no answer, a hidden
+> number it can check, or a value that only an auditor may read, see
+> [Choose how to disclose](https://zeroj.dev/selective-disclosure/), which compares BBS with predicates, commitments,
+> encrypted deliveries and threshold keys.
+
 ## BBS or a circuit?
 
 | You want to… | Use |
@@ -237,8 +244,8 @@ validator's parameters, so the script hash pins both the issuer and the credenti
 >
 > `BbsProofVerify.verify` is unrolled for **one shape: a 5-message credential disclosing indexes 2
 > and 3** (hiding 0, 1 and 4). Plutus has no cheap dynamic loop, so other shapes need a different
-> unrolling. It uses the SHA-256 ciphersuite and was measured at about 2.44 billion CPU steps and
-> 183,509 memory units in the JuLC VM. On-chain BBS is an opt-in, unaudited path for testnets.
+> unrolling. It uses the SHA-256 ciphersuite and was measured at about 2.43 billion CPU steps and
+> 169,451 memory units in the JuLC VM. On-chain BBS is an opt-in, unaudited path for testnets.
 
 Your validator composes `BbsProofVerify` with its own policy: check that the disclosed values match
 what the datum requires, that `ph` equals the value recomputed from `ScriptContext`, and that the

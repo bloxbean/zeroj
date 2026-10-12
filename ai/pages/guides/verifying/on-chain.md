@@ -167,7 +167,7 @@ public inputs, and the validator computes `spendRef` from `ScriptContext` and pr
 checking the proof. It is the validator built and tested in
 [Verify your proof on Cardano](https://zeroj.dev/tutorials/verify-on-cardano/), where it unlocks a real lock
 transaction on an in-memory ledger and rejects the same proof replayed against a second UTxO
-(about 3.02 billion CPU steps and 263,000 memory units for two application inputs).
+(about 2.34 billion CPU steps and 212,000 memory units for two application inputs).
 
 ```java title="SpendBoundGroth16Verifier.java"
 package com.example.onchain;
@@ -283,9 +283,11 @@ tampered proof, a different spent UTxO, an output paying someone else. Then run 
 A Groth16 check is four Miller loops and one final verification, plus one G1 scalar
 multiplication and addition per public input. ZeroJ's JuLC VM tests measured the generic
 `Groth16BLS12381Verifier`, evaluated as a spending validator with a full `ScriptContext`, at
-**2,627,770,348 CPU steps and 177,749 memory units** for one public input, about 2.82 billion
-CPU steps and 212,000 memory units for two, and about 3.02 billion and 246,000 for three. Your own
-validator's policy checks come on top, and a JuLC upgrade can shift these numbers.
+**2,052,276,435 CPU steps and 138,837 memory units** for one public input, about 2.19 billion
+CPU steps and 168,000 memory units for two, and about 2.33 billion and 197,000 for three (JuLC
+0.1.0-pre18, commit `6a89f8a`; the two- and three-input figures are from `Groth16BLS12381VerifierTest`). Each extra public input adds about 0.14 billion CPU steps. The verifier
+decompresses each point once ([ADR-0056](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0056-groth16-onchain-ic-single-decompression.md)), which cut about a fifth of the CPU cost.
+Your own validator's policy checks come on top, and a JuLC upgrade can shift these numbers.
 
 For planning, `ScriptBudgetEstimator` gives estimates built from BLS12-381 builtin costs (they
 leave out the rest of the validator, so measured budgets come out higher), and
@@ -339,12 +341,13 @@ namespace move left script hashes identical. See [Migration notes](https://zeroj
 For completeness: `PlonkBLS12381Verifier` handles one public input,
 `PlonkBLS12381MultiInputVerifier` takes 1–8 public inputs from the datum, and
 `PlonkBLS12381MultiInputParamVerifier` takes them as script parameters, so the statement values are
-pinned by the script hash. `ScriptBudgetEstimator` records roughly 4.8 billion CPU steps for the
-one-input profile.
+pinned by the script hash. The one-input verifier measured about 4.56 billion CPU steps and
+565,000 memory units in the JuLC VM (`ScriptBudgetEstimator` still records an older estimate of
+about 4.8 billion).
 
 `BbsProofVerify` verifies a BBS selective-disclosure presentation natively. It is unrolled for one
-fixed shape: a **5-message credential disclosing indexes 2 and 3**, measured at about 2.44 billion
-CPU steps and 183,509 memory units. Other shapes need a different unrolling. The off-chain half is
+fixed shape: a **5-message credential disclosing indexes 2 and 3**, measured at about 2.43 billion
+CPU steps and 169,451 memory units. Other shapes need a different unrolling. The off-chain half is
 `BbsToCardano` in `zeroj-bbs`; the [BBS guide](https://zeroj.dev/guides/credentials/bbs/) shows both.
 
 ## Next steps

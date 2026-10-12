@@ -1,0 +1,91 @@
+# Tell chosen readers (confidential notes)
+
+> Put a hidden amount on-chain and seal its opening separately for each reader, such as the owner and an auditor, so they can read it straight from the chain and nobody else can.
+
+Canonical URL: https://zeroj.dev/selective-disclosure/share-with-chosen-readers/
+
+**Use this when named parties must be able to read a hidden value from the chain**: the owner of a
+balance, so a lost wallet can recover it, and an auditor, so oversight doesn't depend on a side
+channel.
+
+A **confidential note** is a [Pedersen commitment](https://zeroj.dev/selective-disclosure/hide-a-number/) plus its
+opening, encrypted separately for each reader, in the same transaction output. Each reader has a
+**viewing key**. Their wallet scans the chain, opens the delivery addressed to them, and accepts
+the value only if it recomputes the commitment. To everyone else, a note is a commitment and 89
+bytes of ciphertext per reader.
+
+_The web version of this page has an interactive illustration here._
+
+## Who learns what
+
+| Party | Learns |
+|---|---|
+| Sender | The amount (they created the note) |
+| Owner | The amount, from delivery 0 |
+| Each auditor | The amount, from its own delivery |
+| Everyone else | The commitment and that deliveries exist; never the amount |
+
+## In code
+
+```java title="ConfidentialNote.java (core)"
+import org.zeroj.circuit.lib.jubjub.ConfidentialNotes;
+import org.zeroj.circuit.lib.jubjub.JubjubPoint;
+import org.zeroj.circuit.lib.jubjub.NoteOpening;
+import org.zeroj.circuit.lib.jubjub.NoteReaderKey;
+import org.zeroj.circuit.lib.jubjub.NoteScanner;
+import org.zeroj.circuit.lib.jubjub.NoteViewingKey;
+
+// Each reader creates a viewing key in its own wallet and publishes the 32-byte reader key
+NoteViewingKey ownerKey = NoteViewingKey.generate(random);
+NoteViewingKey auditorKey = NoteViewingKey.generate(random);
+
+// Sender: commit to 250 and seal the opening for the owner (first) and the auditor
+List<NoteReaderKey> readers = List.of(
+        NoteReaderKey.decode(ownerKey.readerKey().encode()),
+        NoteReaderKey.decode(auditorKey.readerKey().encode()));
+NoteOpening opening = NoteOpening.random(BigInteger.valueOf(250), random);
+JubjubPoint c = opening.commitment();                                    // goes in the datum
+List<byte[]> deliveries = ConfidentialNotes.seal(opening, readers, random);   // 2 x 89 bytes
+
+// Owner and auditor each open their own position against the note's (u, v)
+Optional<NoteOpening> mine = NoteScanner.of(ownerKey).open(deliveries.get(0), c.affineU(), c.affineV());
+Optional<NoteOpening> audited = NoteScanner.of(auditorKey).open(deliveries.get(1), c.affineU(), c.affineV());
+// both hold 250; anyone else's key gets Optional.empty()
+```
+
+The complete program, wallet scanning and the rules for wallets are in the
+[Confidential notes guide](https://zeroj.dev/guides/confidential/confidential-notes/).
+
+## Real-world uses
+
+- **Confidential loyalty points.** Holders recover their balances from the chain; an auditor reads
+  every amount. ([use case](https://zeroj.dev/use-cases/confidential-points/))
+- **Payroll.** Each payslip is readable by the employee and the tax authority, nobody else.
+  ([use case](https://zeroj.dev/use-cases/confidential-payroll/))
+- **Proof of solvency.** Each customer opens their own committed balance from the attestation, and
+  the auditor opens only the total. ([use case](https://zeroj.dev/use-cases/private-solvency/))
+- **Escrow and invoicing.** A buyer, a seller and an arbitrator can each read a confidential
+  invoice amount.
+
+## When not to use it
+
+- **The sender must not be able to lie to the auditor.** On-chain, a validator can only check that
+  a delivery of the right length exists, not that it opens. A dishonest sender can deliver garbage.
+  The reader notices ("unopenable"), but if the auditor's copy has to be *guaranteed*, also
+  [encrypt for the auditor with a proof](https://zeroj.dev/selective-disclosure/encrypt-for-an-auditor/).
+- **The reader should only see a total.** Use [split trust](https://zeroj.dev/selective-disclosure/split-trust/).
+
+## Watch out for
+
+- **Report unopenable notes.** A note you own but can't open is value you can't spend. Wallets must
+  show it, never drop it.
+- **Scan in your own process.** The viewing key reads every past delivery to it, so never hand it to
+  a shared scanning service. There's no forward secrecy.
+- **Open only your own position**, and check the note's owner field and script address yourself.
+- **Maturity.** Experimental. The delivery's security assumptions (A1–A3) await external review.
+
+## Next steps
+
+- [Confidential notes guide](https://zeroj.dev/guides/confidential/confidential-notes/)
+- [Encrypt for an auditor](https://zeroj.dev/selective-disclosure/encrypt-for-an-auditor/)
+- [Choose how to disclose](https://zeroj.dev/selective-disclosure/)

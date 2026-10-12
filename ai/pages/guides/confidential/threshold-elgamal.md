@@ -1,0 +1,407 @@
+# Threshold decryption
+
+> Split an ElGamal key among trustees so that no single party can decrypt, run the distributed key generation, deliver its private shares over a public board with HPKE, and decrypt only a total.
+
+Canonical URL: https://zeroj.dev/guides/confidential/threshold-elgamal/
+
+With [ElGamal encryption](https://zeroj.dev/guides/confidential/elgamal/), whoever holds the secret key can read
+every ciphertext. For an election, a sealed-bid market or a shared treasury, that's too much
+trust in one party. **Threshold decryption** splits the key among `n` trustees so that:
+
+- any `t + 1` of them can decrypt together;
+- any `t` or fewer learn nothing, even if they collude;
+- the full secret key **never exists anywhere**, not even during setup.
+
+The trustees create the key together with a **distributed key generation** (DKG): each trustee
+deals secret shares to the others and publishes commitments that let everyone check the shares,
+so a cheating dealer is caught and excluded. Afterwards each trustee holds one share, and everyone
+knows the joint public key that voters encrypt to.
+
+ZeroJ implements the New-DKG protocol of Gennaro, Jarecki, Krawczyk and Rabin
+([J. Cryptology 2007](https://doi.org/10.1007/s00145-006-0347-3)) as the profile
+[`elgamal-jubjub-threshold-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/elgamal-jubjub-threshold-v1.md)
+([ADR-0053](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0053-threshold-elgamal-jubjub-dkg.md)).
+The private shares can travel over a public board, encrypted with HPKE (RFC 9180), following
+[`dkg-share-delivery-hpke-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/dkg-share-delivery-hpke-v1.md)
+([ADR-0054](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0054-hpke-dkg-share-delivery.md)).
+
+## Status
+
+| Area | Status |
+|---|---|
+| Threshold key generation and decryption (`DkgParticipant`, `ThresholdKeyContext`, `ElGamal.decrypt` with shares) | **Experimental**, pending review and external review |
+| Encrypted share delivery over a board (`DkgShareDelivery`, `DkgShareDeliveryKeys`, `DkgKeyDirectory`) | **Experimental**. Assumption A1 (HPKE envelopes can stand in for private channels) and the delivery contract await external review. |
+| Secret operations (dealing, decryption shares) | **Offline/isolated only**: variable-time arithmetic, no constant-time claim |
+
+Everything is in `zeroj-circuit-lib`, the same dependency as the
+[ElGamal guide](https://zeroj.dev/guides/confidential/elgamal/#add-the-dependency).
+
+## Choose t and n
+
+`t` is the number of **corrupted trustees the scheme tolerates**, not the number needed to
+decrypt. Decrypting needs `t + 1`. The protocol requires an honest majority, `2t + 1 ≤ n`, and
+supports up to 64 trustees.
+
+| `DkgConfig.create(t, n, …)` | Decrypting needs | Tolerates |
+|---|---|---|
+| `create(1, 3, …)` | any 2 of 3 | 1 corrupted trustee |
+| `create(2, 5, …)` | any 3 of 5 | 2 |
+| `create(3, 7, …)` | any 4 of 7 | 3 |
+
+A 4-of-5 policy isn't possible: it would need `t = 3` with `n = 5`, which breaks the honest
+majority. And remember the other side of the threshold: any `t + 1` trustees who collude can
+decrypt **any single ciphertext**, not just the total.
+
+## 1. Run the key generation and decrypt a tally
+
+This program runs a 2-of-3 key generation in one process, encrypts five 0/1 votes to the joint
+key, adds them, and has two trustees decrypt only the total. In a real deployment each trustee is
+a separate, isolated machine, and the messages travel over your own channels.
+
+```java title="ThresholdTally.java"
+import org.zeroj.circuit.lib.jubjub.DkgConfig;
+import org.zeroj.circuit.lib.jubjub.DkgMessage;
+import org.zeroj.circuit.lib.jubjub.DkgParticipant;
+import org.zeroj.circuit.lib.jubjub.ElGamal;
+import org.zeroj.circuit.lib.jubjub.ElGamalCiphertext;
+import org.zeroj.circuit.lib.jubjub.ThresholdKeyContext;
+import org.zeroj.circuit.lib.jubjub.ThresholdKeyShare;
+import org.zeroj.circuit.lib.jubjub.VerifiedDecryptionShare;
+
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Three trustees run a threshold key generation (t = 1, n = 3: any 2 can decrypt), voters
+ * encrypt 0/1 votes, the ciphertexts are added, and two trustees decrypt only the tally.
+ * Everything runs in one process here; in reality each trustee is a separate, isolated host.
+ */
+public class ThresholdTally {
+
+    public static void main(String[] args) {
+        SecureRandom random = new SecureRandom();
+
+        // 1. Configuration, agreed by everyone (e.g. published in an election manifest).
+        //    t = faults tolerated; any t + 1 trustees decrypt; the rule is 2t + 1 <= n.
+        List<byte[]> roster = List.of(          // each trustee's authentication key (demo bytes)
+                "trustee-1-auth-key".getBytes(StandardCharsets.UTF_8),
+                "trustee-2-auth-key".getBytes(StandardCharsets.UTF_8),
+                "trustee-3-auth-key".getBytes(StandardCharsets.UTF_8));
+        DkgConfig config = DkgConfig.create(1, 3, roster,
+                "demo-election-2026".getBytes(StandardCharsets.UTF_8), 1);
+
+        // 2. Key generation: 7 rounds. Broadcasts go to everyone (sender included);
+        //    SHARE messages go privately to one recipient.
+        List<DkgParticipant> trustees = new ArrayList<>();
+        for (int id = 1; id <= 3; id++) trustees.add(DkgParticipant.create(config, id, random));
+        List<DkgMessage> outgoing = new ArrayList<>();
+        for (DkgParticipant p : trustees) outgoing.addAll(p.start());
+        for (int round = 1; round <= 7; round++) {
+            for (DkgMessage m : outgoing) {
+                for (DkgParticipant p : trustees) {
+                    if (m.kind() != DkgMessage.Kind.SHARE) p.receiveBroadcast(m.sender(), m.encode());
+                    else if (m.subject() == p.id()) p.receivePrivate(m.sender(), m.encode());
+                }
+            }
+            outgoing = new ArrayList<>();
+            for (DkgParticipant p : trustees) outgoing.addAll(p.closeRound()); // round deadline
+        }
+        List<ThresholdKeyShare> shares = new ArrayList<>();
+        for (DkgParticipant p : trustees) shares.add(p.result());   // each trustee keeps its own
+        ThresholdKeyContext election = shares.get(0).context();
+        System.out.println("Threshold t = " + election.threshold() + ", qualified trustees " + election.qual());
+        System.out.println("All trustees agree on the key: "
+                + (election.equals(shares.get(1).context()) && election.equals(shares.get(2).context())));
+
+        // 3. Voters encrypt 0 or 1 (width 1) under the joint key; the ciphertexts are added.
+        int[] votes = {1, 0, 1, 1, 0};
+        List<ElGamalCiphertext> ballots = new ArrayList<>();
+        for (int vote : votes) ballots.add(ElGamal.encrypt(election, vote, 1, random));
+        ElGamalCiphertext total = ElGamalCiphertext.sum(ballots);
+        System.out.println("Encrypted tally bound: " + total.bound());
+
+        // 4. Any t + 1 = 2 trustees publish decryption shares of the *total* only.
+        List<VerifiedDecryptionShare> published = List.of(
+                ElGamal.decryptionShare(shares.get(0), total),   // trustee 1
+                ElGamal.decryptionShare(shares.get(2), total));  // trustee 3 (trustee 2 is away)
+        long yes = ElGamal.decrypt(total, published, total.bound().longValueExact());
+        System.out.println("Yes votes: " + yes + " of " + votes.length);
+
+        // One share is not enough.
+        try {
+            ElGamal.decrypt(total, published.subList(0, 1), total.bound().longValueExact());
+        } catch (IllegalArgumentException e) {
+            System.out.println("Refused: " + e.getMessage());
+        }
+    }
+}
+```
+
+```text
+Threshold t = 1, qualified trustees [1, 2, 3]
+All trustees agree on the key: true
+Encrypted tally bound: 5
+Yes votes: 3 of 5
+Refused: threshold decryption needs at least t + 1 = 2 verified shares, got 1
+```
+
+The key generation is seven rounds. In each round every trustee processes what it received and
+sends its next messages. `closeRound()` is the round deadline: whatever didn't arrive in time
+counts as missing, which is how a silent trustee gets excluded instead of blocking everyone.
+Two rules of the in-memory loop matter in real code too:
+
+- **Every trustee also receives its own broadcasts**, and `SHARE` messages go only to their one
+  recipient, through `receivePrivate`.
+- **An abort is final.** Start a new attempt with a new `attempt` number in `DkgConfig.create`;
+  never reuse one.
+
+## 2. Deliver private shares over a public board (HPKE)
+
+Each trustee's `SHARE` messages are secrets meant for one recipient. If you don't have private
+channels between trustees, ZeroJ can encrypt them with HPKE (RFC 9180, Base mode, with X25519,
+HKDF-SHA256 and ChaCha20-Poly1305) and post the encrypted **envelopes** on the same public board
+as everything else. The order of posts is part of the security, so the API enforces round
+barriers:
+
+1. **Round 0: announce.** Each trustee generates fresh delivery keys for this attempt and posts the
+   announcement (106 bytes). Once the round-0 window is final, every trustee builds the same
+   `DkgKeyDirectory` from it.
+2. **Round 1: envelopes first.** `DkgShareDelivery.start` replaces `start()`. Post the envelopes
+   (223 bytes each, `n(n−1)` per attempt), and post the `COMMITMENTS` broadcasts only after the
+   envelopes are final, or atomically with them.
+3. **Close round 1 only through `closeRound1`**, passing the round-1 window after its cutoff
+   **and** after it's final on the board. Plain `closeRound()` refuses round 1. The delivery keys
+   are destroyed here.
+4. **Rounds 2 to 7** are plain broadcasts, as in example 1.
+
+This program runs the same 2-of-3 key generation as example 1, with every message on one board.
+Posts are signed with each trustee's Ed25519 roster key, and the board doubles as the verifier
+the API asks for. Its last step, letting an outsider admit the key, is in section 3.
+
+```java title="EncryptedBoardDkg.java"
+import org.zeroj.circuit.lib.jubjub.AuthenticatedDkgMessage;
+import org.zeroj.circuit.lib.jubjub.DkgAdmissionVerifier;
+import org.zeroj.circuit.lib.jubjub.DkgConfig;
+import org.zeroj.circuit.lib.jubjub.DkgKeyDirectory;
+import org.zeroj.circuit.lib.jubjub.DkgMessage;
+import org.zeroj.circuit.lib.jubjub.DkgParticipant;
+import org.zeroj.circuit.lib.jubjub.DkgShareDelivery;
+import org.zeroj.circuit.lib.jubjub.DkgShareDeliveryKeys;
+import org.zeroj.circuit.lib.jubjub.DkgTranscript;
+import org.zeroj.circuit.lib.jubjub.ThresholdKeyContext;
+
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The same 2-of-3 key generation as ThresholdTally, but with no private channels: every message,
+ * including each trustee's secret SHAREs (HPKE-encrypted), goes over one public board. Each post
+ * is signed with the trustee's Ed25519 roster key. Afterwards an outsider (a voter) admits the
+ * joint key from the board alone.
+ */
+public class EncryptedBoardDkg {
+
+    /** An in-memory public board: posts per round window, each signed by its sender. */
+    static final class Board implements DkgAdmissionVerifier {
+        final List<List<AuthenticatedDkgMessage>> rounds = new ArrayList<>();
+        final List<KeyPair> signers;
+
+        Board(List<KeyPair> signers) {
+            this.signers = signers;
+            for (int r = 0; r <= 7; r++) rounds.add(new ArrayList<>());
+        }
+
+        void post(int round, int sender, byte[] message) throws GeneralSecurityException {
+            Signature s = Signature.getInstance("Ed25519");
+            s.initSign(signers.get(sender - 1).getPrivate());
+            s.update(message);
+            rounds.get(round).add(new AuthenticatedDkgMessage(message, s.sign()));
+        }
+
+        @Override  // authenticity: a valid Ed25519 signature under the sender's roster key
+        public boolean authenticate(int sender, byte[] rosterKey, byte[] message, byte[] authenticator) {
+            try {
+                Signature s = Signature.getInstance("Ed25519");
+                s.initVerify(KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(rosterKey)));
+                s.update(message);
+                return s.verify(authenticator);
+            } catch (GeneralSecurityException | RuntimeException e) {
+                return false;   // never throw on attacker-supplied input
+            }
+        }
+
+        @Override  // closure: this board is the agreed, complete record of each round window
+        public boolean roundClosed(DkgConfig config, int round, List<byte[]> messages, byte[] evidence) {
+            List<byte[]> expected = DkgTranscript.deliveredRound(config, round, rounds.get(round), this);
+            if (expected.size() != messages.size()) return false;
+            for (int i = 0; i < expected.size(); i++) {
+                if (!Arrays.equals(expected.get(i), messages.get(i))) return false;
+            }
+            return true;
+        }
+    }
+
+    public static void main(String[] args) throws GeneralSecurityException {
+        SecureRandom random = new SecureRandom();
+        int n = 3;
+
+        // Roster: each trustee's long-term Ed25519 public key (X.509-encoded).
+        List<KeyPair> signers = new ArrayList<>();
+        List<byte[]> roster = new ArrayList<>();
+        KeyPairGenerator ed = KeyPairGenerator.getInstance("Ed25519");
+        for (int j = 1; j <= n; j++) {
+            KeyPair kp = ed.generateKeyPair();
+            signers.add(kp);
+            roster.add(kp.getPublic().getEncoded());
+        }
+        DkgConfig config = DkgConfig.create(1, n, roster, "demo-election-2026".getBytes(StandardCharsets.UTF_8), 1);
+        Board board = new Board(signers);
+
+        List<DkgParticipant> trustees = new ArrayList<>();
+        List<DkgShareDeliveryKeys> hpkeKeys = new ArrayList<>();
+        for (int j = 1; j <= n; j++) {
+            trustees.add(DkgParticipant.create(config, j, random));
+            hpkeKeys.add(DkgShareDeliveryKeys.generate(config, j, random)); // fresh per attempt
+        }
+
+        // Round 0: each trustee announces its HPKE key. Once the window is final, everyone
+        // builds the same directory from it.
+        for (DkgShareDeliveryKeys k : hpkeKeys) board.post(0, k.id(), k.announcement());
+        DkgKeyDirectory directory = DkgKeyDirectory.fromRound0(config, board.rounds.get(0), board);
+
+        // Round 1: envelopes (encrypted SHAREs) first; COMMITMENTS only after the envelopes are final.
+        List<DkgShareDelivery.SealedDealing> dealings = new ArrayList<>();
+        for (DkgParticipant p : trustees) {
+            DkgShareDelivery.SealedDealing d = DkgShareDelivery.start(p, directory, hpkeKeys.get(p.id() - 1), random);
+            dealings.add(d);
+            for (byte[] envelope : d.envelopes()) board.post(1, p.id(), envelope);  // one per other trustee
+        }
+        for (int j = 1; j <= n; j++) {
+            for (DkgMessage m : dealings.get(j - 1).broadcasts()) board.post(1, j, m.encode());
+        }
+        // Barrier: after the round-1 window is final, each trustee processes all of it at once.
+        List<DkgMessage> outgoing = new ArrayList<>();
+        for (DkgParticipant p : trustees) {
+            outgoing.addAll(DkgShareDelivery.closeRound1(p, directory, hpkeKeys.get(p.id() - 1),
+                    board.rounds.get(1), board));
+        }
+        System.out.println("HPKE keys destroyed after round 1: "
+                + hpkeKeys.stream().allMatch(DkgShareDeliveryKeys::isDestroyed));
+
+        // Rounds 2-7: plain broadcasts, as without encryption.
+        for (int round = 2; round <= 7; round++) {
+            for (DkgMessage m : outgoing) {
+                board.post(round, m.sender(), m.encode());
+                for (DkgParticipant p : trustees) p.receiveBroadcast(m.sender(), m.encode());
+            }
+            outgoing = new ArrayList<>();
+            for (DkgParticipant p : trustees) outgoing.addAll(p.closeRound());
+        }
+        ThresholdKeyContext trusteeView = trustees.get(0).result().context();
+
+        // Section 3: an outsider admits the joint key from the board.
+    }
+}
+```
+
+Output of the full program (the joint key is random):
+
+```text
+HPKE keys destroyed after round 1: true
+Board posts: 18
+Voter's admitted key equals the trustees' key: true
+Joint key: 325c41c481f9e3fc49d9cc400cb51928820fa74e4dff86dd8501e8e631b1522e
+```
+
+Two rules for your own board verifier: `authenticate` and `roundClosed` must **return `false`,
+never throw**, on bad input; and `roundClosed` must only say `true` for the agreed, complete
+record of that round. A `roundClosed` that always returns `true` defeats the protection.
+
+HPKE here has no forward secrecy and isn't post-quantum: a delivery key that leaks before it is
+destroyed exposes that trustee's shares.
+
+## 3. Let outsiders admit the joint key
+
+Voters, talliers and validators hold no secret, but they need to know that the joint key really
+came out of an honest key generation. `ThresholdKeyContext.admit` replays the public record and
+returns the same key context the trustees hold:
+
+```java title="EncryptedBoardDkg.java (end of main)"
+
+// A voter, who holds no secret, admits the key from the signed board (rounds 1-6 + confirmations).
+List<AuthenticatedDkgMessage> transcript = new ArrayList<>();
+for (int r = 1; r <= 6; r++) {
+    for (byte[] m : DkgTranscript.deliveredRound(config, r, board.rounds.get(r), board)) {
+        for (AuthenticatedDkgMessage post : board.rounds.get(r)) {
+            if (Arrays.equals(post.message(), m)) { transcript.add(post); break; }
+        }
+    }
+}
+Map<Integer, byte[]> closureEvidence = new HashMap<>();
+for (int r = 1; r <= 7; r++) closureEvidence.put(r, new byte[0]);   // our Board needs none
+ThresholdKeyContext voterView = ThresholdKeyContext.admit(config, transcript, closureEvidence,
+        board.rounds.get(7), board);
+System.out.println("Board posts: " + board.rounds.stream().mapToInt(List::size).sum());
+System.out.println("Voter's admitted key equals the trustees' key: " + voterView.equals(trusteeView));
+System.out.println("Joint key: " + HexFormat.of().formatHex(voterView.jointKey().encode()));
+```
+
+`DkgTranscript.deliveredRound` filters each round down to the threshold protocol's own messages,
+dropping the HPKE envelopes and announcements that share the board.
+
+## Operating rules
+
+The library enforces the protocol; it can't enforce how you run it. A deployment must:
+
+- **Isolate trustees.** Each one runs on its own machine, under its own control.
+- **Fix the configuration in advance.** `t`, `n`, the roster and the application context come from
+  a trusted source, such as a published election manifest, never from the network mid-run.
+- **Never reuse an `attempt` number** for the same context.
+- **Deliver private shares on time.** A missed share triggers a complaint, and answering a
+  complaint publishes that share. Timely private delivery is a precondition for secrecy.
+- **Decrypt once.** Decrypt only the final total, after the deadline. Decrypting running totals
+  and subtracting them reveals individual votes.
+- **Verify every decryption share** you receive with `VerifiedDecryptionShare.verify` and a DLEQ
+  proof. In example 1 the shares are "verified by construction" because one process made them; a
+  separate tallier gets them as bytes.
+
+## Sizes and timings
+
+| Item | Size |
+|---|---|
+| Delivery key announcement | 106 bytes per trustee |
+| Encrypted share envelope | 223 bytes, `n(n−1)` per attempt (about 0.9 MB at `n = 64`) |
+| Joint key, key shares, decryption shares | 32 bytes each |
+
+| Key generation, whole run in one process (Apple M4 Max) | Time |
+|---|---|
+| `t = 1, n = 3` | 62 ms |
+| `t = 2, n = 5` | 176 ms |
+| `t = 10, n = 21` | 4.5 s |
+
+Key generation times are the plain-channel runs in the
+[ElGamal benchmark](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/elgamal-jubjub-2026-10-05.md);
+sizes are from the
+[share delivery benchmark](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/dkg-share-delivery-hpke-2026-10-09.md),
+which also times the HPKE-delivered runs. Network rounds, not computation, dominate a real ceremony.
+
+## Next steps
+
+- [Private voting](https://zeroj.dev/use-cases/private-voting/): an encrypted tally decrypted by trustees
+- [Split trust between several parties](https://zeroj.dev/selective-disclosure/split-trust/): the pattern, and
+  when to use it
+- [ElGamal encryption](https://zeroj.dev/guides/confidential/elgamal/): keys, admission and proofs

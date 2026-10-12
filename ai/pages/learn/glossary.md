@@ -19,8 +19,10 @@ draft-10. See [Groth16, PlonK & BBS](https://zeroj.dev/learn/proof-systems/) and
 
 **Blinding.** Randomness mixed into a proof or commitment so it reveals nothing about the secret.
 ZeroJ's Groth16 prover always blinds proofs, so two proofs of the same statement look unrelated.
-In commitments, a random salt stops low-entropy values like an age from being guessed.
-See [Zero-knowledge in plain English](https://zeroj.dev/learn/zero-knowledge-basics/).
+In commitments, a random salt stops low-entropy values like an age from being guessed. In a
+Pedersen commitment the blinding is a fresh random 252-bit number, and ZeroJ refuses circuits that
+declare it narrower or public. See [Zero-knowledge in plain English](https://zeroj.dev/learn/zero-knowledge-basics/)
+and [Pedersen commitments](https://zeroj.dev/guides/confidential/pedersen/).
 
 **BLS12-381.** The pairing-friendly elliptic curve ZeroJ uses by default, and the only one Cardano
 can verify on-chain, through Plutus V3 builtins. See [Groth16, PlonK & BBS](https://zeroj.dev/learn/proof-systems/).
@@ -43,6 +45,17 @@ See [Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-wit
 In circuits it's often a hash such as Poseidon(value, salt). You can later prove statements about
 the committed value. See [Zero-knowledge in plain English](https://zeroj.dev/learn/zero-knowledge-basics/).
 
+**Commitment (Pedersen).** A commitment that is a curve point, `C = v·G + r·H`, with a random
+blinding `r`. It hides `v` completely, binds you to it, and adds up: the sum of two commitments
+commits to the sum of the values. ZeroJ uses the Jubjub curve. See
+[Commitments & encryption, explained](https://zeroj.dev/learn/commitments-and-encryption/) and
+[Pedersen commitments](https://zeroj.dev/guides/confidential/pedersen/).
+
+**Confidential note.** A Pedersen commitment to an amount, stored on-chain together with its
+opening encrypted separately to each chosen reader, such as the owner and an auditor. Readers find
+their notes by scanning the chain with a viewing key. See
+[Confidential notes](https://zeroj.dev/guides/confidential/confidential-notes/).
+
 **Completeness.** The guarantee that an honest prover with a true statement always convinces the
 verifier. See [Zero-knowledge in plain English](https://zeroj.dev/learn/zero-knowledge-basics/).
 
@@ -62,6 +75,19 @@ proof is two G1 points and one G2 point. See [Groth16, PlonK & BBS](https://zero
 
 **Datum.** Data attached to a UTxO locked at a script address. ZeroJ's reusable on-chain verifier
 reads the public inputs from it. See [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).
+
+**DKG (distributed key generation).** A protocol in which several trustees create one shared
+public key together, each keeping only a share of the secret key. The full secret key never exists
+anywhere. See [Threshold decryption](https://zeroj.dev/guides/confidential/threshold-elgamal/).
+
+**DLEQ proof.** A proof that two points use the same secret multiplier ("discrete-log equality").
+ZeroJ uses it to prove possession of an ElGamal key and to prove that a decryption share is
+correct. See [ElGamal encryption](https://zeroj.dev/guides/confidential/elgamal/).
+
+**ElGamal (exponential).** Public-key encryption of small numbers in which ciphertexts add up:
+the sum of two ciphertexts decrypts to the sum of the values. Decrypting ends in a search, so only
+small values (such as votes or 32-bit limbs) can be decrypted. See
+[ElGamal encryption](https://zeroj.dev/guides/confidential/elgamal/).
 
 **eUTxO.** Cardano's extended unspent-transaction-output model: funds and state live in outputs
 that validators guard, with a datum, a redeemer, and a ScriptContext.
@@ -83,12 +109,26 @@ comparator. ZeroJ's gadgets live in `zeroj-circuit-lib`. See [Gadgets](https://z
 **Groth16.** The zk-SNARK ZeroJ uses by default: 192-byte proofs on BLS12-381, the cheapest
 verification, and a trusted setup per circuit. See [Groth16, PlonK & BBS](https://zeroj.dev/learn/proof-systems/).
 
+**Homomorphic.** Describes commitments or ciphertexts you can combine without opening them:
+adding two gives a commitment or ciphertext of the sum. Useful for totals and tallies. See
+[Commitments & encryption, explained](https://zeroj.dev/learn/commitments-and-encryption/).
+
+**HPKE.** Hybrid Public Key Encryption (RFC 9180). ZeroJ uses it to deliver each trustee's secret
+DKG share over a public board, encrypted to that trustee. See
+[Threshold decryption](https://zeroj.dev/guides/confidential/threshold-elgamal/).
+
 **JuLC.** A compiler that turns Java code into Plutus V3 validators for Cardano. ZeroJ's on-chain
 verifiers are written with it. See [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).
 
 **KZG.** The Kate–Zaverucha–Goldberg polynomial commitment scheme. It lets a prover commit to a
 polynomial and later prove its value at a point. PlonK uses it with a universal SRS.
 See [Groth16, PlonK & BBS](https://zeroj.dev/learn/proof-systems/).
+
+## L
+
+**Limb.** One piece of a number split into smaller parts. An amount up to 2⁶⁴ is encrypted as two
+32-bit limbs so that each limb is small enough to decrypt. See
+[ElGamal encryption](https://zeroj.dev/guides/confidential/elgamal/).
 
 ## M–N
 
@@ -104,6 +144,12 @@ See [Trusted setup, explained](https://zeroj.dev/learn/trusted-setup/).
 Poseidon(secret, electionId). It's the same every time the same secret is used in the same scope,
 so a validator can reject repeats without learning the secret. See [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).
 
+## O
+
+**Opening.** The values that unlock a commitment: for a Pedersen commitment, the value and its
+blinding `(v, r)`. Whoever holds the opening can show what the commitment contains. See
+[Pedersen commitments](https://zeroj.dev/guides/confidential/pedersen/).
+
 ## P
 
 **Pairing.** A special function that maps a G1 point and a G2 point to a third group, such that
@@ -117,6 +163,10 @@ See [Groth16, PlonK & BBS](https://zeroj.dev/learn/proof-systems/).
 **Poseidon.** A hash function designed to be cheap inside circuits, needing far fewer constraints
 than SHA-256. For Cardano circuits, always pass explicit BLS12-381 parameters:
 `PoseidonParamsBLS12_381T3.INSTANCE`. See [Gadgets](https://zeroj.dev/guides/circuits/gadgets/).
+
+**Possession proof.** A proof that whoever publishes a public key also knows its secret key. It
+stops "rogue key" tricks where someone publishes a key derived from other people's keys. ZeroJ's
+are DLEQ proofs. See [ElGamal encryption](https://zeroj.dev/guides/confidential/elgamal/).
 
 **Powers of tau.** The universal phase-1 setup output: curve points built from powers of a secret
 τ. It's stored in a `.ptau` file and reusable by every circuit up to its size.
@@ -161,8 +211,9 @@ never leaves the prover. ZeroJ marks these with `@Secret`.
 See [Zero-knowledge in plain English](https://zeroj.dev/learn/zero-knowledge-basics/).
 
 **Selective disclosure.** Revealing some attributes of a signed credential while proving the rest
-are validly signed but hidden. BBS provides it natively.
-See [Selective disclosure](https://zeroj.dev/use-cases/selective-disclosure/).
+are validly signed but hidden. BBS provides it natively; predicates, commitments and encrypted
+deliveries are other ways to disclose less. See [Choose how to disclose](https://zeroj.dev/selective-disclosure/)
+and [Selective disclosure](https://zeroj.dev/use-cases/selective-disclosure/).
 
 **SNARK.** Succinct Non-interactive ARgument of Knowledge: a short proof, checked quickly, sent in
 one message, showing the prover knows a valid witness. A zk-SNARK is also zero-knowledge.
@@ -177,6 +228,10 @@ probability. Under-constrained circuits and leaked toxic waste both break it.
 See [Zero-knowledge in plain English](https://zeroj.dev/learn/zero-knowledge-basics/).
 
 ## T–U
+
+**Threshold decryption.** Decryption that needs any `t + 1` of `n` key holders to cooperate;
+`t` or fewer learn nothing. ZeroJ's threshold ElGamal requires `2t + 1 ≤ n`. See
+[Threshold decryption](https://zeroj.dev/guides/confidential/threshold-elgamal/).
 
 **Toxic waste.** The secret randomness used in a trusted setup. Anyone who keeps it can forge
 proofs. See [Trusted setup, explained](https://zeroj.dev/learn/trusted-setup/).
@@ -203,6 +258,9 @@ See [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).
 **Verification key.** The small public key used to check proofs for one circuit. For Groth16 on
 BLS12-381 with one public input it's 432 bytes compressed. On Cardano it's baked into the
 validator as script parameters. See [Trusted setup, explained](https://zeroj.dev/learn/trusted-setup/).
+
+**Viewing key.** A key that lets its holder find and open the confidential notes delivered to
+them. It can't spend anything. See [Confidential notes](https://zeroj.dev/guides/confidential/confidential-notes/).
 
 **Wire.** A variable in a circuit. The witness gives every wire a value; wire 0 is always the
 constant 1. See [Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-witnesses/).

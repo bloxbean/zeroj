@@ -51,22 +51,30 @@ key hash. It then checks that the result equals the public payment key hash.
 | Input | Visibility | Why |
 |---|---|---|
 | `rootKL`, `rootKR`, `rootChainCode` | Secret | The root extended private key: the wallet's master secret |
-| `account`, `role`, `index` | Secret | The derivation path stays private; `pkh` already pins the address |
+| `account`, `role`, `index` | Secret | The derivation path is private from chain observers; `pkh` already pins the address |
 | `recipientBytes` | Secret witness | Constrained to pack exactly to the public `recipient` |
 | `pkh` | Public | The address's payment key hash, already public on-chain |
 | `recipient` | Public | The payout's payment key hash, bound so a copied proof can't be redirected |
 
+"Private" here means private from people watching the chain. Anyone who holds the account's xpub,
+such as a wallet service or a watch-only wallet, can derive the account's addresses, find the one
+whose key hash is `pkh`, and so learn its role and index.
+
+The proof also publicly links the compromised address to the recipient. Use a **fresh recipient
+address** that isn't tied to your other wallets.
+
 ## How it works
 
 1. **Vouchers.** The operator locks a refund voucher UTxO for each affected account. Its datum
-   holds `pkh` and `refundAmount`.
+   holds `pkh`, `refundAmount`, the funder's key hash `funderPkh` and a fee allowance `maxFee`.
 2. **Prove.** The owner runs the desktop app or CLI, enters the recovery phrase at a hidden prompt
    and chooses a recipient address. The seed is used in memory only. It's never written to disk or
    sent anywhere.
 3. **Verify.** Anyone can check the proof off-chain in under a second. On-chain, a claim
    transaction spends the voucher.
 4. **One claim.** A UTxO can only be spent once, so each voucher pays out once. Anyone, such as a
-   fee sponsor, may submit the claim, and the funds still go to the bound recipient.
+   fee sponsor, may submit the claim. The refund still goes to the bound recipient, and the rest of
+   the voucher, less at most `maxFee`, goes back to the funder.
 
 ## The circuit
 
@@ -122,7 +130,7 @@ on-chain check affordable.
 | Local dev setup | About 6 min on a 12-core, 128 GB machine; about 9.6 GB key bundle on disk |
 | Prove | About 1.5 min on that machine; about 2.6 min on an ordinary 16 GB machine |
 | Verify off-chain | Under 1 s |
-| Verify on-chain | About 2.8×10⁹ CPU steps, under the 10×10⁹ per-transaction limit |
+| Verify on-chain | About 2.3×10⁹ CPU steps, under the 10×10⁹ per-transaction limit |
 
 These figures come from the demo's CLI documentation and ZeroJ's prover-memory work, and they depend
 on hardware. Proving a circuit this size in commodity memory relies on the memory-mapped proving key
@@ -134,10 +142,23 @@ The demo's `OwnershipProofValidator` is a JuLC spending validator parameterized 
 verification key. On a claim it checks all of the following:
 
 1. **The proof verifies** over `[pkh, recipient]`, where `pkh` comes from the voucher's datum.
-2. **The recipient is actually paid.** Some transaction output's payment credential equals
-   `recipient`, and its value is at least `refundAmount`. Checking only that such an output exists
-   would let a front-runner pay a token amount and skim the rest.
-3. **It's the right voucher.** The datum's `pkh` equals the proof's `pkh`.
+2. **It's the right voucher.** The datum's `pkh` equals the proof's `pkh`.
+3. **The voucher pays exactly what it owes.** Only outputs whose inline datum is exactly the spent
+   voucher's `TxOutRef` count as its payments. Tagged outputs to `recipient` must sum to at least
+   `refundAmount`, and tagged outputs to the funder to at least the remainder,
+   `voucher − refundAmount − maxFee`. The voucher must hold only ADA.
+
+Why the tags? An earlier version only checked that *some* output paid the recipient at least
+`refundAmount`. The demo locks 10 ADA and refunds 2 ADA, so anyone who saw a pending claim could
+resubmit its redeemer, pay the recipient 2 ADA and keep the rest (less fees). One output could also
+satisfy two vouchers in one transaction. A tag is unique to one voucher, so neither works now.
+
+Whoever submits the claim can still keep `maxFee` minus the actual fee (the demo uses a 2 ADA
+`maxFee`), so a funder should set `maxFee` close to the expected fee. In the demo the funder
+is the admin account whose mnemonic you give the CLI or app (`AOR_ADMIN_MNEMONIC` or a hidden
+prompt): a low-value funding wallet, auto-funded on a devnet. The tag guarantee holds only
+between validators that enforce tags, so don't spend a voucher in the same transaction as a script
+that counts any paying output.
 
 This is a good example of "a valid proof is not authorization". The pairing check alone would let
 anyone with a copied proof spend the voucher to any address. The recipient and amount checks bind
@@ -153,6 +174,9 @@ the proof to the transaction. See [Application security](https://zeroj.dev/guide
   [ceremony guide](https://zeroj.dev/guides/proving/trusted-setup-ceremony/).
 - **Confirm the recipient.** A production refund program should also confirm the payout address
   through its own authenticated channel.
+- **Use a fresh recipient.** The proof links the compromised address to the recipient on-chain.
+- **The path is hidden only from observers.** An xpub holder for the account can find which role
+  and index the proven address has.
 - **Protect the seed on the proving machine.** The tools read it at a hidden prompt and keep it in
   memory only, but the machine itself must be trusted.
 - **Review status.** The derivation gadgets are validated against an independent implementation

@@ -131,11 +131,12 @@ policy values (`minAge`, `countryRoot`) as parameters. It accepts a spend only i
 public inputs match the registered issuer and policy, `eligible == 1`, and the pairing check
 passes.
 
-A valid proof is not authorization. This gate is stateless, so the proof isn't tied to the person
-spending. Anyone who sees an unlock transaction can copy its proof. In the demo each locked UTxO
-can be spent only once, but a real protocol should bind the proof to its context: add the
-recipient or the spent `TxOutRef` as a bound public input that the validator recomputes from
-`ScriptContext`, or use a per-epoch nullifier when access should be rate-limited. See
+A valid proof is not authorization. This is a **stateless, replayable demo gate**: the validator
+checks the proof, not the transaction that spends it. Anyone who sees an unlock transaction, on
+the chain or still pending, can copy its proof and use it to open any other UTxO locked at the same
+gate. A real protocol should bind the proof to its context: add the recipient or the spent
+`TxOutRef` as a bound public input that the validator recomputes from `ScriptContext`, or use a
+per-epoch nullifier when access should be rate-limited. See
 [Application security](https://zeroj.dev/guides/verifying/application-security/).
 
 ## Security considerations
@@ -143,12 +144,24 @@ recipient or the spent `TxOutRef` as a bound public input that the validator rec
 - **You trust the issuer.** A dishonest or compromised issuer can sign anything. Plan for key
   rotation and revocation: short-lived credentials, or a periodically refreshed validity tree the
   circuit checks.
+- **The issuer key must be secret.** The demo generates its issuer key with `SecureRandom` on first
+  start and keeps it, owner-only, in its data directory. Earlier versions derived the key from a
+  seed published in the demo's source, so anyone could sign credentials that the deployed validator
+  accepted. A credential signed with that old seed is now refused.
 - **Keep issuance offline.** The demo signs with `EdDSAJubjub.signCompatibilityOffline`. ZeroJ's
   Jubjub signing isn't constant-time and is meant for offline, isolated use. Don't expose it as a
   network signing service.
-- **Credentials can be shared.** A proof shows knowledge of a credential, not identity. Holder
-  binding helps: include the holder's key in the signed message and prove control of it.
+- **Credentials can be shared.** A proof shows knowledge of a credential, not identity, and the
+  demo credential names no holder. Holder binding helps: include the holder's key in the signed
+  message and prove control of it.
+- **Unsalted credentials.** The issuer signs `Poseidon(age, country)` with no salt. That message has
+  a small domain, so anyone who sees it or its signature, together with the issuer's public key, can recover
+  the attributes by trying every age and country. Two holders with the same age and country get the
+  same signature. Add a random salt to the signed message in a real deployment.
 - **Replay** of stateless proofs, as described above.
+- **Demo custody.** The demo server holds the issuer key and every holder's credential, and proves
+  on their behalf. Its API is the operator's view. Privacy holds against chain and mempool
+  observers, not against the demo server.
 - **Linkability outside the proof.** The same wallet, fee payer or timing can still link two
   presentations.
 - **Trusted setup.** The demo uses a single-party development setup; production needs an MPC

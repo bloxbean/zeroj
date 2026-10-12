@@ -1,6 +1,6 @@
 # Private NFT ownership
 
-> Prove you hold an NFT from a collection for one-time token-gated access without connecting your wallet, plus the nullifier trade-off that decides privacy.
+> Prove you hold an NFT from a collection for one-time token-gated access, without revealing which NFT or which wallet, and see why the nullifier must absorb a holder secret.
 
 Canonical URL: https://zeroj.dev/use-cases/nft-ownership/
 
@@ -14,52 +14,99 @@ _The web version of this page has an interactive illustration here._
 
 ## The zero-knowledge idea
 
-**The holder proves "I'm in the collection's current ownership snapshot, holding a token from it,
-and this is the one-time nullifier for that token in this context", without revealing their
-wallet.**
+**The holder proves "one leaf of this event's ownership snapshot is mine, and this is my one-time
+nullifier for the event", without revealing which leaf, which NFT or which wallet.**
 
 Live UTxOs change with every transaction, so the proof is made against a **snapshot**. An indexer
-records who holds which token and builds a Merkle tree. The demo's leaf is
-`Poseidon(ownerHash, tokenName)`, where `ownerHash = Poseidon(secretKey, 0)` is derived from a
-secret only the holder knows. The root is published, and the holder proves their leaf is in the
-tree without saying which leaf.
+collects registrations from holders and builds a Merkle tree. Each holder has a **holder secret**
+`s`: a 252-bit random value that the app draws with `SecureRandom`. For token `t` the leaf is:
 
-The **nullifier** is `Poseidon(tokenName, contextId)`, where `contextId` names the event or
-campaign. The same NFT in the same context always gives the same nullifier, so each NFT gets in
-once. If the NFT changes hands, the new holder can't use it a second time in that context either.
-That choice has a privacy cost, explained in the caution after the circuit.
+```text
+leaf = Poseidon(Poseidon(s, 0), t)
+```
+
+The root is published, and the holder proves their leaf is in the tree without saying which leaf.
+
+The **nullifier** marks one use per event:
+
+```text
+nullifier = Poseidon(Poseidon(s, t), contextId)
+```
+
+`contextId` names the event. The same leaf in the same event always gives the same nullifier, so a
+second use is caught. A different event gives an unrelated value, so one holder's nullifiers can't
+be linked across events. Without `s`, nobody can compute the nullifier for any token.
+
+## Why not just hash the token name?
+
+The first version of this demo used `Poseidon(tokenName, contextId)` as the nullifier. It looks
+private, because the token name stays a secret input. But **every input to that hash is public**:
+the collection's token names are listed on-chain, and `contextId` is a public input. Anyone could
+hash each token name with the event's `contextId` and find the published nullifier. That showed
+*which* NFT was used, and because an NFT's holder address is public on Cardano, *which wallet* too.
+
+The fix is to make the nullifier absorb a value nobody else can guess: the holder's 252-bit secret.
+It has to be large. A short secret such as `42` could be found by trying every small number, so
+the API refuses secrets shorter than 240 bits (below 2^239). Deriving the nullifier from the leaf, as
+`Poseidon(leaf, contextId)`, wouldn't work either: if the snapshot's leaves are published, anyone
+could recompute it.
 
 ## What stays private, what's public
 
 | Input | Visibility | Why |
 |---|---|---|
-| `secretKey` | Secret | The holder's secret; `ownerHash` is derived from it |
-| `tokenName` | Secret | Which NFT (see the caveat below) |
+| `secretKey` | Secret | The holder's 252-bit secret; the leaf and the nullifier absorb it |
+| `tokenName` | Secret | Which NFT; the nullifier no longer reveals it |
 | Merkle path (`siblings`, `pathBits`) | Secret | The path would reveal the leaf's position |
-| `snapshotRoot` | Public | The ownership snapshot the proof is checked against |
-| `contextId` | Public | The event or campaign that scopes the nullifier |
+| `snapshotRoot` | Public | The event's snapshot; a parameter of the event's minting policy |
+| `contextId` | Public | The event; also a policy parameter |
 | `isOwner` | Public | Must be 1 |
-| `nullifier` | Public | Minted as a token name and stored on-chain so it can't be reused |
+| `nullifier` | Public | Minted as a token name and inserted into the on-chain list |
+
+An observer of the chain or the mempool learns that *some* holder in the snapshot used the gate,
+and nothing about which NFT or which wallet.
+
+## One use per what?
+
+With the old nullifier, the circuit itself gave each NFT exactly one nullifier per event. Now each
+**leaf** gives one nullifier per event, so a holder who registered two leaves for one NFT would get
+two uses. Keeping the count right is now the **indexer's** job. In the demo, `SnapshotService`
+plays the indexer, and registration:
+
+- **refuses a second registration for a token** already in the snapshot;
+- **requires a CIP-8 signature from the holding address.** The holder signs
+  `(contextId, tokenName, leaf)` with the payment key of the address that holds the token on-chain,
+  and the indexer checks on-chain that this address holds exactly one unit of it;
+- **freezes when the snapshot is built.** No leaf can be added after the root is fixed.
+
+So the snapshot has at most one leaf per authenticated holding, and each leaf gets in once.
+One limit remains: the leaf hides the token, so the indexer can't check that a leaf registered
+under token A really commits to A. A holder of A could register a leaf over another token B. That
+changes which token a proof names, not how many uses there are: **one use per authenticated
+holding, not one use per specific NFT.** The snapshot is a trust point either way.
 
 ## How it works
 
-1. **Snapshot.** The indexer scans holders of the collection's policy, builds the Merkle tree of
-   `(ownerHash, tokenName)` leaves and publishes the root. (In the demo, holders register with the
-   service; see the security notes on what a real snapshot must check.)
-2. **Prove.** The holder generates a Groth16 proof with ZeroJ's pure-Java prover.
-3. **Access.** A transaction mints one token named after the nullifier. The minting policy
-   verifies the proof on-chain, and the nullifier is inserted into an on-chain sorted list.
-4. **Reuse is rejected.** The same NFT in the same context produces the same nullifier, and the
-   list already contains it.
+1. **Register.** For each NFT, the app draws a holder secret and registers the leaf
+   `Poseidon(Poseidon(s, 0), t)`, signed (CIP-8) by the wallet that holds the token.
+2. **Build the snapshot.** The root is fixed and registration closes. The event's scripts are
+   deployed: a minting policy with the root and `contextId` as parameters, and a nullifier list
+   whose root can be created only once.
+3. **Prove.** The holder generates a Groth16 proof with ZeroJ's pure-Java prover.
+4. **Access.** A transaction mints one token named after the nullifier. The policy verifies the
+   proof on-chain, and the list inserts a node keyed by that nullifier.
+5. **Reuse is rejected.** The same holder in the same event produces the same nullifier, and the
+   list already holds it.
 
 ```text
-indexer: holders of policy P ─▶ Merkle tree ─▶ snapshotRoot (published)
-holder:  secretKey, tokenName, path ─prove─▶ tx: mint 1 × <nullifier>, insert into sorted list
+holder:   s, t ─sign (CIP-8)─▶ indexer: one leaf per token ─▶ snapshotRoot, frozen
+deploy:   ZkProofMintingPolicy(snapshotRoot, contextId, VK) + NullifierListValidator(zkPolicyId, seed)
+holder:   s, t, path ─prove─▶ tx: mint 1 × <nullifier>, insert node keyed by <nullifier>
 ```
 
 ## The circuit
 
-This is the demo's `NFTOwnershipProof`, with constructor validation trimmed.
+This is the demo's `NFTOwnershipProof`, version 2, with constructor validation trimmed.
 
 ```java title="NFTOwnershipProof.java"
 import org.zeroj.circuit.annotation.*;
@@ -69,7 +116,7 @@ import org.zeroj.circuit.lib.zk.ZkMerkle;
 import org.zeroj.circuit.lib.zk.ZkPoseidon;
 
 @ZKCircuit(name = "nft-ownership",
-           nameTemplate = "nft-ownership-d{treeDepth}-bls-poseidon", version = 1)
+           nameTemplate = "nft-ownership-d{treeDepth}-bls-poseidon", version = 2)
 public class NFTOwnershipProof {
     private static final PoseidonParams POSEIDON = PoseidonParamsBLS12_381T3.INSTANCE;
 
@@ -86,59 +133,79 @@ public class NFTOwnershipProof {
                  @Secret @FixedSize(param = "treeDepth") ZkArray<ZkField> siblings,
                  @Secret @FixedSize(param = "treeDepth") ZkArray<ZkBool> pathBits) {
 
+        // Leaf (unchanged from version 1): Poseidon(Poseidon(secretKey, 0), tokenName).
         var ownerHash = ZkPoseidon.hash(zk, POSEIDON, secretKey, zk.constant(0));
         var leaf = ZkPoseidon.hash(zk, POSEIDON, ownerHash, tokenName);
         ZkMerkle.verifyProofPoseidon(zk, POSEIDON, leaf, snapshotRoot, siblings, pathBits);
 
-        var computedNullifier = ZkPoseidon.hash(zk, POSEIDON, tokenName, contextId);
+        // Nullifier: Poseidon(Poseidon(secretKey, tokenName), contextId).
+        var holderToken = ZkPoseidon.hash(zk, POSEIDON, secretKey, tokenName);
+        var computedNullifier = ZkPoseidon.hash(zk, POSEIDON, holderToken, contextId);
         return isOwner.and(computedNullifier.isEqual(nullifier));
     }
 }
 ```
 
-The demo builds a depth-10 tree, which holds up to 1,024 holders. At that depth the circuit
-compiles to a few thousand constraints. Each extra level doubles the tree's capacity (and the
-potential anonymity set) for one more Poseidon hash.
-
-> **Caution: This nullifier can reveal the NFT, and the wallet**
->
-> Token names in a collection are public and usually few. Anyone can compute
-> `Poseidon(tokenName, contextId)` for every token and match the published nullifier. That reveals
-> *which* NFT was used. Because an NFT's holder address is public on Cardano, it usually reveals
-> *which wallet* too. For wallet-level privacy, derive the nullifier from a holder secret instead,
-> such as `Poseidon(secretKey, contextId)`. The token then stays hidden, but the one-use limit
-> applies per holder secret rather than per NFT, so an NFT that changes hands could be used again.
-> Choose deliberately.
+The leaf is the same as in version 1; only the nullifier changed. Token names and event labels
+enter the circuit as their bytes read as one big-endian number (1 to 31 bytes, with no leading
+zero byte, so each name has one value). The demo builds a
+depth-10 tree, which holds up to 1,024 holders. At depth 4, as in the end-to-end test, the circuit
+compiles to 1,942 constraints, and each extra level adds one Poseidon hash and doubles the tree's
+capacity (and the potential anonymity set).
 
 ## On Cardano
 
-The demo pairs two JuLC scripts:
+Building the snapshot deploys two JuLC scripts for the event. Both run in every access
+transaction.
 
-- **`ZkProofMintingPolicy`** composes `Groth16BLS12381Lib.verifyFour(...)` with the verification
-  key baked in as parameters. The redeemer carries the proof plus `snapshotRoot`, `contextId`,
-  `isOwner` and `nullifier`. The policy requires `isOwner == 1` and exactly one minted token whose
-  name equals the nullifier.
-- **`NullifierListValidator`** stores nullifiers as a sorted linked list, one UTxO per entry. An
-  insert proves the new value isn't already present, and unrelated accesses touch different nodes.
+- **`ZkProofMintingPolicy`** takes `snapshotRoot`, `contextId` and the verification key as **script
+  parameters**, so there is one policy per event. The redeemer carries only the proof and the
+  nullifier. The policy requires the mint under it to be exactly one token, quantity 1, whose
+  32-byte name is the nullifier, and verifies the proof with
+  `Groth16BLS12381Lib.verifyFour(snapshotRoot, contextId, 1, nullifier, ...)`. A proof against
+  another snapshot or event fails, because those inputs come from the parameters.
+- **`NullifierListValidator`** keeps nullifiers in a sorted linked list, one UTxO per entry:
+  - **One-shot root.** The list is parameterised by a seed UTxO that the root's creation must
+    spend, so the root exists once.
+  - **The new key is the proved nullifier.** An insert must mint exactly one ZK token, and the
+    new node's key is that token's name (its low 31 bytes). The ZK token sits in the new node.
+  - **Insert-only.** A node can be spent only as the anchor of an insert, one list input per
+    transaction, and nothing is ever burned, so nodes are never removed.
 
-A valid proof is not authorization. The demo policy takes `snapshotRoot` and `contextId` from the
-redeemer. A real gate must pin them to the current snapshot and event, for example by reading a
-snapshot UTxO as a reference input. Otherwise a prover could build a tree of their own. See
-[On-chain verification](https://zeroj.dev/guides/verifying/on-chain/).
+  An insert also proves the key sits between two neighbours, so a nullifier already in the list
+  can't be added again.
+
+The first version of the list checked only that the ZK policy minted *something*, not that the new
+key was the proved nullifier, and its root could be minted again and its nodes removed, so one
+proof could gate any number of accesses.
+
+A token minted under the ZK policy outside a list insert grants nothing: readers count access only
+from list nodes. Each node locks about 2 ADA, which stays locked because nodes are never removed.
+See [On-chain verification](https://zeroj.dev/guides/verifying/on-chain/) for the verifier side.
 
 ## Security considerations
 
-- **The snapshot is a trust point.** The indexer decides which leaves exist. In production it must
-  confirm that each registered `ownerHash` really belongs to the wallet holding the token, for
-  example with a wallet signature at registration. Publish the snapshot data so anyone can rebuild
-  the root.
-- **Staleness.** A holder who sells after the snapshot can still prove against it until the next
-  one. Shorter snapshot intervals narrow the window.
-- **Pin the public inputs** (`snapshotRoot`, `contextId`) on-chain, as above.
-- **Nullifier design leaks information** (see the caveat). Also consider fee payer and timing
+- **The indexer decides the snapshot.** It is trusted to admit one registration per token, from
+  the address holding it. The demo doesn't publish the snapshot's leaves; a real deployment should,
+  so anyone can rebuild the root.
+- **One use per authenticated holding, not per NFT,** as explained above.
+- **Front-running.** A mempool observer can copy a holder's proof from a pending transaction and
+  submit it first; the access then goes to that transaction. The fix is a fresh one-time
+  beneficiary key hash as a public input, with the gate's output paid to it. It is deferred to
+  keep circuit version 2 minimal.
+- **Using the gate shows that some snapshot holder acted.** Also consider fee payer and timing
   linkability when holders submit their own transactions.
+- **Staleness.** A holder who sells after the snapshot can still prove against it. A new snapshot
+  is a new event.
+- **One event per run.** The demo's event comes from `zk.default-context`; a new event needs a
+  restart with a new context.
+- **The demo is custodial.** The server holds the custody wallet that holds the NFTs and signs
+  registrations. It draws each holder secret and returns it once, without storing it, and it proves
+  for the holder. Its API is the operator's view: privacy holds against chain and mempool
+  observers, not against the demo server.
 - **Trusted setup.** The demo uses a single-party development setup; production needs an MPC
-  ceremony ([Trusted setup, explained](https://zeroj.dev/learn/trusted-setup/)).
+  ceremony ([Trusted setup, explained](https://zeroj.dev/learn/trusted-setup/)). The demo is not externally
+  reviewed.
 
 ## Try it
 
@@ -150,12 +217,21 @@ DevKit running (see [Run the demos](https://zeroj.dev/use-cases/overview/#run-th
 ./demo.sh nft-ownership --run
 ```
 
-`--run` registers a holder, builds the snapshot, generates a proof and submits the access
-transaction. The proof is verified on-chain and the nullifier lands in the sorted list. Submit the
-same nullifier again from the UI and the service refuses it, because the nullifier already exists
-on-chain. The UI also lets you mint test NFTs on the devnet.
+`--run` mints `ZeroJTicket_1` into the custody wallet and registers it. The server draws a fresh
+252-bit holder secret, returns it once, and signs the registration with the custody wallet. Then
+it builds the snapshot (which deploys the event's scripts), generates a proof for the event
+`nft-demo-v1`, and submits the access transaction. The proof is verified on-chain and the
+nullifier lands in the sorted list. Submit the same nullifier again and the service answers 403,
+"Already accessed (nullifier exists on-chain)"; forcing the insert past that check is rejected by
+the list script. Registering `ZeroJTicket_1` a second time is refused, and so is a typed-in secret
+such as `42`.
+
+The circuit, scripts and script hashes changed in version 2. If you ran an earlier version, start
+fresh with `./demo.sh nft-ownership --clean-cache`.
 
 Design notes:
+[`DESIGN.md`](https://github.com/bloxbean/zeroj-usecases/blob/main/nft-ownership/DESIGN.md) in the
+demo, and
 [Private NFT ownership — detailed design](https://github.com/bloxbean/zeroj/blob/main/docs/usecases/private-nft-ownership.md)
 (snapshot vs. on-chain registries, threshold "whale" proofs, shielded transfers).
 
