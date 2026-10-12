@@ -176,7 +176,7 @@ const cheatOk = issueProofExists(REPORTED_DEFAULT);
             <span class="v"><span class="real">{fakeHash('tax-authority-sk')}</span><span class="mask">████████</span></span>
           </div>
           <div class="zw-box" data-show="5-6">
-            <span class="zw-box-title">Every salary, decrypted from the limbs</span>
+            <span class="zw-box-title">Salaries: the pay run's notes, spent or not</span>
             <div class="zw-row" data-kind="secret" data-readers="tax">
               <span class="k">carol · pay run</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
               <span class="v"><span class="real">{credits(CAROL_SALARY)}</span><span class="mask">████████</span></span>
@@ -185,6 +185,8 @@ const cheatOk = issueProofExists(REPORTED_DEFAULT);
               <span class="k">dave · pay run</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
               <span class="v"><span class="real">{credits(DAVE_SALARY)}</span><span class="mask">████████</span></span>
             </div>
+            <span class="zw-check">salary totals count these notes only</span>
+            <span class="zw-box-title">Also readable: notes made by spending</span>
             <div class="zw-row" data-kind="secret" data-readers="tax">
               <span class="k">carol → dave</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
               <span class="v"><span class="real">{credits(TRANSFER)}</span><span class="mask">████████</span></span>
@@ -193,7 +195,7 @@ const cheatOk = issueProofExists(REPORTED_DEFAULT);
               <span class="k">carol · change</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
               <span class="v"><span class="real">{credits(CAROL_SALARY - TRANSFER)}</span><span class="mask">████████</span></span>
             </div>
-            <span class="zw-check">every amount proof-enforced</span>
+            <span class="zw-check">every amount proof-enforced; not added to the salary totals</span>
           </div>
         </section>
       </div>
@@ -218,7 +220,7 @@ const cheatOk = issueProofExists(REPORTED_DEFAULT);
       </div>
       <div data-show="5">
         <p class="zw-narr-title">5. Tax view</p>
-        <p>The tax authority decrypts the limbs of every note ever minted or transferred, straight from chain data. Because every one came with a proof, these are the real amounts, not what the employer chose to report.</p>
+        <p>The tax authority decrypts the limbs straight from chain data. Salaries are the notes a pay run minted, counted even after they are spent. Notes minted by a transfer or cash-out are readable too, but they are the same money moving, so adding them would count carol's salary twice. Every note came with a proof, so these are the real amounts, not what the employer chose to report.</p>
       </div>
       <div data-show="6">
         <p class="zw-narr-title">6. Try to under-report</p>

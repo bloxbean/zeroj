@@ -78,9 +78,11 @@ amount cashed out. Transfers between notes reveal no amounts.
 4. **Spend.** An employee can transfer part of a salary to a colleague, or cash out at the employer
    for a public amount. Both are proved: the amounts balance, and every new note's limbs are
    encrypted to the current tax key.
-5. **Tax view.** The tax authority decrypts the limbs of every note in the ledger's mint history,
-   including notes already spent, and totals them per employee. Each amount is
-   **proof-enforced**.
+5. **Tax view.** The tax authority decrypts the limbs of every salary note: the notes minted by
+   pay runs, found in the ledger's mint history, including ones already spent. It totals those
+   per employee. It skips notes minted by a transfer or cash-out, whose transaction spent an
+   existing note: those are the same salary moving, including change, and counting them would
+   count a salary twice. It can still read their amounts. Each amount is **proof-enforced**.
 
 ## The circuit
 

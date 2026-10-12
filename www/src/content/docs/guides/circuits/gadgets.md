@@ -459,7 +459,8 @@ authorization or replay rules.
 | Merkle membership | Hash-dependent | Ready with the params-aware Poseidon helpers |
 | MiMC, MiMC sponge | BN254 only | Not Cardano-ready |
 | Jubjub point arithmetic | BLS12-381 only | Ready for algebraic and public-data use, pending external review |
-| Pedersen commitment (in-circuit) | BLS12-381 only | Ready, pending external review |
+| Pedersen commitment (in-circuit, `ZkPedersen`) | BLS12-381 only | Ready, pending external review |
+| Pedersen homomorphic API (`ZkPedersenCommitment`, `ZkPedersen.assertBalanced`) and vector commitments (`ZkPedersenVector`) | BLS12-381 only | Experimental |
 | Pedersen commitment (off-circuit generation) | Jubjub | Offline or isolated use only |
 | EdDSA-Jubjub | BLS12-381 only | Verification ready pending external review; legacy signing offline only |
 | ElGamal encryption and trustee proofs (in-circuit) | BLS12-381 only | Experimental |

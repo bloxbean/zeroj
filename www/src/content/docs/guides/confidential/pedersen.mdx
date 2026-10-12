@@ -30,8 +30,8 @@ compares it with BBS, predicates, encrypted deliveries and threshold decryption.
 
 | Area | Status |
 |---|---|
-| In-circuit commitment (`ZkPedersen`, `ZkPedersenCommitment`) | **Ready on BLS12-381 Groth16, pending external review** |
-| In-circuit homomorphic API (`ZkPedersen.assertBalanced`, `ZkPedersenCommitment.add`/`subtract`, subgroup checks) | **Experimental**, pending review and external review |
+| In-circuit commitment (`ZkPedersen`: `commit`, `commitBits`, `verifyOpening`) | **Ready on BLS12-381 Groth16, pending external review** |
+| In-circuit homomorphic API (the `ZkPedersenCommitment` wrapper and its `add`/`subtract`, `ZkPedersen.assertBalanced`, subgroup checks) | **Experimental**, pending review and external review |
 | Vector commitments (`ZkPedersenVector`, `PedersenVectorCommitment`) | **Experimental**, pending spec and external review |
 | Creating commitments off-circuit (`PedersenCommitment.commit`, `randomBlinding`) | **Offline/isolated only**: variable-time arithmetic on secrets |
 | Verifying a disclosed opening (`PedersenCommitment.verify`, `decode`) | Fine anywhere: the opening is no longer secret to that verifier |

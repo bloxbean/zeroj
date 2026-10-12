@@ -128,7 +128,7 @@ const rings = [
             <input type="number" min="0" max="10000" step="100" value={ALICE.amount} data-claim aria-label="Claimed amount" />
           </label>
           <span class="zw-check" data-claim-result>commit({fmt(ALICE.amount)}, r) = C: accepted</span>
-          <span class="zw-note">Try another number. No blinding makes a different amount match C.</span>
+          <span class="zw-note">Try another number. Some blinding would make it match C, but Alice can't feasibly find it: that would mean finding a second opening.</span>
         </div>
         <div class="zw-box" data-show="4">
           <span class="zw-box-title">Opening the total</span>
@@ -153,7 +153,7 @@ const rings = [
       </div>
       <div data-show="3">
         <p class="zw-narr-title">3. Open (binding)</p>
-        <p>Later, Alice can hand the opening <code>(v, r)</code> to someone she chooses. They recompute the point and compare it with C. She can't find a second opening for a different amount, so C locks her in. Type another amount to see it fail.</p>
+        <p>Later, Alice can hand the opening <code>(v, r)</code> to someone she chooses. They recompute the point and compare it with C. A second opening for a different amount exists, but she can't feasibly find one, so C locks her in. Type another amount to see it fail.</p>
       </div>
       <div data-show="4">
         <p class="zw-narr-title">4. Add</p>
