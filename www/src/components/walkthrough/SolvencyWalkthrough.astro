@@ -1,0 +1,532 @@
+---
+// Proof of solvency with hidden balances (Pedersen commitments, demo C in zeroj-usecases), step by
+// step: book -> commit and deliver -> prove and lock -> customers check -> auditor opens the total
+// -> release. Values follow solvency-data.ts. Commitments and hashes are illustrative stand-ins
+// (see fakeHash), not Jubjub points or BLAKE2b outputs.
+//
+// Four views: the exchange's (everything), a customer's (their own balance only), the auditor's
+// (the total only) and the public's (nothing secret). The client script marks each secret row
+// data-masked for the current view; rows list who may see them in data-vis.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { BOOK, DEFAULT_RESERVE, GARBAGE_DEFAULT, PERIOD, RESERVE_RANGE, TOTAL, ada, customerCheck, provable } from './solvency-data';
+
+const commitment = (id: string, amount: number) => fakeHash(`C:${id}:${amount}`);
+const idHash = (id: string) => fakeHash(`idHash:${id}:salt-p1`);
+const sumC = fakeHash(`sumC:${BOOK.map((c) => `${c.id}=${c.ada}`).join(',')}`);
+const ok = provable(DEFAULT_RESERVE);
+const first = BOOK[0];
+const rings = [
+  'M116.28 43.93A56 56 0 1 1 29.76 19.69',
+  'M45.87 98.53A39 39 0 1 1 94.31 39.46',
+  'M55.21 43.29A22.5 22.5 0 0 1 80.18 79.63',
+];
+---
+
+<figure class="zw-frame not-content" aria-label="Proof of solvency with hidden balances, step by step">
+  <div
+    class="zw zsv"
+    data-total="6"
+    data-view="insider"
+    data-solvent={ok ? '1' : '0'}
+    data-customer={first.id}
+    data-garbage=""
+  >
+    <div class="zw-head">
+      <span class="zw-eyebrow">Hidden-balance solvency · step <b data-counter>1 / 6</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Exchange</button>
+          <button type="button" data-view-btn="customer" aria-pressed="false">Customer</button>
+          <button type="button" data-view-btn="auditor" aria-pressed="false">Auditor</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- exchange -->
+      <section class="zw-actor" data-hl="1-3" aria-label="Exchange">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Exchange</span>
+          <span class="zw-actor-sub">the book of accounts</span>
+        </div>
+        {BOOK.map((c) => (
+          <div class="zw-row" data-kind="secret" data-vis={`exchange ${c.id}`} data-hl="1">
+            <span class="k">{c.name}</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{ada(c.ada)}</span><span class="mask">████████</span></span>
+          </div>
+        ))}
+        <div class="zw-row" data-kind="secret" data-vis="exchange auditor" data-hl="1">
+          <span class="k">total liabilities L</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{ada(TOTAL)}</span><span class="mask">████████</span></span>
+        </div>
+        <p class="zw-note" data-show="1">Each customer also gets a fresh salt for this period with their statement.</p>
+        <div class="zw-row zsv-reserve" data-kind="public" data-show="3-6" data-hl="3">
+          <span class="k">reserve R to lock</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-reserve-out>{ada(DEFAULT_RESERVE)}</span>
+          <input
+            type="range"
+            min={RESERVE_RANGE.min}
+            max={RESERVE_RANGE.max}
+            step={RESERVE_RANGE.step}
+            value={DEFAULT_RESERVE}
+            data-reserve
+            data-only="insider"
+            aria-label="Reserve to lock, in ADA"
+          />
+        </div>
+        <div class="zsv-proving" data-show="3" aria-hidden="true">
+          <svg class="zw-rings" viewBox="0 0 128 128">
+            {rings.map((d, i) => <path class={`r${i + 1}`} d={d}></path>)}
+          </svg>
+          <span>Proving Σ balances ≤ R</span>
+        </div>
+        <span class={ok ? 'zw-check' : 'zw-check no'} data-show="3" data-prove-out>
+          {ok ? 'proof made: the hidden total fits under R' : 'no proof exists: the book exceeds R'}
+        </span>
+        <label class="zsv-cheat" data-show="2-6" data-only="insider">
+          <input type="checkbox" data-garbage-toggle />
+          <span>Cheat: give {BOOK.find((c) => c.id === GARBAGE_DEFAULT)?.name} a garbage delivery</span>
+        </label>
+      </section>
+
+      <div class="zw-wire zsv-w1" data-hl="2,3" aria-hidden="true">
+        <span class="arrow" data-show="2-3">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">entries</span>
+        <span class="zw-msg" data-show="3">π + R</span>
+      </div>
+
+      <!-- chain -->
+      <section class="zw-actor zsv-chain" data-hl="2,3,6" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">this period's vault</span>
+        </div>
+        <p class="zw-note" data-show="1">Nothing published yet.</p>
+        <div class="zw-box zsv-datum" data-show="2-6">
+          <span class="zw-box-title" data-show="2">Datum, ready to publish</span>
+          <span class="zw-box-title" data-show="3-6">Attestation datum</span>
+          <ul class="zsv-entries">
+            {BOOK.map((c) => (
+              <li data-entry={c.id}>
+                <span class="zsv-id">idHash {idHash(c.id)}</span>
+                <span class="zsv-c">C = {commitment(c.id, c.ada)}</span>
+                <span class="zsv-dlv">delivery → {c.name} <small>89 bytes</small></span>
+                <span class="zsv-dlv-bad">delivery → {c.name} <small>89 random bytes</small></span>
+              </li>
+            ))}
+          </ul>
+          <span class="zsv-dlv zsv-audit-dlv">auditor delivery: opening of ΣC <small>89 bytes</small></span>
+          <span class="zw-note">The vault checks shapes and lengths. It can't check that a delivery opens.</span>
+        </div>
+        <div class="zw-box" data-show="3-6">
+          <span class="zw-box-title"><code>SolvencyVault</code></span>
+          <span class="zw-check" data-vault-ok>{ok ? `${ada(DEFAULT_RESERVE)} locked with the proof` : 'nothing locked'}</span>
+          <span class="zw-check" data-show="3" data-vault-time data-if-solvent>attested before the period starts (in about {PERIOD.leadSeconds} s)</span>
+          <span class="zw-check" data-show="4-5" data-if-solvent>period running ({PERIOD.lengthSeconds} s): nothing added, nothing released</span>
+          <span class="zw-check no" data-show="4-5" data-if-solvent>release inside the period: rejected</span>
+          <span class="zw-check" data-show="6" data-release>period over: reserve released, token burned</span>
+        </div>
+      </section>
+
+      <div class="zw-wire zsv-w2" data-hl="4,5" aria-hidden="true">
+        <span class="arrow" data-show="4-5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="4">my entry</span>
+        <span class="zw-msg" data-show="5">ΣC</span>
+      </div>
+
+      <div class="zsv-side">
+        <!-- customer -->
+        <section class="zw-actor zsv-customer" data-hl="4" aria-label="Customer">
+          <div class="zw-actor-head">
+            <span class="zw-actor-name">Customer</span>
+            <span class="zw-actor-sub">checks their own entry</span>
+          </div>
+          <span class="zw-choice zsv-pick" role="group" aria-label="Which customer checks">
+            {BOOK.map((c, i) => (
+              <button type="button" data-pick={c.id} aria-pressed={i === 0 ? 'true' : 'false'}>{c.name}</button>
+            ))}
+          </span>
+          {BOOK.map((c, i) => (
+            <div class="zw-row" data-kind="secret" data-vis={`exchange ${c.id}`} data-cust={c.id} hidden={i !== 0}>
+              <span class="k">my balance (statement)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real">{ada(c.ada)}</span><span class="mask">████████</span></span>
+            </div>
+          ))}
+          <div class="zw-box" data-show="4-6">
+            <span class="zw-check" data-once>my idHash appears exactly once</span>
+            <span class="zw-check" data-open-out>{`delivery opens to ${ada(first.ada)}: matches`}</span>
+            <span class="zsv-result" data-result-out>{customerCheck(first.id, null)}</span>
+          </div>
+          <p class="zw-note" data-show="1-3">Waits for the attestation.</p>
+        </section>
+
+        <!-- auditor -->
+        <section class="zw-actor zsv-auditor" data-hl="5" aria-label="Auditor">
+          <div class="zw-actor-head">
+            <span class="zw-actor-name">Auditor</span>
+            <span class="zw-actor-sub">registered viewing key</span>
+          </div>
+          <div class="zw-box" data-show="5-6">
+            <div class="zw-row" data-kind="public">
+              <span class="k">ΣC, added up from the chain</span><em class="zw-tag">PUBLIC</em>
+              <span class="v">{sumC}</span>
+            </div>
+            <span class="zw-check" data-audit-open>its delivery opens ΣC: L = {ada(TOTAL)}</span>
+            <span class="zw-check" data-audit-cover>{ok ? `L ≤ ${ada(DEFAULT_RESERVE)} locked` : 'no attestation to audit'}</span>
+            <span class="zw-note">One total, no single balance.</span>
+          </div>
+          <p class="zw-note" data-show="1-4">Opens only the total, at step 5.</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. The book</p>
+        <p>The exchange owes four customers {ada(TOTAL)} in total. It wants to prove it holds enough to pay everyone without publishing any balance, or even the total. Switch views to see what each party knows.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Commit and deliver</p>
+        <p>Each balance becomes a Pedersen commitment <code>C = v·G + r·H</code>. Next to it go a salted hash of the customer's id and the opening <code>(v, r)</code> encrypted to that customer's viewing key. The auditor gets the opening of the sum, encrypted to its own key.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Prove and lock</p>
+        <p>A Groth16 proof shows that the four committed balances add up to at most R. The vault verifies it and locks R before the period starts. Drag R below {ada(TOTAL)}: no proof exists, so nothing can be locked.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Customers check</p>
+        <p>During the period, each customer finds their entry by its salted id hash and opens their delivery with their own key. The opening comes from the chain, not from the exchange. Pick a customer, or tick the cheat to see what Dave finds.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Auditor opens the total</p>
+        <p>Commitments add up, so anyone can compute ΣC from the chain. Only the auditor can open it, with its delivery, and it learns the total and nothing about any one customer.</p>
+      </div>
+      <div data-show="6">
+        <p class="zw-narr-title">6. Release</p>
+        <p>After the period ends, the exchange takes the reserve back. Because every attestation in a period is locked for the whole period, the same funds can't back two attestations one after another.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Book</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Commit</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Prove &amp; lock</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Customers check</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Auditor</button></li>
+        <li><button type="button" data-goto="6"><span>6</span>Release</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> visible only to whoever the view belongs to</span>
+      <span><em class="zw-tag public">PUBLIC</em> on-chain</span>
+      <span>Commitments and hashes are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { BOOK, TOTAL, GARBAGE_DEFAULT, ada, customerCheck, provable } from './solvency-data';
+
+  document.querySelectorAll<HTMLElement>('.zsv').forEach((root) => {
+    initWalkthrough(root);
+    const q = <T extends HTMLElement = HTMLElement>(sel: string) => root.querySelector<T>(sel);
+    const slider = q<HTMLInputElement>('[data-reserve]');
+    const toggle = q<HTMLInputElement>('[data-garbage-toggle]');
+    let reserve = Number(slider?.value ?? TOTAL);
+    let customer = root.dataset.customer || BOOK[0].id;
+
+    const setCheck = (el: HTMLElement | null, text: string, good: boolean) => {
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('no', !good);
+    };
+
+    // Who may read each secret row in the current view.
+    const mask = () => {
+      const view = root.dataset.view;
+      const viewer =
+        view === 'insider' ? 'exchange' : view === 'customer' ? customer : view === 'auditor' ? 'auditor' : '';
+      root.querySelectorAll<HTMLElement>('[data-vis]').forEach((row) => {
+        const allowed = (row.dataset.vis ?? '').split(' ');
+        row.toggleAttribute('data-masked', !viewer || !allowed.includes(viewer));
+      });
+    };
+
+    const render = () => {
+      const ok = provable(reserve);
+      const garbage = toggle?.checked ? GARBAGE_DEFAULT : null;
+      const step = Number(root.dataset.step);
+      root.dataset.solvent = ok ? '1' : '0';
+      root.dataset.garbage = garbage ?? '';
+      root.dataset.customer = customer;
+
+      const out = q('[data-reserve-out]');
+      if (out) out.textContent = ada(reserve);
+      setCheck(
+        q('[data-prove-out]'),
+        ok ? 'proof made: the hidden total fits under R' : `no proof exists: the book exceeds ${ada(reserve)}`,
+        ok,
+      );
+      setCheck(q('[data-vault-ok]'), ok ? `${ada(reserve)} locked with the proof` : 'no proof, so nothing locked', ok);
+
+      // Customer lane: the picked customer's balance row and check.
+      root.querySelectorAll<HTMLElement>('[data-cust]').forEach((row) => (row.hidden = row.dataset.cust !== customer));
+      root.querySelectorAll<HTMLButtonElement>('[data-pick]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.pick === customer)),
+      );
+      const me = BOOK.find((c) => c.id === customer) ?? BOOK[0];
+      const result = customerCheck(me.id, garbage);
+      if (!ok) {
+        setCheck(q('[data-once]'), 'no attestation this period', false);
+        setCheck(q('[data-open-out]'), 'nothing to open', false);
+      } else {
+        setCheck(q('[data-once]'), 'my idHash appears exactly once', true);
+        setCheck(
+          q('[data-open-out]'),
+          result === 'UNOPENABLE'
+            ? "delivery doesn't open with my key: evidence against the exchange"
+            : root.dataset.view === 'insider' || root.dataset.view === 'customer'
+              ? `delivery opens to ${ada(me.ada)}: matches`
+              : 'delivery opens to my balance: matches',
+          result !== 'UNOPENABLE',
+        );
+      }
+      const res = q('[data-result-out]');
+      if (res) {
+        res.textContent = ok ? result : 'MISSING';
+        res.dataset.good = String(ok && result === 'LISTED_ONCE_CORRECT');
+      }
+
+      // Auditor lane.
+      const seesTotal = root.dataset.view === 'insider' || root.dataset.view === 'auditor';
+      setCheck(
+        q('[data-audit-open]'),
+        !ok ? 'no attestation to open' : seesTotal ? `its delivery opens ΣC: L = ${ada(TOTAL)}` : 'its delivery opens ΣC to the total',
+        ok,
+      );
+      setCheck(q('[data-audit-cover]'), ok ? `L ≤ ${ada(reserve)} locked` : 'no attestation to audit', ok);
+      setCheck(q('[data-release]'), ok ? 'period over: reserve released, token burned' : 'nothing was locked', ok);
+
+      // Failing states: the chain at step 3 when no proof exists; the customer at step 4 when the
+      // delivery doesn't open (or nothing was attested).
+      q('.zsv-chain')?.toggleAttribute('data-bad-on', !ok && step >= 3);
+      q('.zsv-datum')?.toggleAttribute('data-gone', !ok && step >= 3);
+      q('.zsv-w1')?.toggleAttribute('data-bad-on', !ok && step === 3);
+      q('.zsv-customer')?.toggleAttribute('data-bad-on', step === 4 && (!ok || result !== 'LISTED_ONCE_CORRECT'));
+      q('.zsv-auditor')?.toggleAttribute('data-bad-on', step === 5 && !ok);
+      root.querySelectorAll<HTMLElement>('[data-entry]').forEach((li) => li.toggleAttribute('data-garbage', li.dataset.entry === garbage));
+      mask();
+    };
+
+    slider?.addEventListener('input', () => {
+      reserve = Number(slider.value);
+      render();
+    });
+    toggle?.addEventListener('change', render);
+    root.querySelectorAll<HTMLButtonElement>('[data-pick]').forEach((b) =>
+      b.addEventListener('click', () => {
+        customer = b.dataset.pick ?? customer;
+        render();
+      }),
+    );
+    // The engine switches data-view first (its listener was added in initWalkthrough).
+    root.querySelectorAll('[data-view-btn]').forEach((b) => b.addEventListener('click', render));
+    root.addEventListener('zw:step', render);
+    render();
+  });
+</script>
+
+<style>
+  /* the fourth and fifth actors share the last column */
+  .zsv-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7em;
+    min-width: 0;
+  }
+
+  .zsv-pick {
+    flex-wrap: wrap;
+    align-self: flex-start;
+  }
+
+  .zsv-datum[data-gone],
+  .zsv[data-solvent='0'] [data-if-solvent] {
+    display: none !important;
+  }
+
+  /* controls only the exchange can use */
+  .zsv:not([data-view='insider']) [data-only='insider'] {
+    display: none !important;
+  }
+
+  /* masking for the customer and auditor views (the public view is masked by walkthrough.css) */
+  .zsv [data-masked] .real,
+  .zsv [data-masked] > .zw-tag .vis {
+    display: none;
+  }
+
+  .zsv [data-masked] .mask,
+  .zsv [data-masked] > .zw-tag .hid {
+    display: inline;
+  }
+
+  .zsv [data-masked] .mask {
+    letter-spacing: -1px;
+    color: var(--zw-secret);
+    opacity: 0.6;
+  }
+
+  .zsv [data-masked] > .zw-tag {
+    color: var(--zw-muted);
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--zw-line);
+  }
+
+  .zsv-reserve input[type='range'] {
+    flex-basis: 100%;
+    width: 100%;
+    margin: 0.35em 0 0.1em;
+    accent-color: var(--zw-public);
+    cursor: pointer;
+  }
+
+  .zw[data-solvent='0'] .zsv-reserve .v {
+    color: var(--zw-bad-ink);
+  }
+
+  .zsv-proving {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+  }
+
+  .zsv-cheat {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45em;
+    padding: 0.4em 0.55em;
+    font-size: 0.78em;
+    color: var(--zw-warn-ink);
+    background: var(--zw-warn-bg);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .zsv-cheat input {
+    margin-top: 0.15em;
+    accent-color: var(--zw-bad);
+  }
+
+  .zsv-entries {
+    display: grid;
+    gap: 0.4em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: 500 0.72em var(--zw-mono);
+  }
+
+  .zsv-entries li {
+    display: grid;
+    gap: 0.05em;
+    padding: 0.3em 0.45em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 6px;
+  }
+
+  .zsv-entries span {
+    overflow-wrap: anywhere;
+  }
+
+  .zsv-id {
+    color: var(--zw-muted);
+  }
+
+  .zsv-c {
+    font-weight: 600;
+  }
+
+  .zsv-dlv {
+    color: var(--zw-text-2);
+  }
+
+  .zsv-dlv small,
+  .zsv-dlv-bad small {
+    color: var(--zw-muted);
+  }
+
+  .zsv-audit-dlv {
+    font: 500 0.72em var(--zw-mono);
+  }
+
+  .zsv-dlv-bad {
+    display: none;
+    color: var(--zw-bad-ink);
+  }
+
+  .zsv-entries li[data-garbage] {
+    border-color: var(--zw-bad);
+  }
+
+  .zsv-entries li[data-garbage] .zsv-dlv {
+    display: none;
+  }
+
+  .zsv-entries li[data-garbage] .zsv-dlv-bad {
+    display: inline;
+  }
+
+  /* only the exchange (and Dave, after checking) knows a delivery is garbage */
+  .zsv[data-view='public'] .zsv-entries li[data-garbage],
+  .zsv[data-view='auditor'] .zsv-entries li[data-garbage] {
+    border-color: var(--zw-line);
+  }
+
+  .zsv[data-view='public'] .zsv-entries li[data-garbage] .zsv-dlv,
+  .zsv[data-view='auditor'] .zsv-entries li[data-garbage] .zsv-dlv {
+    display: inline;
+  }
+
+  .zsv[data-view='public'] .zsv-entries li[data-garbage] .zsv-dlv-bad,
+  .zsv[data-view='auditor'] .zsv-entries li[data-garbage] .zsv-dlv-bad {
+    display: none;
+  }
+
+  .zsv-result {
+    justify-self: start;
+    padding: 0.15em 0.5em;
+    font: 600 0.72em var(--zw-mono);
+    letter-spacing: 0.04em;
+    color: var(--zw-public-ink);
+    background: color-mix(in srgb, var(--zw-public) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--zw-public) 40%, transparent);
+    border-radius: 4px;
+  }
+
+  .zsv-result[data-good='false'] {
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border-color: var(--zw-bad);
+  }
+
+  .zw-frame:fullscreen .zsv-side {
+    gap: 0.5em;
+  }
+</style>

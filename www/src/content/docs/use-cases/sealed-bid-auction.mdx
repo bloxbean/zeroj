@@ -1,0 +1,245 @@
+---
+title: Sealed-bid auction
+description: Bids stay hidden from other bidders and the public, every bid is readable by the auctioneer from the moment it's placed, and a zero-knowledge proof makes the auctioneer pick the right winner.
+sidebar:
+  order: 12
+---
+
+import AuctionWalkthrough from '../../../components/walkthrough/AuctionWalkthrough.astro';
+import SinceNotice from '../../../components/SinceNotice.astro';
+
+In an open auction, every bid is visible, so late bidders can shade their bid against the others,
+and on a public ledger the same thing happens automatically: anyone can read every bid in the
+mempool and on-chain. A **sealed-bid** auction fixes that. Each bidder submits one hidden bid, and
+the highest wins.
+
+The usual way to seal a bid on a blockchain is **commit and reveal**: publish a hash of your bid,
+then reveal the bid after the deadline. That has a weak spot. A bidder who sees they're losing, or
+who wants to disrupt the auction, can simply **not reveal**. Forfeiting a deposit is the most you
+can do about it, and the auction then ends with a wrong price.
+
+This design closes that gap. Each bid is **encrypted so that only the auctioneer's key opens it**,
+and a zero-knowledge proof shows the hidden bid is valid. The auctioneer can read every bid from the
+moment it's placed, so there's nothing left to reveal and no way to back out. A second proof then
+forces the auctioneer to settle honestly: it reads the bids but can't change who wins.
+
+<SinceNotice since="0.1.0-pre13" />
+
+<AuctionWalkthrough />
+
+## The zero-knowledge idea
+
+**A bidder proves "this ciphertext, which only the auctioneer can decrypt, holds a bid between the
+reserve and my deposit". The auctioneer later proves "decrypting every bid in the lot, the earliest
+highest bid is bid number `w`, at price `p`".**
+
+Two building blocks make this work:
+
+- **ElGamal encryption on the Jubjub curve.** A bid `b` becomes a ciphertext `(A, B)` under the
+  auctioneer's public key. Anyone can encrypt; only the auctioneer's secret key decrypts. ZeroJ's
+  `ZkElGamal.encrypt` lets a circuit prove what a ciphertext contains without opening it. See
+  [Commitments & encryption](/learn/commitments-and-encryption/).
+- **Groth16 proofs.** One per bid (`BidProof`), and one for settlement (`SettleProof`), each checked
+  by the auction's validator on Cardano.
+
+Bidders lock the **same deposit**, so the ADA moving on-chain doesn't leak the bid. The deposit is
+also the upper limit: a bid can never exceed what the bidder has locked.
+
+## What stays private, what's public
+
+| Value | Bidder | Auctioneer | Seller | Public |
+|---|---|---|---|---|
+| Its own bid | Knows it | Decrypts it | — | Hidden |
+| Other bidders' bids | Hidden | Decrypts them | Hidden | Hidden |
+| Auctioneer's secret key | — | Holds it | — | Hidden |
+| Who bid, and how many bids | Public | Public | Public | Public |
+| Deposit, reserve, deadlines, item | Public | Public | Public | Public |
+| Bid ciphertexts and bid proofs | Public | Public | Public | Public |
+| Winner and winning price | Public after settlement | Proves them | Public after settlement | Public after settlement |
+| Losing bid amounts | Only its own | Decrypts them | Bounded, never published | Bounded, never published |
+
+The winning price is public by design: the seller is paid in ADA, so the amount shows up in the
+settlement transaction anyway.
+
+Losing bids never appear on-chain in the clear, but they aren't fully hidden either. Every bid is
+proved to lie between the reserve and the deposit, and settlement proves the winner is the earliest
+highest bid. So once the price is public, everyone knows each losing bid lies in `[reserve, price]`,
+and a losing bid placed before the winner's lies strictly below the price.
+
+## How it works
+
+1. **Register the auctioneer's key.** The auctioneer publishes its ElGamal public key in an on-chain
+   key registry, with proofs that it knows the matching secret key.
+2. **Open a lot.** The seller locks the item in a lot UTxO and sets the deposit, the reserve, the
+   bidding deadline and the settlement deadline. The lot names the auctioneer's key from the
+   registry.
+3. **Bid.** Each bidder encrypts its bid to the lot's key, proves `reserve ≤ bid ≤ deposit` in
+   zero knowledge, signs, and adds exactly the deposit to the lot. The validator appends the bid to
+   the lot's datum. The proof is bound to the bidder's key hash, so a copied ciphertext and proof
+   fail for anyone else.
+4. **Close.** After the bidding deadline the validator accepts no more bids.
+5. **Settle.** The auctioneer decrypts every bid privately, finds the earliest highest bid and
+   proves it. The validator checks the proof against **every** bid in the datum, then checks the
+   payouts: the seller gets the price, the winner gets the item plus the rest of its deposit, and
+   every other bidder gets its deposit back.
+6. **Refund.** If nobody settles before the settlement deadline, anyone can return every deposit
+   and give the item back to the seller. A lot with no bids goes back to the seller.
+
+## The circuit
+
+Both circuits are from the demo's `auction/circuit` package. This is the bid proof, as in the demo
+apart from the Javadoc:
+
+```java title="BidProof.java"
+import org.zeroj.circuit.annotation.*;
+import org.zeroj.circuit.lib.zk.ZkElGamal;
+import org.zeroj.circuit.lib.zk.ZkElGamalPublicKey;
+
+@ZKCircuit(name = "sealed-bid", version = 1)
+public class BidProof {
+
+    @Prove
+    void prove(ZkContext zk,
+               @Public ZkField bidderInt,                      // the bidder's key hash, as a number
+               @Public @UInt(bits = 32) ZkUInt deposit,
+               @Public @UInt(bits = 32) ZkUInt reserve,
+               @Public ZkField pkU, @Public ZkField pkV,       // the auctioneer's public key
+               @Public ZkField aU, @Public ZkField aV,         // the ciphertext (A, B)
+               @Public ZkField bU, @Public ZkField bV,
+               @Secret @UInt(bits = 32) ZkUInt bid,
+               @Secret @UInt(bits = 252) ZkUInt k,             // encryption randomness
+               @Secret ZkField bidderSquared) {
+        // A public input that no constraint uses doesn't affect Groth16 verification, so the
+        // bidder is bound with a trivial constraint. Without it, a proof could be copied.
+        bidderInt.mul(bidderInt).assertEqual(bidderSquared);
+        var key = ZkElGamalPublicKey.fromVerifierFixedPublic(zk, pkU, pkV);
+        ZkElGamal.encrypt(zk, bid, k, key).assertAffineEquals(zk, aU, aV, bU, bV);
+        bid.lte(deposit).assertTrue();
+        bid.gte(reserve).assertTrue();
+    }
+}
+```
+
+The settlement proof is the interesting part. The auctioneer's secret key `sk` and the decrypted
+bids `m_i` are private inputs. For each bid it reuses the encryption gadget **backwards**: encrypting
+`m_i` with randomness `sk` under the "key" `A_i` must give `(PK, B_i)`. That says `[sk]·G = PK` and
+`[m_i]·G + [sk]·A_i = B_i`, which is exactly "`m_i` is the decryption of bid `i`". Then it picks the
+winner and checks the price. This is the core of the demo's `SettleProof`:
+
+```java title="SettleProof.java (core)"
+for (int i = 0; i < bids; i++) {
+    // m_i is the decryption of bid i under the auctioneer's key
+    var handle = ZkElGamalPublicKey.fromVerifierFixedPublic(zk, cts.get(4 * i), cts.get(4 * i + 1));
+    ZkElGamal.encrypt(zk, m.get(i), sk, handle)
+            .assertAffineEquals(zk, pkU, pkV, cts.get(4 * i + 2), cts.get(4 * i + 3));
+    isWinner[i] = w.isEqual(zk.constant(i + 1));
+    selected = selected.add(isWinner[i].asField());
+    price = price.add(isWinner[i].asField().mul(m.get(i).asField()));
+}
+selected.assertEqual(one);                // exactly one winner
+price.assertEqual(p.asField());           // the published price is the winner's bid
+for (int i = 0; i < bids; i++) {
+    m.get(i).lte(p).assertTrue();         // nobody bid more
+    // a bid before the winner must be strictly lower, so the earliest highest bid wins ties
+    ZkField beforeWinner = zero;
+    for (int j = i + 1; j < bids; j++) beforeWinner = beforeWinner.add(isWinner[j].asField());
+    beforeWinner.mul(one.sub(m.get(i).lt(p).asField())).assertEqual(zero);
+}
+```
+
+| Circuit | Constraints | Public inputs |
+|---|---|---|
+| `sealed-bid` | 7,011 | 9 |
+| `sealed-bid-settle`, 1 bid | 6,950 | 8 |
+| `sealed-bid-settle`, 2 bids | 13,330 | 12 |
+| `sealed-bid-settle`, 3 bids | 19,710 | 16 |
+
+There's one settlement circuit per bid count, so the demo caps a lot at three bids.
+
+## On Cardano
+
+The demo's `SealedBidAuction` is one JuLC multi-validator: a minting policy for the one-shot lot
+token and a spending validator for the lot. Its actions are:
+
+| Action | What the validator checks |
+|---|---|
+| **Open** (mint) | The seller signs; exactly one lot with the item and no bids; the key matches the auctioneer's current registry entry |
+| **Bid** (spend) | Before the bidding deadline; a new bidder signs; exactly the deposit is added; the datum is the old one plus exactly this bid; `BidProof` verifies |
+| **Settle** (spend + burn) | Between the two deadlines; `SettleProof` verifies over every bid in the datum; the seller, the winner and every loser are paid |
+| **NoBids** (spend + burn) | After bidding, with no bids, signed by the seller: the item goes back |
+| **Refund** (spend + burn) | After the settlement deadline, submitted by anyone: every deposit and the item go back |
+
+Every payout goes to the recipient's exact address and carries a datum naming the lot token, so one
+output can't count as a payout for two lots at once.
+
+Measured on Yaci DevKit with mainnet protocol parameters (ADR-0008 r4 in the demo repository, at
+commit `814b2f0`):
+
+| Transaction | CPU steps (share of the per-transaction limit) | Fee |
+|---|---|---|
+| Open | 3.3% | about 0.51 ADA |
+| Bid | about 46% | about 0.90 ADA |
+| Settle, 3 bids | 60.7% | about 1.03 ADA |
+| Refund | 4.1% | about 0.53 ADA |
+
+These were measured before ZeroJ PRs #85 and #86 cut the cost of the on-chain Groth16 verifier, so
+bids and settlements cost less on ZeroJ 0.1.0-pre13 and later.
+
+## Security considerations
+
+- **The auctioneer sees every bid.** It's trusted for confidentiality, not for the outcome. It could
+  leak bids to a favoured bidder while bidding is open, and nothing here prevents that. Removing
+  that trust needs a different design, such as a key split among several trustees.
+- **Demo custody.** The demo server holds the auctioneer's decryption key, and `GET /api/auction`
+  returns the auctioneer's view (`auctioneerView`, every decrypted bid) to anyone who calls it.
+  That is the demo operator's view. Privacy here holds against chain and mempool observers, not
+  against the demo server.
+- **No forward secrecy.** The ciphertexts stay on-chain. Whoever holds the auctioneer's secret key,
+  now or in the future, can read every bid ever placed in its lots.
+- **The auctioneer can refuse to settle.** Bidders then wait until the settlement deadline and
+  refund. They lose time, not funds.
+- **No Sybil protection.** The first three distinct keys fill a lot, so one party with three keys can
+  shut others out. A real auction needs more bid slots or bidder admission.
+- **The settlement argument needs review.** Reusing the encryption gadget as a decryption check is
+  the demo's own argument. Its design reviewers checked it, but it hasn't been externally reviewed.
+- **Development setup.** The demo's circuits use a single-party development setup, so whoever ran it
+  could forge proofs. Real keys come from a multi-party ceremony
+  ([Trusted setup, explained](/learn/trusted-setup/)).
+- **Not audited.** ZeroJ's ElGamal profile is experimental and not externally audited. Treat the demo
+  as a blueprint, not a production auction.
+
+## Try it
+
+The demo is the **Sealed-bid auction** tab of the [`pedersen-commitments`](https://github.com/bloxbean/zeroj-usecases/tree/main/pedersen-commitments) app in zeroj-usecases. With Yaci DevKit
+running (see [Run the demos](/use-cases/overview/#run-the-demos)):
+
+```bash
+./demo.sh pedersen
+# opens http://localhost:8093; pick the "Sealed-bid auction" tab
+```
+
+To run it without Docker, use Java 25 and `./gradlew -p pedersen-commitments bootRun -PwithFrontend`
+from the repository root.
+
+The first start runs development setups for every circuit, which takes several minutes; later
+starts reuse the cached keys. In the tab you can open a lot (default: "Painting", 100 ADA deposit,
+10 ADA reserve), place bids from Alice, Bob and Carol, watch the auctioneer's private panel, settle,
+and try the cheats:
+
+- a bid above the deposit or below the reserve: no bid proof exists, so the app refuses it;
+- the auctioneer naming the wrong winner: no settlement proof exists;
+- copying another bidder's ciphertext and proof: the validator rejects it, because the proof is bound
+  to the original bidder.
+
+The DevKit end-to-end test also submits a late bid, which the validator rejects.
+
+## Related
+
+- [Commitments & encryption](/learn/commitments-and-encryption/): what ElGamal encryption is and why
+  it adds up
+- [Selective disclosure](/selective-disclosure/): choosing between revealing, proving and encrypting
+- [Encrypt for an auditor](/selective-disclosure/encrypt-for-an-auditor/): the pattern behind sealed
+  bids
+- [ElGamal encryption guide](/guides/confidential/elgamal/)
+- [Confidential payroll](/use-cases/confidential-payroll/): the same "readable by one authority"
+  idea for salaries

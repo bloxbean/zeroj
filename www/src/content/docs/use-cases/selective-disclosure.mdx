@@ -15,6 +15,12 @@ asks "over 21 and a resident?", a healthcare portal asks "a doctor over 30?", a 
 
 ZeroJ supports two complementary ways to do this, and each has a runnable demo.
 
+:::tip[Not sure which approach fits?]
+This page covers revealing signed attributes (BBS) and proving rules over them (Groth16).
+[Choose how to disclose](/selective-disclosure/) also covers hidden amounts, values only an
+auditor may read, and decryption that needs several trustees, with code for each.
+:::
+
 <DisclosureWalkthrough />
 
 ## The zero-knowledge idea
@@ -168,6 +174,12 @@ spending validators built on `Groth16BLS12381Lib`. The issuer key, `currentYear`
 gate) the approved-country root are script parameters. Changing any of them deploys a new script,
 so a caller can't substitute weaker public inputs.
 
+These are **stateless, replayable demo gates**: the validators check the proof, not the
+transaction that spends it. Anyone who sees an unlock transaction, on the chain or still pending,
+can copy its proof and use it to open any other UTxO locked at the same gate. A real deployment
+binds the proof to the output it spends, for example with the spent `TxOutRef` and the payout
+address as public inputs that the validator recomputes from `ScriptContext`.
+
 **BBS natively on-chain.** `BbsProofVerify` in `zeroj-onchain-julc` runs BBS `ProofVerify`
 inside Plutus V3. `BbsToCardano` in `zeroj-bbs` turns the issuer key into validator parameters and
 a presentation into redeemer fields. The demo's `BbsKycClaimValidator` locks a voucher UTxO and
@@ -175,30 +187,72 @@ releases it only if four things hold:
 
 - the presentation verifies on the ledger;
 - it discloses exactly the required values;
-- it pays the voucher's recipient;
 - its presentation header equals `blake2b_256(voucherTxId ‖ I2OSP(index, 8) ‖ recipientPkh)`,
-  which the validator recomputes itself rather than trusting the claimer.
+  which the validator recomputes itself rather than trusting the claimer;
+- the voucher pays exactly what it owes, as described below.
 
 Spending the voucher is the nullifier. The demo measured about 2.4×10⁹ CPU units for the check,
 within Cardano's per-transaction limit. The current `BbsProofVerify` profile is fixed to a
 five-attribute credential disclosing indexes 2 and 3; other shapes need a different unrolling.
 
-In both cases a valid proof is not authorization. The payout, recipient and replay checks above
-carry the authorization; the proof alone doesn't. See
+**How the voucher pays.** The voucher's datum is
+`(requiredCountry, requiredKycLevel, recipientPkh, refundAmount, funderPkh, maxFee)`. The demo locks
+10 ADA with a 2 ADA refund and a `maxFee` of 2 ADA, so 6 ADA goes back to the funder. A claim counts
+only outputs whose inline datum is exactly the spent voucher's `TxOutRef`, called *tagged* outputs:
+
+- tagged outputs to the recipient's key sum to at least `refundAmount`;
+- tagged outputs to the funder's key sum to at least the remainder,
+  `voucher − refundAmount − maxFee` (no funder output is needed when that is 0);
+- the voucher holds only ADA, and `refundAmount + maxFee` is at most the voucher's value.
+
+Why the tags? An earlier version only checked that *some* output paid the recipient at least 2 ADA.
+Anyone who saw a pending claim could resubmit the same redeemer, pay the recipient 2 ADA and keep
+the other 8 ADA (less fees). One output could also count as the payment for two vouchers in one
+transaction. Each tag is unique to one voucher, so no output can pay two vouchers, and the
+remainder must go back to the funder.
+
+Two things remain:
+
+- **Fee slack.** Whoever submits the claim can keep `maxFee` minus the actual fee, so a funder
+  should set `maxFee` close to the expected fee.
+- **Composition.** The tag guarantee holds only between validators that enforce tags. Spending a
+  voucher in the same transaction as a script that counts any paying output is unsafe.
+
+A valid proof is not authorization. For the BBS voucher, the header binding and the tagged payout
+checks above carry the authorization; the proof alone doesn't. The Groth16 gates have no such
+checks, which is why they are replayable. See
 [Application security](/guides/verifying/application-security/).
 
 ## Security considerations
 
 - **Replay.** A BBS presentation stays valid forever. It's single-use only if the relying party
   chooses the challenge (off-chain) or derives it from the UTxO being spent (on-chain). The Groth16
-  demo proofs carry no nonce, so add a session or UTxO binding when the proof isn't consumed
-  together with a UTxO.
+  demo proofs carry no nonce and aren't bound to the UTxO they spend, so a copied proof opens any
+  other UTxO at the same gate. Bind each proof to its session or to the spent output.
+- **Unsalted Groth16 credentials.** The issuer signs
+  `Poseidon(dobYear, country, roleId, salaryBracket, nameHash)` with no salt, and `nameHash` is
+  `Poseidon(name, 0)`. Every field has a small or guessable domain, so anyone who sees the signed
+  message or its signature, together with the issuer's public key, can recover the fields by trying
+  them. Equal fields give an equal signature. Add a random salt to the signed message in a real
+  deployment.
 - **Revealed values can identify you.** A rare combination of disclosed attributes may be enough
   to re-identify someone. Reveal the minimum.
-- **Credential theft and sharing.** Whoever holds the credential can present it. Bind it to the
-  holder's key when that matters.
-- **Issuer keys.** For BBS, the default pure-Java provider isn't constant-time. Prefer the blst
-  provider (`BbsService.withBlsProvider(...)`) for issuer keys. The Jubjub demo issuer
+- **Credential theft and sharing.** Whoever holds the credential can present it. Neither demo
+  binds the credential to a holder. The Groth16 credential names no holder key. A BBS
+  presentation proves that the issuer signed these attributes, not that the presenter is their
+  subject, so one KYC'd credential can satisfy many vouchers. Bind the credential to the holder's
+  key when that matters. BBS per-verifier pseudonyms are out of scope for the demo.
+- **Demo custody.** Both demo servers hold the issuer key and the holders' credentials and prove
+  or present on their behalf; the reusable-KYC server also holds the funder's wallet. Their APIs
+  are the operator's view. Privacy holds against chain and mempool observers, not against the demo
+  servers. The voucher funder's wallet and the Groth16 demo's admin wallet come from Yaci DevKit's
+  well-known test mnemonic, so anyone can sign as them on a devnet; a real deployment replaces
+  them.
+- **Issuer keys.** The Jubjub issuer key of the Groth16 demo is random and persisted in the demo's
+  data directory. It used to be derived from a seed published in the source, so anyone could sign
+  credentials the gates accepted; a credential signed with that old seed is now refused. For BBS,
+  the default pure-Java provider isn't constant-time. Prefer the blst provider
+  (`BbsService.withBlsProvider(...)`) for issuer keys. The Jubjub demo issuer
   (`signCompatibilityOffline`) is for offline, isolated use only.
 - **Maturity.** BBS follows an IRTF draft, not yet an RFC. The Groth16 demos use a single-party
   development setup ([Trusted setup, explained](/learn/trusted-setup/)).
@@ -227,6 +281,7 @@ running (see [Run the demos](/use-cases/overview/#run-the-demos)):
 
 ## Related
 
+- [Choose how to disclose](/selective-disclosure/): every disclosure option, and when to use each
 - [BBS credentials guide](/guides/credentials/bbs/)
 - [Groth16, PlonK & BBS](/learn/proof-systems/): when to reach for which
 - [Age & KYC eligibility](/use-cases/age-and-kyc/): a single predicate from a minimal credential

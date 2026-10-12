@@ -41,6 +41,11 @@ export default defineConfig({
         },
         { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
         {
+          label: 'Selective disclosure',
+          badge: { text: 'What to use when', variant: 'note' },
+          items: [{ autogenerate: { directory: 'selective-disclosure' } }],
+        },
+        {
           label: 'Guides',
           items: [
             { label: 'Circuits', items: [{ autogenerate: { directory: 'guides/circuits' } }] },
@@ -49,6 +54,10 @@ export default defineConfig({
             {
               label: 'Credentials & state',
               items: [{ autogenerate: { directory: 'guides/credentials' } }],
+            },
+            {
+              label: 'Commitments & encryption',
+              items: [{ autogenerate: { directory: 'guides/confidential' } }],
             },
           ],
         },

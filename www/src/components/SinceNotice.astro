@@ -1,0 +1,23 @@
+---
+// Shown on pages that document APIs newer than the published release in release.json. Renders
+// nothing once a release at or after `since` is on Maven Central. The AI exports get the same text
+// (scripts/ai-artifacts.mjs).
+import { Aside } from '@astrojs/starlight/components';
+import { ZEROJ_VERSION, releasedSince } from '../../site.config.mjs';
+
+interface Props {
+  since: string;
+}
+const { since } = Astro.props;
+---
+
+{
+  !releasedSince(since) && (
+    <Aside type="note" title={`New in ZeroJ ${since}, not released yet`}>
+      The APIs on this page are on <code>main</code> but aren't in a release on Maven Central yet
+      (the latest is {ZEROJ_VERSION}). To try them now, use a
+      <a href="/start/installation/#snapshots">development snapshot</a>, versioned{' '}
+      <code>{since}-&lt;commit&gt;-SNAPSHOT</code>.
+    </Aside>
+  )
+}

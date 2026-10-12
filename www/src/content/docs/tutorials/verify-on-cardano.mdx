@@ -371,8 +371,8 @@ bigger picture.
   deprecated in favour of the same operations on `Tx`; this tutorial uses `ScriptTx` because
   it's the path ZeroJ's end-to-end tests run against Yaci DevKit.
 
-Verifying this two-input proof inside the validator costs roughly 2.8 billion CPU steps and
-212,000 memory units, measured in the JuLC VM. More public inputs cost more, because each one
+Verifying this two-input proof inside the validator costs roughly 2.2 billion CPU steps and
+168,000 memory units, measured in the JuLC VM. More public inputs cost more, because each one
 adds a scalar multiplication.
 
 ## A valid proof is not authorization
@@ -738,7 +738,7 @@ validator below computes `spendRef` instead of reading it.
 
 </Steps>
 
-Checking the proof costs about 3.0 billion CPU steps and 263,000 memory units in the JuLC VM,
+Checking the proof costs about 2.34 billion CPU steps and 212,000 memory units in the JuLC VM,
 a little more than the bare verifier because of the extra public input and the hash. Test a
 validator like this with failing cases as well as the happy path. For this one we checked, in
 the JuLC VM, that each of these is rejected: the same proof on another UTxO, a tampered datum

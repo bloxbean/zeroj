@@ -29,7 +29,7 @@ proofs that are tiny and cheap to verify.
 - **Verification:** a single *pairing check*, plus one elliptic-curve multiplication per public
   input. On Cardano, ZeroJ's reusable verifier does four Miller loops and one final check using
   Plutus V3 builtins. In ZeroJ's JuLC VM tests, a proof with two public inputs used about
-  2.8 billion CPU units, against a per-transaction limit of 10 billion.
+  2.2 billion CPU units, against a per-transaction limit of 10 billion.
 - **Setup:** Groth16 needs a **trusted setup for each circuit**. A universal "powers of tau"
   phase is reused, and a circuit-specific phase 2 runs for every circuit and every change to it.
   See [Trusted setup, explained](/learn/trusted-setup/).
@@ -53,7 +53,7 @@ gates and wiring permutations instead of R1CS, and a polynomial commitment schem
   public and deterministic, so changing a circuit doesn't need a new ceremony.
 - **Proof:** larger than Groth16, about 650 bytes (roughly 3.5 times as large).
 - **Verification:** two pairings plus more scalar multiplications than Groth16. ZeroJ's
-  experimental on-chain verifier measured about 4.8 billion CPU units for one public input.
+  experimental on-chain verifier measured about 4.6 billion CPU units for one public input.
 - **Non-interactivity** comes from Fiat–Shamir: the verifier's challenges are derived by hashing
   the proof transcript, so transcript encoding details are security-critical.
 

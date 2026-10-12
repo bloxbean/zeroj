@@ -2,6 +2,24 @@
 
 Trustless anonymous voting using zero-knowledge proofs on Cardano's UTXO model.
 
+> **Correction (2026-10-11): the ballot design in this note does not keep votes secret.**
+> It records each ballot as `commitment = Poseidon(vote, nullifier)`. The nullifier is public and a
+> vote is only 0 or 1, so anyone can compute `Poseidon(0, nullifier)` and `Poseidon(1, nullifier)`
+> and see which one matches. Every vote can be read from chain data: the design hides **who**
+> voted, not **how**. A secret salt would stop the guessing, but then nobody could count the votes
+> without each voter revealing the salt, and with it the vote.
+>
+> The zeroj-usecases `private-voting` demo now encrypts each ballot with exponential ElGamal
+> (`elgamal-jubjub-v1`) under a key held by trustees, adds the ballots up while encrypted, and
+> decrypts only the total
+> ([zeroj-usecases ADR-0005](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0005-private-ballot-homomorphic-tally.md),
+> [issue #7](https://github.com/bloxbean/zeroj-usecases/issues/7)). See the
+> [private voting page](https://zeroj.dev/use-cases/private-voting/) for that design.
+>
+> The rest of this note (nullifiers, the on-chain registry approaches, concurrency, cost, and the
+> alternatives) still applies, because the encrypted ballot keeps the same voter list, nullifier
+> and sorted-list registry. The code samples show the hash-ballot circuit and are illustrative only.
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -64,14 +82,16 @@ Tx 1: addr_??? → voting_contract
       proof: "I'm an eligible voter AND my vote is 0 or 1"
       public: nullifier=0xABC, commitment=0x789
 
-      Nobody knows: who voted, what they voted, which address they used
+      Nobody knows: who voted, or which address they used
+      (with commitment = Poseidon(vote, nullifier), what they voted CAN be recovered:
+       see the correction at the top)
 ```
 
 ### What Each Party Sees
 
 | Data | Voter | Smart Contract | Public |
 |------|-------|---------------|--------|
-| Vote (YES/NO) | Yes | No | No |
+| Vote (YES/NO) | Yes | Recoverable from the commitment (see the correction) | Recoverable from the commitment |
 | Voter identity | Yes | No | No |
 | Secret key | Yes | No | No |
 | Nullifier | Yes | Yes | Yes |
@@ -172,7 +192,9 @@ public class PrivateVoteCircuit implements CircuitSpec {
                        nullifier);
 
         // 3. Commitment = Poseidon(vote, nullifier)
-        //    Binds the vote to the nullifier (for tally verification)
+        //    Binds the vote to the nullifier (for tally verification).
+        //    NOT hiding: the nullifier is public and vote is 0 or 1, so anyone can
+        //    recompute both candidates. The demo replaced this with an ElGamal ballot.
         c.assertEqual(SignalPoseidon.hash(c, vote, nullifier), commitment);
 
         // 4. Voter is in the eligible voter Merkle tree
@@ -570,6 +592,7 @@ var compressed = ProverToCardano.compressProof(proof);
 │                                                                      │
 │  1. Read all nullifier nodes from chain                              │
 │  2. Each commitment is public → tally YES/NO from commitments        │
+│     (by recomputing Poseidon(0|1, nullifier): this reveals each vote)│
 │  3. Result is verifiable by anyone                                   │
 │  4. Cleanup: burn tokens, reclaim ADA to treasury                    │
 │                                                                      │
@@ -582,11 +605,11 @@ var compressed = ProverToCardano.compressProof(proof);
 |----------|------------------|
 | **One vote per person** | Nullifier is deterministic (same key + election = same hash) |
 | **Can't fake identity** | Merkle proof ties secret key to voter list |
-| **Vote is private** | Nullifier reveals nothing about YES/NO |
+| **Vote is private** | **Not provided by this design.** The nullifier reveals nothing about YES/NO, but the commitment does (see the correction at the top). The encrypted ballot provides it. |
 | **Votes unlinkable across elections** | Different electionId → different nullifier |
 | **No trusted third party** | Sorted linked list is fully on-chain |
 | **Censorship resistant** | Voters submit directly to Cardano |
-| **Verifiable tally** | Commitments are public, anyone can count |
+| **Verifiable tally** | Commitments are public, anyone can count, because anyone can read every vote |
 | **ADA reclaimable** | Cleanup after election returns all locked ADA |
 
 ## Alternative Approaches
@@ -738,8 +761,8 @@ The coordinator (who has the decryption key) processes all votes and produces a 
 | | Sorted Linked List | MACI |
 |---|---|---|
 | **Vote buying resistance** | No — voter can prove their vote to briber | **Yes — voter can secretly change** |
-| **Trust** | **Trustless** | Coordinator sees votes (can't change them) |
-| **Privacy from public** | **Full** | **Full** |
+| **Trust** | **Trustless** registry (the encrypted ballot adds trustees, who decrypt only the total) | Coordinator sees votes (can't change them) |
+| **Privacy from public** | Identity only with the hash ballot; **full** with the encrypted ballot | **Full** |
 | **Privacy from coordinator** | N/A | No (coordinator decrypts) |
 | **Complexity** | Medium | High |
 | **Best for** | Standard DAO governance | **High-stakes votes where buying is a threat** |

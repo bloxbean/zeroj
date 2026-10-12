@@ -2,6 +2,13 @@
 
 Prove solvency without revealing individual account balances.
 
+> **Note (2026-10-11): salt the leaves.** A leaf `Poseidon(accountId, balance)` with a guessable id
+> lets anyone who sees it (for example as a sibling in their own Merkle path) recover the balance
+> by trying values. The demo now uses `Poseidon(Poseidon(idTag, salt), balance)` with a fresh
+> 252-bit salt per account and snapshot, and mints the attestation only with a verified solvent
+> proof. See [zeroj-usecases ADR-0009](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0009-privacy-and-binding-hardening-of-the-original-demos.md), D4, and the
+> [proof of reserves page](https://zeroj.dev/use-cases/proof-of-reserves/).
+
 ## Table of Contents
 
 - [Overview](#overview)

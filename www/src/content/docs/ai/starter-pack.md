@@ -184,6 +184,21 @@ The annotation processor generates `<ClassName>Circuit` with: `build(...)`, `sch
 - **Never** for Cardano: `ZkMiMC` (BN254-only), the no-params Poseidon overload, `ZkMerkle.HashType.MIMC` or `HashType.POSEIDON`.
 - Heavier gadgets exist for real-world cryptography: `ZkSha512`, `ZkHmacSha512`, `ZkBlake2b`, `ZkCip1852` (BIP32-Ed25519 / CIP-1852 derivation), `ZkPedersen`, `ZkJubjubPoint`, `ZkEdDSAJubjub`. Bind prover-supplied Jubjub points with `ZkJubjubPoint.witnessAffine(zk, u, v)`. See [Gadget library](/guides/circuits/gadgets/).
 
+### Commitments and encryption (new in 0.1.0-pre13, experimental)
+
+Pedersen commitments, exponential ElGamal, threshold DKG and confidential notes are in `zeroj-circuit-lib` (host classes in `org.zeroj.circuit.lib.jubjub`, circuit adapters in `org.zeroj.circuit.lib.zk`). Rules:
+
+- **Blinding:** a Pedersen blinding is `@Secret @UInt(bits = 252)` in circuits (narrower, public or constant blindings make `build()` throw) and `PedersenCommitment.randomBlinding(new SecureRandom())` on the host — fresh every time, never derived from public data.
+- **Decoding:** received commitment bytes go through `PedersenCommitment.decode` (canonical + prime-order subgroup), never `JubjubPoint.fromBytes`. The verifier rebuilds the public inputs (commitment `u`, then `v`) from data it trusts.
+- **No wrap:** commitment and ciphertext sums are modulo a 252-bit order. Prove conservation with `ZkPedersen.assertBalanced` on width-bounded terms; never treat an off-circuit point sum as an integer total.
+- **ElGamal widths:** message width 1–64; ciphertext bounds add up under `add`/`sum`; decryption needs `maxPlaintext ≥ bound` and only works up to about 2^43, so encrypt 64-bit amounts as two 32-bit limbs and use the narrowest width that fits.
+- **Verify by type, with real proofs:** keys from others → `VerifiedKeyShare.verify(bytes, possessionProofVerifier)`; ciphertexts from others → `ElGamal.admit(raw, ctx, width, encryptionProofVerifier)`; decryption shares → `VerifiedDecryptionShare.verify(…)`. A verifier lambda that returns `true` (`s -> true`) silently removes the guarantee — only use it when a validator already checked that exact proof, and say so in a comment.
+- **Threshold:** `DkgConfig.create(t, n, …)` means any `t + 1` of `n` decrypt, with `2t + 1 ≤ n ≤ 64` (2-of-3 is `create(1, 3, …)`). Never reuse an `attempt` number. Decrypt only the final total, once; decrypting running totals leaks individual values. With HPKE delivery, close round 1 only through `DkgShareDelivery.closeRound1`.
+- **Notes:** reader order is fixed (owner first, then auditors); a reader opens only its own delivery position and checks the owner credential itself; report `unopenableOwned` notes, never drop them; scan only in the user's own wallet process. A viewing key can't spend.
+- **Secret operations are offline/isolated only** (variable-time arithmetic): committing, encrypting, decrypting, DKG dealing, sealing and opening notes. Don't put them in a timing-observable service.
+- **Not a library API:** an auditor amount enforced inside a transfer proof ("D3a") is a pattern you build in your own circuit (`ZkElGamal.encrypt` + `ZkPedersenCommitment`), and issued notes carry whatever audit data the issuer supplied.
+- Guides: [Commitments & encryption, explained](/learn/commitments-and-encryption/), [Pedersen commitments](/guides/confidential/pedersen/), [ElGamal encryption](/guides/confidential/elgamal/), [Threshold decryption](/guides/confidential/threshold-elgamal/), [Confidential notes](/guides/confidential/confidential-notes/), [Choose how to disclose](/selective-disclosure/).
+
 ### Lower-level DSL
 
 When annotations don't fit, implement `CircuitSpec` and use `SignalBuilder`/`Signal`:
@@ -260,6 +275,9 @@ var p = ProverToCardano.compressProof(proof);          // piA (48 B), piB (96 B)
 | Inventing a seeded/deterministic prover for reproducibility | Store the proof you produced |
 | Bare `Groth16BLS12381Verifier` (or the datum-based `Groth16BLS12381TxOutRefBindingVerifier`) guarding funds | A custom validator on `Groth16BLS12381Lib` that computes the spend binding from `ScriptContext`, binds the recipient, and enforces policy |
 | Trusting a prover-supplied fact ("my age is 27") | Have an issuer sign or commit to it and verify that inside the circuit or with BBS |
+| A short or public Pedersen blinding, or reusing one | `@Secret @UInt(bits = 252)` and a fresh `PedersenCommitment.randomBlinding(new SecureRandom())` |
+| Summing commitments or ciphertexts and calling it an integer total | `ZkPedersen.assertBalanced` with declared widths; track ElGamal bounds |
+| `s -> true` as a key, share or ciphertext verifier | Verify the possession, DLEQ or encryption proof for exactly that statement |
 | Testing only the happy path | Invalid-witness and tampered-public-input tests for every constraint |
 | Claiming "secure", "audited", "production-ready" | "Experimental, not externally audited" |
 

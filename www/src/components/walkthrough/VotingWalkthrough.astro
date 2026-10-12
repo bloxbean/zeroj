@@ -1,7 +1,9 @@
 ---
 // Private voting, step by step: register -> prove -> submit -> vote again -> tally.
-// Values follow the private-voting demo (election "ZeroJ DAO Proposal #1", five voters, voter1 votes
-// yes and voter2 votes no). Hashes are illustrative stand-ins (see fakeHash), not Poseidon outputs.
+// Values follow the private-voting demo (election "ZeroJ DAO Proposal #1", five voters, three
+// trustees, voter1 votes yes and voter2 votes no). Each ballot is an ElGamal ciphertext (A, B) of the
+// vote under the trustees' election key. Hashes and points are illustrative stand-ins (see fakeHash),
+// not Poseidon outputs or Jubjub points.
 import './walkthrough.css';
 import { fakeHash } from './engine';
 
@@ -9,7 +11,9 @@ const election = 'ZeroJ DAO Proposal #1';
 const voterRoot = fakeHash('root:voter1..voter5');
 const secretKey = fakeHash('sk:voter3');
 const nullifier = fakeHash(`nf:${secretKey}:${election}`);
-const commitment = (vote: number) => fakeHash(`cm:${vote}:${nullifier}`);
+const electionKey = fakeHash('election-key:PK1+PK2+PK3');
+const randomness = fakeHash('k:voter3');
+const ballot = (vote: number) => `A ${fakeHash(`A:${randomness}`)} B ${fakeHash(`B:${vote}:${randomness}`)}`;
 
 // The on-chain nullifier list before you vote holds voter1's and voter2's nullifiers; yours is
 // inserted between its sorted neighbours.
@@ -38,7 +42,7 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
 ---
 
 <figure class="zw-frame not-content" aria-label="Private voting, step by step">
-  <div class="zw zv" data-total="5" data-view="insider" data-vote="1" data-nullifier={nullifier}>
+  <div class="zw zv" data-total="5" data-view="insider" data-vote="1" data-randomness={randomness}>
     <div class="zw-head">
       <span class="zw-eyebrow">Private voting · step <b data-counter>1 / 5</b></span>
       <div class="zw-tools">
@@ -89,6 +93,10 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
           <span class="k">electionId</span><em class="zw-tag">PUBLIC</em>
           <span class="v wrap">{election}</span>
         </div>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">election key PK (3 trustees)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{electionKey}</span>
+        </div>
         <p class="zw-note">5 voters registered. The demo's tree has depth 10 (1,024 slots).</p>
       </section>
 
@@ -124,6 +132,10 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
             <span class="mask">████████</span>
           </span>
         </div>
+        <div class="zw-row" data-kind="secret" data-hl="2">
+          <span class="k">randomness k (fresh)</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">{randomness}</span><span class="mask">████████</span></span>
+        </div>
         <div class="zv-prove" data-show="2" aria-hidden="true">
           <svg class="zw-rings" viewBox="0 0 128 128">
             <path class="r1" d="M116.28 43.93A56 56 0 1 1 29.76 19.69"></path>
@@ -137,8 +149,8 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
           <span class="v">{nullifier}</span>
         </div>
         <div class="zw-row" data-kind="public" data-show="2-5" data-hl="2">
-          <span class="k">commitment = Poseidon(vote, nullifier)</span><em class="zw-tag">PUBLIC</em>
-          <span class="v" data-commitment>{commitment(1)}</span>
+          <span class="k">ballot (A, B) = Enc(PK, vote)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap" data-ballot>{ballot(1)}</span>
         </div>
         <div class="zw-proof" data-show="2-4">
           <span class="pi">π</span><span>Groth16 proof</span><small>192 bytes</small>
@@ -151,7 +163,7 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
       <div class="zw-wire" data-hl="3" data-bad="4" aria-hidden="true">
         <span class="arrow" data-show="3-4">→</span>
         <span class="zw-wire-line"></span>
-        <span class="zw-msg" data-show="3">π + 4 inputs</span>
+        <span class="zw-msg" data-show="3">π + ballot</span>
         <span class="zw-msg" data-show="4">same nullifier</span>
       </div>
 
@@ -164,10 +176,11 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
         <div class="zw-box" data-show="3-4">
           <span class="zw-box-title"><code>VoteZkMintingPolicy</code></span>
           <span class="zw-check">Groth16 proof valid</span>
+          <span class="zw-check">before the voting deadline</span>
           <span class="zw-check">mints 1 token named <code>nullifier</code></span>
         </div>
         <div class="zw-box">
-          <span class="zw-box-title"><code>VoteListValidator</code> · sorted nullifiers</span>
+          <span class="zw-box-title"><code>VoteListValidator</code> · nullifier → ballot</span>
           <ol class="zv-list">
             {list.map((n) => (
               <li class={n.you ? 'you' : ''} data-show={n.you ? '3-5' : undefined} data-hl={n.you ? '3' : undefined}>
@@ -180,12 +193,14 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
           <span class="zw-check no" data-show="4">insert fails: already in the list</span>
         </div>
         <div class="zw-box zv-tally" data-show="5">
-          <span class="zw-box-title">Tally · anyone can count</span>
+          <span class="zw-box-title">Tally · after the deadline</span>
+          <span class="zw-check">anyone adds the 3 ballots, still encrypted</span>
+          <span class="zw-check">the 3 trustees decrypt only the total, once</span>
           <div class="zv-count">
             <span><b data-yes>2</b> Yes</span>
             <span><b data-no>1</b> No</span>
           </div>
-          <p class="zw-note">Which voter cast which ballot: unknown. The choice decodes by trying 0 and 1.</p>
+          <p class="zw-note">Which voter cast which ballot, and how each one voted: unknown.</p>
         </div>
       </section>
     </div>
@@ -193,15 +208,15 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
     <div class="zw-narr" aria-live="polite">
       <div data-show="1">
         <p class="zw-narr-title">1. Register</p>
-        <p>The organizer collects each voter's public key, <code>Poseidon(secretKey, 0)</code>, builds a Merkle tree and publishes only the root and the election ID. Your secret key stays on your device.</p>
+        <p>The organizer collects each voter's public key, <code>Poseidon(secretKey, 0)</code>, builds a Merkle tree and publishes only the root and the election ID. Three trustees publish the election key that ballots are encrypted to. Your secret key stays on your device.</p>
       </div>
       <div data-show="2">
         <p class="zw-narr-title">2. Prove</p>
-        <p>Your device finds the Merkle path to your key, computes the nullifier and the commitment, and proves that all three come from one key on the list. Switch to <b>Public view</b> to see what leaves the device.</p>
+        <p>Your device computes your nullifier, encrypts your vote to the election key with fresh randomness, and proves three things at once: your key is on the list, the nullifier is yours, and the ballot holds a 0 or a 1. Switch to <b>Public view</b>: the vote never leaves the device in the clear.</p>
       </div>
       <div data-show="3">
         <p class="zw-narr-title">3. Submit</p>
-        <p>The transaction carries the 192-byte proof and four public inputs. The minting policy verifies the proof and mints one token named after the nullifier. The list validator inserts the nullifier between its sorted neighbours.</p>
+        <p>The transaction carries the 192-byte proof and a new list node holding your nullifier and ballot. The minting policy takes the election ID, voter root and election key from its own parameters, the ballot from that node, verifies the proof before the deadline, and mints one token named after the nullifier. The list validator inserts the node between its sorted neighbours.</p>
       </div>
       <div data-show="4">
         <p class="zw-narr-title">4. Vote again</p>
@@ -209,7 +224,7 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
       </div>
       <div data-show="5">
         <p class="zw-narr-title">5. Tally</p>
-        <p>Anyone reads the commitments and counts them, and nobody can tell which voter cast which ballot. In this demo the choice can be decoded by trying 0 and 1, so it gives anonymity, not ballot secrecy (see the note below).</p>
+        <p>After the deadline anyone adds the encrypted ballots, and the trustees decrypt only that total, once, with proofs that they did it honestly. Nobody learns who cast which ballot or how any one voter voted. The encrypted tally walkthrough below shows the count step by step.</p>
       </div>
     </div>
 
@@ -230,7 +245,7 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
     <div class="zw-legend">
       <span><em class="zw-tag secret">SECRET</em> never leaves the voter's device</span>
       <span><em class="zw-tag public">PUBLIC</em> visible to anyone on Cardano</span>
-      <span>Hash values are illustrative.</span>
+      <span>Hash and ballot values are illustrative.</span>
     </div>
   </div>
 </figure>
@@ -240,14 +255,15 @@ const edges = levels.slice(0, 3).flatMap((level, l) =>
 
   document.querySelectorAll<HTMLElement>('.zv').forEach((root) => {
     initWalkthrough(root);
-    const nullifier = root.dataset.nullifier ?? '';
     const setVote = (vote: number) => {
       root.dataset.vote = String(vote);
       root.querySelectorAll('[data-vote-btn]').forEach((b) =>
         b.setAttribute('aria-pressed', String(Number((b as HTMLElement).dataset.voteBtn) === vote)),
       );
-      const commitment = root.querySelector('[data-commitment]');
-      if (commitment) commitment.textContent = fakeHash(`cm:${vote}:${nullifier}`);
+      // A fresh ballot for the new choice (the illustration keeps one randomness per device).
+      const ballot = root.querySelector('[data-ballot]');
+      const k = root.dataset.randomness ?? '';
+      if (ballot) ballot.textContent = `A ${fakeHash(`A:${k}`)} B ${fakeHash(`B:${vote}:${k}`)}`;
       const flip = root.querySelector('[data-vote-flip]');
       if (flip) flip.textContent = vote ? 'No' : 'Yes';
       // voter1 voted yes and voter2 voted no before you.

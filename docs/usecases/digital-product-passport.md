@@ -2,6 +2,16 @@
 
 Prove product compliance without revealing trade secrets. EU-mandated, blockchain-anchored, ZK-verified.
 
+> **Note (2026-10-11): read this with the current demo design.** This study was written before
+> the demo was hardened. The first demo hashed each measurement with a secret that every
+> manufacturer had to hold (and the demo published), so a 16-bit measurement could be recovered
+> by trying every value against the mint datum, and the minting policy let the manufacturer pick
+> its own threshold. A hash hides a value only if the attacker can't try every candidate, and a
+> secret shared by every prover protects nothing. The demo now has the auditor commit each claim
+> with a Pedersen commitment and a fresh 252-bit blinding, and mints an auditor-co-signed,
+> locked passport ([zeroj-usecases ADR-0009](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0009-privacy-and-binding-hardening-of-the-original-demos.md), D1). See the
+> [product passport page](https://zeroj.dev/use-cases/digital-product-passport/) for that design.
+
 ## Table of Contents
 
 - [Overview](#overview)

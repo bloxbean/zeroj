@@ -1,0 +1,368 @@
+---
+// Confidential payroll, step by step: register the tax key -> proved pay run -> payslips recovered
+// from chain -> transfer -> tax view -> under-report cheat. Values follow the zeroj-usecases
+// payroll demo (payroll-data.ts). Hashes and ciphertexts are illustrative stand-ins (fakeHash).
+//
+// Three views: Carol's (an employee), the tax authority's, and the public's. Rows marked
+// data-readers="employee tax" are readable only in those views; the public view masks every
+// data-kind="secret" row through the shared walkthrough CSS.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import {
+  CAROL_SALARY,
+  CASH_OUT,
+  DAVE_SALARY,
+  REPORTED_DEFAULT,
+  TRANSFER,
+  credits,
+  issueProofExists,
+} from './payroll-data';
+
+const taxKey = fakeHash('tax-authority-pk');
+const cCarol = fakeHash(`C:carol:${CAROL_SALARY}`);
+const cDave = fakeHash(`C:dave:${DAVE_SALARY}`);
+const cToDave = fakeHash(`C:dave:${TRANSFER}`);
+const cChange = fakeHash(`C:carol:${CAROL_SALARY - TRANSFER}`);
+const cheatOk = issueProofExists(REPORTED_DEFAULT);
+---
+
+<figure class="zw-frame not-content" aria-label="Confidential payroll, step by step">
+  <div class="zw zpr" data-total="6" data-view="employee" data-honest={cheatOk ? '1' : '0'}>
+    <div class="zw-head">
+      <span class="zw-eyebrow">Confidential payroll · step <b data-counter>1 / 6</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="employee" aria-pressed="true">Carol's view</button>
+          <button type="button" data-view-btn="tax" aria-pressed="false">Tax authority's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- employer -->
+      <section class="zw-actor" data-hl="2,6" aria-label="Employer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Employer</span>
+          <span class="zw-actor-sub">pays salaries</span>
+        </div>
+        <p class="zw-note" data-show="1">Waiting for the tax authority's key.</p>
+        <div class="zw-box" data-show="2-5">
+          <span class="zw-box-title">Pay run</span>
+          <div class="zw-row" data-kind="secret" data-readers="employee tax">
+            <span class="k">carol's salary</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{credits(CAROL_SALARY)}</span><span class="mask">████████</span></span>
+          </div>
+          <div class="zw-row" data-kind="secret" data-readers="tax">
+            <span class="k">dave's salary</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{credits(DAVE_SALARY)}</span><span class="mask">████████</span></span>
+          </div>
+          <span class="zw-check" data-show="2">each amount also encrypted to the tax key, as two 32-bit limbs</span>
+          <div class="zw-proof" data-show="2">
+            <span class="pi">π</span><span>issuance proof</span><small>limbs match each salary</small>
+          </div>
+        </div>
+        <div class="zw-box zpr-cheat" data-show="6">
+          <span class="zw-box-title">Pay carol {credits(CAROL_SALARY)}, but tell the tax authority</span>
+          <div class="zw-row zpr-report" data-kind="public">
+            <span class="k">amount in the limbs</span><em class="zw-tag">CHEAT</em>
+            <span class="v" data-reported-out>{credits(REPORTED_DEFAULT)}</span>
+            <input
+              type="range"
+              min="0"
+              max={CAROL_SALARY}
+              step="100"
+              value={REPORTED_DEFAULT}
+              data-reported
+              aria-label="Amount the employer reports to the tax authority"
+            />
+          </div>
+          <span class={cheatOk ? 'zw-check' : 'zw-check no'} data-proof-out>
+            {cheatOk ? 'limbs match the salary: the proof can be made' : 'limbs ≠ salary: no issuance proof exists'}
+          </span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="2,6" aria-hidden="true">
+        <span class="arrow" data-show="2,6">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">pay run + π</span>
+        <span class="zw-msg" data-show="6">pay run, no π</span>
+      </div>
+
+      <!-- Cardano -->
+      <section class="zw-actor zpr-chain" data-hl="1-4" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">anyone can read it</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-hl="1">
+          <span class="k">registry: tax key PK</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{taxKey}</span>
+        </div>
+        <span class="zw-check" data-show="1">key possession proved on-chain</span>
+        <div class="zw-box" data-show="2-6">
+          <span class="zw-box-title"><code>NoteLedger</code> salary notes</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">owner carol · C</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{cCarol}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">owner dave · C</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{cDave}</span>
+          </div>
+          <span class="zpr-meta">each note also carries: 2 limb ciphertexts for the tax key, and 2 sealed openings (payslip, tax copy)</span>
+          <span class="zw-check" data-show="2">proof valid: the limbs encrypt each committed salary</span>
+        </div>
+        <div class="zw-box" data-show="4-6">
+          <span class="zw-box-title">Transfer</span>
+          <div class="zw-row" data-kind="public">
+            <span class="k">owner dave · C</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{cToDave}</span>
+          </div>
+          <div class="zw-row" data-kind="public">
+            <span class="k">owner carol (change) · C</span><em class="zw-tag">PUBLIC</em>
+            <span class="v">{cChange}</span>
+          </div>
+          <span class="zw-check" data-show="4">proof valid: input = outputs, limbs match</span>
+        </div>
+        <div class="zw-box" data-show="6">
+          <span class={cheatOk ? 'zw-check' : 'zw-check no'} data-chain-out>
+            {cheatOk ? 'honest pay run accepted' : 'no proof to verify: pay run refused, nothing minted'}
+          </span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1,3,4,5" aria-hidden="true">
+        <span class="arrow" data-show="1">←</span>
+        <span class="arrow" data-show="3-5">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">register key</span>
+        <span class="zw-msg" data-show="3">scan</span>
+        <span class="zw-msg" data-show="4">transfer</span>
+        <span class="zw-msg" data-show="5">read limbs</span>
+      </div>
+
+      <!-- employee + tax authority, stacked in the third lane -->
+      <div class="zpr-right">
+        <section class="zw-actor" data-hl="3,4" aria-label="Carol, an employee">
+          <div class="zw-actor-head">
+            <span class="zw-actor-name">Carol</span>
+            <span class="zw-actor-sub">employee</span>
+          </div>
+          <div class="zw-row" data-kind="secret" data-readers="employee">
+            <span class="k">viewing key</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{fakeHash('carol-viewing-key')}</span><span class="mask">████████</span></span>
+          </div>
+          <div class="zw-row" data-kind="secret" data-readers="employee" data-show="3-6" data-hl="3">
+            <span class="k">payslip opened from chain</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{credits(CAROL_SALARY)}</span><span class="mask">████████</span></span>
+          </div>
+          <span class="zw-check" data-show="3" data-when-view="employee">opening recomputes C: the payslip is genuine</span>
+          <div class="zw-row" data-kind="secret" data-readers="employee" data-show="4-6" data-hl="4">
+            <span class="k">sent to dave · change kept</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{credits(TRANSFER)} · {credits(CAROL_SALARY - TRANSFER)}</span><span class="mask">████████</span></span>
+          </div>
+        </section>
+
+        <section class="zw-actor" data-hl="1,5" aria-label="Tax authority">
+          <div class="zw-actor-head">
+            <span class="zw-actor-name">Tax authority</span>
+            <span class="zw-actor-sub">registry auditor</span>
+          </div>
+          <div class="zw-row" data-kind="secret" data-readers="tax">
+            <span class="k">secret key</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real">{fakeHash('tax-authority-sk')}</span><span class="mask">████████</span></span>
+          </div>
+          <div class="zw-box" data-show="5-6">
+            <span class="zw-box-title">Salaries: the pay run's notes, spent or not</span>
+            <div class="zw-row" data-kind="secret" data-readers="tax">
+              <span class="k">carol · pay run</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real">{credits(CAROL_SALARY)}</span><span class="mask">████████</span></span>
+            </div>
+            <div class="zw-row" data-kind="secret" data-readers="tax">
+              <span class="k">dave · pay run</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real">{credits(DAVE_SALARY)}</span><span class="mask">████████</span></span>
+            </div>
+            <span class="zw-check">salary totals count these notes only</span>
+            <span class="zw-box-title">Also readable: notes made by spending</span>
+            <div class="zw-row" data-kind="secret" data-readers="tax">
+              <span class="k">carol → dave</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real">{credits(TRANSFER)}</span><span class="mask">████████</span></span>
+            </div>
+            <div class="zw-row" data-kind="secret" data-readers="tax">
+              <span class="k">carol · change</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real">{credits(CAROL_SALARY - TRANSFER)}</span><span class="mask">████████</span></span>
+            </div>
+            <span class="zw-check">every amount proof-enforced; not added to the salary totals</span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Register the tax key</p>
+        <p>The tax authority publishes an encryption key in an on-chain registry, with a proof that it holds the matching secret key. The payroll ledger reads the key from there, so the employer can't pick its own.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Pay run</p>
+        <p>The employer pays carol {credits(CAROL_SALARY)} and dave {credits(DAVE_SALARY)} in one transaction. Each salary becomes a note: a commitment that hides the amount, the amount encrypted to the tax key in two 32-bit pieces ("limbs"), and two sealed copies of the opening. A zero-knowledge proof shows that the limbs add up to the committed amount. The ledger mints nothing without that proof.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Payslip</p>
+        <p>Carol scans the chain with her viewing key, a key that only opens notes sent to her. She decrypts her payslip and checks that it recomputes the commitment. Switch views: the public sees owners and commitments, never amounts.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Spend</p>
+        <p>Carol sends {credits(TRANSFER)} to dave and keeps {credits(CAROL_SALARY - TRANSFER)} as change. The transfer proof shows the amounts balance and that the new notes' limbs are encrypted to the tax key. She could also cash out {credits(CASH_OUT)} at the employer as a public amount.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Tax view</p>
+        <p>The tax authority decrypts the limbs straight from chain data. Salaries are the notes a pay run minted, counted even after they are spent. Notes minted by a transfer or cash-out are readable too, but they are the same money moving, so adding them would count carol's salary twice. Every note came with a proof, so these are the real amounts, not what the employer chose to report.</p>
+      </div>
+      <div data-show="6">
+        <p class="zw-narr-title">6. Try to under-report</p>
+        <p>The employer pays carol {credits(CAROL_SALARY)} but encrypts a smaller number to the tax authority. The limbs no longer match the committed salary, so no issuance proof exists and the pay run is refused. Drag the slider to {credits(CAROL_SALARY)} to make it honest again.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Register</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Pay run</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Payslip</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Spend</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Tax view</button></li>
+        <li><button type="button" data-goto="6"><span>6</span>Cheat</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> readable in this view</span>
+      <span><em class="zw-tag">HIDDEN</em> not readable in this view</span>
+      <span><em class="zw-tag public">PUBLIC</em> on-chain</span>
+      <span>Hashes are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { credits, issueProofExists } from './payroll-data';
+
+  document.querySelectorAll<HTMLElement>('.zpr').forEach((root) => {
+    initWalkthrough(root);
+    const slider = root.querySelector<HTMLInputElement>('[data-reported]');
+    const chain = root.querySelector<HTMLElement>('.zpr-chain');
+
+    // The refusal lights up on step 6 only while the reported amount differs from the salary.
+    const syncRefusal = () => {
+      const bad = root.dataset.step === '6' && root.dataset.honest === '0';
+      chain?.toggleAttribute('data-bad-on', bad);
+    };
+
+    const setReported = (reported: number) => {
+      const ok = issueProofExists(reported);
+      root.dataset.honest = ok ? '1' : '0';
+      const out = root.querySelector('[data-reported-out]');
+      if (out) out.textContent = credits(reported);
+      const proof = root.querySelector<HTMLElement>('[data-proof-out]');
+      if (proof) {
+        proof.textContent = ok
+          ? 'limbs match the salary: the proof can be made'
+          : 'limbs ≠ salary: no issuance proof exists';
+        proof.classList.toggle('no', !ok);
+      }
+      const verdict = root.querySelector<HTMLElement>('[data-chain-out]');
+      if (verdict) {
+        verdict.textContent = ok ? 'honest pay run accepted' : 'no proof to verify: pay run refused, nothing minted';
+        verdict.classList.toggle('no', !ok);
+      }
+      syncRefusal();
+    };
+
+    slider?.addEventListener('input', () => setReported(Number(slider.value)));
+    root.addEventListener('zw:step', syncRefusal);
+    if (slider) setReported(Number(slider.value));
+  });
+</script>
+
+<style>
+  .zpr-right {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75em;
+    min-width: 0;
+  }
+
+  .zpr-meta {
+    font-size: 0.74em;
+    color: var(--zw-muted);
+  }
+
+  .zpr-report input[type='range'] {
+    flex-basis: 100%;
+    width: 100%;
+    margin: 0.35em 0 0.1em;
+    accent-color: var(--zw-bad);
+    cursor: pointer;
+  }
+
+  .zpr-report > .zw-tag {
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border: 1px solid color-mix(in srgb, var(--zw-bad) 40%, transparent);
+  }
+
+  .zw[data-honest='1'] .zpr-report > .zw-tag {
+    color: var(--zw-public);
+    background: transparent;
+    border-color: var(--zw-line);
+  }
+
+  /* Carol's and the tax authority's views: a secret row is readable only when its data-readers
+     names the viewer; otherwise it is masked like the public view masks every secret. */
+  .zw[data-view='employee'] [data-readers]:not([data-readers~='employee']) .real,
+  .zw[data-view='tax'] [data-readers]:not([data-readers~='tax']) .real,
+  .zw[data-view='employee'] [data-readers]:not([data-readers~='employee']) > .zw-tag .vis,
+  .zw[data-view='tax'] [data-readers]:not([data-readers~='tax']) > .zw-tag .vis {
+    display: none;
+  }
+
+  .zw[data-view='employee'] [data-readers]:not([data-readers~='employee']) .mask,
+  .zw[data-view='tax'] [data-readers]:not([data-readers~='tax']) .mask,
+  .zw[data-view='employee'] [data-readers]:not([data-readers~='employee']) > .zw-tag .hid,
+  .zw[data-view='tax'] [data-readers]:not([data-readers~='tax']) > .zw-tag .hid {
+    display: inline;
+  }
+
+  .zw[data-view='employee'] [data-readers]:not([data-readers~='employee']) .mask,
+  .zw[data-view='tax'] [data-readers]:not([data-readers~='tax']) .mask {
+    letter-spacing: -1px;
+    color: var(--zw-secret);
+    opacity: 0.6;
+  }
+
+  .zw[data-view='employee'] [data-readers]:not([data-readers~='employee']) > .zw-tag,
+  .zw[data-view='tax'] [data-readers]:not([data-readers~='tax']) > .zw-tag {
+    color: var(--zw-muted);
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--zw-line);
+  }
+
+  /* The "opening recomputes C" check is Carol's own; hide it from the other views. */
+  .zw:not([data-view='employee']) [data-when-view='employee'] {
+    display: none;
+  }
+
+  .zw[data-step='1'] .zpr-chain + .zw-wire .zw-wire-line::after {
+    animation-name: zw-travel-left;
+  }
+</style>

@@ -148,7 +148,8 @@ the public commitment. Sample it with `PedersenCommitment.randomBlinding(SecureR
 complete commitment with both coordinates bound as public inputs costs 2,410 constraints for a
 64-bit value and 4,042 for a 252-bit value. A value narrower than 252 bits is canonical by its own
 range, so only full-width values pay for the comparator. The profile is specified in
-`docs/specs/pedersen-jubjub-v1.md`.
+`docs/specs/pedersen-jubjub-v1.md`. For a step-by-step introduction with runnable programs, see
+[Pedersen commitments](/guides/confidential/pedersen/).
 
 **Commitments the circuit did not compute.** `ZkPedersenCommitment` is a typed commitment
 that records where a point came from. Use `ZkPedersenCommitment.commit(...)` for commitments
@@ -248,7 +249,9 @@ affected. The normative scheme is
 `elgamal-jubjub-v1` is exponential ("lifted") ElGamal on Jubjub. A message `m` becomes
 `A = [k]·G`, `B = [m]·G + [k]·PK`. Ciphertexts under one key add up to an encryption of the sum,
 so you can total encrypted votes, bids or survey answers and decrypt only the total. The profile
-is specified in `docs/specs/elgamal-jubjub-v1.md` (ADR-0052). It is **experimental**.
+is specified in `docs/specs/elgamal-jubjub-v1.md` (ADR-0052). It is **experimental**. The
+host-side guides are [ElGamal encryption](/guides/confidential/elgamal/) and
+[Threshold decryption](/guides/confidential/threshold-elgamal/).
 
 **Proving a ciphertext is well formed.** The circuit side proves that a public ciphertext
 encrypts an in-range message under a key:
@@ -273,7 +276,8 @@ void prove(ZkContext zk,
   (`fromVerifierFixedPublic`; the verifier checks subgroup membership), or as a witness proved
   in the subgroup (`witnessInSubgroup`). Both refuse the identity key.
 
-Cost: 6,558 constraints at width 1, and 6,938 at width 64.
+Cost: 6,558 constraints at width 1, 6,650 at width 16 and 6,938 at width 64 with a
+verifier-fixed key; a key witnessed in the subgroup raises it to 12,105.
 
 **Trustee proofs.** `ZkElGamal.assertDiscreteLogEquality(zk, x, X…, P…, D…)` proves
 `P = [x]·G` and `D = [x]·X` (6,546 constraints). All six coordinates must be public inputs, so
@@ -369,7 +373,7 @@ spec `docs/specs/dkg-share-delivery-hpke-v1.md`.
 itself, to each of its readers: the owner, and any auditors the application requires. It uses
 Zcash Sapling's key agreement on Jubjub, its BLAKE2b-256 KDF (with ZeroJ's personalization) and
 ChaCha20-Poly1305, with a fresh ephemeral key per reader. Recipients and auditors recover every
-note from chain data alone.
+note from chain data alone. See [Confidential notes](/guides/confidential/confidential-notes/).
 
 ```java
 // Sender: one delivery per reader, in the application's order (owner first, then auditors).
@@ -455,7 +459,8 @@ authorization or replay rules.
 | Merkle membership | Hash-dependent | Ready with the params-aware Poseidon helpers |
 | MiMC, MiMC sponge | BN254 only | Not Cardano-ready |
 | Jubjub point arithmetic | BLS12-381 only | Ready for algebraic and public-data use, pending external review |
-| Pedersen commitment (in-circuit) | BLS12-381 only | Ready, pending external review |
+| Pedersen commitment (in-circuit, `ZkPedersen`) | BLS12-381 only | Ready, pending external review |
+| Pedersen homomorphic API (`ZkPedersenCommitment`, `ZkPedersen.assertBalanced`) and vector commitments (`ZkPedersenVector`) | BLS12-381 only | Experimental |
 | Pedersen commitment (off-circuit generation) | Jubjub | Offline or isolated use only |
 | EdDSA-Jubjub | BLS12-381 only | Verification ready pending external review; legacy signing offline only |
 | ElGamal encryption and trustee proofs (in-circuit) | BLS12-381 only | Experimental |
@@ -486,5 +491,7 @@ The authoritative, detailed table is in the
 ## Next steps
 
 - [Test your circuits for soundness](/guides/circuits/testing-circuits/)
+- [Commitments & encryption, explained](/learn/commitments-and-encryption/) and
+  [Choose how to disclose](/selective-disclosure/)
 - [Private allowlist with a Merkle tree](/tutorials/private-allowlist/)
 - [Prove with Groth16](/guides/proving/groth16/)

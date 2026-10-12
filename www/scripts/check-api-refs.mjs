@@ -165,6 +165,9 @@ for (const b of blocks) {
     }
     const entries = byName.get(type);
     if (!entries || docTypes.has(type) || EXTERNAL.has(type)) continue;
+    // The block imports a non-ZeroJ type with this simple name (java.security.Signature, say), so a
+    // ZeroJ type that shares the name isn't the one in use.
+    if (imported.has(type) && !imported.get(type).startsWith('org.zeroj.')) continue;
     if (member === 'class' || member === 'length') continue;
     if (!declares(entries, member)) {
       // Enum constants/nested types declared in a nested type with the same simple name are covered by

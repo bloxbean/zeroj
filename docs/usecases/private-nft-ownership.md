@@ -2,6 +2,14 @@
 
 Prove you own an NFT without revealing your wallet address.
 
+> **Note (2026-10-11): two pitfalls fixed in the demo.** (1) A nullifier built only from public
+> values, such as `Poseidon(nft_id, context)`, can be recomputed for every token in the
+> collection, so it reveals which NFT (and wallet) was used: include a holder secret, as the demo
+> now does with `Poseidon(Poseidon(secret, tokenName), contextId)`. (2) The on-chain list must
+> admit exactly the nullifier the proof attests, or one proof can be reused. The scenarios below
+> that use `Poseidon(nft_id, …)` need the same change. See [zeroj-usecases ADR-0009](https://github.com/bloxbean/zeroj-usecases/blob/main/docs/adr/0009-privacy-and-binding-hardening-of-the-original-demos.md), D2, and the
+> [NFT ownership page](https://zeroj.dev/use-cases/nft-ownership/).
+
 ## Table of Contents
 
 - [Overview](#overview)

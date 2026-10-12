@@ -21,15 +21,15 @@ balances. Stablecoin issuers, bridges, lending protocols and DAO treasuries face
 non-negative, add up to exactly this total, and that total is covered by our reserves", without
 revealing any balance.**
 
-Each customer account becomes a leaf `Poseidon(accountId, balance)` in a Merkle tree, and the root
-is published. The circuit rebuilds the whole tree from the private balances, so the root commits to
-exactly the numbers being summed. The custodian can't sum one set of balances and publish another.
-Every balance is a 64-bit unsigned integer, and range checks rule out a negative "balance" that
-would quietly shrink the total.
+Each customer account becomes a leaf in a Merkle tree, and the root is published. The circuit
+rebuilds the whole tree from the private balances, so the root commits to exactly the numbers being
+summed. The custodian can't sum one set of balances and publish another. Every balance is a 64-bit
+unsigned integer, and range checks rule out a negative "balance" that would quietly shrink the
+total.
 
-Customers close the loop. Each gets the Merkle path for their own leaf and checks that it hashes up
-to the published root. If the custodian left someone out or understated a balance, that customer
-can tell.
+Customers close the loop. Each gets the Merkle path for their own leaf, recomputes the root, and
+compares it with the attestation on the chain. If the custodian left someone out or understated a
+balance, that customer can tell.
 
 :::caution[Reserves are claimed, not proven]
 In this design `totalReserves` is a public input the custodian supplies. The circuit proves
@@ -38,41 +38,69 @@ check reserves held at known addresses directly; off-chain reserves need an atte
 you trust.
 :::
 
+### Why the leaves are salted
+
+A customer's Merkle path contains other customers' leaves: the sibling next to their own leaf is a
+neighbour's. If a leaf were just `Poseidon(accountId, balance)`, a customer who can guess the
+neighbour's id could hash every plausible balance until one matched the sibling, and so learn the
+neighbour's balance. The demo's leaves used to work that way.
+
+Now every account gets a fresh 252-bit salt in every snapshot, and the leaf is
+
+```text
+leaf = Poseidon(Poseidon(idTag, salt), balance)
+```
+
+where `idTag` is a fixed Poseidon encoding of the account id. A neighbour who doesn't know the
+salt has nothing small left to guess. Unused slots get a random id and balance 0, so they look like any other leaf.
+
 ## What stays private, what's public
 
 | Input | Visibility | Why |
 |---|---|---|
-| `accountIds` | Secret | Customer identities stay private |
+| `accountIds` | Secret | Each is the salted id `Poseidon(idTag, salt)`, so identities stay private and leaves can't be guessed |
 | `balances` | Secret | Individual balances; each is range-checked to 64 bits |
 | `totalReserves` | Public | The custodian's claimed reserves, which must be checked independently |
 | `liabilitiesRoot` | Public | Commits to every leaf; customers check their inclusion against it |
 | `totalLiabilities` | Public | The exact sum of all balances |
-| `isSolvent` | Public | Proven equal to `totalReserves ≥ totalLiabilities`; the validator requires 1 |
+| `isSolvent` | Public | Proven equal to `totalReserves ≥ totalLiabilities`; the minting policy fixes it to 1 |
 
 ## How it works
 
-1. **Snapshot.** The custodian takes the customer balances at a point in time and builds the
-   Poseidon Merkle tree.
+1. **Snapshot.** The custodian takes the customer balances at a point in time, draws a fresh salt
+   for every account and builds the Poseidon Merkle tree.
 2. **Prove.** It generates a Groth16 proof over the private balances with the four public inputs
    above.
-3. **Attest on-chain.** It locks an attestation UTxO whose datum holds the public inputs. Spending
-   it with the proof runs the verifier on-chain. An insolvent claim can't pass.
-4. **Customers verify.** Each customer receives their Merkle path and checks their leaf against
-   `liabilitiesRoot`, off-chain, whenever they like.
-5. **Repeat.** A fresh proof every period keeps the attestation current.
+3. **Attest on-chain.** It mints this period's attestation token into an output at the attestation
+   script's address. The minting policy verifies the proof against the values in that output's
+   datum, so an insolvent claim can't mint.
+4. **Customers verify.** Each customer receives their salt, balance and Merkle path, recomputes the
+   root in their browser, reads the attestation from the chain, and compares the two.
+5. **Repeat.** Each period gets new salts, a new proof and its own token.
 
 ```text
-custodian (private)                  public
-───────────────────                  ──────
-16 × (accountId, balance)  ─prove─▶  datum: [totalReserves, liabilitiesRoot, totalLiabilities, isSolvent=1]
-                                     redeemer: Groth16 proof
-customer: my leaf + Merkle path ───▶ hashes up to liabilitiesRoot? ✓
+custodian (private)                        public
+───────────────────                        ──────
+16 × (salted id, balance)  ─prove─▶  mint token I2OSP8(p), locked at the script address
+(8 accounts + 8 random padding)
+                                     datum: Attestation(p, liabilitiesRoot, totalLiabilities, totalReserves)
+                                     redeemer: Groth16 proof, checked against the datum with isSolvent = 1
+customer: salt + leaf + path ──────▶ root from the chain indexer = my root? ✓
 ```
+
+:::tip[Hide the total too]
+This design publishes `totalLiabilities`. If the total is sensitive as well,
+[Proof of solvency with hidden balances](/use-cases/private-solvency/) commits to each balance with
+a Pedersen commitment, proves the hidden total fits under reserves locked for an attestation period,
+and lets each customer open their own entry from an encrypted on-chain delivery. An auditor opens
+only the total.
+:::
 
 ## The circuit
 
 This is simplified from the demo's `SolvencyProof`: constructor validation is trimmed, and the demo
-requires `numLeaves == 1 << treeDepth`.
+requires `numLeaves == 1 << treeDepth`. Salting didn't change the circuit. Its `accountIds` witness
+now holds the salted ids, so the existing keys still work.
 
 ```java title="SolvencyProof.java"
 import org.zeroj.circuit.annotation.*;
@@ -132,16 +160,45 @@ of accounts needs a much larger circuit or a batching scheme, and proving cost g
 
 ## On Cardano
 
-The demo's `ReserveAttestationValidator` is a Plutus V3 spending validator written with JuLC. Its
-datum is the list `[totalReserves, liabilitiesRoot, totalLiabilities, isSolvent]`, its redeemer is
-the proof `(piA, piB, piC)`, and it calls `Groth16BLS12381Lib.verify(datum, …)` from
-`zeroj-onchain-julc` with the verification key baked in as script parameters. It also requires
-`isSolvent == 1`, so an honest proof of insolvency is rejected.
+An attestation is a **minted, locked token**. The demo's `ReserveAttestation` is one JuLC
+multi-validator that is both the attestation's minting policy and its script address. Its
+parameters are the custodian's key hash, the period clock (`genesisMs`, `periodMs`) and the
+verification key. Period `p` covers `[genesisMs + p·periodMs, genesisMs + (p+1)·periodMs)`; the demo
+uses five-minute periods.
 
-A valid proof is not authorization. This demo validator checks the math and the solvency flag,
-nothing else. A real attestation also has to bind who is attesting (the custodian's signature),
-when (a period or slot as a public input, checked against the transaction's validity range, so an
-old proof can't be replayed) and where the reserves figure comes from. See
+- **Mint (attest).** The custodian signs. The mint is exactly one token named `I2OSP8(p)` (the
+  period as 8 bytes), sent to the single output at the script's own enterprise address (payment
+  credential, no stake credential). That output holds only ADA and the token, carries no reference
+  script, and has the inline datum
+  `Attestation(period, liabilitiesRoot, totalLiabilities, totalReserves)`. The redeemer is the
+  proof, which must verify against `[totalReserves, liabilitiesRoot, totalLiabilities, 1]` read from
+  that datum. An honest proof of insolvency has `isSolvent = 0`, so it can't mint.
+- **Spend (release).** The only spend is a custodian-signed burn of that token, after the period has
+  ended. The datum can't change while the token exists.
+
+Why a token? The demo used to lock a plain UTxO with the four public inputs in its datum and check
+the proof only when someone spent it. Anyone can create a UTxO with any datum, so a datum alone
+proved nothing. Now readers look only for the token, and the token can't exist without a proof over
+its own datum.
+
+**One per period.** The script doesn't stop the custodian minting a second token for the same
+period, but every mint is visible. The demo's custodian service refuses a second attestation for a
+period itself (HTTP 409), and the customer check reads the token's whole mint history from the
+chain indexer and refuses a period unless it shows exactly one mint and no burn. Without that check,
+a custodian could split its liabilities across several trees against the same reserves.
+
+The mint also doesn't check the transaction's validity range. Only the burn checks time. So a
+custodian can mint a future period's token in advance, from today's tree. The customer check looks
+only at the current period, so when that period arrives it is checked against the old tree.
+
+**Checking against the chain, not the custodian.** The customer page gets its salt, balance, leaf
+index and path from the custodian, and recomputes the root in the browser. It then finds the current
+period's token under the known policy id through the chain indexer (Yaci Store), not through the
+custodian's API, and compares the attested root with its own. The customer also compares the
+balance with their own records.
+
+A valid proof is still not the whole story. The proof checks the sum of the balances the custodian
+put in the tree. It doesn't check that those balances are true, or that the reserves exist. See
 [Application security](/guides/verifying/application-security/).
 
 :::caution[Experimental PlonK variant]
@@ -152,15 +209,25 @@ PlonK is experimental in ZeroJ and not a recommended path; use Groth16.
 
 ## Security considerations
 
-- **Reserves need their own evidence.** Check on-chain holdings directly, or rely on an attestation
-  you trust. Watch for reserves borrowed just for the snapshot. Proving over several periods, or at
-  unpredictable times, makes that harder.
-- **Omissions are only caught by customers.** The proof covers the accounts in the tree. If few
-  customers check their inclusion, a missing account can go unnoticed. Make checking easy.
-- **Freshness and replay.** Put the snapshot period in the public inputs and enforce it on-chain.
-- **Salt the leaves.** An inclusion path contains neighbouring leaf hashes. If account IDs are
-  guessable and balances fall in a small range, `Poseidon(accountId, balance)` can be brute-forced.
-  A per-account random salt in the leaf prevents that.
+- **Reserves are custodian-declared.** `totalReserves` is whatever the custodian puts in the datum;
+  the demo doesn't check it against on-chain holdings. Check holdings directly, or rely on an
+  attestation you trust. Watch for reserves borrowed just for the snapshot. Proving over several
+  periods, or at unpredictable times, makes that harder.
+- **The proof checks the sum, not the balances.** The custodian chooses the balances in the tree.
+  Omissions and understated balances are only caught by customers who check. Make checking easy.
+- **The proof isn't bound to its period.** The period is in the token name and datum, not in the
+  proof's public inputs, and the mint doesn't check the validity range. A custodian could re-attest
+  an old solvent tree (the same root, liabilities and reserves) for a new period, or mint a future
+  period's token in advance. Customers would then see old balances, so comparing the balance
+  with their own records is what catches it. A real design puts the period in the public inputs.
+- **Trust the indexer and the page.** The customer trusts the indexer they point the page at. In the
+  demo the custodian serves the customer page, and the policy id and clock it pins on first load come
+  from the custodian. A real customer takes them from a published, independent source and runs the
+  check from code they trust, such as a wallet or a third-party page.
+- **Operator view.** The demo server is the custodian. It holds every balance, every salt and the
+  custodian key, and its `/accounts` and `/verify/{id}` endpoints answer anyone. That's the demo
+  operator's view; a real custodian gives each customer only their own inclusion data, after
+  authenticating. Privacy in the demo holds against chain observers, not against the demo server.
 - **Trusted setup.** The demo uses a single-party development setup. Production keys come from a
   multi-party ceremony ([Trusted setup, explained](/learn/trusted-setup/)).
 
@@ -175,9 +242,13 @@ Yaci DevKit running (see [Run the demos](/use-cases/overview/#run-the-demos)):
 ```
 
 `--run` builds the liabilities tree over the demo accounts and proves solvency against 10,000 ADA of
-declared reserves. The proof is verified on-chain. In the UI you can add accounts, try a reserve
-figure below total liabilities to see the attestation rejected and verify a single account's
-inclusion. The first start generates a development setup cache, which can take a few minutes.
+declared reserves, and mints the current period's attestation token, whose minting policy verifies
+the proof. In the UI you can add accounts, try a reserve figure below total liabilities to see the
+attestation refused, try a second attestation in the same period (the demo server refuses it, and the customer page
+would refuse the period too), and run a customer's
+inclusion check against the chain. The first start generates a development setup cache and a
+random custodian key, which can take a few minutes. `./demo.sh proof-of-reserves --clean-cache`
+removes the key, the deployment state and the attested snapshot together.
 
 Design notes:
 [Proof of reserves — detailed design](https://github.com/bloxbean/zeroj/blob/main/docs/usecases/proof-of-reserves.md)
@@ -190,3 +261,5 @@ Design notes:
 - [Verify your proof on Cardano](/tutorials/verify-on-cardano/): lock and unlock with a proof on
   Yaci DevKit
 - [Performance](/guides/proving/performance/): sizing larger circuits
+- [Proof of solvency with hidden balances](/use-cases/private-solvency/): the same question with
+  Pedersen commitments, hiding the total as well

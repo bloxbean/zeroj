@@ -1,0 +1,259 @@
+---
+// Why a ballot must be encrypted, step by step: hash the vote -> add a salt -> encrypt it.
+// An observer tries both possible votes against the public ballot, and a counter tries to tally.
+// Hash and ciphertext values are illustrative stand-ins (fakeHash), not Poseidon outputs or Jubjub
+// points; what each step shows (a match, no match, a fresh ciphertext) is the real behaviour.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+
+const nullifier = fakeHash('nf:voter3:dao-proposal-1');
+const salt = fakeHash('salt:voter3');
+const hashBallot = (v: number) => fakeHash(`h:${v}:${nullifier}`);
+const saltedBallot = (v: number) => fakeHash(`hs:${v}:${nullifier}:${salt}`);
+const cipherA = (k: number) => fakeHash(`A:${k}`);
+const cipherB = (v: number, k: number) => fakeHash(`B:${v}:${k}`);
+const K0 = 7;
+---
+
+<figure class="zw-frame not-content" aria-label="Can anyone read the vote? Three ballot designs">
+  <div
+    class="zw zbp"
+    data-total="3"
+    data-view="insider"
+    data-vote="1"
+    data-k={K0}
+    data-nullifier={nullifier}
+    data-salt={salt}
+  >
+    <div class="zw-head">
+      <span class="zw-eyebrow">Can anyone read the vote? · step <b data-counter>1 / 3</b></span>
+      <div class="zw-tools">
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- voter -->
+      <section class="zw-actor" aria-label="Voter">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">voter3</span>
+          <span class="zw-actor-sub">casts a ballot</span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">vote</span><em class="zw-tag">SECRET</em>
+          <span class="v">
+            <span class="zw-choice" role="group" aria-label="voter3's vote">
+              <button type="button" data-vote-btn="1" aria-pressed="true">Yes</button>
+              <button type="button" data-vote-btn="0" aria-pressed="false">No</button>
+            </span>
+          </span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="2">
+          <span class="k">salt (random)</span><em class="zw-tag">SECRET</em>
+          <span class="v">{salt}</span>
+        </div>
+        <div class="zw-row" data-kind="secret" data-show="3">
+          <span class="k">randomness k (fresh, 252 bits)</span><em class="zw-tag">SECRET</em>
+          <span class="v" data-k-out>{fakeHash(`k:${K0}`)}</span>
+          <button type="button" class="zw-btn zbp-roll" data-roll>Encrypt again</button>
+        </div>
+        <p class="zw-note">Pick a vote, then see what the observer can do with the public ballot.</p>
+      </section>
+
+      <div class="zw-wire" aria-hidden="true">
+        <span class="arrow">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg">ballot</span>
+      </div>
+
+      <!-- public ledger -->
+      <section class="zw-actor" aria-label="On-chain">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">On-chain</span>
+          <span class="zw-actor-sub">anyone can read it</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">nullifier N</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{nullifier}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="1">
+          <span class="k">ballot = Poseidon(vote, N)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-hash-out>{hashBallot(1)}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="2">
+          <span class="k">ballot = Poseidon(vote, N, salt)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-salted-out>{saltedBallot(1)}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="3">
+          <span class="k">ballot A = [k]·G</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-a-out>{cipherA(K0)}</span>
+        </div>
+        <div class="zw-row" data-kind="public" data-show="3">
+          <span class="k">ballot B = [vote]·G + [k]·PK</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-b-out>{cipherB(1, K0)}</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" aria-hidden="true">
+        <span class="arrow">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg">try 0 and 1</span>
+      </div>
+
+      <!-- observer -->
+      <section class="zw-actor" data-bad="1" aria-label="Observer">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Observer</span>
+          <span class="zw-actor-sub">a vote buyer, an employer, anyone</span>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Guess the vote</span>
+          <div data-show="1">
+            <span class="zw-check" data-guess-h="0">Poseidon(0, N) = {hashBallot(0)}</span>
+            <span class="zw-check" data-guess-h="1">Poseidon(1, N) = {hashBallot(1)}</span>
+          </div>
+          <div data-show="2">
+            <span class="zw-check no">Poseidon(0, N, ?) — the salt is secret</span>
+            <span class="zw-check no">Poseidon(1, N, ?) — the salt is secret</span>
+          </div>
+          <div data-show="3">
+            <span class="zw-check no" data-guess-e="0">encrypt 0 myself: B = {cipherB(0, 1001)} — no match</span>
+            <span class="zw-check no" data-guess-e="1">encrypt 1 myself: B = {cipherB(1, 1002)} — no match</span>
+          </div>
+          <p class="zw-note zbp-verdict" data-verdict>Match found: voter3 voted Yes.</p>
+        </div>
+        <div class="zw-box">
+          <span class="zw-box-title">Count the votes</span>
+          <span class="zw-check warn" data-show="1">anyone can, by guessing every ballot: that's the problem</span>
+          <span class="zw-check no" data-show="2">nobody can, until every voter reveals their salt, and with it their vote</span>
+          <span class="zw-check" data-show="3">ciphertexts add up; the trustees decrypt only the total</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Hash the vote</p>
+        <p>The first version of the demo stored <code>Poseidon(vote, N)</code>. The hash can't be undone, but it doesn't need to be: <code>N</code> is public and a vote is only 0 or 1, so an observer hashes both and compares. One always matches. Flip the vote and try again. A hash hides a value only when there are too many possible values to try.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Add a salt</p>
+        <p>Mixing in a secret random salt stops the guessing, because the observer can't compute the hash without it. But now nobody can count either. To tally, every voter has to come back and reveal their salt, which reveals their vote at the end, and anyone who doesn't come back isn't counted.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Encrypt it</p>
+        <p>The demo encrypts the vote with exponential ElGamal to a key the trustees hold together. Each ballot uses fresh randomness <code>k</code>, so encrypting 0 or 1 yourself never reproduces it. Press <b>Encrypt again</b>: same vote, a completely different ballot. And ElGamal ciphertexts add up, so the chain can total the ballots and the trustees decrypt only the sum.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Hash</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Salt</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Encrypt</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> only the voter knows it</span>
+      <span><em class="zw-tag public">PUBLIC</em> anyone can see it</span>
+      <span>Hash and point values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough, fakeHash } from './engine';
+
+  document.querySelectorAll<HTMLElement>('.zbp').forEach((root) => {
+    initWalkthrough(root);
+    const nullifier = root.dataset.nullifier ?? '';
+    const salt = root.dataset.salt ?? '';
+    let vote = 1;
+    let k = Number(root.dataset.k ?? 7);
+    let guesses = 1000;
+    const set = (sel: string, text: string) => {
+      const el = root.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+
+    const render = () => {
+      const step = root.dataset.step;
+      set('[data-hash-out]', fakeHash(`h:${vote}:${nullifier}`));
+      set('[data-salted-out]', fakeHash(`hs:${vote}:${nullifier}:${salt}`));
+      set('[data-k-out]', fakeHash(`k:${k}`));
+      set('[data-a-out]', fakeHash(`A:${k}`));
+      set('[data-b-out]', fakeHash(`B:${vote}:${k}`));
+      // Step 1: the guess that equals the ballot gets a tick, the other a cross.
+      root.querySelectorAll<HTMLElement>('[data-guess-h]').forEach((el) => {
+        const g = Number(el.dataset.guessH);
+        const match = g === vote;
+        el.textContent = `Poseidon(${g}, N) = ${fakeHash(`h:${g}:${nullifier}`)} — ${match ? 'match' : 'no match'}`;
+        el.classList.toggle('no', !match);
+      });
+      // Step 3: the observer's own encryptions use their own randomness, so neither matches.
+      root.querySelectorAll<HTMLElement>('[data-guess-e]').forEach((el) => {
+        const g = Number(el.dataset.guessE);
+        el.textContent = `encrypt ${g} myself: B = ${fakeHash(`B:${g}:${guesses + g}`)} — no match`;
+      });
+      const verdict = root.querySelector<HTMLElement>('[data-verdict]');
+      if (verdict) {
+        verdict.textContent =
+          step === '1'
+            ? `Match found: voter3 voted ${vote ? 'Yes' : 'No'}.`
+            : step === '2'
+              ? 'No match possible without the salt.'
+              : 'No match: the ballot reveals nothing without the trustees.';
+        verdict.classList.toggle('bad', step === '1');
+      }
+    };
+
+    root.querySelectorAll<HTMLButtonElement>('[data-vote-btn]').forEach((b, _, all) =>
+      b.addEventListener('click', () => {
+        vote = Number(b.dataset.voteBtn);
+        all.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        guesses += 2;
+        render();
+      }),
+    );
+    root.querySelector('[data-roll]')?.addEventListener('click', () => {
+      k = crypto.getRandomValues(new Uint32Array(1))[0];
+      guesses += 2;
+      render();
+    });
+    root.addEventListener('zw:step', render);
+    render();
+  });
+</script>
+
+<style>
+  .zbp-roll {
+    flex: 0 0 auto;
+    margin-top: 0.3em;
+    padding: 0.2em 0.65em;
+    font-size: 0.75em;
+    white-space: nowrap;
+  }
+
+  .zbp .zw-box > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+  }
+
+  .zbp-verdict {
+    margin: 0.2em 0 0;
+    font-weight: 600;
+  }
+
+  .zbp-verdict.bad {
+    padding: 0.4em 0.55em;
+    color: var(--zw-bad-ink);
+    background: var(--zw-bad-bg);
+    border-radius: 8px;
+  }
+</style>

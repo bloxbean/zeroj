@@ -1,0 +1,320 @@
+---
+// Encrypted ballots and a homomorphic tally, step by step (zeroj-usecases PR #8, ADR-0005):
+// election key -> encrypted votes -> double vote refused -> encrypted sum -> decryption shares ->
+// result. The demo's election key is n-of-n: every trustee must post a share.
+import './walkthrough.css';
+import { fakeHash } from './engine';
+import { TRUSTEES, VOTERS, ballotLabel, nullifierLabel, shareLabel, sumLabel, yesCount } from './tally-data';
+
+const votes = VOTERS.map((v) => v.vote);
+const yes = yesCount(votes);
+const electionKey = fakeHash('election-key:PK1+PK2+PK3');
+---
+
+<figure class="zw-frame not-content" aria-label="An encrypted tally, step by step">
+  <div class="zw ztl" data-total="6" data-view="insider" data-absent="0">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Encrypted tally · step <b data-counter>1 / 6</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Voters' view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+
+    <div class="zw-stage">
+      <!-- voters -->
+      <section class="zw-actor" data-hl="2,3" data-bad="3" aria-label="Voters">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Voters</span>
+          <span class="zw-actor-sub" data-when="insider">each knows only their own vote</span>
+          <span class="zw-actor-sub" data-when="public">identities and choices hidden</span>
+        </div>
+        <p class="zw-note" data-show="1">Each voter holds an eligibility secret. Its key is a leaf in the voter tree.</p>
+        {VOTERS.map((v, i) => (
+          <div class="zw-row ztl-voter" data-kind="secret" data-show="2-6">
+            <span class="k">{v.id}</span>
+            <span class="zw-choice" role="group" aria-label={`${v.id}'s vote`} data-when="insider">
+              <button type="button" data-vote={i} data-value="1" aria-pressed={v.vote === 1 ? 'true' : 'false'}>YES</button>
+              <button type="button" data-vote={i} data-value="0" aria-pressed={v.vote === 0 ? 'true' : 'false'}>NO</button>
+            </span>
+            <em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+            <span class="v"><span class="real" data-vote-out={i}>{v.vote ? 'YES' : 'NO'}</span><span class="mask">████</span></span>
+          </div>
+        ))}
+        <div class="zw-proof" data-show="2">
+          <span class="pi">π</span><span>eligible · my nullifier · encrypts 0 or 1</span><small>one per ballot</small>
+        </div>
+        <span class="zw-check no" data-show="3">voter1 votes again: same secret, same nullifier</span>
+      </section>
+
+      <div class="zw-wire" data-hl="2,3" data-bad="3" aria-hidden="true">
+        <span class="arrow" data-show="2-3">→</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="2">ballot + π</span>
+        <span class="zw-msg" data-show="3">second ballot</span>
+      </div>
+
+      <!-- chain -->
+      <section class="zw-actor" data-hl="1,2,4,6" data-bad="3" aria-label="Cardano">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Cardano</span>
+          <span class="zw-actor-sub">ballot policy + vote list</span>
+        </div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">election key PK = PK₁ + PK₂ + PK₃</span><em class="zw-tag">PUBLIC</em>
+          <span class="v">{electionKey}</span>
+        </div>
+        <div class="zw-box" data-show="2-6">
+          <span class="zw-box-title">Vote list (one node per nullifier)</span>
+          <ul class="ztl-ballots">
+            {VOTERS.map((v, i) => (
+              <li>
+                <span class="n">N = {nullifierLabel(v.id)}</span>
+                <span class="c">(A, B) = <b data-ballot-out={i}>{ballotLabel(v.id, v.vote)}</b></span>
+              </li>
+            ))}
+          </ul>
+          <span class="zw-check" data-show="2">each proof verified on-chain, before the deadline</span>
+          <span class="zw-check no" data-show="3">nullifier already in the list: second ballot refused</span>
+        </div>
+        <div class="zw-row ztl-sum" data-kind="public" data-show="4-6">
+          <span class="k">encrypted sum (ΣA, ΣB)</span><em class="zw-tag">PUBLIC</em>
+          <span class="v" data-sum-out>{sumLabel(votes)}</span>
+        </div>
+        <p class="zw-note" data-show="4">Adding the ciphertexts adds the votes inside them. Nobody has decrypted anything yet.</p>
+        <div class="zw-box ztl-result" data-show="6">
+          <span class="zw-box-title">Result</span>
+          <span class="ztl-count" data-result-ok>YES <b data-yes-out>{yes}</b> · NO <b data-no-out>{VOTERS.length - yes}</b> · total {VOTERS.length}</span>
+          <span class="zw-check" data-result-ok>ΣB − (D₁ + D₂ + D₃) = [YES]·G, found by a short search</span>
+          <span class="zw-check" data-result-ok>anyone re-checks the shares, the ballots and the count</span>
+          <span class="zw-check no" data-result-missing hidden>a share is missing: the n-of-n key can't decrypt</span>
+        </div>
+      </section>
+
+      <div class="zw-wire" data-hl="1,5" aria-hidden="true">
+        <span class="arrow" data-show="1">←</span>
+        <span class="arrow" data-show="5">←</span>
+        <span class="zw-wire-line"></span>
+        <span class="zw-msg" data-show="1">key shares + proofs</span>
+        <span class="zw-msg" data-show="5">decryption shares</span>
+      </div>
+
+      <!-- trustees -->
+      <section class="zw-actor" data-hl="1,5" aria-label="Trustees">
+        <div class="zw-actor-head">
+          <span class="zw-actor-name">Trustees</span>
+          <span class="zw-actor-sub">n-of-n in the demo</span>
+        </div>
+        {TRUSTEES.map((t, j) => (
+          <div class="zw-box ztl-trustee" data-trustee={j}>
+            <span class="zw-box-title">{t}</span>
+            <div class="zw-row" data-kind="secret">
+              <span class="k">sk{j + 1}</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+              <span class="v"><span class="real">{fakeHash(`sk:${t}`)}</span><span class="mask">████</span></span>
+            </div>
+            <span class="zw-check" data-show="1">publishes PK{j + 1} with a proof it knows sk{j + 1}</span>
+            <span class="zw-check ztl-share" data-show="5-6">D{j + 1} = <code data-share-out={j}>{shareLabel(t, votes)}</code> + proof</span>
+            <span class="zw-check no ztl-absent" data-show="5-6">absent: no share</span>
+          </div>
+        ))}
+        <label class="ztl-toggle" data-show="5-6">
+          <input type="checkbox" data-absent-toggle />
+          <span>Trustee 3 doesn't show up</span>
+        </label>
+      </section>
+    </div>
+
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1">
+        <p class="zw-narr-title">1. Election key</p>
+        <p>Three trustees each make a key pair and publish the public half, with a proof that they know the secret behind it (this stops a trustee choosing a key that cancels the others). The election key is the sum of the three. Nobody holds its secret key.</p>
+      </div>
+      <div data-show="2">
+        <p class="zw-narr-title">2. Encrypted votes</p>
+        <p>Each voter encrypts 0 or 1 to the election key and proves, in zero knowledge, that they are on the voter list, that the nullifier is theirs, and that the ciphertext holds a 0 or a 1, nothing else. The chain sees only ciphertexts. Flip a vote in the voters' view: its ciphertext changes, and the public view stays unreadable.</p>
+      </div>
+      <div data-show="3">
+        <p class="zw-narr-title">3. Vote twice?</p>
+        <p>voter1 tries again. The same secret gives the same nullifier, which is already in the on-chain list, so the second ballot is refused, whatever it encrypts.</p>
+      </div>
+      <div data-show="4">
+        <p class="zw-narr-title">4. Add them up</p>
+        <p>Anyone can add the ciphertexts. The result is one ciphertext of the number of YES votes. No single ballot is ever decrypted, and the running total isn't decrypted before the deadline either.</p>
+      </div>
+      <div data-show="5">
+        <p class="zw-narr-title">5. Decryption shares</p>
+        <p>After the deadline, each trustee applies its secret to the sum, once, and posts the result with a proof that it used the same secret as its registered key. A wrong share fails its proof. In the demo every trustee must take part; tick the box to see what happens when one doesn't.</p>
+      </div>
+      <div data-show="6">
+        <p class="zw-narr-title">6. Result</p>
+        <p>Removing the three shares leaves the YES count as a small curve multiple, found by a quick search. Anyone can redo every check from chain data. Only the total is revealed, never who voted what.</p>
+      </div>
+    </div>
+
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Steps">
+        <li><button type="button" data-goto="1"><span>1</span>Key</button></li>
+        <li><button type="button" data-goto="2"><span>2</span>Vote</button></li>
+        <li><button type="button" data-goto="3"><span>3</span>Vote twice?</button></li>
+        <li><button type="button" data-goto="4"><span>4</span>Add up</button></li>
+        <li><button type="button" data-goto="5"><span>5</span>Shares</button></li>
+        <li><button type="button" data-goto="6"><span>6</span>Result</button></li>
+      </ol>
+      <div class="zw-ctrl">
+        <button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button>
+        <button type="button" class="zw-btn" data-play aria-pressed="false">Play</button>
+        <button type="button" class="zw-btn" data-next aria-label="Next step">→</button>
+      </div>
+    </div>
+    <div class="zw-legend">
+      <span><em class="zw-tag secret">SECRET</em> known only to its owner</span>
+      <span><em class="zw-tag public">PUBLIC</em> on-chain</span>
+      <span>Key and ciphertext values are illustrative.</span>
+    </div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { TRUSTEES, VOTERS, ballotLabel, shareLabel, sumLabel, yesCount } from './tally-data';
+
+  document.querySelectorAll<HTMLElement>('.ztl').forEach((root) => {
+    initWalkthrough(root);
+    const votes = VOTERS.map((v) => v.vote);
+    const toggle = root.querySelector<HTMLInputElement>('[data-absent-toggle]');
+    const set = (sel: string, text: string) => root.querySelectorAll(sel).forEach((el) => (el.textContent = text));
+
+    const render = () => {
+      VOTERS.forEach((v, i) => {
+        set(`[data-vote-out="${i}"]`, votes[i] ? 'YES' : 'NO');
+        set(`[data-ballot-out="${i}"]`, ballotLabel(v.id, votes[i]));
+      });
+      root.querySelectorAll<HTMLButtonElement>('[data-vote]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(votes[Number(b.dataset.vote)] === Number(b.dataset.value))),
+      );
+      set('[data-sum-out]', sumLabel(votes));
+      TRUSTEES.forEach((t, j) => set(`[data-share-out="${j}"]`, shareLabel(t, votes)));
+      const yes = yesCount(votes);
+      set('[data-yes-out]', String(yes));
+      set('[data-no-out]', String(votes.length - yes));
+
+      const absent = toggle?.checked ?? false;
+      root.dataset.absent = absent ? '1' : '0';
+      root.querySelectorAll<HTMLElement>('[data-result-ok]').forEach((el) => (el.hidden = absent));
+      root.querySelectorAll<HTMLElement>('[data-result-missing]').forEach((el) => (el.hidden = !absent));
+      const step = Number(root.dataset.step);
+      root.querySelector('.ztl-result')?.toggleAttribute('data-bad-on', absent && step === 6);
+    };
+
+    root.querySelectorAll<HTMLButtonElement>('[data-vote]').forEach((b) =>
+      b.addEventListener('click', () => {
+        votes[Number(b.dataset.vote)] = Number(b.dataset.value);
+        render();
+      }),
+    );
+    toggle?.addEventListener('change', render);
+    root.addEventListener('zw:step', render);
+    render();
+  });
+</script>
+
+<style>
+  /* Long proof captions: let the caption wrap under the label instead of leaving the lane. */
+  .ztl .zw-proof {
+    flex-wrap: wrap;
+  }
+
+  .ztl .zw-proof > span:not(.pi) {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .ztl-voter .zw-choice {
+    margin-left: auto;
+  }
+
+  /* In the voters' view the YES/NO switch already shows the vote; the public view shows the mask. */
+  .zw:not([data-view='public']) .ztl-voter .v {
+    display: none;
+  }
+
+  .ztl-ballots {
+    display: grid;
+    gap: 0.3em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: 500 0.74em var(--zw-mono);
+  }
+
+  .ztl-ballots li {
+    display: grid;
+    gap: 0.05em;
+    padding: 0.3em 0.45em;
+    background: var(--zw-bg);
+    border: 1px solid var(--zw-line);
+    border-radius: 6px;
+  }
+
+  .ztl-ballots .n {
+    color: var(--zw-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .ztl-ballots .c {
+    overflow-wrap: anywhere;
+  }
+
+  .ztl-ballots b {
+    color: var(--zw-public-ink);
+  }
+
+  .ztl-sum .v {
+    color: var(--zw-public-ink);
+  }
+
+  .ztl-count {
+    font: 700 1.05em var(--zw-display);
+  }
+
+  .ztl-count b {
+    color: var(--zw-public-ink);
+  }
+
+  .ztl-trustee code {
+    overflow-wrap: anywhere;
+  }
+
+  /* Trustee 3's share disappears when the reader marks it absent. */
+  .ztl-absent {
+    display: none;
+  }
+
+  .zw[data-absent='1'] .ztl-trustee[data-trustee='2'] .ztl-share {
+    display: none;
+  }
+
+  .zw[data-absent='1'] .ztl-trustee[data-trustee='2'] .ztl-absent:not([data-off]) {
+    display: block;
+  }
+
+  .zw[data-absent='1'] .ztl-trustee[data-trustee='2'] {
+    opacity: 0.6;
+  }
+
+  .ztl-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    font-size: 0.8em;
+    color: var(--zw-text-2);
+    cursor: pointer;
+  }
+
+  .ztl-toggle input {
+    accent-color: var(--zw-bad);
+  }
+</style>

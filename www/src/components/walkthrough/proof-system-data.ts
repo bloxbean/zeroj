@@ -57,7 +57,7 @@ export function recommend(a: Answers): Recommendation {
   }
   if (a.where === 'cardano') {
     if (circuit) {
-      notes.push({ kind: 'ok', html: 'Groth16 on Cardano is Beta, testnet only. In ZeroJ\u2019s JuLC VM tests, a proof with two public inputs used about 2.8 billion of the 10 billion CPU units a transaction may spend.' });
+      notes.push({ kind: 'ok', html: 'Groth16 on Cardano is Beta, testnet only. In ZeroJ\u2019s JuLC VM tests, a proof with two public inputs used about 2.2 billion of the 10 billion CPU units a transaction may spend.' });
     }
     if (a.need !== 'compute') {
       notes.push({ kind: 'warn', html: 'On-chain BBS supports one fixed shape: a 5-attribute credential revealing indexes 2 and 3. Other shapes need a different unrolling, or a Groth16 circuit.' });

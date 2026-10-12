@@ -359,7 +359,9 @@ number is *their age*. Right now anyone can type `.age(25)` and pass.
 
 To make an age check meaningful, the age has to come from someone the verifier trusts, such
 as a government or a KYC provider. Typically the issuer signs or commits to the user's
-attributes, and the circuit proves the age inside that signed credential is at least 18.
+attributes, and the circuit proves the age inside that signed credential is at least 18. If a
+hash or commitment of the attributes is ever published, include a random salt or blinding in it:
+an age has only a few hundred possible values, so anyone could hash each one and compare.
 Alternatively, BBS credentials let the holder reveal selected attributes of a signed
 credential directly. See [Age & KYC checks](/use-cases/age-and-kyc/) and
 [BBS credentials](/guides/credentials/bbs/).
