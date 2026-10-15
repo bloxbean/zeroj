@@ -58,6 +58,37 @@ tasks.register('confidentialNoteBenchmark', Test) {
     testLogging { showStandardStreams = true }
 }
 
+// ADR-0058 M2 byte-commitment resource gates: a 256 MiB generated stream under a 64 MiB heap,
+// flat mapper allocation and a > 2^31-octet counter. Asserts. Run:
+// ./gradlew :zeroj-circuit-lib:pedersenBytesResourceTest
+tasks.register('pedersenBytesResourceTest', Test) {
+    description = 'ADR-0058 byte-commitment resource gates (64 MiB heap; asserts).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*PedersenBytesResourceTest*' }
+    systemProperty 'zeroj.pedersenBytesResource', 'true'
+    maxHeapSize = '64m'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+// ADR-0058 M2 byte-commitment host performance matrix. Records, asserts nothing.
+// Run: ./gradlew :zeroj-circuit-lib:pedersenBytesBenchmark
+tasks.register('pedersenBytesBenchmark', Test) {
+    description = 'ADR-0058 byte-commitment host performance (records, does not assert).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching '*PedersenBytesBenchmark*' }
+    systemProperty 'zeroj.pedersenBytesBench', 'true'
+    maxHeapSize = '2g'
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 // ADR-0039 M6 fixed-limb signer/Pedersen performance matrix. Results are evidence for the
 // exact JVM/CPU used to run it, never a portable constant-time or readiness claim.
 // Run: ./gradlew :zeroj-circuit-lib:jubjubHardenedBenchmark
