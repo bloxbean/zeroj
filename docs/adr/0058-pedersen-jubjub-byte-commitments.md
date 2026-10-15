@@ -13,7 +13,7 @@ not optional follow-ups. Existing experimental/offline restrictions remain in fo
 
 ## Date
 
-2026-10-15 (initial proposal); 2026-10-16 (r2)
+2026-10-15 (initial proposal); 2026-10-16 (r3)
 
 ## Context
 
@@ -318,7 +318,7 @@ manually extract a point, but doing so leaves the byte API's semantic protection
 ### D5 — Keep secret execution on the established restricted path (R3)
 
 `commitBytes` and `commitBytesToEnd` hash and reduce in the same offline/isolated boundary as
-`PedersenCommitment.commit(s, r)`, then uses that method's two blinded secret schedules.
+`PedersenCommitment.commit(s, r)`, then use that method's two blinded secret schedules.
 Do not use public `scalarMul`, `FastJubjubPoint`, MSM, or a secret-indexed lookup table because
 the payload is large or because the value is called a hash. Both `s` and `r` can be secret.
 The additive multiple-of-`l` scalar blinding inside the arithmetic is separate from commitment
@@ -650,7 +650,7 @@ For **r2**, scratch checks against the same source baseline established:
   for payload lengths 0, 1, 256 and 8193, with `payload[i] = (131*i + 17) mod 256`.
   Streaming updates of 1, 7, 64 and 8192 bytes matched the one-shot reference in all 16 cases.
   DST ASCII/hex/46-byte length and `MAX_PAYLOAD_BYTES + 122 < 2^61` checked.
-- A standalone Java `MessageDigest` probe (`java /private/tmp/Zeroj93HashProbe.java`)
+- A standalone Java `MessageDigest` probe (recipe below)
   measured SHA-256 at **3182 MiB/s median** (3174–3188) and SHA-512 at **1784 MiB/s median**
   (1777–1795) on Apple M4 Max, BellSoft JDK `25.0.2+12-LTS`, aarch64, SUN provider 25.
   Recipe: one reused 8192-byte buffer (`buffer[i] = (byte)i`); four 64 MiB warmup passes
@@ -682,3 +682,7 @@ documentation PR. The scratch files are outside the repository; the PR remains A
   F3 → final-type profile constant, `decode(byte[])` and exact raw-point wire contract with
   trusted external context (D3/D4, I5, Q2 and tests); F4 → normative `2^61 - 256` payload cap,
   explicit XMD-overhead arithmetic and injected boundary tests (D2/D6, I3 and M0/M1).
+- **r3 (2026-10-16; responds to review of `fee20ead2cc1748ba9f7d8036cc6b2e9993db19e`):**
+  F5 → removed the local scratch-probe path while retaining the measurement recipe and
+  corrected the subject/verb agreement in D5. No design or implementation change; Q1–Q3
+  remain open for maintainer decision.
