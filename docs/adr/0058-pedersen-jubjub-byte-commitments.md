@@ -2,7 +2,8 @@
 
 ## Status
 
-**Accepted — design (2026-10-16); implementation in progress (M0–M3).** Addresses
+**Accepted — design (2026-10-16); M0–M3 implemented in this PR (experimental; external
+review and x86-64 evidence outstanding).** Addresses
 [issue #93](https://github.com/bloxbean/zeroj/issues/93), phase 1 of #93–#96. The design was
 approved in review at `b4e8c2c2a6db3dfadf288c1305a7fbcb5449438e` and the maintainer resolved
 Q1–Q3 as recorded below. Acceptance authorizes the milestones below; it is not a security
@@ -714,6 +715,104 @@ documentation PR. The scratch files are outside the repository; the PR remains A
   hashing large payloads should build with `-march` for their CPU. **x86-64, with and without
   SHA extensions, was not available and remains open release evidence.**
 
+### M1 — host implementation (`zeroj-circuit-lib`, `org.zeroj.circuit.lib.jubjub`)
+
+- **Production code.**
+  - `PedersenBytesHash` (package-private): a streaming XMD/SHA-256 mapper.
+  - `PedersenBytesCommitment` (public final): the profile type.
+  - Six additive static methods on `PedersenCommitment`, exactly the set in spec §6.2. The
+    existing numeric methods are unchanged, and the full public surface is pinned by a test.
+  - Generation calls the existing `commit(s, r)`, so both scalars use its blinded fixed
+    schedules. Disclosed verification calls the existing `verify`.
+- **Tests (default suite): 54 byte tests run (58 including the 4 opt-in resource/benchmark tests).**
+  - Reference vectors: every fixture of the independent reference — all payload
+    intermediates, all commitments, the 20 mutations and the 11 rejected encodings.
+  - Cross-path:
+    - `Bls12381Hash.expandMessageXmdSha256` (existing BBS expander) and a BouncyCastle
+      `SHA256Digest` expander give identical `b0`/`b1`/`b2`/`uniform_bytes`.
+    - Array, declared-length and read-to-end sources agree under 1-byte, irregular,
+      zero-progress and full-buffer chunkings.
+  - Stream contract: every §6.1 rule.
+  - API contract and validation: every entry point, with null → `r` → bound precedence. A
+    test-only digest-acquisition observer shows that no digest is obtained before rejection.
+  - Schedule instrumentation: two blinded schedules and no public multiplication in generation;
+    the public path in verification.
+  - Cleanup fault injection: a tracking digest fails at every update, digest output and reset,
+    on both paths. It shows that the original exception propagates (a reset failure is only
+    suppressed) and that digest outputs, the length suffix, the XOR chain value and the read
+    buffer are wiped. The caller's payload is untouched.
+  - D4: the numeric opening of a byte commitment exists, and an example consumer rejects a
+    mismatched authenticated profile or context.
+- **Mutation evidence.** The two reviewers seeded 17 faults into copies of the code, covering
+  stream hardening, wipes, resets, validation order and blinding checks. Every one is killed by
+  the suite. Before the round-1 fixes, 10 of the first reviewer's 11 initial faults survived; those fixes added the tests that kill them.
+- **Review.** Two rounds with an independent Claude reviewer and three with Codex.
+  - Fixes from review: the reset failure that masked the primary exception, including the
+    self-suppression case; the vacuous allocation gate; tests for stream edge cases, cleanup
+    and validation order; and docs accuracy.
+  - Both reviewers end at **IMPLEMENTATION READY**.
+
+### M2 — regression, resource and platform gates
+
+- **Regression.** `./gradlew :zeroj-circuit-lib:test`: **1,235 tests, 125 suites, 0 failures,
+  0 errors, 26 skipped (opt-in)**. That includes the 243-test Pedersen/note baseline. No
+  circuit, key or numeric fixture changed.
+- **Resource gate.** `./gradlew :zeroj-circuit-lib:pedersenBytesResourceTest` runs with a
+  64 MiB heap and asserts:
+  - a generated 256 MiB stream commits in both modes and verifies (about 148 ms);
+  - mapper allocation is **9,528 B at 1, 16 and 256 MiB**, with accounting enabled and its
+    samples validated, so allocation is flat;
+  - a `2^31 + 4099`-octet stream is counted and framed correctly.
+
+  Expected scalars come from an independent BouncyCastle streaming expander.
+- **Performance.** `./gradlew :zeroj-circuit-lib:pedersenBytesBenchmark` records only. On an
+  Apple M4 Max, GraalVM 25.0.2 JVM, p50:
+
+  | Operation | Time | Allocation |
+  |---|---|---|
+  | Numeric `commit` | 2.69 ms | 7.55 MB/op, existing curve code |
+  | `commitBytes`, 0 B | 2.65 ms | |
+  | `commitBytes`, 1 MiB | 2.97 ms | |
+  | `commitBytes`, 16 MiB | 7.61 ms | |
+  | Hash/reduce, 16 MiB | 4.99 ms (about 3.2 GB/s) | 1.3 KB/op |
+  | `verifyBytes`, prevalidated / received, 0 B | 1.59 / 2.38 ms | |
+  | `commitBytes`, 1 MiB, 8 workers | 2,525 ops/s, 7.9× one worker | |
+
+  - Byte-commitment overhead over the staged `hash/reduce + numeric commit` is within noise.
+  - Numeric operations did not regress against the r2 measurements.
+  - Generation and disclosed verification are reported separately because their security
+    contracts differ.
+- **GraalVM native image.** `PedersenBytesNativeProbe` (test sources) built with
+  `native-image --no-fallback` prints output **identical to the JVM**. That output also
+  matches the spec's §10 known answers. No native-image configuration is needed.
+- **Not run.** x86-64 throughput, and Yaci/on-chain tests: the profile adds no circuit,
+  validator or key.
+
+### M3 — examples and documentation
+
+- **Examples.** `PedersenBytesExamplesTest` makes the ADR's required examples executable:
+  - raw bytes, showing disclosed verification versus private recomputation;
+  - strings, with explicit UTF-8, where NFC and NFD forms and UTF-16 commit differently;
+  - JSON, where whitespace and key order are significant;
+  - documents, where both stream modes agree, the caller closes the stream, the file name is
+    not committed, and a wrong declared length or limit fails instead of truncating.
+- **Docs updated.**
+  - `zeroj-circuit-lib/README.md`: the capability row and the offline-only/disclosed-verification
+    note.
+  - The gadget support matrix.
+  - Docsite: the Pedersen guide §6 (marked new in 0.1.0-pre14), the status page and the API
+    cheat sheet.
+- **Maturity.** Experimental. Generation is offline/isolated only. No production or constant-time
+  claim.
+
+**Remaining gates (unchanged by this implementation):**
+- independent cryptographic review of the composition, encoding/profile trust boundary,
+  blinding lifecycle and side channels;
+- x86-64 SHA-256/SHA-512 measurements;
+- target-deployment JVM/GraalVM review;
+- application authorization/replay policy;
+- ADR-0039 M9 for any hardened (fixed-limb) promotion.
+
 ## Revision history
 
 - **r1 (2026-10-15):** Initial proposal for #93: audited API and compatibility boundaries,
@@ -739,3 +838,7 @@ documentation PR. The scratch files are outside the repository; the PR remains A
 - **r5 (2026-10-16): M0.** Added the normative spec, the independent reference and the
   hash platform matrix (§Implementation evidence). The spec's §6.2 freezes D3's signatures as
   written. No change to the profile bytes.
+- **r6 (2026-10-16): M1–M3.** Host implementation, regression/resource/native-image gates,
+  executable examples and documentation, each reviewed by Claude and Codex to
+  IMPLEMENTATION READY. Evidence recorded above. Status stays Accepted (design); maturity stays
+  experimental pending the remaining gates.

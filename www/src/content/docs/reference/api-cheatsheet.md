@@ -148,6 +148,7 @@ encrypting, decrypting, sealing notes, DKG) are offline/isolated only. See
 |---|---|
 | `BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom())` · `JubjubPoint c = PedersenCommitment.commit(v, r)` | `PedersenCommitment`, `JubjubPoint` (`…lib.jubjub`) |
 | `PedersenCommitment.verify(c, v, r)` · `PedersenCommitment.decode(bytes)` (canonical + subgroup check; not `JubjubPoint.fromBytes`) | `PedersenCommitment` (`…lib.jubjub`) |
+| Bytes (0.1.0-pre14): `PedersenCommitment.commitBytes(bytes, r)` · `commitBytes(in, length, r)` · `commitBytesToEnd(in, maxBytes, r)` · `verifyBytes(c, bytes, r)` · `verifyBytes(c, in, length, r)` · `verifyBytesToEnd(c, in, maxBytes, r)` · `PedersenBytesCommitment.decode(point32)` | `PedersenCommitment`, `PedersenBytesCommitment` (`…lib.jubjub`) |
 | In a circuit: `ZkPedersen.commit(zk, value, blinding).assertAffineEquals(zk, u, v)` (blinding `@Secret @UInt(bits = 252)`) | `ZkPedersen` (`…lib.zk`) |
 | `ZkPedersenCommitment.commit(zk, value, blinding)` · `ZkPedersen.assertBalanced(zk, List.of(Term.of(in)), List.of(Term.of(out), Term.amount(fee)))` | `ZkPedersenCommitment`, `ZkPedersen.Term` (`…lib.zk`) |
 | `ZkPedersenVector.commit(zk, ZkPedersenVector.bindSchema(zk, schema, schemaDigest), values, blinding)` | `ZkPedersenVector` (`…lib.zk`), `PedersenVectorSchema` (`…lib.jubjub`) |
