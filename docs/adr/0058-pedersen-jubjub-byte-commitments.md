@@ -2,9 +2,11 @@
 
 ## Status
 
-**Proposed — design review only.** Addresses [issue #93](https://github.com/bloxbean/zeroj/issues/93),
-phase 1 of #93–#96. This PR adds only this ADR. It implements no API or profile and does not
-close #93. Acceptance authorizes the milestones below; it is not a security certification.
+**Accepted — design (2026-10-16); implementation in progress (M0–M3).** Addresses
+[issue #93](https://github.com/bloxbean/zeroj/issues/93), phase 1 of #93–#96. The design was
+approved in review at `b4e8c2c2a6db3dfadf288c1305a7fbcb5449438e` and the maintainer resolved
+Q1–Q3 as recorded below. Acceptance authorizes the milestones below; it is not a security
+certification. Each milestone is reviewed in the same PR before the next begins.
 
 **Risk: R3** for the byte-to-scalar mapping and secret-bearing execution; **R2** for API,
 validation, serialization boundaries and compatibility. Correctness and security invariants
@@ -13,7 +15,7 @@ not optional follow-ups. Existing experimental/offline restrictions remain in fo
 
 ## Date
 
-2026-10-15 (initial proposal); 2026-10-16 (r3)
+2026-10-15 (initial proposal); 2026-10-16 (r4: accepted, Q1–Q3 decided)
 
 ## Context
 
@@ -145,7 +147,7 @@ A numeric `commitScalar` alias and a general multi-curve interface are left to #
 
 Use RFC 9380 `hash_to_field` (§5.2), with `count = 1`, extension degree `m = 1`, target
 prime **`l`**, statistical security parameter `k = 128`, and
-`expand_message_xmd` (§5.3.1) using **SHA-256** (r2 recommendation; Q1 remains open).
+`expand_message_xmd` (§5.3.1) using **SHA-256** (decided under Q1).
 
 ```text
 l   = 0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7
@@ -433,7 +435,7 @@ byte checks; this phase claims neither an on-chain implementation nor a feasible
 |---|---|
 | Interpret bytes as an integer modulo `l` | Reject: trivial representation/modular aliases; no binding to arbitrary byte strings |
 | Plain domain-prefixed digest modulo `l` | Less expander overhead, but RFC 9380 gives a specified scalar mapping and primitive vectors; retain its exact XMD construction |
-| RFC 9380 XMD/SHA-512 (r1 recommendation, replaced in r2) | Equally suitable cryptographically and has an existing SHA-512 circuit gadget, but lacks a Plutus SHA-512 builtin and is slower in the local bulk probe. It remains the measured alternative in Q1; XMD output-block count is not the deciding metric |
+| RFC 9380 XMD/SHA-512 (r1 recommendation, replaced in r2) | Equally suitable cryptographically and has an existing SHA-512 circuit gadget, but lacks a Plutus SHA-512 builtin and is slower in the local bulk probe. Not selected under Q1; it remains the measured comparison in the platform matrix. XMD output-block count is not the deciding metric |
 | Length prefix (r1 proposal, replaced in r2) | Equally injective, but requires a prior count or spool for unknown-length sources. There is no existing byte-profile wire compatibility to preserve and no extra binding benefit. Choose an eight-byte suffix so generated/compressed/pipe input needs one bounded-memory pass |
 | Poseidon packing/sponge over bytes | Defer: requires its own injective packing, padding, domain and published sponge construction; existing two-field Poseidon helper is not an arbitrary-byte hash specification |
 | Sapling Pedersen hash or a vector commitment per byte/chunk | Different construction/semantics, with curve work and potentially tables proportional to payload size; unnecessary for this host byte-opening feature |
@@ -451,7 +453,7 @@ reviewed; changed cryptographic choices return to design review before coding co
 
 | Milestone | Entry gate | Deliverable and exit criteria |
 |---|---|---|
-| M0 — Freeze specification and vectors | ADR design accepted; Q1–Q3 resolved | Publish and review `docs/specs/pedersen-jubjub-bytes-v1.md` with the exact D2 suffix frame, SHA-256 mapping, length cap, API/errors/stream contracts and compatibility. Add an independently authored reference and pinned positive/negative fixtures; verify RFC K.1 first and compare the existing XMD expander before reduction. Benchmark SHA-256 vs SHA-512 on the target-platform matrix; if the evidence warrants a different choice, amend this ADR and re-review the spec before implementation. No production implementation until spec review passes. Covers I1–I6, I10 |
+| M0 — Freeze specification and vectors | ADR design accepted; Q1–Q3 resolved (done in r4) | Publish and review `docs/specs/pedersen-jubjub-bytes-v1.md` with the exact D2 suffix frame, SHA-256 mapping, length cap, API/errors/stream contracts and compatibility. Add an independently authored reference and pinned positive/negative fixtures; verify RFC K.1 first and compare the existing XMD expander before reduction. Benchmark SHA-256 vs SHA-512 on every available platform of the target matrix and record unavailable platforms as open release evidence; if the evidence contradicts the Q1 decision, amend this ADR and re-review the spec before implementation. No production implementation until spec review passes. Covers I1–I6, I10 |
 | M1 — Bounded host implementation | Reviewed M0 spec, fixtures and baseline cost records | Add byte type, strict decoder, array, declared-length and bounded read-to-EOF methods. Reuse existing generation/verification paths. Pass vectors, stream faults, cap/counter boundaries, validation order and schedule instrumentation. Cover I2–I9; do not modify old profile semantics |
 | M2 — Regression and resource gates | M1 correctness evidence | Full affected module tests, existing independent numeric/vector/note fixtures, circuit cost/key compatibility, disclosed/private path regression, memory/throughput matrix and GraalVM probe. Differential implementations agree. Covers I1–I10 |
 | M3 — Documentation and release review | M2 passes; security limitations reviewed | Raw-byte, string, JSON and document examples; profile authentication and privacy caveats; updated gadget/support matrix and maturity wording. Audit hash/encoding/randomness/side-channel handling; retain external production gates |
@@ -602,29 +604,28 @@ into a shared helper would risk changing EdDSA semantics. The existing public nu
 do not copy that boundary into the new typed API or silently change the old method here.
 ADR-0051 D7 and ADR-0039 M9 retain their separate unresolved/release gates.
 
-## Open questions for design acceptance
+## Design questions — decided (r4, 2026-10-16)
 
-These are proposed choices, not hidden implementation discretion. They need resolution before
-M0 freezes the profile; no blocking disagreement between fetched references was found.
+These were open at design approval (`b4e8c2c`). The maintainer resolved them as follows before
+M0; the options considered are retained for the record.
 
-- **Q1 — Hash selection (lean revised in r2).** Accept D2's RFC 9380 XMD/SHA-256 with M0
-  platform validation, or retain SHA-512 for its existing circuit gadget and accept its
-  native on-chain/hash-throughput trade-offs? Lean: SHA-256 for measured local bulk throughput,
-  verified Plutus builtin availability and existing XMD differential oracles. SHA-512's
-  existing circuit gadget is a real advantage for future work, outside this host milestone.
-  The required platform comparison must not be replaced by the single local probe or by
-  XMD output-block counts. Changing the decision before publication updates the DST and fixtures;
-  changing it after the profile freezes requires a new version.
-- **Q2 — Minimal typed surface.** Accept D3's final byte-specific type with raw 32-byte point
-  encoding and trusted protocol selection, or move these methods to a separate `PedersenBytes`
-  facade? Lean: additive methods
-  on the current facade with a separate returned type, keeping #94's general interfaces open.
-  The return type's validation and D4's limitations are required under either naming choice.
-- **Q3 — Streaming in phase 1 (expanded in r2).** Accept both declared-length and bounded
-  read-to-EOF variants with suffix framing in M1, or defer streaming and limit the first release
-  to in-memory arrays? Lean: include both; otherwise the
-  large-document memory objective is not met. EOF/ownership/error semantics must not be left
-  to implementation guesswork.
+- **Q1 — Hash selection. Decided: RFC 9380 XMD/SHA-256** (D2 as written). Alternative was
+  SHA-512, retained for its existing circuit gadget at the cost of native on-chain availability
+  and measured host throughput. Reasons: measured local bulk throughput, the verified Plutus
+  `sha2_256` builtin, and existing XMD/SHA-256 differential oracles. SHA-512's circuit gadget
+  remains a real advantage for future byte-to-scalar circuits, which are outside #93. The
+  platform comparison stays a recorded gate: M0/M2 measure every available platform and record
+  unavailable ones (for example x86-64 with/without SHA extensions) as open release evidence;
+  contradicting evidence returns the profile to design review before publication. After the
+  profile freezes, changing the hash requires a new profile version.
+- **Q2 — Minimal typed surface. Decided: additive static methods on `PedersenCommitment`**
+  returning the final `PedersenBytesCommitment` with the raw 32-byte point encoding and trusted
+  protocol selection (D3). Alternative was a separate `PedersenBytes` facade. #94's general
+  interfaces stay open. The return type's validation and D4's limitations apply unchanged.
+- **Q3 — Streaming in phase 1. Decided: ship both** the declared-length and the bounded
+  read-to-EOF variants with suffix framing in M1 (D6). Alternative was arrays only, which
+  would not meet the large-document memory objective. EOF, ownership and error semantics are
+  fixed by D6 and the M0 specification, not left to implementation.
 
 ## Evidence for this design-only PR
 
@@ -686,3 +687,8 @@ documentation PR. The scratch files are outside the repository; the PR remains A
   F5 → removed the local scratch-probe path while retaining the measurement recipe and
   corrected the subject/verb agreement in D5. No design or implementation change; Q1–Q3
   remain open for maintainer decision.
+- **r4 (2026-10-16):** Design approved at `b4e8c2c`. Status → Accepted (design). Maintainer
+  decisions recorded: Q1 XMD/SHA-256, Q2 additive methods on `PedersenCommitment` with the
+  final byte type, Q3 both stream modes in phase 1. M0 entry gate updated; unavailable
+  benchmark platforms are recorded as open release evidence rather than silently skipped.
+  No change to D1–D6, invariants or the profile bytes.
