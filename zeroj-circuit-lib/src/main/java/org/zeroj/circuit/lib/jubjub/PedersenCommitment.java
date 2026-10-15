@@ -3,6 +3,8 @@ package org.zeroj.circuit.lib.jubjub;
 import org.zeroj.circuit.lib.poseidon.PoseidonHash;
 import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -183,6 +185,145 @@ public final class PedersenCommitment {
      */
     public static boolean verify(JubjubPoint commitment, BigInteger value, BigInteger blinding) {
         return commitPublic(value, blinding).projectiveEquals(commitment);
+    }
+
+    // ---- pedersen-jubjub-bytes-v1 (ADR-0058, docs/specs/pedersen-jubjub-bytes-v1.md) ----
+
+    /**
+     * Commits to the exact octets of {@code payload}:
+     * {@code C = [HashBytesToScalar(payload)]·G + [r]·H} ({@code pedersen-jubjub-bytes-v1}).
+     *
+     * <p>Every octet is significant; nothing is normalized or decoded, and an empty array is a
+     * valid payload. Unlike {@link #commit}, the blinding must already be canonical,
+     * {@code 0 ≤ r < l}; use {@link #randomBlinding(SecureRandom)}. The payload is read once and
+     * not copied or retained; the caller must not modify it during the call.
+     *
+     * <p><b>Same execution restriction as {@link #commit}</b>: the payload, the derived scalar and
+     * {@code r} are secret, the hash reduction and curve arithmetic use variable-time
+     * {@link BigInteger}, and generation must run offline or in an isolated process. Both scalars
+     * go through {@code commit}'s two blinded fixed schedules.
+     *
+     * @throws NullPointerException     if an argument is null
+     * @throws IllegalArgumentException if {@code blinding} is not in {@code [0, l)}
+     * @throws IllegalStateException    if SHA-256 is unavailable
+     */
+    public static PedersenBytesCommitment commitBytes(byte[] payload, BigInteger blinding) {
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        requireCanonicalBlinding(blinding);
+        return commitHashed(PedersenBytesHash.hashToScalar(payload), blinding);
+    }
+
+    /**
+     * {@link #commitBytes(byte[], BigInteger)} over a stream that must hold exactly
+     * {@code length} octets, read once through a bounded buffer.
+     *
+     * <p>After {@code length} octets one more read checks for end of stream: an extra octet, or
+     * end of stream before {@code length}, fails with {@link IOException} and produces no
+     * commitment. At most {@code length + 1} octets are read. The stream is never closed, reset or
+     * retried; the caller owns it, its deadlines and its limits, and the end-of-stream check can
+     * block. All arguments are validated before the first read.
+     *
+     * @throws IllegalArgumentException if {@code blinding} is not in {@code [0, l)} or
+     *         {@code length} is not in {@code [0, 2^61 − 256]}
+     * @throws IOException              on truncation, excess input or a read failure
+     */
+    public static PedersenBytesCommitment commitBytes(InputStream payload, long length, BigInteger blinding)
+            throws IOException {
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        requireCanonicalBlinding(blinding);
+        requirePayloadBound(length, "length");
+        return commitHashed(PedersenBytesHash.hashToScalar(payload, length, true), blinding);
+    }
+
+    /**
+     * {@link #commitBytes(byte[], BigInteger)} over a stream of unknown length, read to end of
+     * stream in one pass. The stream may hold at most {@code maxBytes} octets; if it holds more,
+     * the call fails with {@link IOException} after reading {@code maxBytes + 1} octets. The same
+     * octets give the same commitment as the array and declared-length forms. Ownership and
+     * blocking behaviour are as for {@link #commitBytes(InputStream, long, BigInteger)}.
+     *
+     * @throws IllegalArgumentException if {@code blinding} is not in {@code [0, l)} or
+     *         {@code maxBytes} is not in {@code [0, 2^61 − 256]}
+     * @throws IOException              on excess input or a read failure
+     */
+    public static PedersenBytesCommitment commitBytesToEnd(InputStream payload, long maxBytes, BigInteger blinding)
+            throws IOException {
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        requireCanonicalBlinding(blinding);
+        requirePayloadBound(maxBytes, "maxBytes");
+        return commitHashed(PedersenBytesHash.hashToScalar(payload, maxBytes, false), blinding);
+    }
+
+    /**
+     * Verifies a <b>disclosed</b> byte opening: {@code true} iff
+     * {@code commitment == [HashBytesToScalar(payload)]·G + [r]·H}.
+     *
+     * <p>Like {@link #verify}, this uses the faster public-scalar path, because the payload and
+     * blinding are disclosed to the verifier. To check a payload or opening that must stay private,
+     * recompute with {@link #commitBytes(byte[], BigInteger)} and compare commitments instead.
+     *
+     * <p>A {@code true} result says the opening matches the point. It does not say under which
+     * profile or in which context the point was issued: the same point also has a numeric opening.
+     *
+     * @throws IllegalArgumentException if {@code blinding} is not in {@code [0, l)}
+     */
+    public static boolean verifyBytes(PedersenBytesCommitment commitment, byte[] payload, BigInteger blinding) {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        requireCanonicalBlinding(blinding);
+        return verify(commitment.point(), PedersenBytesHash.hashToScalar(payload), blinding);
+    }
+
+    /**
+     * {@link #verifyBytes(PedersenBytesCommitment, byte[], BigInteger)} over a stream holding
+     * exactly {@code length} octets, with the stream rules of
+     * {@link #commitBytes(InputStream, long, BigInteger)}. Truncation, excess input and read
+     * failures throw {@link IOException}; they never return {@code true}.
+     */
+    public static boolean verifyBytes(PedersenBytesCommitment commitment, InputStream payload, long length,
+                                      BigInteger blinding) throws IOException {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        requireCanonicalBlinding(blinding);
+        requirePayloadBound(length, "length");
+        return verify(commitment.point(), PedersenBytesHash.hashToScalar(payload, length, true), blinding);
+    }
+
+    /**
+     * {@link #verifyBytes(PedersenBytesCommitment, byte[], BigInteger)} over a stream read to end of
+     * stream, holding at most {@code maxBytes} octets, with the stream rules of
+     * {@link #commitBytesToEnd(InputStream, long, BigInteger)}.
+     */
+    public static boolean verifyBytesToEnd(PedersenBytesCommitment commitment, InputStream payload, long maxBytes,
+                                           BigInteger blinding) throws IOException {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        requireCanonicalBlinding(blinding);
+        requirePayloadBound(maxBytes, "maxBytes");
+        return verify(commitment.point(), PedersenBytesHash.hashToScalar(payload, maxBytes, false), blinding);
+    }
+
+    private static PedersenBytesCommitment commitHashed(BigInteger scalar, BigInteger blinding) {
+        return new PedersenBytesCommitment(commit(scalar, blinding));
+    }
+
+    private static void requireCanonicalBlinding(BigInteger blinding) {
+        if (blinding.signum() < 0 || blinding.compareTo(JubjubCurve.SUBGROUP_ORDER) >= 0) {
+            // Never echo the value: it is secret.
+            throw new IllegalArgumentException("blinding must be in [0, l)");
+        }
+    }
+
+    private static void requirePayloadBound(long bound, String name) {
+        if (bound < 0 || bound > PedersenBytesHash.MAX_PAYLOAD_BYTES) {
+            throw new IllegalArgumentException(name + " must be in [0, " + PedersenBytesHash.MAX_PAYLOAD_BYTES + "]");
+        }
     }
 
     private static JubjubPoint commitPublic(BigInteger value, BigInteger blinding) {
