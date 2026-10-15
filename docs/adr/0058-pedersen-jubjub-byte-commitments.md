@@ -670,6 +670,50 @@ These author sanity checks are not the independently authored profile reference 
 M0. No byte API, new circuit, native-image run or new on-chain execution is claimed by this
 documentation PR. The scratch files are outside the repository; the PR remains ADR-only.
 
+## Implementation evidence
+
+### M0 — specification, independent reference, hash platform matrix
+
+- **Specification:** [`docs/specs/pedersen-jubjub-bytes-v1.md`](../specs/pedersen-jubjub-bytes-v1.md),
+  reviewed in three rounds by an independent Claude reviewer and Codex. Both end at "SPEC
+  READY". The rounds added: the §6.2 API contract, which freezes D3; the §6.1 stream reading
+  rules (only −1 is end of stream; a zero-octet read falls back to a single-octet read; invalid
+  counts fail); §7 implementation requirements (D5/D6); §9 compatibility; §10 inline known
+  answers; and a corrected identity statement.
+- **Independent reference:** `zeroj-circuit-lib/src/test/resources/pedersen-bytes-reference/`
+  (Python standard library; OpenSSL SHA-256 through `hashlib`). It was written from the spec,
+  RFC 9380 and the existing independent `pedersen-jubjub-v1` reference, without reading Java
+  and without searching the repository.
+  - All 10 RFC 9380 K.1 SHA-256 vectors.
+  - 35 payloads with `b0`/`b1`/`b2`/`uniform_bytes`/`s`, including `b0` padding and block
+    boundaries.
+  - 11 commitments under fixed test blindings.
+  - 20 algorithm mutations, each distinguished.
+  - 11 rejected encodings, including the `v = p + 1` identity alias that only the canonical-`v`
+    rule rejects, and order-8 torsion.
+  - 14 mutated copies of the script all fail.
+
+  A second independent Python implementation, written by the spec reviewer, agrees on every
+  overlapping value. The reference uses OpenSSL's SHA-256; the Java tests add the JDK provider
+  and BouncyCastle as two more SHA-256 implementations.
+- **SHA-256 vs SHA-512 (Q1 platform matrix)**, Apple M4 Max (aarch64), Oracle GraalVM
+  25.0.2+10.1, SUN provider. Recipe as in r2: 4 × 64 MiB warmup, 5 × 256 MiB timed passes,
+  median.
+
+  | Platform | SHA-256 MiB/s | SHA-512 MiB/s |
+  |---|---|---|
+  | JVM, 3 forks | 3033 / 3080 / 3042 | 1695 / 1744 / 1735 |
+  | Native image, default `-march` (armv8.1-a, software SHA) | 263 / 266 / 266 | 443 / 446 / 448 |
+  | Native image, `-march=native` (hardware SHA) | 2463 / 2489 | 1495 / 1517 |
+
+  The ranking depends on whether hardware SHA instructions are used. With them (JVM
+  intrinsics, or a native image built for the target CPU), SHA-256 is about 1.65–1.8× faster.
+  A default-`-march` native image hashes in software, about 10× slower overall, and there
+  SHA-512 is about 1.7× faster. This does not contradict Q1: the primary target is the JVM, and
+  the Plutus-builtin and oracle reasons are unaffected. It does mean that native-image users
+  hashing large payloads should build with `-march` for their CPU. **x86-64, with and without
+  SHA extensions, was not available and remains open release evidence.**
+
 ## Revision history
 
 - **r1 (2026-10-15):** Initial proposal for #93: audited API and compatibility boundaries,
@@ -692,3 +736,6 @@ documentation PR. The scratch files are outside the repository; the PR remains A
   final byte type, Q3 both stream modes in phase 1. M0 entry gate updated; unavailable
   benchmark platforms are recorded as open release evidence rather than silently skipped.
   No change to D1–D6, invariants or the profile bytes.
+- **r5 (2026-10-16): M0.** Added the normative spec, the independent reference and the
+  hash platform matrix (§Implementation evidence). The spec's §6.2 freezes D3's signatures as
+  written. No change to the profile bytes.
