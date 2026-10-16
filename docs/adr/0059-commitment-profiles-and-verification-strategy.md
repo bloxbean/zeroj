@@ -5,9 +5,11 @@
 **Proposed** — design only. Addresses [issue #94](https://github.com/bloxbean/zeroj/issues/94),
 phase 2 of the #93–#96 Pedersen roadmap. Stacked on PR #97 (ADR-0058,
 `pedersen-jubjub-bytes-v1`), which it cites as an accepted input. The maintainer decided the
-four design questions in r2 (see "Design questions — decided"); the ADR as a whole still
-awaits design review. Acceptance would be design acceptance only; it certifies no
-implementation, test or security property.
+four design questions in r2 (see "Design questions — decided"). AI review (Claude and Codex
+on this PR) is input to the decision, not the decision: acceptance is recorded only by a named
+human maintainer, and no AI verdict upgrades a maturity or security claim (AGENTS.md).
+Acceptance would be design acceptance only; it certifies no implementation, test or security
+property.
 
 **Risk: R2.** This ADR defines profile identity, serialization formats, validation and
 API contracts at security boundaries, and the verification matrix applications rely on. It
@@ -17,7 +19,7 @@ Bulletproof transcripts with #96, the G1 sigma-proof transcript with ADR-0051 D7
 
 ## Date
 
-2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1)
+2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review)
 
 ## Context
 
@@ -164,8 +166,11 @@ profile with its immutable cryptographic core, its lifecycle metadata and any pr
 bound to it. The per-profile specs stay authoritative for their algorithms; the registry links
 them and adds the cross-profile rules.
 
-- **Identifier grammar.** ASCII, 1–64 bytes, matching
-  `^[a-z0-9]+(-[a-z0-9]+)*-v[1-9][0-9]*$`. All three existing identifiers conform.
+- **Identifier grammar and namespace.** ASCII, 4–64 bytes (the shortest match is `a-v1`),
+  matching `^[a-z0-9]+(-[a-z0-9]+)*-v[1-9][0-9]*$`. Commitment profiles, proof protocols and
+  basis sets all use this grammar and share **one namespace**: an identifier names exactly one
+  registry entry of one type, and admission rejects a collision with any existing or withdrawn
+  entry. The three existing profile identifiers and the two reserved G1 names conform.
   Identifiers compare byte-for-byte; there is no case folding or normalization.
 - **Cryptographic core (immutable).** A profile identifier names one cryptographic core
   forever. Changing any core field is a new identifier (generalizing ADR-0051 I7). An
@@ -235,14 +240,22 @@ separate "protocols using a profile" table, because they are not commitment prof
 |---|---|---|---|
 | `scalar` | an integer residue mod `q` | addition of residues mod `q` | integer arithmetic, unless the D3a width rule of ADR-0051 holds for every term |
 | `bytes` | an exact octet string | addition of the **hash-derived scalars** mod `q` | arithmetic, concatenation, merge or comparison of the original bytes |
-| `vector` | `n` residues under one schema | component-wise addition within one schema digest | anything across schemas (ADR-0051 D5) |
+| `vector` | `n` residues under one schema | component-wise addition within one schema digest; a sum's components may exceed the schema widths (see D4) | anything across schemas (ADR-0051 D5) |
 
 Rules the typed API enforces and the spec states:
 
 - **No cross-profile arithmetic.** Homomorphic operations exist only on concrete
-  profile-specific types and accept only the same type. A runtime profile check backs the
-  compile-time one where a generic path exists. Mixing curves is impossible by type and by
-  encoding length; mixing profiles on one curve is rejected by type.
+  profile-specific types and accept only the same type. Mixing profiles, on one curve or
+  across curves, is rejected by type and by the expected-profile check; that today's Jubjub
+  and G1 encodings differ in length is a coincidence, not a rule to rely on.
+- **Runtime profile check.** `Commitment` is an open interface (a `sealed` interface in
+  `zeroj-api` cannot permit classes in other modules), so any class can claim any
+  `profile()`. Where a generic path needs a runtime check, it compares the commitment's
+  concrete class with the expected codec's class **and** its `profile()` with the expected
+  descriptor constant by identity, never by a caller-supplied string. Only ZeroJ's own final
+  implementations are trusted to report their profile; producer-side helpers such as
+  `CommitmentEnvelope.encode` trust their input, and the consumer-side decoder trusts nothing
+  (D4).
 - **No arithmetic on byte commitments in the typed API** (ADR-0058 D3). A caller who extracts
   the point leaves the byte API's protections.
 - **Point sets are not disjoint.** Profiles that share bases produce the same points: a byte
@@ -278,8 +291,13 @@ identifier, every base, every commitment and the application context into the tr
 under one profile or context is never accepted under another.
 
 V2 uses the profile's secret-bearing generation path and keeps its maturity restriction
-(ADR-0038 offline/isolated for Jubjub). V1 may use variable-time arithmetic because its
-inputs are disclosed.
+(ADR-0038 offline/isolated for Jubjub). **"Disclosed to this verifier" is not "public".** V1
+may use variable-time arithmetic only when the opening is already public (for example, it is
+published on-chain) or when no party from whom it is still secret can observe the verifier's
+timing. Otherwise — an auditor checking an opening that is secret from third parties on an
+observable host — the V2 restriction (offline/isolated) applies to the V1 check as well. This
+qualifies the "disclosed values" wording of `pedersen-jubjub-v1` §3.2 and ADR-0058's disclosed
+verification; it changes no algorithm.
 
 ### D4 — Encodings: raw points, an optional envelope, canonical openings (R2)
 
@@ -314,8 +332,17 @@ inputs are disclosed.
      The canonical rule therefore accepts `q − 1` and rejects `q`, `q + 1` and `−1`.
   2. **Application range bound (only when requested).** An application that reads `m` as an
      amount additionally requires `m < 2^k` for its chosen `k`. This is a policy check on top of
-     (1) and may reject a valid residue. For vectors the schema's widths are this bound, so
-     `v_i < min(2^{k_i}, q)`. No range bound applies to `r` or to a byte-derived `s`.
+     (1) and may reject a valid residue. For vectors issued under a schema, the schema's
+     widths are this bound, so `v_i < min(2^{k_i}, q)`. No range bound applies to `r` or to a
+     byte-derived `s`.
+  3. **Derived commitments.** A sum or difference of commitments (`add`, `subtract`) opens to
+     component-wise residues that may exceed the schema widths. Its opening is checked with
+     (1) only, unless the application declares a widened bound derived by ADR-0051 D3a (for
+     `n` added terms of width `k`, `k + ⌈log₂ n⌉` bits, still below `q`), in which case that
+     bound replaces the schema widths. The strict adapter therefore takes the bound policy
+     explicitly — schema widths (issued commitments), residue only, or a declared widened
+     bound — and never infers it. A difference with a negative component opens to the residue
+     `q − x`, which only (1) accepts. The legacy `verify` keeps rejecting over-width values.
 - **Canonical opening encodings.** At every serialization boundary (vectors, delivery
   formats, redeemers, cross-language interchange) openings satisfy check (1), and (2) where
   the application or schema sets a bound. `I2OSP` is unsigned big-endian, as in the note
@@ -324,6 +351,7 @@ inputs are disclosed.
   | Kind | Opening encoding |
   |---|---|
   | `scalar` (Jubjub) | `I2OSP(m, 32) ‖ I2OSP(r, 32)` |
+  | `scalar`, `bytes` (G1) | defined by #95's spec for its group order and encodings |
   | `bytes` | `I2OSP(r, 32)`; the payload travels separately as its exact octets (no transcoding, no implied length beyond its own framing) |
   | `vector` | `u8(n) ‖ I2OSP(v_0, 32) ‖ … ‖ I2OSP(v_{n−1}, 32) ‖ I2OSP(r, 32)`, with `n` equal to the configured schema's dimension and each `v_i < min(2^{k_i}, q)` |
 
@@ -363,7 +391,7 @@ public enum CommitmentGroup { JUBJUB, BLS12_381_G1 }
 public interface CommitmentProfile {              // descriptor; one constant per profile
     CommitmentProfileId id();
     CommitmentKind kind();
-    CommitmentGroup group();                      // new enum: JUBJUB, BLS12_381_G1
+    CommitmentGroup group();
     int pointEncodingLength();
 }
 
@@ -377,14 +405,22 @@ public interface CommitmentCodec<C extends Commitment> {   // the expected profi
     C decodePoint(byte[] rawPoint);               // strict: canonical, subgroup, identity policy
 }
 
+public final class CommitmentKey { ... }          // profile id + raw point (+ schema digest); value equality
+
 public final class CommitmentEnvelope {           // D4
-    static byte[] encode(Commitment c);
-    static <C extends Commitment> C decode(byte[] envelope, CommitmentCodec<C> expected);
+    public static byte[] encode(Commitment c);    // producer side: trusts its input
+    public static <C extends Commitment> C decode(byte[] envelope, CommitmentCodec<C> expected);
 }
 ```
 
 - **No arithmetic on the shared interfaces.** `add`, `subtract` and `negate` live only on
   concrete types and take the same concrete type (D2).
+- **Equality is not part of the contract.** Existing types differ
+  (`PedersenBytesCommitment` compares encodings, `PedersenVectorCommitment` compares
+  references) and keep their behaviour (I10). Generic code — deduplication, map keys, replay
+  sets — never relies on `equals`/`hashCode` of a `Commitment`. It uses `CommitmentKey.of(c)`,
+  a value type over the profile identifier, the raw point encoding and, for vectors, the
+  schema digest (the same point under two schemas is two different commitments).
 - **Openings are not records.** Opening holders are final classes with a redacted
   `toString`, no `equals`/`hashCode` on secret fields and no `Serializable`. `BigInteger`
   values cannot be wiped; the Javadoc says so, as ADR-0058 does.
@@ -400,8 +436,9 @@ public final class CommitmentEnvelope {           // D4
 - **Strict adapters for the new contracts.** The new entry points never delegate unchecked
   input to a legacy method. Each validates first, then delegates:
   - scalar (Q2): nulls, then `m` and `r` in `[0, l)`;
-  - vector: nulls, dimension equal to the configured schema's, each `v_i` in
-    `[0, min(2^{k_i}, l))`, `r` in `[0, l)`;
+  - vector: nulls, dimension equal to the configured schema's, each `v_i` in `[0, l)` and
+    within the explicit bound policy of D4 (schema widths by default for issued commitments),
+    `r` in `[0, l)`;
   - bytes: the existing ADR-0058 contract.
 
   Malformed input throws `IllegalArgumentException` (the D6 error classes), and a well-formed
@@ -443,8 +480,11 @@ The existing independent Python references (`pedersen-reference`,
 their current `key=value` outputs stay as additional pins. For each Jubjub profile the minimum negative set is: wrong length, `v ≥ p`, the ZIP 216 sign alias,
 off-curve, small-order (orders 2, 4, 8), mixed-order (subgroup point plus torsion),
 non-canonical `m` and `r` (`q`, `q + 1`, `−1`), envelope version, identifier and length
-mismatches, and an opening for the wrong message. JuLC consumers (from #95) load the same
-files in their VM tests.
+mismatches, and an opening for the wrong message. JuLC consumers (from #95, G1 profiles
+only) load the same files in their VM tests. A validator can only succeed or fail, so on-chain
+every error class and `OPENING_MISMATCH` map to "script fails". JuLC vector tests assert
+failure for every negative case and success for every positive one; they do not, and cannot,
+distinguish error classes. Off-chain implementations must match the error class.
 
 ### D7 — Verification matrix (R2, normative in the registry spec)
 
@@ -463,7 +503,7 @@ protection and context binding to the application (class P).
 | `pedersen-bls12-381-g1-v1` (#95) | V1 opening | Planned | Planned native: canonical-residue checks on `m` and `r` (D4 check 1), an amount bound only if the application asks (check 2), then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | message and `r` |
 | | V3 relation | Planned | Planned native: `C_new = C_old + [δ]·G` with the D4 signed-delta rule; sums with verifier-fixed coefficients | deltas |
 | | V4 proof | Sigma proofs blocked by ADR-0051 D7; range proofs by #96 | Blocked / feasibility only (#96) | — |
-| `pedersen-bls12-381-g1-bytes-v1` (#95) | V1 opening | Planned | Native only if the validator recomputes the byte mapping with `sha2_256`; the payload must fit in the transaction (`maxTxSize` 16,384 bytes in total). The recomputed `s` is canonical by construction and gets no amount bound. A validator that accepts a supplied scalar instead (after check 1) authenticates **only that scalar**, not the bytes | payload (or scalar) and `r` |
+| `pedersen-bls12-381-g1-bytes-v1` (#95) | V1 opening | Planned | Native only if the validator recomputes the byte mapping with `sha2_256`. The payload limit is whichever binds first: the execution budget (`sha2_256` and byte-string costs grow with payload length, against `maxTxExecutionUnits`), or the size of the place the payload comes from (redeemer, datum, or an inline datum on a reference input, each bounded by the 16,384-byte `maxTxSize` of the transaction that carries it). #95 measures and documents that limit. The recomputed `s` is canonical by construction and gets no amount bound. A validator that accepts a supplied scalar instead (after check 1) authenticates **only that scalar**, not the bytes | payload (or scalar) and `r` |
 
 Consequences the spec states explicitly:
 
@@ -478,9 +518,10 @@ Consequences the spec states explicitly:
   commitments with the same blinding reveal `[m₁ − m₂]·G`, so small differences can be
   enumerated; a disclosed opening of a low-entropy message space (votes, small amounts, short
   strings) is a disclosure of the message.
-- **Byte mapping on-chain costs scale with payload size** and are bounded by the transaction
-  size limit. Larger documents can only be committed and opened off-chain; on-chain
-  references them by commitment.
+- **Byte mapping on-chain costs scale with payload size.** The usable payload is bounded by
+  the execution budget and by the size of the redeemer, datum or reference-input inline datum
+  that carries it, whichever binds first; #95 measures which. Larger documents can only be
+  committed and opened off-chain; on-chain references them by commitment.
 
 ### D8 — Benchmark methodology (R2; executed by #95/#96)
 
@@ -549,8 +590,11 @@ Benchmarks are records, not assertions, and never trade a check for a number (AD
 - **I10 — Compatibility.** No existing profile's bases, encodings, vectors, circuits or
   verification keys change, and no existing public method is removed or changes its
   semantics; additions are listed under Compatibility. (Compatibility)
-- **I11 — Provider and environment parity.** Every implementation of a profile (pure Java,
-  blst, JuLC) passes the same vector file and returns the same verdicts. (D5, D6)
+- **I11 — Provider and environment parity.** Every implementation of a profile passes the
+  same vector file: off-chain implementations (pure Java, blst) return the same verdicts and
+  error classes; JuLC implementations, which exist only for profiles with native on-chain
+  support (the G1 profiles of #95, not the Jubjub profiles), return the same accept/fail
+  verdicts under the D6 on-chain mapping. (D5, D6)
 
 ## Compatibility
 
@@ -580,8 +624,8 @@ Benchmarks are records, not assertions, and never trade a check for a number (AD
 
 | Milestone | Entry gate | Deliverables and exit criteria |
 |---|---|---|
-| M0 — Registry spec | ADR accepted (Q1–Q4 decided in r2) | `docs/specs/commitment-profiles-v1.md`: D1 grammar, core records, lifecycle metadata, basis sets and admission/update rules for the three Jubjub profiles, the two reserved names, the proof-protocol record format, D2 kinds, D3 classes, D4 envelope and opening encodings, D6 format with its error classes, D7 matrix, D8 methodology. Reviewed (Claude and Codex) before code. Covers I1, I2, I5–I7 |
-| M1 — Contracts and adapters | M0 reviewed | `org.zeroj.api.commitment`; adapters for the three profiles; typed `pedersen-jubjub-v1` commitment and `commitScalar`/`verifyScalar` (Q2); strict validating adapters for the scalar and vector openings, with paired legacy-behaviour tests (D5); envelope codec (Q1); composed acceptance helper. API-surface tests (no records, no public raw constructors, no shared arithmetic). Covers I2–I5, I8, I10 |
+| M0 — Registry spec | ADR accepted by a named human maintainer (Q1–Q4 decided in r2) | `docs/specs/commitment-profiles-v1.md`: D1 grammar, core records, lifecycle metadata, basis sets and admission/update rules for the three Jubjub profiles, the two reserved names, the proof-protocol record format, D2 kinds, D3 classes, D4 envelope and opening encodings, D6 format with its error classes, D7 matrix, D8 methodology. Exit: sign-off by a named human maintainer before any code; Claude and Codex reviews are additional input, not the gate. Covers I1, I2, I5–I7 |
+| M1 — Contracts and adapters | M0 signed off | `org.zeroj.api.commitment`; adapters for the three profiles; typed `pedersen-jubjub-v1` commitment and `commitScalar`/`verifyScalar` (Q2); strict validating adapters for the scalar and vector openings, with paired legacy-behaviour tests (D5); envelope codec (Q1); composed acceptance helper. API-surface tests (no records, no public raw constructors, no shared arithmetic). Covers I2–I5, I8, I10 |
 | M2 — Vectors | M1 | Python references extended to emit D6 files for the three profiles, with provenance; Java loader runs every positive and negative case; mutated-file self-test. Covers I4, I5, I9, I11 |
 | M3 — Documentation | M2 | Registry and matrix on the docsite and in the gadget/support matrix; API examples for scalar, bytes, opening and relation checks; maturity unchanged. Covers I6, I7 |
 
@@ -613,6 +657,20 @@ measurements as part of its own milestones.
   that must fail.
 - **API surface (M1):** reflection tests: no shared arithmetic, opening types are final,
   not records and not `Serializable`, and their `toString` does not contain any scalar.
+- **Generic paths (M1):** a test-only `Commitment` implementation that claims the byte
+  profile is rejected by the runtime check (wrong concrete class) and by the acceptance
+  helper; `CommitmentKey` distinguishes the same point under the numeric and byte profiles and
+  under two vector schemas, and is equal for equal inputs regardless of the types' own
+  `equals`.
+- **Derived vector openings (M1, M2):** the sum of two width-`k` commitments with a component
+  of `2^k` or more is rejected under the schema-width policy, accepted under the residue-only
+  policy and under the declared `k + 1`-bit widened policy; the legacy `verify` still rejects
+  it.
+- **Registry namespace (M0):** an identifier already used by a profile, proof protocol or basis
+  set (including a withdrawn one) is rejected at admission; `a-v1` is the shortest valid
+  identifier.
+- **On-chain mapping (#95):** every negative vector makes the JuLC validator fail and every
+  positive one succeeds.
 - **Regression:** the full `:zeroj-circuit-lib:test` and `:zeroj-api:test`; existing
   Pedersen reference fixtures and circuit pins unchanged.
 
@@ -688,3 +746,18 @@ for the record. These decisions do not replace design review of the ADR as a who
   Compatibility, M1, tests); F5 → CIP-0381 and CIP-0133 pinned at
   `86b89208d3b2aabb5dcc5b778dfbe09096b4e114` with section-level quotes, and deployment
   observations separated from normative definitions (references, D4).
+- **r4 (2026-10-16; responds to a second, independent review of
+  `2e51e047687ff0fdc131cd904f96a701c709e357`, supplied by the maintainer):** A1 → acceptance
+  and the M0 exit gate require a named human maintainer; AI reviews are input only (Status,
+  milestones). A2 → variable-time V1 only for public openings or unobservable verifiers,
+  otherwise the V2 restriction applies (D3). Derived vector commitments get an explicit bound
+  policy: schema widths, residue only, or a declared D3a widened bound (D2, D4, D5, tests). One
+  shared identifier namespace for profiles, proof protocols and basis sets, and length 4–64
+  (D1, tests). Equality is not part of the contract; generic code uses `CommitmentKey` (D5,
+  tests). The runtime profile check compares concrete class and descriptor identity; the
+  envelope encoder trusts its input (D2, D5, tests). On-chain error classes map to script
+  failure, and JuLC parity covers only natively supported profiles (D6, I11, tests). The G1
+  byte-opening limit is the tighter of the execution budget and the carrying data's size (D7).
+  Nits: duplicate enum comment, `public` statics, G1 opening encodings deferred to #95,
+  encoding length no longer cited as a mixing guard. No algorithm, constant or encoding
+  changed.
