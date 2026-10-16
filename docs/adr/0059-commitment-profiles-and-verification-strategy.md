@@ -4,8 +4,10 @@
 
 **Proposed** — design only. Addresses [issue #94](https://github.com/bloxbean/zeroj/issues/94),
 phase 2 of the #93–#96 Pedersen roadmap. Stacked on PR #97 (ADR-0058,
-`pedersen-jubjub-bytes-v1`), which it cites as an accepted input. Acceptance would be design
-acceptance only; it certifies no implementation, test or security property.
+`pedersen-jubjub-bytes-v1`), which it cites as an accepted input. The maintainer decided the
+four design questions in r2 (see "Design questions — decided"); the ADR as a whole still
+awaits design review. Acceptance would be design acceptance only; it certifies no
+implementation, test or security property.
 
 **Risk: R2.** This ADR defines profile identity, serialization formats, validation and
 API contracts at security boundaries, and the verification matrix applications rely on. It
@@ -15,7 +17,7 @@ Bulletproof transcripts with #96, the G1 sigma-proof transcript with ADR-0051 D7
 
 ## Date
 
-2026-10-16 (r1)
+2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided)
 
 ## Context
 
@@ -184,7 +186,7 @@ their algorithms; the registry links them and adds the cross-profile rules.
 - **Registered now:** `pedersen-jubjub-v1`, `pedersen-jubjub-vector-v1`,
   `pedersen-jubjub-bytes-v1`.
 - **Reserved, parameters undefined:** `pedersen-bls12-381-g1-v1` and
-  `pedersen-bls12-381-g1-bytes-v1` (Q3). Reservation fixes only the names; #95's ADR and spec
+  `pedersen-bls12-381-g1-bytes-v1` (Q3, decided). Reservation fixes only the names; #95's ADR and spec
   define the generators, the byte mapping and the encodings, and admit the entries.
 - **Admission rule.** A profile enters the registry only with an accepted ADR, a normative
   spec, an independent reproduction of its constants, vectors in the D6 format, and one public
@@ -252,7 +254,8 @@ inputs are disclosed.
   affine `(u, v)` public inputs (§5). G1 profiles: defined by #95 (48-byte compressed is the
   expected form). On-chain datums and redeemers use the raw form fixed by the validator's
   parameters, never an envelope.
-- **Commitment envelope v1** (off-chain storage and transport; Q1):
+- **Commitment envelope v1** (off-chain storage and transport; Q1, decided: implemented in
+  M1):
 
   ```
   envelope = 0x01                        # envelope format version
@@ -336,7 +339,7 @@ public final class CommitmentEnvelope {           // D4
   `NON_CANONICAL_SCALAR`, `OPENING_MISMATCH`, `PROVENANCE_MISSING`, `PROVENANCE_MISMATCH`,
   `OUT_OF_RANGE`). Reason codes and messages never contain secrets.
 - **Existing types adopt the contracts additively.** `PedersenBytesCommitment` and
-  `PedersenVectorCommitment` implement `Commitment`. If Q2 is decided (a),
+  `PedersenVectorCommitment` implement `Commitment`. Per Q2,
   `pedersen-jubjub-v1` gains a typed commitment and `commitScalar`/`verifyScalar` entry points
   that require canonical `m` and `r`.
   `PedersenCommitment.commit`/`verify` and `JubjubPoint` returns remain unchanged.
@@ -492,8 +495,8 @@ Benchmarks are records, not assertions, and never trade a check for a number (AD
 
 | Milestone | Entry gate | Deliverables and exit criteria |
 |---|---|---|
-| M0 — Registry spec | ADR accepted; Q1–Q4 decided | `docs/specs/commitment-profiles-v1.md`: D1 grammar and records for the three Jubjub profiles, the two reserved names, D2 kinds, D3 classes, D4 envelope and opening encodings, D6 format with its error classes, D7 matrix, D8 methodology. Reviewed (Claude and Codex) before code. Covers I1, I2, I5–I7 |
-| M1 — Contracts and adapters | M0 reviewed | `org.zeroj.api.commitment`; adapters for the three profiles; typed `pedersen-jubjub-v1` entry points (if Q2); envelope codec; composed acceptance helper. API-surface tests (no records, no public raw constructors, no shared arithmetic). Covers I2–I5, I8, I10 |
+| M0 — Registry spec | ADR accepted (Q1–Q4 decided in r2) | `docs/specs/commitment-profiles-v1.md`: D1 grammar and records for the three Jubjub profiles, the two reserved names, D2 kinds, D3 classes, D4 envelope and opening encodings, D6 format with its error classes, D7 matrix, D8 methodology. Reviewed (Claude and Codex) before code. Covers I1, I2, I5–I7 |
+| M1 — Contracts and adapters | M0 reviewed | `org.zeroj.api.commitment`; adapters for the three profiles; typed `pedersen-jubjub-v1` commitment and `commitScalar`/`verifyScalar` (Q2); envelope codec (Q1); composed acceptance helper. API-surface tests (no records, no public raw constructors, no shared arithmetic). Covers I2–I5, I8, I10 |
 | M2 — Vectors | M1 | Python references extended to emit D6 files for the three profiles, with provenance; Java loader runs every positive and negative case; mutated-file self-test. Covers I4, I5, I9, I11 |
 | M3 — Documentation | M2 | Registry and matrix on the docsite and in the gadget/support matrix; API examples for scalar, bytes, opening and relation checks; maturity unchanged. Covers I6, I7 |
 
@@ -546,27 +549,36 @@ measurements as part of its own milestones.
 ## Related findings (out of scope)
 
 - `JubjubPoint` is still the return type of the numeric `commit`; Q2 adds a typed
-  alternative but does not deprecate it.
+  alternative and does not deprecate it.
 - Yano-X and other downstream verifiers are applications of the Java column; their
   determinism and resource limits are their own design.
 - ADR-0051 D7 (G1 sigma-proof transcript) remains escalated and blocks G1 V4 proofs.
 
-## Open questions (maintainer decision)
+## Design questions — decided by the maintainer (2026-10-16, r2)
 
-- **Q1 — Envelope now or with #95.** (a) Specify and implement the D4 envelope in M0/M1
-  (lean: it is small, and #95 introduces the first case where two curves' raw encodings could
-  be confused in storage). (b) Specify only; implement with #95. (c) Omit; raw points plus
-  configuration only.
-- **Q2 — Typed numeric commitment.** (a) Add a typed `pedersen-jubjub-v1` commitment with
-  canonical-`r` `commitScalar`/`verifyScalar` entry points (lean: gives the numeric profile
-  the same contract as the others, and matches #95's `commitScalar` naming). (b) Keep the
-  bare `JubjubPoint` API and adapt it only inside the acceptance helper.
-- **Q3 — G1 profile identifiers.** (a) Two identifiers, `pedersen-bls12-381-g1-v1` (scalar)
-  and `pedersen-bls12-381-g1-bytes-v1` (bytes), sharing bases (lean: mirrors ADR-0058 D1,
-  where the message map is part of the profile). (b) One identifier covering both kinds, as
-  #95's text suggests. The final parameters remain #95's either way.
-- **Q4 — Contract module.** (a) `zeroj-api` (lean). (b) A new `zeroj-commitment-api` module.
+The maintainer accepted the recommended option for each question. The alternatives are kept
+for the record. These decisions do not replace design review of the ADR as a whole.
+
+- **Q1 — Envelope now or with #95. Decided: (a)** specify and implement the D4 envelope in
+  M0/M1. It is small, and #95 introduces the first case where two curves' raw encodings could
+  be confused in storage. Alternatives: (b) specify only and implement with #95; (c) omit and
+  rely on raw points plus configuration.
+- **Q2 — Typed numeric commitment. Decided: (a)** add a typed `pedersen-jubjub-v1`
+  commitment with `commitScalar`/`verifyScalar` entry points that require canonical `m` and
+  `r`. It gives the numeric profile the same contract as the others and matches #95's
+  `commitScalar` naming. The existing `commit`/`verify` stay unchanged. Alternative: (b) keep
+  the bare `JubjubPoint` API and adapt it only inside the acceptance helper.
+- **Q3 — G1 profile identifiers. Decided: (a)** two identifiers, `pedersen-bls12-381-g1-v1`
+  (scalar) and `pedersen-bls12-381-g1-bytes-v1` (bytes), sharing bases, mirroring ADR-0058 D1
+  where the message map is part of the profile. Alternative: (b) one identifier covering both
+  kinds, as #95's text suggests. #95 still defines all G1 parameters.
+- **Q4 — Contract module. Decided: (a)** `zeroj-api`. Alternative: (b) a new
+  `zeroj-commitment-api` module.
 
 ## Revision history
 
 - **r1 (2026-10-16):** Initial proposal for #94.
+- **r2 (2026-10-16):** Maintainer decisions recorded: Q1 (a) envelope in M0/M1, Q2 (a) typed
+  numeric commitment with canonical `commitScalar`/`verifyScalar`, Q3 (a) two G1 identifiers,
+  Q4 (a) `zeroj-api`. D1, D4, D5, Compatibility, milestones and related findings updated to
+  match. Status stays Proposed pending design review.
