@@ -19,7 +19,7 @@ Bulletproof transcripts with #96, the G1 sigma-proof transcript with ADR-0051 D7
 
 ## Date
 
-2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2)
+2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3)
 
 ## Context
 
@@ -412,7 +412,9 @@ public interface CommitmentCodec<C extends Commitment> {   // the expected profi
     C decodePoint(byte[] rawPoint);               // strict: canonical, subgroup, identity policy
 }
 
-public final class CommitmentKey { ... }          // profile id + raw point (+ schema digest); value equality
+public final class CommitmentKey {               // profile id + raw point (+ schema digest); value equality
+    public static <C extends Commitment> CommitmentKey of(C c, CommitmentCodec<C> expected);
+}
 
 public final class CommitmentEnvelope {           // D4
     public static byte[] encode(Commitment c);    // producer side: trusts its input
@@ -425,13 +427,16 @@ public final class CommitmentEnvelope {           // D4
 - **Equality is not part of the contract.** Existing types differ
   (`PedersenBytesCommitment` compares encodings, `PedersenVectorCommitment` compares
   references) and keep their behaviour (I10). Generic code — deduplication, map keys, replay
-  sets — never relies on `equals`/`hashCode` of a `Commitment`. It uses `CommitmentKey.of(c)`,
-  a value type over the profile identifier, the raw point encoding and, for vectors, the
-  schema digest (the same point under two schemas is two different commitments).
-  `CommitmentKey.of` applies the D2 runtime check: it accepts only ZeroJ's own registered
-  implementations whose concrete class and descriptor identity match, and rejects any other
-  `Commitment`, so a foreign implementation cannot forge a key for a replay or deduplication
-  set.
+  sets — never relies on `equals`/`hashCode` of a `Commitment`. It uses
+  `CommitmentKey.of(c, expectedCodec)`, a value type over the profile identifier, the raw
+  point encoding and, for vectors, the schema digest (the same point under two schemas is two
+  different commitments). `of` takes the expected codec from the caller's trusted
+  configuration and applies the same D2 runtime check: `c`'s concrete class must equal
+  `expectedCodec.commitmentType()` and `c.profile()` must be the codec's descriptor by
+  identity; for vectors, `c`'s schema must equal the codec's schema. Anything else is rejected,
+  so a foreign implementation cannot forge a key for a replay or deduplication set.
+  `zeroj-api` therefore needs no registry of implementations, no `ServiceLoader` and no
+  native-image configuration.
 - **Openings are not records.** Opening holders are final classes with a redacted
   `toString`, no `equals`/`hashCode` on secret fields and no `Serializable`. `BigInteger`
   values cannot be wiped; the Javadoc says so, as ADR-0058 does.
@@ -672,7 +677,8 @@ measurements as part of its own milestones.
   profile is rejected by the runtime check (wrong concrete class) and by the acceptance
   helper; `CommitmentKey` distinguishes the same point under the numeric and byte profiles and
   under two vector schemas, is equal for equal inputs regardless of the types' own
-  `equals`, and `CommitmentKey.of` rejects the test-only foreign implementation.
+  `equals`, and `CommitmentKey.of` rejects the test-only foreign implementation, a commitment
+  of another profile, and a vector commitment whose schema differs from the codec's.
 - **Derived vector openings (M1, M2):** for a schema with different per-component widths, the
   sum of two commitments with a component of `2^{k_i}` or more is rejected under the
   schema-width policy, accepted under the residue-only policy and under the declared
@@ -784,3 +790,9 @@ for the record. These decisions do not replace design review of the ADR as a who
   pointers to the A2 timing qualification in the numeric and byte specs and ADR-0058, and M0
   gives existing basis sets identifiers distinct from profile names (D1, references, M3).
   No algorithm, constant or encoding changed.
+- **r6 (2026-10-16; responds to the same reviewer's re-review of
+  `62cde750846560371c272d5617eb6a9a0e31b096`):** `CommitmentKey.of(c)` could not know which
+  implementations are ZeroJ's own, because `zeroj-api` has no dependencies. It becomes
+  `CommitmentKey.of(c, expectedCodec)`, which reuses the D2 class-and-descriptor check (plus
+  schema equality for vectors) and needs no registry, `ServiceLoader` or native-image
+  configuration (D5 sketch and text, tests). No algorithm, constant or encoding changed.
