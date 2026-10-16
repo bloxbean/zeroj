@@ -2,8 +2,10 @@ package org.zeroj.onchain.julc.groth16.lib;
 
 import org.julclang.core.PlutusData;
 import org.julclang.core.types.JulcG1;
+import org.julclang.core.types.JulcG1Points;
 import org.julclang.core.types.JulcG2;
 import org.julclang.core.types.JulcMlResult;
+import org.julclang.core.types.JulcScalars;
 import org.julclang.stdlib.Builtins;
 import org.julclang.stdlib.annotation.OnchainLibrary;
 
@@ -113,7 +115,11 @@ public class Groth16BLS12381Lib {
         // so it is evaluated first only to skip every multiplication when the counts disagree: the
         // walk still validates each entry, and the result is the same as before, false.
         boolean countsMatch = matchingLengths(inputsCursor, Builtins.tailList(icCursor));
-        JulcG1 vkX = icSum(inputsCursor, icCursor, countsMatch);
+        // From msmMinInputs() public inputs one multi-scalar multiplication is cheaper than one
+        // scalar multiplication per input (ADR-0056 M2); the walk validates the same way either way.
+        JulcG1 vkX = countsMatch && atLeast(inputsCursor, msmMinInputs())
+                ? icSumMsm(inputsCursor, icCursor)
+                : icSum(inputsCursor, icCursor, countsMatch);
         if (!countsMatch) {
             return false;
         }
@@ -286,6 +292,58 @@ public class Groth16BLS12381Lib {
         }
         return Builtins.bls12_381_G1_add(later,
                 Builtins.bls12_381_G1_scalarMul(Builtins.asInteger(Builtins.headList(inputsCursor)), point));
+    }
+
+    /**
+     * The smallest number of public inputs for which {@link #icSumMsm} is used. Measured (Julc VM,
+     * PV11 cost model; ADR-0056 D3): one multi-scalar multiplication over n points costs about
+     * 53e6 steps less per input than n scalar multiplications, against a higher fixed cost, and
+     * the two cross between 6 and 7 inputs, so it pays from 7.
+     */
+    private static int msmMinInputs() {
+        return 7;
+    }
+
+    /** {@code cursor} has at least {@code k} elements. */
+    private static boolean atLeast(PlutusData cursor, int k) {
+        if (k <= 0) {
+            return true;
+        }
+        return !Builtins.nullList(cursor) && atLeast(Builtins.tailList(cursor), k - 1);
+    }
+
+    /**
+     * {@code IC[0] + Σ inputs[i] · IC[i+1]} with one multi-scalar multiplication. Each IC entry is
+     * decompressed once and validated on the way down (as in {@link #icSum}); the validated points
+     * are collected into a native list, and the multiplication runs only after the whole walk has
+     * returned, so after every entry is validated (ADR-0045 V1). The counts are known to agree.
+     */
+    private static JulcG1 icSumMsm(PlutusData inputsCursor, PlutusData icCursor) {
+        JulcG1 base = validatedIcPoint(icCursor);
+        PlutusData rest = Builtins.tailList(icCursor);
+        if (Builtins.nullList(rest)) {
+            return base;
+        }
+        JulcG1Points points = icPoints(rest);
+        JulcScalars scalars = scalarList(inputsCursor);
+        return Builtins.bls12_381_G1_add(base, Builtins.bls12_381_G1_multiScalarMul(scalars, points));
+    }
+
+    /** The validated points of {@code icCursor}, in order: each entry is validated before the rest. */
+    private static JulcG1Points icPoints(PlutusData icCursor) {
+        JulcG1 point = validatedIcPoint(icCursor);
+        PlutusData rest = Builtins.tailList(icCursor);
+        JulcG1Points later = Builtins.nullList(rest) ? Builtins.g1PointsEmpty() : icPoints(rest);
+        return Builtins.g1PointsCons(point, later);
+    }
+
+    /** The public inputs as a native scalar list, in order (validScalars has checked each one). */
+    private static JulcScalars scalarList(PlutusData inputsCursor) {
+        if (Builtins.nullList(inputsCursor)) {
+            return Builtins.scalarsEmpty();
+        }
+        return Builtins.scalarsCons(Builtins.asInteger(Builtins.headList(inputsCursor)),
+                scalarList(Builtins.tailList(inputsCursor)));
     }
 
     /**
