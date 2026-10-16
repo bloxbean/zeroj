@@ -16,7 +16,7 @@ not optional follow-ups. Existing experimental/offline restrictions remain in fo
 
 ## Date
 
-2026-10-15 (initial proposal); 2026-10-16 (r4: accepted, Q1–Q3 decided)
+2026-10-15 (initial proposal); 2026-10-16 (r4: accepted, Q1–Q3 decided); 2026-10-16 (r7: status wording, F6)
 
 ## Context
 
@@ -449,8 +449,12 @@ byte checks; this phase claims neither an on-chain implementation nor a feasible
 
 ## Implementation milestones
 
-No implementation milestone is complete in this ADR PR. Each implementation PR is independently
-reviewed; changed cryptographic choices return to design review before coding continues.
+**Current status (r7):** M0–M3 are implemented in PR #97 and recorded under
+[Implementation evidence](#implementation-evidence). The feature stays experimental; the
+remaining release gates are listed at the end of that section (external cryptographic review,
+x86-64 hash throughput, target-deployment JVM/GraalVM review, application authorization/replay
+policy, and ADR-0039 M9 for any hardened promotion). Each milestone was reviewed before the
+next began; a changed cryptographic choice returns to design review before coding continues.
 
 | Milestone | Entry gate | Deliverable and exit criteria |
 |---|---|---|
@@ -628,7 +632,11 @@ M0; the options considered are retained for the record.
   would not meet the large-document memory objective. EOF, ownership and error semantics are
   fixed by D6 and the M0 specification, not left to implementation.
 
-## Evidence for this design-only PR
+## Historical design-review evidence (r1–r3)
+
+This section records the evidence gathered while the PR was still design-only (r1–r3, before
+the r4 acceptance). It is kept for provenance; statements in it describe the PR at that time.
+Current implementation evidence is in the next section.
 
 At baseline `43c7b32e96fd231eca8b26abbb63c7bc002090b9`, Java 25.0.2:
 
@@ -637,8 +645,8 @@ At baseline `43c7b32e96fd231eca8b26abbb63c7bc002090b9`, Java 25.0.2:
   --tests '*ConfidentialNote*Test' --tests '*NoteScheduleTest' --console=plain
 ```
 
-**Passed: 243 tests, 18 suites, zero failures/errors/skips.** This is baseline compatibility
-evidence, not tests of an unimplemented byte API.
+**Passed: 243 tests, 18 suites, zero failures/errors/skips.** This was baseline compatibility
+evidence, gathered before the byte API existed.
 For **r1**, a scratch Python `hashlib` check reproduced RFC 9380 K.3's SHA-512
 empty-message/32-byte-output vector and checked `bitLength(l)=252`, `L=48`, the then-proposed
 DST bytes/length and the stated reduction bound. That framing/hash recommendation is replaced
@@ -667,9 +675,10 @@ For **r2**, scratch checks against the same source baseline established:
   the SHA-512-only gadget availability, and the pinned Plutus builtin list. Existing BBS
   tests are code evidence here; no new Julc execution was performed for r2.
 
-These author sanity checks are not the independently authored profile reference required by
-M0. No byte API, new circuit, native-image run or new on-chain execution is claimed by this
-documentation PR. The scratch files are outside the repository; the PR remains ADR-only.
+These author sanity checks were not the independently authored profile reference required by
+M0 (that reference was added in r5). At r1–r3 no byte API, new circuit, native-image run or
+new on-chain execution was claimed; the scratch files stayed outside the repository and the
+PR was then ADR-only.
 
 ## Implementation evidence
 
@@ -842,3 +851,8 @@ documentation PR. The scratch files are outside the repository; the PR remains A
   executable examples and documentation, each reviewed by Claude and Codex to
   IMPLEMENTATION READY. Evidence recorded above. Status stays Accepted (design); maturity stays
   experimental pending the remaining gates.
+- **r7 (2026-10-16; responds to review of `6680b145e37f7968a6bcdcdd94ea311b9d140b21`):**
+  F6 → the milestone introduction now states the current M0–M3 status and remaining gates;
+  the r1–r3 evidence section is labelled historical and written in the past tense; the PR
+  description is rewritten around the final implementation. Docs-only; no algorithm, API,
+  test or fixture change.
