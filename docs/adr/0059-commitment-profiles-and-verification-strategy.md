@@ -2,7 +2,11 @@
 
 ## Status
 
-**Proposed** — design only. Addresses [issue #94](https://github.com/bloxbean/zeroj/issues/94),
+**Accepted — design (2026-10-16), by maintainer Satya**, who reviewed the design rounds and
+directed implementation. Implementation of M0–M3 proceeds on this PR, one reviewed milestone
+at a time; the M0 registry spec needs the same maintainer's sign-off before any code. Review
+evidence: Codex approved r3 `2e51e04`; a second, independent reviewer had nothing outstanding
+at r6 `cfbdcaf`; Codex has not re-reviewed r4–r6. Addresses [issue #94](https://github.com/bloxbean/zeroj/issues/94),
 phase 2 of the #93–#96 Pedersen roadmap. Stacked on PR #97 (ADR-0058,
 `pedersen-jubjub-bytes-v1`), which it cites as an accepted input. The maintainer decided the
 four design questions in r2 (see "Design questions — decided"). AI review (Claude and Codex
@@ -19,7 +23,7 @@ Bulletproof transcripts with #96, the G1 sigma-proof transcript with ADR-0051 D7
 
 ## Date
 
-2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3)
+2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3); 2026-10-17 (r7: accepted, design)
 
 ## Context
 
@@ -796,3 +800,6 @@ for the record. These decisions do not replace design review of the ADR as a who
   `CommitmentKey.of(c, expectedCodec)`, which reuses the D2 class-and-descriptor check (plus
   schema equality for vectors) and needs no registry, `ServiceLoader` or native-image
   configuration (D5 sketch and text, tests). No algorithm, constant or encoding changed.
+- **r7 (2026-10-17):** Status → Accepted (design) by maintainer Satya, who directed
+  implementation. Review evidence recorded in Status, including that Codex has not
+  re-reviewed r4–r6. No design change.
