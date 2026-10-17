@@ -16,5 +16,29 @@
     "allDeclaredConstructors": true,
     "allDeclaredMethods": true,
     "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.api.commitment.CommitmentKind",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.api.commitment.CommitmentGroup",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.api.commitment.CommitmentError",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.zeroj.api.commitment.ProvenancePolicy$Result",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   }
 ]
