@@ -290,6 +290,12 @@ reserves no binary tag or cross-curve encoding. An application transmitting prof
 must separately define its encoding and authentication. `r` is an integer API input here,
 not a new scalar wire format.
 
+> **Pointer (ADR-0059, non-normative here).** #94 has since defined these off-chain:
+> `docs/specs/commitment-profiles-v1.md` §8.2 (blinding encoding `I2OSP(r, 32)`), §9 (the
+> envelope, which carries `PROFILE_ID` next to the raw point and is not authentication) and §12
+> (`PedersenBytesCommitment.PROFILE`/`CODEC`, `CommitmentKey`). The byte profile's own wire form
+> and every rule of this ADR are unchanged.
+
 ### D4 — Authenticate semantics; do not promise profile separation from a point (R2)
 
 Hash-domain separation makes a different mapping of bytes. It does **not** make the point
@@ -330,7 +336,9 @@ blinding `r`; it must remain fresh even when a caller intentionally recomputes a
 `verifyBytes` and `verifyBytesToEnd` are explicitly **disclosed-opening** operations: they
 recompute the mapping and use `PedersenCommitment.verify(C, s, r)`. A local integrity check
 on a private document or decrypted opening instead uses `commitBytes` or `commitBytesToEnd`
-and compares the resulting public commitment.
+and compares the resulting public commitment. (Pointer: ADR-0059 A2 / `commitment-profiles-v1`
+§6.2 qualify "disclosed": variable-time verification only where the opening is already public or
+no party from whom it is still secret can observe the verifier's timing.)
 The distinction follows ADR-0055's recipient-side check; new docs must show it.
 
 Generate blindings with existing `randomBlinding(SecureRandom)`: 64 CSPRNG bytes interpreted

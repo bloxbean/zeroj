@@ -15,6 +15,13 @@ human maintainer, and no AI verdict upgrades a maturity or security claim (AGENT
 Acceptance would be design acceptance only; it certifies no implementation, test or security
 property.
 
+**Implemented — M0–M3 (2026-10-17), experimental.** The maintainer signed off M0
+(`67da5d4`); M1 `c5c57a7` and M2 `8e6a059` followed on this PR, each reviewed by Claude and Codex
+until no P0–P2 finding remained; M3 (this revision) records its review outcome in the PR (see
+"Implementation evidence"). Maturity is unchanged:
+every profile stays experimental, generation stays offline/isolated only, and nothing here is
+externally reviewed.
+
 **Risk: R2.** This ADR defines profile identity, serialization formats, validation and
 API contracts at security boundaries, and the verification matrix applications rely on. It
 introduces no new primitive, generator, hash mapping or transcript. The R3 decisions of the
@@ -23,7 +30,7 @@ Bulletproof transcripts with #96, the G1 sigma-proof transcript with ADR-0051 D7
 
 ## Date
 
-2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3); 2026-10-17 (r7: accepted, design)
+2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3); 2026-10-17 (r7: accepted, design); 2026-10-17 (r8: M0–M3 implemented)
 
 ## Context
 
@@ -497,7 +504,9 @@ the existing `schema`/`profileId`/hex conventions of that module:
 Expected values come from an independent implementation, never from the code under test.
 The existing independent Python references (`pedersen-reference`,
 `pedersen-vector-reference`, `pedersen-bytes-reference`) are extended to emit this format;
-their current `key=value` outputs stay as additional pins. For each Jubjub profile the minimum negative set is: wrong length, `v ≥ p`, the ZIP 216 sign alias,
+their current `key=value` outputs stay as additional pins. *(As implemented in M2: a separate
+generator, `commitment-vectors-reference/emit_commitment_vectors_v1.py`, imports the three
+references unmodified and emits the files, so their outputs and pins are untouched.)* For each Jubjub profile the minimum negative set is: wrong length, `v ≥ p`, the ZIP 216 sign alias,
 off-curve, small-order (orders 2, 4, 8), mixed-order (subgroup point plus torsion),
 non-canonical `m` and `r` (`q`, `q + 1`, `−1`), envelope version, identifier and length
 mismatches, and an opening for the wrong message. JuLC consumers (from #95, G1 profiles
@@ -646,7 +655,7 @@ Benchmarks are records, not assertions, and never trade a check for a number (AD
 |---|---|---|
 | M0 — Registry spec | ADR accepted by a named human maintainer (Q1–Q4 decided in r2) | `docs/specs/commitment-profiles-v1.md`: D1 grammar, core records, lifecycle metadata, basis sets and admission/update rules for the three Jubjub profiles, the two reserved names, the proof-protocol record format, D2 kinds, D3 classes, D4 envelope and opening encodings, D6 format with its error classes, D7 matrix, D8 methodology. Exit: sign-off by a named human maintainer before any code; Claude and Codex reviews are additional input, not the gate. Covers I1, I2, I5–I7 |
 | M1 — Contracts and adapters | M0 signed off | `org.zeroj.api.commitment`; adapters for the three profiles; typed `pedersen-jubjub-v1` commitment and `commitScalar`/`verifyScalar` (Q2); strict validating adapters for the scalar and vector openings, with paired legacy-behaviour tests (D5); envelope codec (Q1); composed acceptance helper. API-surface tests (no records, no public raw constructors, no shared arithmetic). Covers I2–I5, I8, I10 |
-| M2 — Vectors | M1 | Python references extended to emit D6 files for the three profiles, with provenance; Java loader runs every positive and negative case; mutated-file self-test. Covers I4, I5, I9, I11 |
+| M2 — Vectors | M1 | Python references extended to emit D6 files for the three profiles (as implemented: a separate generator importing them unmodified), with provenance; Java loader runs every positive and negative case; mutated-file self-test. Covers I4, I5, I9, I11 |
 | M3 — Documentation | M2 | Registry and matrix on the docsite and in the gadget/support matrix; API examples for scalar, bytes, opening and relation checks; editorial, non-normative pointers from `pedersen-jubjub-v1` §3.2, `pedersen-jubjub-bytes-v1` §6 and ADR-0058 to the D3 timing qualification of V1, and from `pedersen-jubjub-bytes-v1` §6.2 and §11 to the envelope that now carries the profile identifier (no change to their constants, encodings or algorithms); maturity unchanged. Covers I6, I7 |
 
 #95 and #96 consume this ADR: each adds its registry entry, vector file, matrix cells and D8
@@ -697,6 +706,46 @@ measurements as part of its own milestones.
   positive one succeeds.
 - **Regression:** the full `:zeroj-circuit-lib:test` and `:zeroj-api:test`; existing
   Pedersen reference fixtures and circuit pins unchanged.
+
+## Implementation evidence (M0–M3, 2026-10-17)
+
+| Milestone | Commit | Content | Reviews |
+|---|---|---|---|
+| M0 | `67da5d4` | `docs/specs/commitment-profiles-v1.md` r3; signed off by maintainer Satya (A1 gate) | Claude 3 rounds, Codex 6 rounds, both SPEC READY |
+| M1 | `c5c57a7` | `org.zeroj.api.commitment` (14 types); typed `pedersen-jubjub-v1` commitment, `commitScalar`/`verifyScalar`, opening codecs, vector bound policies and strict `verifyOpening`; contracts on the bytes and vector types; strict error classes | Claude 2 rounds, Codex 4 rounds, both IMPLEMENTATION READY |
+| M2 | `8e6a059` | Independent generator and 518 vector cases (scalar 56/104, bytes 50/84, vector 74/150 positive/negative); Java loader with whole-file fixture validation | Claude 2 rounds (READY); Codex 3 rounds, the last with one P3 (expected-schema validation), fixed in `8e6a059` without a further Codex round |
+| M3 | this revision | Docs, support matrix, docsite verification matrix, non-normative spec pointers, spec r4 (metadata and a contract clarification) | Claude and Codex; outcome recorded on PR #98 with the M3 commit |
+
+Commands and results at `8e6a059` (Java 25.0.2-graal):
+
+- `./gradlew :zeroj-api:test` — 117 tests, 0 failed (63 new).
+- `./gradlew :zeroj-circuit-lib:test` — 1286 tests, 26 skipped (pre-existing opt-in benchmarks
+  and resource probes), 0 failed.
+- `./gradlew :zeroj-test-vectors:build` — passes; the jar contains the three vector files.
+- `python3 -I -B .../emit_commitment_vectors_v1.py --check` — identical; `--self-test` — 25 of 25
+  generator mutations change the output, and the 18-copy `--check` regression passes. After the
+  M3 edits it reports provenance-only warnings (the specs' hashes and the registry spec's r4
+  label differ from what the r3 vectors record), which is expected and exits 0.
+- Seeded faults in the M1 checks (scratch copy, targeted tests): 27 of 27 killed, against an
+  unmodified baseline that passes.
+- Differential: two reviewers each recomputed all 518 cases with their own evaluators written from
+  the specs, importing neither the generator nor the references; no mismatch.
+
+Invariants exercised: I2/I3 (expected-profile rule, substitution and key tests), I4 (strict
+decoders, envelope steps, fuzz), I5 (checks 1–3 and their order), I8 (closure and redaction
+surface tests, subclass copies, wiped temporaries), I10 (paired legacy tests, full suites).
+
+Deviations and follow-ups recorded during implementation:
+
+- D6/M2 wording: the references are imported unmodified by a separate generator, not edited.
+- Spec r4 notes a follow-up: a codec's `INVALID_CONFIGURATION` during envelope decoding becomes a
+  rejected verdict, while the opening step propagates it.
+- The `zeroj-api` commitment package is sealed in its jar; `org.zeroj.circuit.lib.jubjub` is not
+  (sealing it would also cover the ElGamal, DKG and note types), so closure there is a
+  language-level property only.
+- Passing tests, fixture agreement and AI reviews are not evidence of cryptographic security. The
+  remaining gates are those of "Risks and production/audit gates": external review, and
+  generation outside offline/isolated environments only after the ADR-0039 gates.
 
 ## Consequences
 
@@ -803,3 +852,6 @@ for the record. These decisions do not replace design review of the ADR as a who
 - **r7 (2026-10-17):** Status → Accepted (design) by maintainer Satya, who directed
   implementation. Review evidence recorded in Status, including that Codex has not
   re-reviewed r4–r6. No design change.
+- **r8 (2026-10-17, ADR-0059 M3):** Status records M0–M3 as implemented, experimental, with
+  maturity unchanged; new "Implementation evidence" section; D6 and the M2 row note that the
+  references are imported unmodified by a separate generator. No design change.

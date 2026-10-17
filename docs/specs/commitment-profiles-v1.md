@@ -5,7 +5,7 @@
 mainnet use. "Normative" fixes identifiers, bytes, checks, check order and error behaviour; it
 is not a maturity or security claim. This document governs if it and an implementation
 disagree.
-**Date:** 2026-10-17 (r3)
+**Date:** 2026-10-17 (r4)
 
 This document is the registry of ZeroJ commitment profiles, basis sets and proof protocols, and
 the contract every implementation of them follows: the expected-profile rule, scalar checks,
@@ -220,9 +220,9 @@ Maintained separately from the core (§2.4).
 
 | Profile | Status | Maturity | Governing ADRs | Evidence | Implementations / providers |
 |---|---|---|---|---|---|
-| `pedersen-jubjub-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-reference/`; §13 vectors (M2, pending) | pure Java, `zeroj-circuit-lib` |
-| `pedersen-jubjub-vector-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-vector-reference/`; §13 vectors (M2, pending) | pure Java, `zeroj-circuit-lib` |
-| `pedersen-jubjub-bytes-v1` | active | experimental; generation offline/isolated only | ADR-0058, ADR-0059 | `pedersen-bytes-reference/`; §13 vectors (M2, pending) | pure Java, `zeroj-circuit-lib` |
+| `pedersen-jubjub-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
+| `pedersen-jubjub-vector-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-vector-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-vector-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
+| `pedersen-jubjub-bytes-v1` | active | experimental; generation offline/isolated only | ADR-0058, ADR-0059 | `pedersen-bytes-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-bytes-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
 
 ---
 
@@ -547,7 +547,7 @@ Javadoc says so.
 | `PedersenBytesCommitment` | implements `Commitment`; gains `PROFILE`, `CODEC`, `profile()`. `PROFILE_ID` and `profileId()` stay; `PROFILE_ID` is still not part of this type's own encoding (`toPointBytes()`), but the envelope (§9) carries it |
 | `PedersenVectorCommitment` | implements `Commitment`; gains `PROFILE`, `static codec(PedersenVectorSchema)`, `profile()`, `toPointBytes()` (same octets as the existing `toBytes()`), and `verifyOpening(List<BigInteger> values, BigInteger blinding, PedersenVectorBoundPolicy policy)`. Its legacy equality (reference identity) is unchanged |
 | `PedersenVectorBoundPolicy` (new) | `static schemaWidths(PedersenVectorSchema)`, `static residueOnly(PedersenVectorSchema)`, `static widened(PedersenVectorSchema, int addedTerms)` (`2 ≤ addedTerms ≤ 65536`); `schema()` |
-| `PedersenVectorOpening` (new) | `static of(PedersenVectorBoundPolicy, List<BigInteger> values, BigInteger blinding)`; `static decode(byte[], PedersenVectorBoundPolicy)` (§8.3); `encode()`; `values()` (copy); `blinding()`; `policy()` |
+| `PedersenVectorOpening` (new) | `static of(PedersenVectorBoundPolicy, List<BigInteger> values, BigInteger blinding)`; `static decode(byte[], PedersenVectorBoundPolicy)` (§8.3); `encode()`; `values()` (an unmodifiable snapshot taken at construction); `blinding()`; `policy()` |
 
 **The exact public surface added** (the reviewed set for API-surface tests):
 
@@ -841,6 +841,14 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   having no public factory; vector `encodeEnvelope` carries `schema`; `relation` operand
   cardinality; repeated-decoding wording; explicit `add`/`subtract` equations; signed 64-bit
   domain for `declaredLength` and `maxBytes`.
+- **r4 (2026-10-17, metadata and a contract clarification; ADR-0059 M3):** §4.5 evidence now
+  names the §13 vector files of M2; §12.2 clarifies that `PedersenVectorOpening.values()` returns
+  an unmodifiable snapshot taken at construction rather than a per-call copy (callers still cannot
+  modify the opening, so the guarantee is unchanged). No identifier, byte, check, check
+  order or error class changes, so the r3 vectors stay valid (§13.1). Recorded follow-up for a
+  later revision: §12.1 maps a codec's `INVALID_CONFIGURATION` during envelope decoding to a
+  rejected verdict, while the opening step propagates it; aligning the two would change
+  behaviour and needs its own review.
 
 ---
 
