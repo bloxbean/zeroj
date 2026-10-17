@@ -130,6 +130,7 @@ Relevant source:
 | `ConfidentialNotes`, `NoteScanner`, `NoteViewingKey`, `NoteReaderKey`, `NoteOpening` | Confidential notes: a `pedersen-jubjub-v1` commitment's opening delivered on-chain to each reader by Diffie–Hellman on Jubjub (ADR-0055) | Jubjub over BLS12-381 scalar field; JDK ChaCha20-Poly1305 | Not a circuit gadget. D3a (auditor amount in the transfer proof) uses `ZkElGamal`; measured within budget in a test-only reference validator, covering proof-enforced transitions only (issuance trusted); no library D3a API | Experimental; **secret operations offline/isolated only**; **assumptions A1–A3 await external review** | Zcash Sapling's `KA^Sapling`, `KDF^Sapling` (BLAKE2b-256, personalization `ZeroJ_NoteKDF_v1`) and ChaCha20-Poly1305 with a fresh ephemeral per reader; the note protocol around them is ZeroJ's. Acceptance: `E` canonical and in the subgroup, tag verifies, `r < l`, and `[v]·G + [r]·H = C` recomputed on the blinded path. Reader keys validated; possession checked at registration. Checked against all 10 Zcash Sapling note-encryption vectors and an independent Python reference; identical in a GraalVM native image. Spec: `docs/specs/confidential-note-jubjub-v1.md`. |
 | `PedersenCommitment.commit` (off-circuit) | Host-side commitment generation | Jubjub over BLS12-381 scalar field | Not a circuit gadget | **Offline/isolated generation only (ADR-0038)** | Both secret scalars use a fresh multiple-of-`l` blinding and fixed 316-add/316-double schedule. The former loop-bound/operation-count channel is removed and the raw trailing-zero signal is blinded, but Java branches and `BigInteger` remain variable-time. The commitment's hiding and binding are unaffected; the restriction is on secret-bearing execution. |
 | `PedersenCommitment.commitBytes`/`verifyBytes` (+ stream forms), `PedersenBytesCommitment` | Host-side commitment to exact octets, `pedersen-jubjub-bytes-v1` (ADR-0058) | Jubjub over BLS12-381 scalar field | Not a circuit gadget; no circuit proves the byte-to-scalar derivation | Experimental; **offline/isolated generation only**; awaits external review | RFC 9380 XMD/SHA-256 into `GF(l)` over `B ‖ I2OSP(n,8)`, then the unchanged two-base commitment on the blinded schedules. Canonical blinding required; strict decode (ZIP 216 + subgroup). One pass, fixed 8 KiB buffer, flat allocation. The point is also a numeric commitment to `s`, so profile/context need separate authentication. Spec: `docs/specs/pedersen-jubjub-bytes-v1.md`. |
+| `PedersenCommitment.commitScalar`/`verifyScalar`, `PedersenScalarCommitment`, `PedersenVectorCommitment.verifyOpening` + `PedersenVectorBoundPolicy`, opening codecs; `org.zeroj.api.commitment` (`CommitmentEnvelope`, `CommitmentKey`, `CommitmentAcceptance`) | Typed commitment profiles, strict adapters, off-chain envelope and safe keys (ADR-0059) | Jubjub over BLS12-381 scalar field; contracts are curve-independent | Not a circuit gadget; envelopes are never datums, redeemers or public inputs | Experimental; **offline/isolated generation only**; disclosed (V1) verification only where the opening is public or the verifier's timing is unobservable; awaits external review | Spec: `docs/specs/commitment-profiles-v1.md`. Scalars are canonical (`[0, l)`), never reduced; vector openings checked under an explicit bound policy (schema-widths, residue-only, widened(n)); the expected profile always comes from configuration, never from the envelope. Checked against independent Python vectors (`commitment-profiles-v1/`). |
 | `InCircuitEdDSAJubjub` / `ZkEdDSAJubjub` | EdDSA-Jubjub verification | Requires BLS12-381 scalar field | Direct | Yes for verification, pending external review; signing is not constant-time | Use `verifyStrict` when `pk` is prover-supplied, `verifyWithRegisteredKey` when it is a public input or constant. No unqualified `verify`. Spec: `docs/specs/jubjub-eddsa-v1.md`. |
 | `zeroj-bls12381` | BLS12-381 field, G1/G2, pairing, hash-to-curve | BLS12-381 | Not a circuit gadget | Supports off-chain proof verification and conversion paths; Cardano has BLS builtins | Use for proof systems and BBS, not directly inside symbolic circuits unless a circuit gadget is built. |
 | `zeroj-blst` | Native BLS12-381 provider | BLS12-381 | Not a circuit gadget | Off-chain helper | No annotation work. |
@@ -138,6 +139,34 @@ Relevant source:
 | Groth16 pure Java provers | Proof generation | BN254 and BLS12-381 | Consumes generated circuits through R1CS/witness APIs | BLS12-381 proofs target Cardano through the canonical arbitrary-count verifier | None for public-input count; consider generated fixed-count validators only for budget-critical circuits. |
 | PlonK pure Java provers | Proof generation | BLS12-381 by default; BN254 legacy opt-in only | Consumes generated circuits through existing compile APIs | BLS12-381 on-chain is experimental | Do not make PlonK the Cardano default until external review closes. |
 | Halo2 incubator verifier | Halo2 IPA verification | Pallas | Not a symbolic circuit target for Cardano | No | Keep as incubator/off-chain. |
+
+### Commitment profile verification matrix (ADR-0059)
+
+A compact rendering of [`commitment-profiles-v1`](../../specs/commitment-profiles-v1.md) §14, which
+governs. V1 = disclosed opening, V3 = public relation, V4 = proof. "Native" means ledger builtins
+directly; "in a proof" means a Groth16/PlonK verifier with the commitment as public inputs. Every
+cell leaves authorization, replay protection and context binding to the application. V1 checks are
+variable-time: run them where the opening is already public or nobody it is still secret from can
+time the verifier, otherwise offline/isolated.
+
+| Profile | Class | Java off-chain | Cardano L1 (JuLC) | Public after the check |
+|---|---|---|---|---|
+| `pedersen-jubjub-v1` | V1 | `verify`; `verifyScalar` | Not native (no Jubjub builtins); possible only as a proof statement | Message and blinding |
+| | V3 | Typed `add`/`subtract`/`negate` (residues mod `l`); ADR-0051 D3a for integer readings | In a proof only | The deltas |
+| | V4 | Groth16/PlonK with `ZkPedersen` | `Groth16BLS12381Lib.verify` with affine `(u, v)` public inputs | The public inputs |
+| `pedersen-jubjub-vector-v1` | V1 | `verify`; `verifyOpening` under a bound policy | Not native | Values and blinding |
+| | V3 | `add`/`subtract` (same schema) | In a proof only | The deltas |
+| | V4 | Groth16/PlonK with `ZkPedersenVector` | `Groth16BLS12381Lib.verify` with `σ` as a public input and an issuance record | The public inputs, including `σ` |
+| `pedersen-jubjub-bytes-v1` | V1 | `verifyBytes*`, streaming to `2^61 − 256` octets | Not native; not provided in a proof | Payload and blinding |
+| | V3, V4 | Not offered | Not offered | — |
+| `pedersen-bls12-381-g1-v1` | V1 | Planned (#95) | Planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | Message and blinding |
+| | V3 | Planned (#95) | Planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | The deltas |
+| | V4 | Blocked (ADR-0051 D7; #96) | Blocked / feasibility (#96) | — |
+| `pedersen-bls12-381-g1-bytes-v1` | V1 only (no arithmetic on byte commitments) | Planned (#95) | Native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first (#95 measures and documents that limit); a supplied scalar authenticates only that scalar, not the bytes | Payload (or scalar) and blinding |
+
+Disclosed openings on-chain are public forever. Relations prove residues, not balances: integer
+conservation needs a range proof per term or a circuit. Documents larger than the on-chain limit
+can only be committed and opened off-chain; on-chain references them by commitment.
 
 ## Important Current Limitations
 

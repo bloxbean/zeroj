@@ -1,0 +1,1627 @@
+{
+  "schema": "zeroj-commitment-vectors-v1",
+  "profileId": "pedersen-jubjub-v1",
+  "spec": [
+    {
+      "path": "docs/specs/commitment-profiles-v1.md",
+      "revision": "r3",
+      "date": "2026-10-17",
+      "sha256": "542d168510338b6d36771ff6352effaf3e3678d5458e90b0b57935fa3bfe39a3"
+    },
+    {
+      "path": "docs/specs/pedersen-jubjub-v1.md",
+      "date": "2026-10-03",
+      "sha256": "f41a10ad000e7843456240fda6e7a0885cee0aa94e219c7af7ddfcf4d286142a"
+    }
+  ],
+  "generator": {
+    "script": "zeroj-circuit-lib/src/test/resources/commitment-vectors-reference/emit_commitment_vectors_v1.py",
+    "scriptSha256": "85dfa980cfa63a519bfe3951325f25be33c6f9e155e9b474512881bdad4dd30e",
+    "python": "CPython 3.13.5"
+  },
+  "positive": [
+    {
+      "name": "decode-point-identity",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "uHex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "vHex": "0000000000000000000000000000000000000000000000000000000000000001"
+      }
+    },
+    {
+      "name": "decode-point-base-g",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7"
+      },
+      "expected": {
+        "uHex": "3ea5c4673a121ca35ed37ee3b172f5ee04315c657fbe375f512dfea318d56fe5",
+        "vHex": "57137b83ea6edb4f78f7d30d3f616cb3b9aa6e8e40808413c10cea38d50c55cb"
+      }
+    },
+    {
+      "name": "decode-point-base-h",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "7de3c894779099fe9b13d141c992003ba2fab89eeb4a190345e05917d897bb60"
+      },
+      "expected": {
+        "uHex": "72963e7766b3cd553a1525a17da810e6b4cdeb70541dac5b52a3210f5c372db6",
+        "vHex": "60bb97d81759e04503194aeb9eb8faa23b0092c941d1139bfe99907794c8e37d"
+      }
+    },
+    {
+      "name": "decode-point-commitment-42-12345",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      },
+      "expected": {
+        "uHex": "478a0bd6a0eebdffc610618ad979b39d6237f240125534886d38720cbd76a025",
+        "vHex": "6387c33be7b7177b74ce909592456d7c81dab375a6ba3182eb7f5e2974e0d357"
+      }
+    },
+    {
+      "name": "decode-point-commitment-qm1-qm1",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "cb6c7d862c330a5f8b59ff3c1f155b53857545d5b2856a97f616e826eef5075f"
+      },
+      "expected": {
+        "uHex": "123ee722fab1a4ca8f86597575288880a2868f7713c942ddda7b58affcdd0990",
+        "vHex": "5f07f5ee26e816f6976a85b2d5457585535b151f3cff598b5f0a332c867d6ccb"
+      }
+    },
+    {
+      "name": "commit-zero-zero",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "commit-42-12345",
+      "operation": "commit",
+      "input": {
+        "value": "42",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      }
+    },
+    {
+      "name": "commit-qm1-qm1",
+      "operation": "commit",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "pointHex": "cb6c7d862c330a5f8b59ff3c1f155b53857545d5b2856a97f616e826eef5075f"
+      }
+    },
+    {
+      "name": "commit-zero-qm1",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "pointHex": "7de3c894779099fe9b13d141c992003ba2fab89eeb4a190345e05917d897bbe0"
+      }
+    },
+    {
+      "name": "commit-qm1-zero",
+      "operation": "commit",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b1357"
+      }
+    },
+    {
+      "name": "commit-one-zero",
+      "operation": "commit",
+      "input": {
+        "value": "1",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7"
+      }
+    },
+    {
+      "name": "commit-zero-one",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "1"
+      },
+      "expected": {
+        "pointHex": "7de3c894779099fe9b13d141c992003ba2fab89eeb4a190345e05917d897bb60"
+      }
+    },
+    {
+      "name": "commit-2pow64-12345",
+      "operation": "commit",
+      "input": {
+        "value": "18446744073709551616",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "7076b00a692f0de59e140afd19ad7895cdea6e787ad3c6f9a4743e7503f451d3"
+      }
+    },
+    {
+      "name": "commit-2pow64m1-12345",
+      "operation": "commit",
+      "input": {
+        "value": "18446744073709551615",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "4ad1c5a996d1e78a6aee000b17812ba83d25dcaede8b32e65fec150198bd316c"
+      }
+    },
+    {
+      "name": "commit-2pow251-12345",
+      "operation": "commit",
+      "input": {
+        "value": "3618502788666131106986593281521497120414687020801267626233049500247285301248",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "00266fab50871d6e7206d079bd756ad88c1e590e8378e8c52e27c3d2331c9199"
+      }
+    },
+    {
+      "name": "commit-2pow251m1-12345",
+      "operation": "commit",
+      "input": {
+        "value": "3618502788666131106986593281521497120414687020801267626233049500247285301247",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "79cf23e972ea02722f921704e90fb3a31b4cbd3bc712075b56c9e7736720b798"
+      }
+    },
+    {
+      "name": "commit-legacy-value-q",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "e4768dc8fea19591a92cee4f565fc9019fb6c420756bf3fead4d8819d3aad90f"
+      }
+    },
+    {
+      "name": "commit-legacy-value-zero",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "0",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "e4768dc8fea19591a92cee4f565fc9019fb6c420756bf3fead4d8819d3aad90f"
+      }
+    },
+    {
+      "name": "commit-legacy-value-minus-1",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "-1",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "accbe6db81cb4c80399935e7457165ff771a26a150c8741f356f7a2e9acb894c"
+      }
+    },
+    {
+      "name": "commit-legacy-value-qm1",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "accbe6db81cb4c80399935e7457165ff771a26a150c8741f356f7a2e9acb894c"
+      }
+    },
+    {
+      "name": "commit-legacy-value-q-plus-42",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254241",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      }
+    },
+    {
+      "name": "commit-legacy-value-42",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "42",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      }
+    },
+    {
+      "name": "commit-legacy-blinding-minus-1",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "42",
+        "blinding": "-1"
+      },
+      "expected": {
+        "pointHex": "71de09362361bd5de1a78dc4d3a05857e873955ee40a96a0c983935316b11fda"
+      }
+    },
+    {
+      "name": "commit-legacy-blinding-qm1",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "pointHex": "71de09362361bd5de1a78dc4d3a05857e873955ee40a96a0c983935316b11fda"
+      }
+    },
+    {
+      "name": "commit-legacy-both-q",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "expected": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "commit-legacy-value-minus-q",
+      "operation": "commitLegacy",
+      "input": {
+        "value": "-6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "verify-identity-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000",
+        "value": "0",
+        "blinding": "0"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-42-12345",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "12345"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-qm1-qm1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "cb6c7d862c330a5f8b59ff3c1f155b53857545d5b2856a97f616e826eef5075f",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-zero-qm1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "7de3c894779099fe9b13d141c992003ba2fab89eeb4a190345e05917d897bbe0",
+        "value": "0",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-qm1-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b1357",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "0"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-1-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "bf9da806f6694e39a62684a5c5b57d41e2391b3b96240adb9c2b45209ab6a798",
+        "value": "1",
+        "blinding": "12345",
+        "amountBits": "1"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-64-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "4ad1c5a996d1e78a6aee000b17812ba83d25dcaede8b32e65fec150198bd316c",
+        "value": "18446744073709551615",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-251-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "79cf23e972ea02722f921704e90fb3a31b4cbd3bc712075b56c9e7736720b798",
+        "value": "3618502788666131106986593281521497120414687020801267626233049500247285301247",
+        "blinding": "12345",
+        "amountBits": "251"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-64-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "e4768dc8fea19591a92cee4f565fc9019fb6c420756bf3fead4d8819d3aad90f",
+        "value": "0",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "encode-opening-zero-zero",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "0",
+        "blinding": "0"
+      },
+      "expected": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "decode-opening-zero-zero",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "value": "0",
+        "blinding": "0"
+      }
+    },
+    {
+      "name": "encode-opening-42-12345",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "42",
+        "blinding": "12345"
+      },
+      "expected": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a0000000000000000000000000000000000000000000000000000000000003039"
+      }
+    },
+    {
+      "name": "decode-opening-42-12345",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a0000000000000000000000000000000000000000000000000000000000003039"
+      },
+      "expected": {
+        "value": "42",
+        "blinding": "12345"
+      }
+    },
+    {
+      "name": "encode-opening-qm1-qm1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb60e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb6"
+      }
+    },
+    {
+      "name": "decode-opening-qm1-qm1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb60e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb6"
+      },
+      "expected": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254198",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      }
+    },
+    {
+      "name": "encode-opening-1-2",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "1",
+        "blinding": "2"
+      },
+      "expected": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002"
+      }
+    },
+    {
+      "name": "decode-opening-1-2",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002"
+      },
+      "expected": {
+        "value": "1",
+        "blinding": "2"
+      }
+    },
+    {
+      "name": "envelope-encode-identity",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "envelope-decode-identity",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310100000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "expected": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "envelope-encode-commitment-42-12345",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      },
+      "expected": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      }
+    },
+    {
+      "name": "envelope-decode-commitment-42-12345",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      }
+    },
+    {
+      "name": "envelope-encode-base-g",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7"
+      },
+      "expected": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7"
+      }
+    },
+    {
+      "name": "envelope-decode-base-g",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "expected": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7"
+      }
+    },
+    {
+      "name": "relation-add-wraparound",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "8a8b6efc75e398ae69ae329e5b2ce53ea3c7c6b5b2dc76ba08b38d6b6ce02b45",
+          "ed6652ac2c3851455903936c14a7cdf874eb278945ebb641507183091194f5cb"
+        ]
+      },
+      "expected": {
+        "pointHex": "9c9b9a15a3945826b2e13ea61d1449a76e774e5c1c3ad2e920ff6d0cf3faaeaf"
+      }
+    },
+    {
+      "name": "relation-subtract",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "9c9b9a15a3945826b2e13ea61d1449a76e774e5c1c3ad2e920ff6d0cf3faaeaf",
+          "ed6652ac2c3851455903936c14a7cdf874eb278945ebb641507183091194f5cb"
+        ]
+      },
+      "expected": {
+        "pointHex": "8a8b6efc75e398ae69ae329e5b2ce53ea3c7c6b5b2dc76ba08b38d6b6ce02b45"
+      }
+    },
+    {
+      "name": "relation-subtract-to-negative",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "0100000000000000000000000000000000000000000000000000000000000000",
+          "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+        ]
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc38763"
+      }
+    },
+    {
+      "name": "relation-negate",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+        ]
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc38763"
+      }
+    },
+    {
+      "name": "relation-negate-identity",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "0100000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "expected": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "relation-add-identity",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+          "0100000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "expected": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+      }
+    },
+    {
+      "name": "verify-relation-result-qm42",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc38763",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254157",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183241854"
+      },
+      "expected": {
+        "result": "true"
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "verify-amount-bits-1-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "2e18d8b08d18e3dc63d5eab81a5caa67a95dd9e4aefd5b8ca4c35700ccbb7cca",
+        "value": "2",
+        "blinding": "12345",
+        "amountBits": "1"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-64-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "7076b00a692f0de59e140afd19ad7895cdea6e787ad3c6f9a4743e7503f451d3",
+        "value": "18446744073709551616",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-251-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "00266fab50871d6e7206d079bd756ad88c1e590e8378e8c52e27c3d2331c9199",
+        "value": "3618502788666131106986593281521497120414687020801267626233049500247285301248",
+        "blinding": "12345",
+        "amountBits": "251"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-0",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "12345",
+        "amountBits": "0"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-252",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "12345",
+        "amountBits": "252"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "12345",
+        "amountBits": "-1"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-wrong-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "43",
+        "blinding": "12345"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-wrong-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "12346"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-swapped-value-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "12345",
+        "blinding": "42"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-value-42-plus-q-not-reduced",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254241",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-amount-bits-64-wrong-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "43",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "commit-value-q",
+      "operation": "commit",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-q",
+      "operation": "commit",
+      "input": {
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-q",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-q",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-value-q",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-q",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-value-q-plus-1",
+      "operation": "commit",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254200",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-q-plus-1",
+      "operation": "commit",
+      "input": {
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254200"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-q-plus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254200",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-q-plus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254200"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-value-q-plus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254200",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-q-plus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "42",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254200"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-value-minus-1",
+      "operation": "commit",
+      "input": {
+        "value": "-1",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-minus-1",
+      "operation": "commit",
+      "input": {
+        "value": "42",
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "-1",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "42",
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-value-minus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "-1",
+        "blinding": "12345"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-minus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "42",
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-value-q",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb70000000000000000000000000000000000000000000000000000000000003039"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-q",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-value-q-plus-1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb80000000000000000000000000000000000000000000000000000000000003039"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-q-plus-1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb8"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-value-all-ones",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000003039"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-length-0",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": ""
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-32",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-63",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a00000000000000000000000000000000000000000000000000000000000030"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-65",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000000000000000303900"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-96",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000002a00000000000000000000000000000000000000000000000000000000000030390000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-63-order-before-scalars",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb70e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72c"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-empty",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-only",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "01",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0x00",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0012706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0x02",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0212706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-truncated-in-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-truncated-by-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-trailing-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e300",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-31-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-33-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e300",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-no-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-id-length-exceeds-envelope",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0134706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-other-profile-pedersen-jubjub-vector-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0119706564657273656e2d6a75626a75622d766563746f722d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-other-profile-pedersen-jubjub-bytes-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-reserved-profile-pedersen-bls12-381-g1-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-differs-in-one-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763257d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-uppercase-first-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112506564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-length-octet-minus-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0111706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-length-octet-plus-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0113706564657273656e2d6a75626a75622d763157d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-empty",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "010057d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-order-version-before-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0212706564657273656e2d6a75626a75622d763257d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-order-identifier-before-point-length",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763257d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-order-identifier-before-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0119706564657273656e2d6a75626a75622d766563746f722d76310200000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-encode-order-8",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-encode-off-curve",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "0200000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "relation-add-second-order-8",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+          "dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9"
+        ]
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "relation-negate-mixed-order",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "9c29cf9c9377e47f018c73e52713ef0bfea3f9f89e1850db974834deb5179c9f"
+        ]
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "relation-subtract-sign-alias",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "0100000000000000000000000000000000000000000000000000000000000080",
+          "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3"
+        ]
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-0",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": ""
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-0",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-31",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "01000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-31",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763101000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-33",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "010000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-33",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631010000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-v-equals-p",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "01000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-v-equals-p",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763101000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-v-equals-p-plus-1",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "02000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-v-equals-p-plus-1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763102000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-v-max-255-bit",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-v-max-255-bit",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-sign-alias-identity",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000080"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-sign-alias-identity",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310100000000000000000000000000000000000000000000000000000000000080",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-sign-alias-order-2",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7edf3"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-sign-alias-order-2",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763100000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7edf3",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-off-curve",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0200000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-off-curve",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310200000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-order-2",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-2",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d763100000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-order-4",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-4",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-order-8",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-8",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-mixed-order-8",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "9c29cf9c9377e47f018c73e52713ef0bfea3f9f89e1850db974834deb5179c9f"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-mixed-order-8",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76319c29cf9c9377e47f018c73e52713ef0bfea3f9f89e1850db974834deb5179c9f",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-mixed-order-2",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "aa2c1f8bd5a180147c2a44598df0e2d1886a5c7772476bbecc65e64117e46510"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-mixed-order-2",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d7631aa2c1f8bd5a180147c2a44598df0e2d1886a5c7772476bbecc65e64117e46510",
+        "expectedProfileId": "pedersen-jubjub-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "verify-order-bad-point-before-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "12345"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "verify-order-short-point-before-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "01000000000000000000000000000000000000000000000000000000000000",
+        "value": "-1",
+        "blinding": "12345"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "verify-order-point-before-amount-bits",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "0200000000000000000000000000000000000000000000000000000000000000",
+        "value": "42",
+        "blinding": "12345",
+        "amountBits": "252"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "verify-order-amount-bits-before-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "blinding": "12345",
+        "amountBits": "0"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-order-check1-before-check2",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "18446744073709551616",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199",
+        "amountBits": "64"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-order-blinding-check1-before-equation",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "43",
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-order-check2-before-equation",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "57d3e074295e7feb8231baa675b3da817c6d45929590ce747b17b7e73bc387e3",
+        "value": "18446744073709551616",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "relation-order-first-point-first",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+          ""
+        ]
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "relation-order-empty-then-order-2",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "",
+          "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+        ]
+      },
+      "error": "MALFORMED_ENCODING"
+    }
+  ]
+}

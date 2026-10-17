@@ -19,7 +19,7 @@ or Jubjub-style primitives.
 | Selection | `Mux` |
 | Signal helpers | `SignalPoseidon`, `SignalMiMC` |
 | Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
-| Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `PedersenBytesCommitment`, `EdDSAJubjub`, in-circuit variants |
+| Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `PedersenBytesCommitment`, `PedersenScalarCommitment`, `PedersenVectorBoundPolicy`, opening codecs, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
 ## Gadget Status
@@ -56,6 +56,7 @@ final proof, verification key data, and public inputs.
 | Confidential notes (encrypted opening delivery) | `ConfidentialNotes`, `NoteScanner`, `NoteViewingKey`, `NoteReaderKey`, `NoteOpening` | — | Jubjub over BLS12-381 (Zcash Sapling key agreement, BLAKE2b-256 KDF, JDK ChaCha20-Poly1305) | Experimental; secret operations **offline/isolated only**; assumptions A1–A3 await external review | Profile [`confidential-note-jubjub-v1`](../docs/specs/confidential-note-jubjub-v1.md) (ADR-0055): a `pedersen-jubjub-v1` note's opening `(v, r)` delivered on-chain to each reader (owner, auditors) with a fresh ephemeral key per reader. A reader accepts only after the opening recomputes the commitment on the blinded path. Rules: open only your own delivery position; check the owner credential yourself; report unopenable owned notes; scan only in your own process. Checked against all 10 Zcash Sapling note-encryption vectors, an independent Python reference, BouncyCastle's personalised BLAKE2b and Wycheproof ChaCha20-Poly1305; identical in a GraalVM native image. D3a (an auditor's amount enforced inside the transfer proof) is **not a library API**: it was measured within the per-transaction budget in a test-only reference validator (two-output transfer, one auditor), and covers only notes created by proof-enforced transitions; issued notes rest on the issuer ([benchmark](../docs/benchmarks/confidential-note-jubjub-2026-10-09.md)). |
 | Pedersen commitment (off-circuit generation) | `PedersenCommitment.commit`; internal fixed-limb review candidate | — | Jubjub over BLS12-381 | Legacy is **offline/isolated only**; fixed-limb path is an unapproved ADR-0039 M9 candidate | The candidate is package-private, uses mutable explicit-width openings and fixed-limb schedules, and has separate timing/external/platform gates. Hiding and binding of the commitment itself are unaffected. |
 | Pedersen byte commitment (`pedersen-jubjub-bytes-v1`) | `PedersenCommitment.commitBytes`/`commitBytesToEnd`/`verifyBytes`/`verifyBytesToEnd`, `PedersenBytesCommitment` | — | Jubjub over BLS12-381 | Experimental; generation **offline/isolated only**; awaits external review | Spec: [`pedersen-jubjub-bytes-v1`](../docs/specs/pedersen-jubjub-bytes-v1.md) (ADR-0058). Commits to exact octets: RFC 9380 XMD/SHA-256 hash-to-scalar mod `l` over `B ‖ I2OSP(n,8)`, then the unchanged `pedersen-jubjub-v1` commitment. Arrays, exact-length streams and bounded read-to-end streams give the same commitment in one pass with a fixed 8 KiB buffer. Blinding must be canonical (`0 ≤ r < l`). The point carries no profile: whoever knows `(B, r)` also knows the numeric opening `(s, r)`, so authenticate the point/profile/context association when issuance matters. No circuit proves `s` was derived from bytes. Checked against an independent Python reference, `Bls12381Hash` and a BouncyCastle expander. |
+| Commitment profiles and strict adapters (ADR-0059) | `PedersenCommitment.commitScalar`/`verifyScalar`, `PedersenScalarCommitment`, `PedersenScalarOpening`, `PedersenBlinding`, `PedersenVectorCommitment.verifyOpening`, `PedersenVectorBoundPolicy`, `PedersenVectorOpening`; contracts in `zeroj-api` (`org.zeroj.api.commitment`) | — | Jubjub over BLS12-381 | Experimental; generation **offline/isolated only**; awaits external review | Registry and contract: [`commitment-profiles-v1`](../docs/specs/commitment-profiles-v1.md). Strict paths require canonical scalars (`[0, l)`), never reduce them, and report one error class each (`CommitmentFormatException`). Vector openings are checked under an explicit bound policy, so sums (`widened(n)`) and differences (`residue-only`) can be opened. The off-chain envelope carries the profile identifier (never a vector schema) but is decoded only under the caller's expected codec; `CommitmentKey` keys commitments by profile, point and schema. Legacy `commit`/`verify` are unchanged. Checked against independent Python vectors (`zeroj-test-vectors`, `commitment-profiles-v1/`). |
 | EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub`, `JubjubSigner` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Verification ready pending external review; legacy signing offline-only; fixed-limb hedged profile remains an unapproved candidate | Two in-circuit entry points are named for their key-trust model. `JubjubSigners.validatedDedicatedHostJavaRequired` deliberately fails closed until ADR-0039 M4–M8 pass. Specs: [`jubjub-eddsa-v1`](../docs/specs/jubjub-eddsa-v1.md), [hedged candidate](../docs/specs/jubjub-eddsa-hedged-v1-candidate.md). |
 | Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR`, `PoseidonParameterFingerprint` | Used by `ZkPoseidon*`, `ZkMerkle`, and the separate MPF/JMT modules | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. `FastPoseidonBls12381T3` is the equivalence-tested optimized **host-side** path used for off-circuit roots and witnesses; circuit constraints still use the Poseidon gadget. |
 
@@ -253,12 +254,21 @@ Curve and parameter guidance:
   signal, but Java branches, `BigInteger`, the reductions and the JVM remain variable-time.
   The commitment's binding and perfect hiding are unaffected, as are the in-circuit Pedersen
   gadgets — the restriction is on secret-bearing execution only. Verification uses the faster
-  public-scalar path because the opening is disclosed to that verifier.
+  public-scalar path because the opening is disclosed to that verifier. Disclosed is not public
+  (ADR-0059 A2): run variable-time verification only where the opening is already public or no
+  party from whom it is still secret can observe the verifier's timing; otherwise verify offline
+  or in an isolated process too.
 
   ADR-0039 also contains an internal fixed-limb Pedersen candidate. It accepts explicit
   unsigned widths, stores both inputs modulo `l`, uses fixed 252-iteration schedules, and
   never converts a secret opening to `BigInteger`. Its classes remain package-private until
   independent timing, platform, external-review, and public-API gates pass.
+
+- **Strict commitment-profile entry points (ADR-0059) keep the same restrictions.**
+  `commitScalar` runs through `commit`'s two blinded schedules; `verifyScalar`, vector
+  `verifyOpening` and `CommitmentAcceptance` with such an opening check are variable-time
+  disclosed (V1) verification under the timing rule above. The envelope and `CommitmentKey`
+  carry no secret. See `docs/specs/commitment-profiles-v1.md` §6.2 and §12.
 
 - **Byte commitments (`commitBytes*`) inherit the same offline-only restriction.** The payload,
   the SHA-256 state and intermediates, the derived scalar and `r` are secret during generation;

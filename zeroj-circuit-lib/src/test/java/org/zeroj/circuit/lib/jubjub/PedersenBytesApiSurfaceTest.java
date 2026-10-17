@@ -22,6 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ADR-0058 D3: the byte-commitment surface stays exactly as reviewed. The value type cannot be
  * constructed from a raw point except through the validating decoder, carries no arithmetic and
  * no opening, and the hash internals (including the cap seam) are not public.
+ *
+ * <p>ADR-0059 M1 ({@code commitment-profiles-v1} §12.2) grows only the allowlists: the descriptor
+ * and codec of the byte profile, and the three strict {@code pedersen-jubjub-v1} entry points.
  */
 class PedersenBytesApiSurfaceTest {
 
@@ -39,20 +42,22 @@ class PedersenBytesApiSurfaceTest {
     }
 
     @Test
-    @DisplayName("PedersenBytesCommitment exposes only decode, profileId, toPointBytes and Object methods")
+    @DisplayName("PedersenBytesCommitment exposes only decode, profileId, profile, toPointBytes and Object methods")
     void valueTypeMethods() {
         Set<String> publicMethods = new TreeSet<>();
         for (Method m : PedersenBytesCommitment.class.getDeclaredMethods()) {
             if (Modifier.isPublic(m.getModifiers())) publicMethods.add(m.getName());
         }
-        assertEquals(new TreeSet<>(Set.of("decode", "profileId", "toPointBytes", "equals", "hashCode", "toString")),
-                publicMethods);
+        assertEquals(new TreeSet<>(Set.of("decode", "profileId", "profile", "toPointBytes", "equals", "hashCode",
+                "toString")), publicMethods);
+        Set<String> publicFields = new TreeSet<>();
         for (Field f : PedersenBytesCommitment.class.getDeclaredFields()) {
             if (Modifier.isPublic(f.getModifiers())) {
-                assertEquals("PROFILE_ID", f.getName());
+                publicFields.add(f.getName());
             }
             assertFalse(f.getType() == BigInteger.class, "no scalar is retained: " + f);
         }
+        assertEquals(new TreeSet<>(Set.of("PROFILE_ID", "PROFILE", "CODEC")), publicFields);
     }
 
     @Test
@@ -88,6 +93,10 @@ class PedersenBytesApiSurfaceTest {
                 "randomBlinding[SecureRandom]",
                 "decode[byte[]]",
                 "field H", "field H_DOMAIN_TAG",
+                // pedersen-jubjub-v1 strict entry points (ADR-0059 M1, commitment-profiles-v1 §12.2)
+                "commitScalar[BigInteger, BigInteger]",
+                "verifyScalar[PedersenScalarCommitment, BigInteger, BigInteger]",
+                "verifyScalar[PedersenScalarCommitment, BigInteger, BigInteger, int]",
                 // pedersen-jubjub-bytes-v1 (spec §6.2)
                 "commitBytes[byte[], BigInteger]",
                 "commitBytes[InputStream, long, BigInteger]",

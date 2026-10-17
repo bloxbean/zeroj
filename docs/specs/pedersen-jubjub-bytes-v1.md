@@ -204,6 +204,14 @@ opening verification** recomputes `s` from the supplied payload and checks
 verifier. A party checking a still-private payload or opening recomputes the commitment with
 generation and compares points instead.
 
+> **Non-normative pointer (ADR-0059).** The V1 timing rule of
+> [`commitment-profiles-v1`](commitment-profiles-v1.md) §6.2 qualifies "disclosed": variable-time verification is appropriate only
+> where the opening is already public or no party from whom it is still secret can observe the
+> verifier's timing. That specification also assigns the Java error classes of the rows above
+> (§11: `NON_CANONICAL_SCALAR`, `LENGTH_OUT_OF_RANGE`, `MALFORMED_ENCODING`, `NOT_IN_SUBGROUP`,
+> carried by `CommitmentFormatException`, a subclass of `IllegalArgumentException`). This note
+> changes no rule of this document.
+
 ### 6.1 Payload sources
 
 Three payload sources produce the **same** `s` for the same octets:
@@ -259,7 +267,10 @@ length, the `ToEnd` forms a maximum. Neither meaning is ever inferred from the v
 `PedersenBytesCommitment` is a final, immutable class:
 
 - `public static final String PROFILE_ID = "pedersen-jubjub-bytes-v1"` and `profileId()`:
-  metadata for configuration and documentation, never serialized and never proof of provenance.
+  metadata for configuration and documentation, never part of this profile's own wire form and
+  never proof of provenance. (Non-normative pointer: ADR-0059 adds `PROFILE`, `CODEC` and
+  `profile()`, and an off-chain envelope that carries the identifier next to the point,
+  [`commitment-profiles-v1`](commitment-profiles-v1.md) §9, §12.2.)
 - `static PedersenBytesCommitment decode(byte[] pointBytes)`: §5; the only way to build one
   from received bytes.
 - `byte[] toPointBytes()`: a fresh copy of the 32-octet encoding.
@@ -361,7 +372,8 @@ blindings (§4).
 - Any circuit or proof that `s` was derived from particular octets. Existing scalar gadgets
   constrain an opening of `s` only.
 - A self-describing envelope, profile tag or generic opening codec (ADR-0058 defers these to
-  issue #94).
+  issue #94; non-normative pointer: they are now defined off-chain by
+  [`commitment-profiles-v1`](commitment-profiles-v1.md) §8.2 and §9, outside this profile's wire form).
 - Commitments to text, JSON or other structured data beyond their exact octets. Applications
   that canonicalize such data define and version that step themselves.
 - Any statement about constant-time generation. Secret-bearing off-circuit generation remains
