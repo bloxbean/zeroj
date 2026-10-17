@@ -1,0 +1,1499 @@
+{
+  "schema": "zeroj-commitment-vectors-v1",
+  "profileId": "pedersen-jubjub-bytes-v1",
+  "spec": [
+    {
+      "path": "docs/specs/commitment-profiles-v1.md",
+      "revision": "r3",
+      "date": "2026-10-17",
+      "sha256": "542d168510338b6d36771ff6352effaf3e3678d5458e90b0b57935fa3bfe39a3"
+    },
+    {
+      "path": "docs/specs/pedersen-jubjub-v1.md",
+      "date": "2026-10-03",
+      "sha256": "f41a10ad000e7843456240fda6e7a0885cee0aa94e219c7af7ddfcf4d286142a"
+    },
+    {
+      "path": "docs/specs/pedersen-jubjub-bytes-v1.md",
+      "date": "2026-10-16",
+      "sha256": "9a1c84d4beb1113e99246d48e1e25773758a4a029c0103fb9a94fdcdf7cfde77"
+    }
+  ],
+  "generator": {
+    "script": "zeroj-circuit-lib/src/test/resources/commitment-vectors-reference/emit_commitment_vectors_v1.py",
+    "scriptSha256": "85dfa980cfa63a519bfe3951325f25be33c6f9e155e9b474512881bdad4dd30e",
+    "python": "CPython 3.13.5"
+  },
+  "positive": [
+    {
+      "name": "decode-point-identity",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "uHex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "vHex": "0000000000000000000000000000000000000000000000000000000000000001"
+      }
+    },
+    {
+      "name": "decode-point-base-g",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "cb550cd538ea0cc1138480408e6eaab9b36c613f0dd3f7784fdb6eea837b13d7"
+      },
+      "expected": {
+        "uHex": "3ea5c4673a121ca35ed37ee3b172f5ee04315c657fbe375f512dfea318d56fe5",
+        "vHex": "57137b83ea6edb4f78f7d30d3f616cb3b9aa6e8e40808413c10cea38d50c55cb"
+      }
+    },
+    {
+      "name": "decode-point-base-h",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "7de3c894779099fe9b13d141c992003ba2fab89eeb4a190345e05917d897bb60"
+      },
+      "expected": {
+        "uHex": "72963e7766b3cd553a1525a17da810e6b4cdeb70541dac5b52a3210f5c372db6",
+        "vHex": "60bb97d81759e04503194aeb9eb8faa23b0092c941d1139bfe99907794c8e37d"
+      }
+    },
+    {
+      "name": "decode-point-commitment-empty-0",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      },
+      "expected": {
+        "uHex": "73df74459d12915ce5185ed0b9c51f42f1f5c1a844a0e8a0ae0ec0e150df5795",
+        "vHex": "1d78e936f3d1e3ace42af471f8f8ffd8d3bf089989e45989e7022d712a940d9f"
+      }
+    },
+    {
+      "name": "decode-point-commitment-empty-qm1",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0f2b6778c98d4623d8312c6d7cb02dc7892ce94927c04dd064adcfb7e7912489"
+      },
+      "expected": {
+        "uHex": "60f836bdff1218b49f1f59890e78fc30c3082ca852bfa2e1fa99df53f2256539",
+        "vHex": "092491e7b7cfad64d04dc02749e92c89c72db07c6d2c31d823468dc978672b0f"
+      }
+    },
+    {
+      "name": "hash-to-scalar-empty",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "hex": ""
+        }
+      },
+      "expected": {
+        "b0Hex": "d8a576b8db82c95dac7246e17f5cee19e4aa715e06e0c6a7f26b8c30aec62481",
+        "b1Hex": "0806e94e86b0513631c07b6aba359c462afe5fae6338f2b8a9f8f9070c67b61f",
+        "b2Hex": "c8b5cd7a9ee1f3d2739001762e0b7f1742325a4ef895f6164d4d643a6ae70028",
+        "uniformBytesHex": "0806e94e86b0513631c07b6aba359c462afe5fae6338f2b8a9f8f9070c67b61fc8b5cd7a9ee1f3d2739001762e0b7f17",
+        "scalar": "2768688386148388643750966059999018659354169745073017804345851873500118073729"
+      }
+    },
+    {
+      "name": "hash-to-scalar-octet-00",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "hex": "00"
+        }
+      },
+      "expected": {
+        "b0Hex": "a84874de20303a0860814ff75de321b5f9769148f69b8c92f592903ab4596d8b",
+        "b1Hex": "290e6c537b7cef839f21a279c3f7f3a6f398685c90ad53a756983191ddada000",
+        "b2Hex": "79be933b8b7a3fb14f0b08d59aff511b100f994f68a0b01d9500712daf948725",
+        "uniformBytesHex": "290e6c537b7cef839f21a279c3f7f3a6f398685c90ad53a756983191ddada00079be933b8b7a3fb14f0b08d59aff511b",
+        "scalar": "6237748535820120633160646092218244252291626506898568908355863836794960556692"
+      }
+    },
+    {
+      "name": "hash-to-scalar-hello-zeroj-utf8",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        }
+      },
+      "expected": {
+        "b0Hex": "7ab88f3f0eabbe595b1f2c929b9d713f21d6acef1738844dc36641af72d35a98",
+        "b1Hex": "14dd89e576c99be0eaec0c2418bf300cec741d24cebb7bd89b748ef17696cc26",
+        "b2Hex": "97bd11709f19b0d3132bc80ace9a4e63e97e400348c49b3d2882d7f428810548",
+        "uniformBytesHex": "14dd89e576c99be0eaec0c2418bf300cec741d24cebb7bd89b748ef17696cc2697bd11709f19b0d3132bc80ace9a4e63",
+        "scalar": "456038447076078389376331968700418361310272811093853935727086220292416956239"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-55",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "55"
+        }
+      },
+      "expected": {
+        "b0Hex": "ed729dbac38d512743d7dbd70bb1e041712a121d26447158a34d3f2b217225c5",
+        "b1Hex": "b04b3c49d108f297c8888de449145c025084161aee0c2365d248a26adbc3a36e",
+        "b2Hex": "3ee3d2f2081debddb02f5ffd0355fd647ae0e91f91303578683a4ac0fa384abf",
+        "uniformBytesHex": "b04b3c49d108f297c8888de449145c025084161aee0c2365d248a26adbc3a36e3ee3d2f2081debddb02f5ffd0355fd64",
+        "scalar": "1442420364753627049819131496206016596700552918368718087466977481764613126913"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-56",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "56"
+        }
+      },
+      "expected": {
+        "b0Hex": "f13e196e971a98bc8629c3df4d6b7c824551b88ab6d7e8d63b486f60a46dc3a2",
+        "b1Hex": "04346b2c7c46294ee16755912c8885399f10dd83c029751ed4461a2273edb47e",
+        "b2Hex": "ec2d388d3202e2c8dc32b439802077d1267b6bf31dee47733a5ee1ef0edeb3b3",
+        "uniformBytesHex": "04346b2c7c46294ee16755912c8885399f10dd83c029751ed4461a2273edb47eec2d388d3202e2c8dc32b439802077d1",
+        "scalar": "5317606287895039839922192572939779096777136769121981704689356228652985095270"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-64",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "64"
+        }
+      },
+      "expected": {
+        "b0Hex": "021992c88482978cc22cc83633b98f03a01a96514e4cc1c5a206f0e72618cbc2",
+        "b1Hex": "b9575fc51ee397fcc809253325385cd1acff8f3c9aa6cff5f96d61f62b17c361",
+        "b2Hex": "4a3f63c227af2627ac077048fa8c9b0c7efdeea94224f643cc45ca966f9ce03a",
+        "uniformBytesHex": "b9575fc51ee397fcc809253325385cd1acff8f3c9aa6cff5f96d61f62b17c3614a3f63c227af2627ac077048fa8c9b0c",
+        "scalar": "6342014310672146513350853465894164813686212728060751514675593652743384604629"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-1000",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "1000"
+        }
+      },
+      "expected": {
+        "b0Hex": "5addc2f79f3991660f3a31b2d039546bb0f5b7376addb031253dd61d0baabb59",
+        "b1Hex": "cfb6d92737f300a6694073d7f32095f6acca623c575b631c242f03c24a369fc3",
+        "b2Hex": "c34ee9647d236f463c7275fe2bdf2a932152f4a9179768f22af093eb936937e3",
+        "uniformBytesHex": "cfb6d92737f300a6694073d7f32095f6acca623c575b631c242f03c24a369fc3c34ee9647d236f463c7275fe2bdf2a93",
+        "scalar": "4990763820721555315378070758265670759526300648392343157654813646559683669666"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-5",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "5"
+        }
+      },
+      "expected": {
+        "b0Hex": "424d9005fc90b4e81cef1332547408d55d7c93df4312f24fbb96e8f824d717eb",
+        "b1Hex": "1703e79c8d64ff77b6ed2c8fbbc0bcfacc512b9db75853997ba17c61a4c14e67",
+        "b2Hex": "793d55f4092f6b40e672b49842f0d4f4b72a2e2ec748384ba40c2e7356499ceb",
+        "uniformBytesHex": "1703e79c8d64ff77b6ed2c8fbbc0bcfacc512b9db75853997ba17c61a4c14e67793d55f4092f6b40e672b49842f0d4f4",
+        "scalar": "5661858898532081017820760342979615004380095412994692785506186405592245295559"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-6",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "6"
+        }
+      },
+      "expected": {
+        "b0Hex": "f2b554f3ebd886eddb4289351d0427fbeb93a40f77aae81db793aabf9c102258",
+        "b1Hex": "f3e99a7cc809eeacf3425091544b63454f404b13397924912f092aa81a218684",
+        "b2Hex": "d2c688f36001f834ecf34b0ebda9955569fe656287ae44b7918b3b43fc160c8f",
+        "uniformBytesHex": "f3e99a7cc809eeacf3425091544b63454f404b13397924912f092aa81a218684d2c688f36001f834ecf34b0ebda99555",
+        "scalar": "1766643032439915024494296284928636290179109118267998601673535222143287157381"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-61",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "61"
+        }
+      },
+      "expected": {
+        "b0Hex": "0e032f22b5b68161d9177c3b39329d5e32117a5a4ce1936857100899de552721",
+        "b1Hex": "db67200a7dd99b3ef08ec124c16cdf759835284f829066d0b4b3ad3459e5c372",
+        "b2Hex": "8559a944aaf71bb5ca78657d2342dacaaed0657c78b6ecc5d701a26bc3675b59",
+        "uniformBytesHex": "db67200a7dd99b3ef08ec124c16cdf759835284f829066d0b4b3ad3459e5c3728559a944aaf71bb5ca78657d2342daca",
+        "scalar": "392506058368650384336588081203401762974305021067608690120214536655334119292"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-62",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "62"
+        }
+      },
+      "expected": {
+        "b0Hex": "eb7032f3d5a2bc013039b9aa53ba1bbbe0f653b3282eb4cfde0475de69d63900",
+        "b1Hex": "d0e6118b23d2dc6b35bbc5098ccec323917eee9ad2dccfb295ad2e62fcbf8e2c",
+        "b2Hex": "bba7cd14b6f9202b06beee258115be555cecb155ec29fd8343d0d76d4ffb578e",
+        "uniformBytesHex": "d0e6118b23d2dc6b35bbc5098ccec323917eee9ad2dccfb295ad2e62fcbf8e2cbba7cd14b6f9202b06beee258115be55",
+        "scalar": "5167804991520258344604050525301636896866191761990554215620814356274809487780"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-69",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "69"
+        }
+      },
+      "expected": {
+        "b0Hex": "a63962fc8aae8f101109568c89a4d25349a6a32452d18d4de90524628a35f492",
+        "b1Hex": "d3b9bac74d7572d1cd97366a6522300d2b5f1d7d5d87a729f2d4840bd1a3f109",
+        "b2Hex": "7e74d40954921b931831150ba5c4825f0ca2ba4bd09cce987759cd1b3932500d",
+        "uniformBytesHex": "d3b9bac74d7572d1cd97366a6522300d2b5f1d7d5d87a729f2d4840bd1a3f1097e74d40954921b931831150ba5c4825f",
+        "scalar": "2562650248052837383326326751372320735444567861328904978725871749993289564934"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-70",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "70"
+        }
+      },
+      "expected": {
+        "b0Hex": "dc6aa4bd04675cd453a5188c29eac2b56bf34f639104a2a220968c32eb5587c2",
+        "b1Hex": "8098f6efb7f2524871280995442f68a257635e3a5850f08c79d6860fe14f3381",
+        "b2Hex": "a99ef5e58a75b08fbcb74c22b7a30aadb00bccd8ef6423671b3ae91b875adcfa",
+        "uniformBytesHex": "8098f6efb7f2524871280995442f68a257635e3a5850f08c79d6860fe14f3381a99ef5e58a75b08fbcb74c22b7a30aad",
+        "scalar": "4217311711631011907473847434928633605801750154802502667430896534520575584621"
+      }
+    },
+    {
+      "name": "hash-to-scalar-pattern-65536",
+      "operation": "hashToScalar",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "65536"
+        }
+      },
+      "expected": {
+        "b0Hex": "532cc7885206dabf1f057ec9e741929610ebc4a8d0ee5e79109128afa43dabc6",
+        "b1Hex": "f54c3f6939fcce94cc80e9b58f45b03a522a7ecbab000482d3aaa741c002805d",
+        "b2Hex": "80db6973fd4263fad6c0387f9e5eb312bd67384c6065db749672e793da17c2ab",
+        "uniformBytesHex": "f54c3f6939fcce94cc80e9b58f45b03a522a7ecbab000482d3aaa741c002805d80db6973fd4263fad6c0387f9e5eb312",
+        "scalar": "1367050974615341940485990828294772966355556398730740290714747626716693326029"
+      }
+    },
+    {
+      "name": "commit-empty-zero",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      }
+    },
+    {
+      "name": "commit-empty-qm1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "pointHex": "0f2b6778c98d4623d8312c6d7cb02dc7892ce94927c04dd064adcfb7e7912489"
+      }
+    },
+    {
+      "name": "commit-hello-qm1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "pointHex": "4e66485131af3603f96f18003966a30793f1c78492c27d644c1e12d0a941852d"
+      }
+    },
+    {
+      "name": "commit-hello-12345",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      }
+    },
+    {
+      "name": "commit-hello-12345-declared-length",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12345",
+        "declaredLength": "16"
+      },
+      "expected": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      }
+    },
+    {
+      "name": "commit-hello-12345-max-bytes-16",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12345",
+        "maxBytes": "16"
+      },
+      "expected": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      }
+    },
+    {
+      "name": "commit-hello-12345-max-bytes-4096",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12345",
+        "maxBytes": "4096"
+      },
+      "expected": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      }
+    },
+    {
+      "name": "commit-empty-zero-declared-length-0",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "0",
+        "declaredLength": "0"
+      },
+      "expected": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      }
+    },
+    {
+      "name": "commit-empty-zero-max-bytes-max",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "0",
+        "maxBytes": "2305843009213693696"
+      },
+      "expected": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      }
+    },
+    {
+      "name": "commit-pattern-65536-12345",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "65536"
+        },
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "09afdae633ceb418b97af99d17f307163705f8fbcd876d806d9f23dc8fefaf37"
+      }
+    },
+    {
+      "name": "commit-pattern-65536-12345-declared-length",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "65536"
+        },
+        "blinding": "12345",
+        "declaredLength": "65536"
+      },
+      "expected": {
+        "pointHex": "09afdae633ceb418b97af99d17f307163705f8fbcd876d806d9f23dc8fefaf37"
+      }
+    },
+    {
+      "name": "commit-pattern-65536-12345-max-bytes",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "pattern": "131i+17",
+          "length": "65536"
+        },
+        "blinding": "12345",
+        "maxBytes": "65537"
+      },
+      "expected": {
+        "pointHex": "09afdae633ceb418b97af99d17f307163705f8fbcd876d806d9f23dc8fefaf37"
+      }
+    },
+    {
+      "name": "verify-empty-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d",
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "0"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-empty-qm1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "0f2b6778c98d4623d8312c6d7cb02dc7892ce94927c04dd064adcfb7e7912489",
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-hello-qm1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "4e66485131af3603f96f18003966a30793f1c78492c27d644c1e12d0a941852d",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-hello-12345",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12345"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-pattern-65536-12345",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "09afdae633ceb418b97af99d17f307163705f8fbcd876d806d9f23dc8fefaf37",
+        "payload": {
+          "pattern": "131i+17",
+          "length": "65536"
+        },
+        "blinding": "12345"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "encode-opening-zero",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "0"
+      },
+      "expected": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "decode-opening-zero",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "blinding": "0"
+      }
+    },
+    {
+      "name": "encode-opening-one",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "1"
+      },
+      "expected": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000001"
+      }
+    },
+    {
+      "name": "decode-opening-one",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "expected": {
+        "blinding": "1"
+      }
+    },
+    {
+      "name": "encode-opening-12345",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "12345"
+      },
+      "expected": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000003039"
+      }
+    },
+    {
+      "name": "decode-opening-12345",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000003039"
+      },
+      "expected": {
+        "blinding": "12345"
+      }
+    },
+    {
+      "name": "encode-opening-qm1",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      },
+      "expected": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb6"
+      }
+    },
+    {
+      "name": "decode-opening-qm1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb6"
+      },
+      "expected": {
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254198"
+      }
+    },
+    {
+      "name": "envelope-encode-identity",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76310100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "envelope-decode-identity",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76310100000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "expected": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "envelope-encode-commitment-empty-0",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76319f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      }
+    },
+    {
+      "name": "envelope-decode-commitment-empty-0",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76319f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "expected": {
+        "pointHex": "9f0d942a712d02e78959e4899908bfd3d8fff8f871f42ae4ace3d1f336e9789d"
+      }
+    },
+    {
+      "name": "envelope-encode-commitment-hello-12345",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      }
+    },
+    {
+      "name": "envelope-decode-commitment-hello-12345",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "expected": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c"
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "commit-declared-length-minus-1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "declaredLength": "-1"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-max-bytes-minus-1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "maxBytes": "-1"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-declared-length-max-plus-1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "declaredLength": "2305843009213693697"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-max-bytes-max-plus-1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "maxBytes": "2305843009213693697"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-declared-length-long-min",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "declaredLength": "-9223372036854775808"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-max-bytes-long-min",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "maxBytes": "-9223372036854775808"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-declared-length-long-max",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "declaredLength": "9223372036854775807"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "commit-max-bytes-long-max",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "12345",
+        "maxBytes": "9223372036854775807"
+      },
+      "error": "LENGTH_OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-wrong-payload",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c"
+        },
+        "blinding": "12345"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-wrong-payload-trailing-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c9300"
+        },
+        "blinding": "12345"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-wrong-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12346"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-pattern-length-off-by-one",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "09afdae633ceb418b97af99d17f307163705f8fbcd876d806d9f23dc8fefaf37",
+        "payload": {
+          "pattern": "131i+17",
+          "length": "65535"
+        },
+        "blinding": "12345"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-identity-empty-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000",
+        "payload": {
+          "hex": ""
+        },
+        "blinding": "0"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "commit-blinding-q",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-q",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-q",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-q-plus-1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254200"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-q-plus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254200"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-q-plus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254200"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-minus-1",
+      "operation": "commit",
+      "input": {
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-minus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-q",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-q-plus-1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb8"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-all-ones",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-length-0",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": ""
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-31",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000030"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-33",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000303900"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-64",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000030390000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-empty",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-only",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "01",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0x00",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0018706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0x02",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0218706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-truncated-in-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-truncated-by-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf1",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-trailing-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c00",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-31-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf1",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-33-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c00",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-no-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d7631",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-id-length-exceeds-envelope",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "013a706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-other-profile-pedersen-jubjub-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-other-profile-pedersen-jubjub-vector-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0119706564657273656e2d6a75626a75622d766563746f722d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-reserved-profile-pedersen-bls12-381-g1-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-differs-in-one-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76326cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-uppercase-first-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118506564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-length-octet-minus-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0117706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-length-octet-plus-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0119706564657273656e2d6a75626a75622d62797465732d76316cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-empty",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "01006cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-order-version-before-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0218706564657273656e2d6a75626a75622d62797465732d76326cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-order-identifier-before-point-length",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76326cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf1",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-order-identifier-before-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310200000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-encode-order-4",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-length-0",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": ""
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-0",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d7631",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-31",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "01000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-31",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763101000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-33",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "010000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-33",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d7631010000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-v-equals-p",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "01000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-v-equals-p",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763101000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-v-equals-p-plus-1",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "02000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-v-equals-p-plus-1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763102000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-v-max-255-bit",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-v-max-255-bit",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d7631ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-sign-alias-identity",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000080"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-sign-alias-identity",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76310100000000000000000000000000000000000000000000000000000000000080",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-sign-alias-order-2",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7edf3"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-sign-alias-order-2",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763100000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7edf3",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-off-curve",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0200000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-off-curve",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76310200000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-order-2",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-2",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763100000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-order-4",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-4",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76310000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-order-8",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-8",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d7631dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-mixed-order-8",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00b37b5ad849fcf36dbcfe644182cf85011e016861174e91a664300b62f3004b"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-mixed-order-8",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d763100b37b5ad849fcf36dbcfe644182cf85011e016861174e91a664300b62f3004b",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-mixed-order-2",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "9509cf9e5635208f67127bccaac05c431879517ff329b0ea471819407abafb66"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-mixed-order-2",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76319509cf9e5635208f67127bccaac05c431879517ff329b0ea471819407abafb66",
+        "expectedProfileId": "pedersen-jubjub-bytes-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "verify-order-blinding-before-equation",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "6cf63061a8cadf709749833358e36010ed5e508a14ae8948006584e9d8ecf18c",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-order-off-curve-before-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "0200000000000000000000000000000000000000000000000000000000000000",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "6554484396890773809930967563523245729705921265872317281365359162392183254199"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "verify-order-order-8-before-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "dd96f4ef68200dffa1a484f390ee069166724dad3530a1162e986619b2bd58c9",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "-1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "verify-order-point-before-mismatch",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "9509cf9e5635208f67127bccaac05c431879517ff329b0ea471819407abafb66",
+        "payload": {
+          "hex": "48656c6c6f2c205a65726f4a20e29c93"
+        },
+        "blinding": "12345"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    }
+  ]
+}

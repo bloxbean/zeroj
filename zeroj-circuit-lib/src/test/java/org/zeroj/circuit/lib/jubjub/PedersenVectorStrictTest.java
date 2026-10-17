@@ -96,6 +96,44 @@ class PedersenVectorStrictTest {
     }
 
     @Test
+    @DisplayName("Dimension 16: strict verification and the opening codec reach the last component")
+    void maximumDimension() {
+        List<PedersenVectorSchema.Entry> entries = new ArrayList<>();
+        for (int i = 0; i < 16; i++) entries.add(new PedersenVectorSchema.Entry("c" + i, i == 15 ? 16 : 8));
+        PedersenVectorSchema sixteen = PedersenVectorSchema.of("zeroj.test.sixteen", 1, entries);
+        List<BigInteger> v = new ArrayList<>();
+        for (int i = 0; i < 16; i++) v.add(BigInteger.valueOf(i == 15 ? 40_000 : i + 1));
+        BigInteger r = PedersenCommitment.randomBlinding(RANDOM);
+        PedersenVectorCommitment c = PedersenVectorCommitment.commit(sixteen, v, r);
+        PedersenVectorBoundPolicy widths = PedersenVectorBoundPolicy.schemaWidths(sixteen);
+        assertTrue(c.verifyOpening(v, r, widths));
+        List<BigInteger> wrongLast = new ArrayList<>(v);
+        wrongLast.set(15, BigInteger.valueOf(40_001));
+        assertFalse(c.verifyOpening(wrongLast, r, widths), "the last component is in the equation");
+
+        PedersenVectorOpening opening = PedersenVectorOpening.of(widths, v, r);
+        byte[] encoded = opening.encode();
+        assertEquals(33 + 32 * 16, encoded.length);
+        assertEquals(16, encoded[0]);
+        assertEquals(v, PedersenVectorOpening.decode(encoded, widths).values());
+
+        List<BigInteger> lastOver = new ArrayList<>(v);
+        lastOver.set(15, BigInteger.valueOf(65_536));
+        assertError(CommitmentError.OUT_OF_RANGE, () -> c.verifyOpening(lastOver, r, widths));
+        assertError(CommitmentError.OUT_OF_RANGE, () -> PedersenVectorOpening.of(widths, lastOver, r));
+        List<BigInteger> lastAtL = new ArrayList<>(v);
+        lastAtL.set(15, L);
+        assertError(CommitmentError.NON_CANONICAL_SCALAR, () -> c.verifyOpening(lastAtL, r, widths));
+        byte[] lastL = encoded.clone();
+        System.arraycopy(i2osp(L), 0, lastL, 1 + 15 * 32, 32);
+        assertError(CommitmentError.NON_CANONICAL_SCALAR, () -> PedersenVectorOpening.decode(lastL, widths));
+        byte[] last2pow16 = encoded.clone();
+        System.arraycopy(i2osp(BigInteger.valueOf(65_536)), 0, last2pow16, 1 + 15 * 32, 32);
+        assertError(CommitmentError.OUT_OF_RANGE, () -> PedersenVectorOpening.decode(last2pow16, widths));
+        assertTrue(c.verifyOpening(v, r, PedersenVectorBoundPolicy.widened(sixteen, 65_536)));
+    }
+
+    @Test
     @DisplayName("widened is rejected when only a later component's bound would exceed l")
     void widenedRejectsLaterComponent() {
         PedersenVectorSchema narrowThenWide = PedersenVectorSchema.of("zeroj.test.nw", 1, List.of(
