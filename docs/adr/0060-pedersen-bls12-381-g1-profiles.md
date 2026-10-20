@@ -17,7 +17,7 @@ change (D8), vectors and the on-chain library (D9).
 
 ## Date
 
-2026-10-21 (r1)
+2026-10-21 (r1); 2026-10-21 (r2: review round 1)
 
 ## Context
 
@@ -179,7 +179,8 @@ Notation: `q` is the order of the BLS12-381 G1 prime-order subgroup,
 
 ### D1 — Two profiles and one basis set (R2)
 
-Admit, under `commitment-profiles-v1` §2.4:
+Specify the following entries, and admit them under `commitment-profiles-v1` §2.4 once the evidence
+exists. The lifecycle is given at the end of this decision.
 
 | Identifier | Type | Kind | Message map |
 |---|---|---|---|
@@ -209,6 +210,28 @@ The registry rule that the point sets of two profiles over one basis set are not
 here too: a bytes commitment is also a valid scalar commitment to `s`. Kind and profile come only
 from the verifier's configuration, never from a point.
 
+**Lifecycle.** Approving the spec, reserving a descriptor, implementing a profile and admitting it
+are separate steps:
+
+1. **Spec approval (M0).** The registry spec r6 records the parameters and points to the new spec.
+   The two profiles stay `reserved`. The basis set is added as `reserved`, with this ADR named as
+   the one that may admit it.
+2. **Descriptor reservation (M1).** `zeroj-api` creates and registers the descriptors of both G1
+   identifiers (D8), so nothing can pre-empt them. Holding a descriptor does not make an entry
+   active.
+3. **Implementation (M2–M4).** Java, vectors and on-chain code are built against the reserved
+   entries and carry the same experimental status as every profile.
+4. **Admission (M5).** A registry revision (r7) turns the basis set and both profiles `active`, and
+   only after M5 has checked every prerequisite:
+   - the accepted ADR;
+   - the normative spec;
+   - all three base reproductions of D2;
+   - the §13 vectors and their independent recomputation;
+   - the descriptors;
+   - the M4 on-chain parity results.
+
+   If any prerequisite is missing, the entries stay `reserved`.
+
 ### D2 — Basis derivation (R3)
 
 ```
@@ -232,10 +255,12 @@ Rules:
 - Implementations use the pinned constants and do not hash at run time. A test recomputes them.
 - No one, including the deriver, knows `log_H(G)`: both bases are random-oracle outputs, which is
   what binding requires (registry spec §3).
-- Three independent reproductions are required before admission (§2.4 item 3): the existing Java
-  `hashToG1`, a stand-alone Python implementation written from RFC 9380 without reading the Java
-  and validated against all five Appendix J.9.1 vectors, and on-chain `bls12_381_G1_hashToGroup`
-  run in the JuLC VM and on Yaci DevKit.
+- Three independent reproductions are required before admission (§2.4 item 3, which asks for
+  one). This ADR asks for three, so admission waits for M5 (D1 lifecycle):
+  - the existing Java `hashToG1` (M0);
+  - a stand-alone Python implementation, written from RFC 9380 without reading the Java and
+    validated against all five Appendix J.9.1 vectors (M0);
+  - on-chain `bls12_381_G1_hashToGroup`, run in the JuLC VM and on Yaci DevKit (M4).
 - A different tag, message or suite is a different basis set and therefore new profile versions
   (registry spec §2.4; ADR-0051 I7).
 
@@ -248,26 +273,36 @@ asymmetrically and makes `[m]·g₁` a value that other protocols on the same cu
 The point encoding is the 48-octet Zcash compressed form that CIP-0381 uses. The uncompressed
 form is not accepted. The strict decoder (registry spec §10) applies, in order:
 
-| Step | Rejects | Class |
+| Step | Rule | Outcome |
 |---|---|---|
 | 1 | null | `NullPointerException` |
 | 2 | length ≠ 48 | `MALFORMED_ENCODING` |
 | 3 | compression flag (`0x80`) clear | `MALFORMED_ENCODING` |
-| 4 | infinity flag (`0x40`) set and any other bit set, including the sort flag (`0x20`) | `MALFORMED_ENCODING` |
-| 5 | `x ≥ P_381` | `MALFORMED_ENCODING` |
-| 6 | `x³ + 4` not a square in `GF(P_381)` (no curve point) | `MALFORMED_ENCODING` |
-| 7 | a curve point outside the prime-order subgroup | `NOT_IN_SUBGROUP` |
+| 4 | infinity flag (`0x40`) set: the encoding must be exactly `0xC0 ‖ 0^47` | if exact, **return the identity and stop**; any other encoding with the infinity flag (sort flag `0x20` set, or any nonzero coordinate bit) is `MALFORMED_ENCODING` |
+| 5 | finite encodings only, coordinate `x` (the 381 bits below the three flag bits): `x ≥ P_381` | `MALFORMED_ENCODING` |
+| 6 | finite encodings only: `x³ + 4` not a square in `GF(P_381)` (no curve point) | `MALFORMED_ENCODING` |
+| 7 | finite encodings only: the recovered point (`y` chosen by the sort flag) is outside the prime-order subgroup | `NOT_IN_SUBGROUP` |
 
-The decoder never clears the cofactor. This is the order `Bls12381Codecs.g1FromCompressed`
-already implements; M2 splits its single `IllegalArgumentException` into these classes in a
-package-private strict decoder, as ADR-0059 M1 did for Jubjub, and adds unit tests for steps 3–5,
-which have none today.
+Steps 5–7 never run on an infinity encoding. Without that rule, the masked coordinate of
+`0xC0 ‖ 0^47` would read as `x = 0`. The finite encoding `0x80 ‖ 0^47` does have `x = 0`; it
+decodes to a curve point of order 3, `(0, ±2)`, and is rejected at step 7. The decoder never
+clears the cofactor.
+
+This is the order `Bls12381Codecs.g1FromCompressed` already implements: it returns
+`G1Point.INFINITY` at step 4. M2 splits its single `IllegalArgumentException` into these classes
+in a package-private strict decoder, as ADR-0059 M1 did for Jubjub. M2 adds unit tests for steps
+3–5, which have none today, plus three cases:
+- the identity, as a positive;
+- infinity with the sort flag set, as a negative;
+- infinity with a nonzero coordinate bit, as a negative.
 
 **Identity policy.** The identity `0xC0 ‖ 0^47` is accepted, as in every Jubjub profile. It is a
 legitimate commitment (`m = r = 0`, or a sum whose blindings cancel), and rejecting it would make
 some sums unrepresentable. Hiding is the committer's job (registry spec §14 consequences); a
 verifier that wants to refuse it does so as application policy. M4 records what
-`bls12_381_G1_uncompress` returns for `0xC0 ‖ 0^47` and for every step-3–7 negative.
+`bls12_381_G1_uncompress` returns for `0xC0 ‖ 0^47` and for every step-2–7 negative, including
+both infinity negatives and `0x80 ‖ 0^47`. The on-chain verdict must equal the off-chain verdict
+on each of them (D9).
 
 ### D4 — The byte mapping `HashBytesToScalarG1` (R3)
 
@@ -284,6 +319,21 @@ statistical distance below `q / 2^384 < 2^-129` from uniform. `s = 0` is valid a
 `MAX_PAYLOAD_BYTES = 2^61 − 256`, as in the Jubjub profile, because the SHA-256 input bound is the
 same. The three Java sources (array, declared-length stream, bounded stream) produce identical
 `s`.
+
+**What can be rejected before any read, and what cannot.** The rules are those of
+`pedersen-jubjub-bytes-v1` §6.1 and ADR-0058 D6:
+
+- **Before any read or digest work.** An array longer than `MAX_PAYLOAD_BYTES`, and a declared
+  length or caller maximum outside `[0, MAX_PAYLOAD_BYTES]`, are rejected with
+  `LENGTH_OUT_OF_RANGE`.
+- **Stream content, by counting.** The actual length of a stream is unknown until it is read, so
+  stream content is checked as it is read:
+  - A declared-length stream may be read for `length` octets plus one end-of-stream probe.
+  - A bounded stream may be read for `maxBytes` octets plus one probe.
+  - Excess content found by the probe, or a stream that ends before a declared length, fails
+    with `IOException`.
+  - The probe octet is never hashed.
+  - No result and no curve work is produced until the source has been consumed successfully.
 
 On-chain, the same expansion is `BbsHashToScalar`'s algorithm with this tag and the framed
 message. The library recomputes `s` from the payload (D9).
@@ -383,6 +433,24 @@ so where a validator might be tempted to use it.
   are source-compatible and keep comparison by identity.
 - The registry spec §12.1 is revised (r6) to say that built-in descriptors are defined by
   `zeroj-api`, and that the duplicate rule now protects them rather than threatening them.
+- **Coordinated upgrade; mixed versions are unsupported.** Today every Jubjub `PROFILE`
+  initialiser calls the public `define`. A pre-M1 `zeroj-circuit-lib` binary run against a
+  post-M1 `zeroj-api` therefore fails class initialisation with `ExceptionInInitializerError`,
+  because its own built-in identifier is already registered. Any later use then fails with
+  `NoClassDefFoundError`. The PR #103 review reproduced this with the unchanged baseline classes.
+  The failure is closed and immediate, not a silent misbehaviour, but it is a break.
+  - `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` must come from the same ZeroJ release.
+    Applications align them with the ZeroJ BOM (`zeroj-bom-core`, which manages all three) or by pinning one version for all three, and must
+    check that transitive dependency resolution does not mix them.
+  - The release notes of the M1 release say so.
+  - M1 adds a check that every profile module obtains its descriptor from `CommitmentProfiles`
+    and that none calls `define`.
+- **Alternative rejected.** `define` could return the existing built-in instance when called
+  with exactly a built-in's parameters. Old binaries would then keep working, and nothing could
+  still pre-empt a built-in. It is rejected because it changes `define` from "always a new
+  descriptor" to "sometimes an existing one", which every caller would have to reason about, in
+  order to support a mixed classpath that ZeroJ does not otherwise support. The maintainer can
+  choose it under Q4.
 - Considered and rejected:
   - Rejecting reserved identifiers inside `define` would require a non-public path from
     `zeroj-circuit-lib` and `zeroj-bls12381` into `zeroj-api`.
@@ -392,9 +460,16 @@ so where a validator might be tempted to use it.
 ### D9 — On-chain library and validators (R2)
 
 - **A published JuLC library** `PedersenG1Lib` in `zeroj-onchain-julc` (Q5), with:
-  - `decodeCommitment`: length 48, then `uncompress`, then `compress(point) == bytes`. That last
-    check rejects every non-canonical encoding whatever `uncompress` accepts, as
-    `Groth16BLS12381Lib` does.
+  - `decodeCommitment`, with this split of responsibility:
+    - The library checks length 48 before `uncompress` is called.
+    - Curve and subgroup validity are delegated to the builtin's normative contract. CIP-0381
+      says a `bls12_381_G1_element` "can only be generated with byte arrays that represent a
+      point which is part of the prime order subgroup". The library does not re-implement curve
+      arithmetic.
+    - After `uncompress` and before the point is used, the library checks
+      `compress(point) == bytes`. That rejects every non-canonical encoding `uncompress` might
+      accept, which CIP-0381 does not specify, as `Groth16BLS12381Lib` does. The round trip is a
+      canonicality check, not a subgroup check.
   - `verifyScalarOpening(C, m, r)`: check 1 on `m` and `r` before any builtin sees them, then
     `[m]·G + [r]·H == C` with the pinned bases.
   - `verifyBytesOpening(C, B, r)`: recompute `s` with the D4 mapping on-chain, check 1 on `r`, then
@@ -446,14 +521,23 @@ so where a validator might be tempted to use it.
   identity and satisfy `G ≠ ±H`. The pinned constants are reproduced by Java, by an independent
   Python implementation and by on-chain `hashToGroup`. (D2)
 - **I2 — Strict decoding.** Every 48-octet input decodes to the point it encodes, or fails at the
-  first D3 step with that step's class. The identity is accepted, the cofactor is never cleared,
-  and on-chain `compress(uncompress(b)) == b` holds for every accepted `b`. (D3, D9)
+  first D3 step with that step's class. Exactly `0xC0 ‖ 0^47` decodes to the identity, without
+  coordinate recovery; every other encoding with the infinity flag is rejected. The cofactor is
+  never cleared, and on-chain `compress(uncompress(b)) == b` holds for every accepted `b`.
+  (D3, D9)
 - **I3 — Canonical scalars.** No strict path, off-chain or on-chain, reduces or accepts `m` or `r`
   outside `[0, q)`. Check 2 accepts only `k ∈ [1, 254]`. No negative or out-of-range integer
   reaches a scalar multiplication. (D5, D9)
 - **I4 — Byte mapping.** `s` equals the D4 value for every source, payload length and split of a
-  stream. Payloads above `MAX_PAYLOAD_BYTES` are rejected before any read. The on-chain mapping
-  agrees with Java on every vector. (D4)
+  stream.
+  - An array longer than `MAX_PAYLOAD_BYTES`, or a declared length or maximum outside
+    `[0, MAX_PAYLOAD_BYTES]`, is rejected before any read or digest work.
+  - Stream content is bounded by counting: at most `length + 1` or `maxBytes + 1` octets are
+    read, and an excess octet is never hashed.
+  - No result or curve work happens before the source has been consumed successfully.
+  - The on-chain mapping agrees with Java on every vector.
+
+  (D4)
 - **I5 — No cross-profile or cross-curve use.** Decoders and keys accept only the expected
   profile. Bytes commitments have no arithmetic, and Jubjub and G1 types cannot be combined.
   (D1, D5, D7)
@@ -464,12 +548,24 @@ so where a validator might be tempted to use it.
   vector. (D6)
 - **I8 — Built-in descriptors.** Every built-in descriptor exists, and is registered, before any
   external `define` can run. A `define` of a built-in identifier is rejected, and each built-in
-  profile has exactly one descriptor per `zeroj-api` class loader. (D8)
+  profile has exactly one descriptor per `zeroj-api` class loader. No ZeroJ profile module calls
+  `define`. Mixing a pre-M1 profile module with a post-M1 `zeroj-api` is unsupported and fails
+  closed at class initialisation. (D8)
 - **I9 — Jubjub unchanged.** No Jubjub constant, base, encoding, circuit, key or vector changes,
   and every existing test and vector passes. The only Jubjub change is that `PROFILE` fields refer
   to the `zeroj-api` constants. (D8)
-- **I10 — On-chain guards.** The library performs every check of I2–I4 itself, before the
-  corresponding builtin, and its verdict on every vector equals the off-chain verdict. (D9)
+- **I10 — On-chain trust boundary.** The library's verdict on every applicable vector equals the
+  off-chain verdict, including every malformed, non-canonical and non-subgroup encoding. It
+  enforces:
+  - the 48-octet length before `uncompress`;
+  - curve and subgroup validity through the pinned CIP-0381 element contract, not through its
+    own arithmetic;
+  - canonical encoding by `compress(uncompress(b)) == b`, after `uncompress` and before the point
+    is used;
+  - check 1 and the delta rule before any `scalarMul` or MSM;
+  - the byte mapping recomputed from the payload.
+
+  (D9)
 - **I11 — Measurements are records.** No benchmark changes a check, and no figure is claimed
   without the measurement in the registry spec's §15 form. (D9)
 
@@ -481,26 +577,34 @@ so where a validator might be tempted to use it.
   - `zeroj-bls12381` gains a dependency on the dependency-free `zeroj-api`.
   - `zeroj-api` gains `CommitmentProfiles`.
 - **Jubjub.** No Jubjub behaviour or encoding changes. The Jubjub `PROFILE` fields keep their
-  names and types and refer to the same instances as before, now created in `zeroj-api`.
+  names and types, and now refer to descriptors created in `zeroj-api`. That is source- and
+  API-compatible.
+- **Binaries: coordinated upgrade required.** A pre-M1 profile-module binary does not work with a
+  post-M1 `zeroj-api`: its `PROFILE` initialiser calls `define` for a built-in identifier and
+  fails closed with `ExceptionInInitializerError` (D8). `zeroj-api`, `zeroj-circuit-lib` and
+  `zeroj-bls12381` must be upgraded together, through the BOM or one pinned version, with
+  transitive resolution checked. Mixed versions are unsupported, and the M1 release notes say so.
 - **`define`.** Code that called `define` with a built-in identifier, which previously disabled a
   ZeroJ profile, now gets `INVALID_CONFIGURATION` at that call.
 - **Existing vectors and tests.** The existing Jubjub vector files stay valid. The reserved-profile
   envelope negatives in those files still expect `PROFILE_MISMATCH`, since a Jubjub codec rejects
   a G1 identifier whether or not that identifier is reserved.
-- **Registry spec.** It moves to r6: the two entries become active, the basis set is added, and
-  the §1 notation, §8.4, §9, §12, §13 and §14 sections change.
+- **Registry spec.** It moves to r6 at M0. That revision adds the parameters and the basis set,
+  revises §12.1 for D8, and changes the §1 notation, §8.4, §9, §12, §13 and §14 sections. The
+  entries stay `reserved` in r6. They become `active` only in r7, at M5, after every admission
+  prerequisite has been checked (D1 lifecycle).
 - **Shipped behaviour.** No existing validator, script hash or key changes.
 
 ## Implementation milestones (after acceptance)
 
 | Milestone | Entry gate | Deliverable and exit criteria |
 |---|---|---|
-| M0 — spec | ADR accepted by a named maintainer | <ul><li>`docs/specs/pedersen-bls12-381-g1-v1.md`: basis set, both profiles, D3 decoder, D4 mapping, D5 encodings, vectors in the D2/D4 test sections.</li><li>`commitment-profiles-v1` r6: registry, §1, §8.4, §9, §12.1 per D8, §12.3 G1 rows, §13 G1 point fields (`xHex`/`yHex`, 48 octets) and G1 minimum sets, §14 cells.</li><li>Independent Python reproduction of `G`, `H` and the D4 mapping, written without reading Java and passing all five RFC 9380 J.9.1 vectors.</li><li>Claude and Codex SPEC READY, then maintainer sign-off.</li></ul> |
-| M1 — registry (#99) | M0 signed off | <ul><li>`CommitmentProfiles` in `zeroj-api`, with the Jubjub `PROFILE` fields as aliases.</li><li>A regression in which `define(pedersen-jubjub-v1, …)` runs before any profile class loads and the profiles stay usable.</li><li>Surface tests updated; full `zeroj-api` and `zeroj-circuit-lib` suites green.</li></ul> |
-| M2 — Java G1 profiles | M1 | <ul><li>D3 strict decoder with tests for steps 2–7; D5–D7 types and entry point.</li><li>Pure-Java and blst parity tests.</li><li>The missing RFC 9380 J.9.1 and K.1 known-answer tests for the existing `hashToG1` and `expandMessageXmdSha256`.</li><li>Negative and closure tests mirroring ADR-0059 M1.</li><li>Seeded-fault check of the new guards.</li></ul> |
+| M0 — spec | ADR accepted by a named maintainer | <ul><li>`docs/specs/pedersen-bls12-381-g1-v1.md`: basis set, both profiles, D3 decoder with its explicit identity branch, D4 mapping and stream rules, D5 encodings, vectors in the D2/D4 test sections.</li><li>`commitment-profiles-v1` r6: parameters, with the two profiles and the new basis set all `reserved` and pending admission under this ADR; §1, §8.4, §9, §12.1 per D8, §12.3 G1 rows, §13 G1 point fields (`xHex`/`yHex`, 48 octets) and G1 minimum sets, §14 cells still `planned`.</li><li>Java and independent Python reproductions of `G`, `H` and the D4 mapping. The Python is written without reading Java and passes all five RFC 9380 J.9.1 vectors.</li><li>Claude and Codex SPEC READY, then maintainer sign-off.</li></ul> |
+| M1 — descriptors (#99) | ADR accepted and the §12.1 text agreed; it does not depend on the rest of M0, so #99 can ship first | <ul><li>`CommitmentProfiles` in `zeroj-api`, registering all five built-in descriptors (the G1 ones reserved, not admitted); Jubjub `PROFILE` fields as aliases.</li><li>A regression in which `define(pedersen-jubjub-v1, …)` runs before any profile class loads and the profiles stay usable.</li><li>A check that no profile module calls `define`; release notes stating the coordinated-upgrade requirement (D8).</li><li>Surface tests updated; full `zeroj-api` and `zeroj-circuit-lib` suites green.</li></ul> |
+| M2 — Java G1 profiles | M0 signed off, M1 | <ul><li>D3 strict decoder with tests for steps 2–7, an identity positive and the infinity negatives; D5–D7 types and entry point.</li><li>Stream tests: an invalid limit before any read, excess content via the probe, an early end.</li><li>Pure-Java and blst parity tests.</li><li>The missing RFC 9380 J.9.1 and K.1 known-answer tests for the existing `hashToG1` and `expandMessageXmdSha256`.</li><li>Negative and closure tests mirroring ADR-0059 M1.</li><li>Seeded-fault check of the new guards.</li></ul> |
 | M3 — vectors | M2 | <ul><li>`pedersen-bls12-381-g1-v1.json` and `-bytes-v1.json` in the registry spec §13 format, from a generator written from the spec only.</li><li>Java loader over both providers.</li><li>Independent recomputation of every case by a reviewer.</li></ul> |
 | M4 — on-chain | M3 | <ul><li>`PedersenG1Lib`, example validators, and JuLC VM tests over every applicable vector.</li><li>Builtin evidence vectors (D9) and the on-chain `hashToGroup` reproduction of the bases.</li><li>DevKit E2E: opening, delta update, bytes opening, each with tampered negatives.</li><li>Registry spec §15 Cardano measurements, the documented payload limit, and MSM versus two `scalarMul`.</li></ul> |
-| M5 — docs | M4 | <ul><li>Docsite and module READMEs, support matrix, §14 cells moved from planned to implemented (experimental), and the registry spec §15 Java benchmarks.</li><li>An ADR-0051 status note recording the M5 split.</li><li>Implementation evidence in this ADR.</li></ul> |
+| M5 — docs and admission | M4 | <ul><li>An admission check against every prerequisite of the D1 lifecycle, recorded in this ADR.</li><li>Registry spec r7: the basis set and both profiles `active`, and §14 cells implemented (experimental). If any prerequisite is missing, the entries stay `reserved` and the gap is recorded.</li><li>Docsite and module READMEs, the support matrix, and the registry spec §15 Java benchmarks.</li><li>An ADR-0051 status note recording the M5 split.</li><li>Implementation evidence in this ADR.</li></ul> |
 
 Each milestone is reviewed by a Claude reviewer and Codex until no P0–P2 finding remains, then
 committed and pushed. M1 can ship on its own if the maintainer wants #99 closed before the G1
@@ -521,7 +625,12 @@ work.
   - The blst provider for arithmetic.
   - The WASM provider as an assurance oracle where available.
 - **Negative tests:**
-  - Every D3 step.
+  - Every D3 step:
+    - infinity with the sort flag set, and infinity with a nonzero coordinate bit;
+    - `0x80 ‖ 0^47`, which decodes to `(0, ±2)` and is rejected with `NOT_IN_SUBGROUP`;
+    - the identity `0xC0 ‖ 0^47`, as a positive.
+  - Streams: a declared length or maximum of −1 and of `MAX_PAYLOAD_BYTES + 1`, rejected before
+    any read; one excess octet, rejected via the probe and not hashed; an early end.
   - Check 1 at `q − 1`, `q`, `q + 1` and `−1` for `m` and `r`.
   - Check 2 at `2^k − 1` and `2^k`, and `k` at 0 and 255.
   - Deltas at `±(2^{k_δ} − 1)` and `±2^{k_δ}`.
@@ -559,10 +668,14 @@ work.
 
 - **Side channels in generation.** Neither provider has a side-channel contract. This is the main
   production gate, together with external review of the basis derivation and the byte mapping.
-- **Unspecified builtin behaviour.** `uncompress` canonicity, `scalarMul` on out-of-range
-  integers, and MSM list rules are recorded, not relied on. The library's own guards are the
-  defence. A node change that alters them is caught by the M4 evidence vectors when they are
-  re-run, and is reported.
+- **Builtin behaviour.**
+  - The library relies on one normative builtin guarantee: CIP-0381's subgroup-only G1
+    elements, which make `uncompress` the curve and subgroup check.
+  - What CIP-0381 leaves unspecified is recorded, not relied on: `uncompress` canonicity,
+    `scalarMul` on out-of-range integers, and MSM list rules. The library's own length,
+    round-trip, scalar and delta guards cover them.
+  - Accept/fail parity on malformed and non-subgroup encodings is tested in M4, so a node that
+    broke the subgroup contract would be detected when those vectors are re-run, and reported.
 - **JuLC VM versus node.** Costs and behaviour are measured in the JuLC VM and confirmed on
   DevKit, but DevKit's `/evaluate` cannot initialise blst on aarch64 (ADR-0056). No CI job runs
   the E2E tests, so they are run and recorded manually.
@@ -579,8 +692,12 @@ work.
 - `ScriptBudgetEstimator` uses pre-PV11 cost constants.
 - The repository's docs disagree on the `ConfidentialNoteValidator` cost (3.66e9 against 3.85e9
   steps) and on the transaction memory limit (14M against 16.5M).
-- `Bls12381Hash.expandMessageXmdSha256` reduces an oversize DST silently and does not reject an
-  empty one. D2 and D4 use fixed tags, but the general API deserves the RFC 9380 §3.1 checks.
+- `Bls12381Hash.expandMessageXmdSha256` does not reject an empty DST, although RFC 9380 §3.1
+  says "Tags MUST have nonzero length"; that policy question belongs to the general API.
+  Separately, its reduction of a DST longer than 255 octets to `SHA-256("H2C-OVERSIZE-DST-" ‖ DST)`
+  is the behaviour RFC 9380 §5.3.3 specifies, and is correct. CIP-0381's 255-octet limit is a
+  different boundary: the builtin's argument. D2 and D4 use fixed tags under 255 octets, so
+  neither point affects them.
 - #100, #101 and #102 (vector integer format, sealing, `INVALID_CONFIGURATION` asymmetry) stay
   separate.
 
@@ -602,3 +719,22 @@ work.
 ## Revision history
 
 - **r1 (2026-10-21):** Initial proposal for #95, folding in #99.
+- **r2 (2026-10-21; responds to review of `937087c5ec4a8a62e5a8651f0f4012bfaf0978fb`):**
+  - F1 → admission is separated from spec approval, descriptor reservation and implementation
+    (D1 lifecycle). Registry r6 keeps the entries `reserved`; r7 admits them at M5 after every
+    prerequisite, including the M4 on-chain base reproduction (D1, D2, Compatibility, M0, M1,
+    M5). M1 no longer depends on the rest of M0.
+  - F2 → D3 step 4 is an explicit identity branch that returns and stops. Steps 5–7 apply only
+    to finite encodings, and `0x80 ‖ 0^47` is a step-7 negative (D3, I2, M2, tests).
+  - F3 → the coordinated upgrade is recorded: mixed pre-/post-M1 binaries fail closed and are
+    unsupported (BOM or one pinned version, release notes, M1 check). The alternative of a
+    `define` that returns the built-in instance is recorded (D8, I8, Compatibility, M1).
+  - F4 → the on-chain trust boundary is stated as a split: length before `uncompress`, subgroup
+    via the CIP-0381 element contract, canonicality by round trip before use, and scalar and
+    delta guards before multiplication (D9, I10, Risks).
+  - F5 → the guarantee of rejection before any read is limited to arrays and declared
+    lengths/maxima; stream content is bounded by counting and the probe (D4, I4, tests).
+  - F6 → long-DST reduction is described as RFC 9380 §5.3.3 behaviour, separate from the
+    empty-tag question (Related findings).
+
+  No base, tag, mapping, encoding or other cryptographic choice changed.
