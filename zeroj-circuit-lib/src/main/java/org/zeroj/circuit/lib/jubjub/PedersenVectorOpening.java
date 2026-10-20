@@ -34,7 +34,9 @@ public final class PedersenVectorOpening {
     }
 
     /**
-     * Checks, in order: nulls (including null elements); dimension ({@code MALFORMED_ENCODING});
+     * Checks, in order: nulls (including null elements; at most
+     * {@value PedersenVectorBases#MAX_DIMENSION} + 1 elements are read, so a longer list costs
+     * bounded work and fails the dimension check); dimension ({@code MALFORMED_ENCODING});
      * each value's check 1, then the blinding's ({@code NON_CANONICAL_SCALAR}); each value's check 3
      * ({@code OUT_OF_RANGE}).
      *

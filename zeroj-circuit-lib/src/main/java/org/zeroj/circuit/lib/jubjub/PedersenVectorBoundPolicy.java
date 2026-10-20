@@ -94,21 +94,30 @@ public final class PedersenVectorBoundPolicy {
     }
 
     /**
-     * Snapshots and checks an opening under this policy, in the order of spec §12.3: dimension
-     * ({@code MALFORMED_ENCODING}), each component's check 1 in index order, the blinding's check 1
-     * ({@code NON_CANONICAL_SCALAR}), each component's check 3 in index order
-     * ({@code OUT_OF_RANGE}). The caller has already rejected nulls.
-     *
-     * <p>Returns the checked opening: an immutable snapshot of plain {@link BigInteger} values and
-     * blinding. Callers must use only the returned values, so a subclass cannot pass the checks
-     * with one value and present another to the equation or the encoding.
+     * Snapshots ({@link PedersenStrict#trustedSnapshot}, bounded) and checks an opening under this
+     * policy. The caller has already rejected a null list or blinding.
      */
     CheckedOpening requireOpening(List<BigInteger> rawValues, BigInteger rawBlinding) {
-        List<BigInteger> values = PedersenStrict.trustedSnapshot(rawValues);
+        return requireSnapshot(PedersenStrict.trustedSnapshot(rawValues), rawBlinding);
+    }
+
+    /**
+     * Checks an opening whose values are already a {@link PedersenStrict#trustedSnapshot}, in the
+     * order of spec §12.3: dimension ({@code MALFORMED_ENCODING}), each component's check 1 in index
+     * order, the blinding's check 1 ({@code NON_CANONICAL_SCALAR}), each component's check 3 in index
+     * order ({@code OUT_OF_RANGE}).
+     *
+     * <p>Returns the checked opening: the snapshot and a plain {@link BigInteger} blinding. Callers
+     * must use only the returned values, so a subclass cannot pass the checks with one value and
+     * present another to the equation or the encoding.
+     */
+    CheckedOpening requireSnapshot(List<BigInteger> values, BigInteger rawBlinding) {
         BigInteger blinding = PedersenStrict.trusted(rawBlinding);
         if (values.size() != schema.dimension()) {
+            String got = values.size() == PedersenStrict.MAX_SNAPSHOT
+                    ? "more than " + PedersenVectorBases.MAX_DIMENSION : String.valueOf(values.size());
             throw new CommitmentFormatException(CommitmentError.MALFORMED_ENCODING,
-                    "schema " + schema.id() + " has dimension " + schema.dimension() + ", got " + values.size() + " values");
+                    "schema " + schema.id() + " has dimension " + schema.dimension() + ", got " + got + " values");
         }
         for (int i = 0; i < values.size(); i++) {
             PedersenStrict.canonical(values.get(i), "value " + i);

@@ -6,8 +6,10 @@ import org.zeroj.api.commitment.CommitmentError;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -16,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.zeroj.circuit.lib.jubjub.CommitmentTestPoints.L;
 import static org.zeroj.circuit.lib.jubjub.PedersenScalarCommitmentTest.assertError;
 import static org.zeroj.circuit.lib.jubjub.PedersenScalarCommitmentTest.concat;
@@ -98,9 +101,7 @@ class PedersenVectorStrictTest {
     @Test
     @DisplayName("Dimension 16: strict verification and the opening codec reach the last component")
     void maximumDimension() {
-        List<PedersenVectorSchema.Entry> entries = new ArrayList<>();
-        for (int i = 0; i < 16; i++) entries.add(new PedersenVectorSchema.Entry("c" + i, i == 15 ? 16 : 8));
-        PedersenVectorSchema sixteen = PedersenVectorSchema.of("zeroj.test.sixteen", 1, entries);
+        PedersenVectorSchema sixteen = sixteen();
         List<BigInteger> v = new ArrayList<>();
         for (int i = 0; i < 16; i++) v.add(BigInteger.valueOf(i == 15 ? 40_000 : i + 1));
         BigInteger r = PedersenCommitment.randomBlinding(RANDOM);
@@ -203,6 +204,92 @@ class PedersenVectorStrictTest {
     }
 
     @Test
+    @DisplayName("Codex F6: an oversized list is rejected after reading at most 17 elements, with no allocation proportional to its size")
+    void oversizedListsAreBounded() {
+        PedersenVectorSchema one = PedersenVectorSchema.of("zeroj.test.one", 1,
+                List.of(new PedersenVectorSchema.Entry("amount", 8)));
+        PedersenVectorBoundPolicy oneWidths = PedersenVectorBoundPolicy.schemaWidths(one);
+        PedersenVectorCommitment identity = PedersenVectorCommitment.commit(one, values(0), BigInteger.ZERO);
+        // Copying this list would need a 2^31-element array, beyond any heap and the VM's array limit.
+        List<BigInteger> huge = Collections.nCopies(Integer.MAX_VALUE, BigInteger.ZERO);
+        withoutHugeAllocation(() -> {
+            assertError(CommitmentError.MALFORMED_ENCODING, () -> identity.verifyOpening(huge, BigInteger.ZERO, oneWidths));
+            assertError(CommitmentError.MALFORMED_ENCODING, () -> PedersenVectorOpening.of(oneWidths, huge, BigInteger.ZERO));
+            // The schema comparison still precedes the dimension check.
+            assertError(CommitmentError.PROFILE_MISMATCH, () -> identity.verifyOpening(huge, BigInteger.ZERO,
+                    PedersenVectorBoundPolicy.schemaWidths(BYTE_PAIR)));
+        });
+
+        // Work is bounded too: at most MAX_DIMENSION + 1 = 17 elements are ever read, whatever size() says.
+        CountingList counting = new CountingList(1_000_000);
+        assertError(CommitmentError.MALFORMED_ENCODING, () -> identity.verifyOpening(counting, BigInteger.ZERO, oneWidths));
+        assertEquals(17, counting.reads);
+        counting.reads = 0;
+        assertError(CommitmentError.MALFORMED_ENCODING, () -> PedersenVectorOpening.of(oneWidths, counting, BigInteger.ZERO));
+        assertEquals(17, counting.reads);
+
+        // Boundary around the maximum dimension, on a 16-dimensional schema: 16 entries open, 17 and 18 are MALFORMED.
+        PedersenVectorSchema sixteen = sixteen();
+        PedersenVectorBoundPolicy widths = PedersenVectorBoundPolicy.schemaWidths(sixteen);
+        List<BigInteger> v = new ArrayList<>(Collections.nCopies(16, BigInteger.ONE));
+        PedersenVectorCommitment c = PedersenVectorCommitment.commit(sixteen, v, BigInteger.ONE);
+        assertTrue(c.verifyOpening(v, BigInteger.ONE, widths));
+        assertEquals(v, PedersenVectorOpening.of(widths, v, BigInteger.ONE).values());
+        for (int size : new int[]{15, 17, 18}) {
+            List<BigInteger> wrong = Collections.nCopies(size, BigInteger.ONE);
+            assertError(CommitmentError.MALFORMED_ENCODING, () -> c.verifyOpening(wrong, BigInteger.ONE, widths));
+            assertError(CommitmentError.MALFORMED_ENCODING, () -> PedersenVectorOpening.of(widths, wrong, BigInteger.ONE));
+        }
+
+        // Nulls: an element among the first 17 is read and rejected (NPE, before the schema comparison);
+        // one beyond the 17th is never read, so the list fails on dimension (or on schema) instead.
+        List<BigInteger> nullAt16 = new ArrayList<>(Collections.nCopies(18, BigInteger.ONE));
+        nullAt16.set(16, null);
+        assertThrows(NullPointerException.class, () -> c.verifyOpening(nullAt16, BigInteger.ONE, widths));
+        assertThrows(NullPointerException.class, () -> c.verifyOpening(nullAt16, BigInteger.ONE, PedersenVectorBoundPolicy.schemaWidths(BYTE_PAIR)));
+        assertThrows(NullPointerException.class, () -> PedersenVectorOpening.of(widths, nullAt16, BigInteger.ONE));
+        List<BigInteger> nullAt17 = new ArrayList<>(Collections.nCopies(18, BigInteger.ONE));
+        nullAt17.set(17, null);
+        assertError(CommitmentError.MALFORMED_ENCODING, () -> c.verifyOpening(nullAt17, BigInteger.ONE, widths));
+        assertError(CommitmentError.PROFILE_MISMATCH, () -> c.verifyOpening(nullAt17, BigInteger.ONE, PedersenVectorBoundPolicy.schemaWidths(BYTE_PAIR)));
+        assertError(CommitmentError.MALFORMED_ENCODING, () -> PedersenVectorOpening.of(widths, nullAt17, BigInteger.ONE));
+    }
+
+    /**
+     * Runs {@code body}, turning an {@link OutOfMemoryError} into a test failure. JUnit rethrows that
+     * error, which aborts the test executor; here it can only be "Requested array size exceeds VM
+     * limit", thrown before anything is allocated, so it is safe to catch.
+     */
+    private static void withoutHugeAllocation(Runnable body) {
+        try {
+            body.run();
+        } catch (OutOfMemoryError e) {
+            fail("an oversized list was copied before its dimension was checked: " + e.getMessage());
+        }
+    }
+
+    /** A list of {@code size} zeros that counts element reads through {@code get}. */
+    private static final class CountingList extends AbstractList<BigInteger> {
+        private final int size;
+        int reads;
+
+        CountingList(int size) {
+            this.size = size;
+        }
+
+        @Override
+        public BigInteger get(int index) {
+            reads++;
+            return BigInteger.ZERO;
+        }
+
+        @Override
+        public int size() {
+            return size;
+        }
+    }
+
+    @Test
     @DisplayName("The list is snapshotted: mutating it after the checks cannot change the verdict")
     void snapshot() {
         PedersenVectorCommitment c = PedersenVectorCommitment.commit(BYTE_PAIR, values(1, 2), BigInteger.ONE);
@@ -211,8 +298,8 @@ class PedersenVectorStrictTest {
 
             @Override
             public BigInteger get(int index) {
-                // Returns other contents after the first size() reads through get(). List.copyOf reads
-                // through toArray(), so only an implementation that re-reads the caller's list sees 99.
+                // Returns other contents after the first size() reads through get(). The snapshot reads
+                // through the iterator, so only an implementation that re-reads the caller's list sees 99.
                 return reads++ < size() ? super.get(index) : BigInteger.valueOf(99);
             }
         };
@@ -335,5 +422,12 @@ class PedersenVectorStrictTest {
 
     private static PedersenVectorSchema schema(int width) {
         return PedersenVectorSchema.of("zeroj.test.w" + width, 1, List.of(new PedersenVectorSchema.Entry("x", width)));
+    }
+
+    /** The maximum dimension: 15 components of width 8, then one of width 16. */
+    private static PedersenVectorSchema sixteen() {
+        List<PedersenVectorSchema.Entry> entries = new ArrayList<>();
+        for (int i = 0; i < 16; i++) entries.add(new PedersenVectorSchema.Entry("c" + i, i == 15 ? 16 : 8));
+        return PedersenVectorSchema.of("zeroj.test.sixteen", 1, entries);
     }
 }

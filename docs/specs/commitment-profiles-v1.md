@@ -5,7 +5,7 @@
 mainnet use. "Normative" fixes identifiers, bytes, checks, check order and error behaviour; it
 is not a maturity or security claim. This document governs if it and an implementation
 disagree.
-**Date:** 2026-10-17 (r4)
+**Date:** 2026-10-20 (r5)
 
 This document is the registry of ZeroJ commitment profiles, basis sets and proof protocols, and
 the contract every implementation of them follows: the expected-profile rule, scalar checks,
@@ -575,12 +575,23 @@ itself curve arithmetic on public data), and no input is reduced:
 | `PedersenScalarOpening.of` / `decode` | nulls / §8.1 → `value` check 1 → `blinding` check 1 |
 | `PedersenBlinding.encode` / `decode` | nulls → `r` check 1 / §8.2 |
 | `PedersenVectorCommitment.codec` | nulls |
-| `verifyOpening` (vector) | nulls → snapshot the list (`List.copyOf`, which also rejects null elements) → policy schema equals commitment schema (`PROFILE_MISMATCH`) → dimension (`MALFORMED_ENCODING`) → each `v_i` check 1 in index order → `blinding` check 1 → each `v_i` check 3 in index order → equation |
+| `verifyOpening` (vector) | nulls → bounded snapshot of the list (below) → policy schema equals commitment schema (`PROFILE_MISMATCH`) → dimension (`MALFORMED_ENCODING`) → each `v_i` check 1 in index order → `blinding` check 1 → each `v_i` check 3 in index order → equation |
 | `PedersenVectorOpening.of` / `decode` | as `verifyOpening` without the schema comparison / §8.3 |
 | `PedersenVectorBoundPolicy` factories | nulls → `widened`: `2 ≤ addedTerms ≤ 65536` and every `2^{k_i + ⌈log₂ n⌉} ≤ q` (`INVALID_CONFIGURATION`) |
 | `commitBytes*`, `verifyBytes*` (six methods) | `pedersen-jubjub-bytes-v1.md` §6 order: nulls → `blinding` check 1 (`NON_CANONICAL_SCALAR`) → declared length or maximum (`LENGTH_OUT_OF_RANGE`) → read and hash |
 | Point decoders: `CODEC.decodePoint`, `codec(schema).decodePoint`, `PedersenScalarCommitment.decode`, `PedersenBytesCommitment.decode`, `PedersenVectorCommitment.decode`, `PedersenCommitment.decode` | §10 (the legacy `PedersenCommitment.decode` and `PedersenVectorCommitment.decode(schema, null)` keep throwing `IllegalArgumentException` for a null array, as today) |
 | `CommitmentEnvelope.encode` / `decode`, `CommitmentKey.of`, `CommitmentProfileId.of`, `CommitmentProfile.define` | nulls → §9 / §12.1 |
+
+**Bounded snapshot.** The strict vector list paths (`verifyOpening`, `PedersenVectorOpening.of`)
+copy the caller's list once, reading its elements in index order and stopping after the 17th
+(`MAX_DIMENSION + 1`); each element read MUST be non-null (else `NullPointerException`) and is
+copied to a plain `BigInteger`, and every later check and the equation use only the copy. Work and
+memory are therefore bounded by 17 elements whatever the list's size. A list of more than 17
+elements yields a 17-element copy, which no schema dimension (`1..16`) matches, so it fails the
+dimension check (`MALFORMED_ENCODING`), after the policy-schema comparison on `verifyOpening`
+(`PROFILE_MISMATCH` takes precedence, as for any other list). Consequently a null element at index
+17 or later is never read: such a list is rejected by the schema or dimension check instead of
+with `NullPointerException`. Every list of at most 17 elements is checked exactly as before.
 
 The strict vector `verifyOpening` computes `Σ [v_i]·G_i + [r]·H_V` itself after its checks, using
 the disclosed (variable-time) path; it MUST NOT delegate to the legacy `verify`, whose width
@@ -849,6 +860,15 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   later revision: §12.1 maps a codec's `INVALID_CONFIGURATION` during envelope decoding to a
   rejected verdict, while the opening step propagates it; aligning the two would change
   behaviour and needs its own review.
+- **r5 (2026-10-20, responds to the Codex implementation review of `455da47`, finding F6):**
+  §12.3 bounds the vector list snapshot to 17 elements, so an oversized list (for example a
+  constant-size `Collections.nCopies` view of 20 million elements) is rejected with bounded work
+  and memory instead of being copied in full first. Precedence change, for lists longer than 17
+  elements only: a null element at index 17 or later is no longer read, so the list is rejected
+  by the policy-schema (`PROFILE_MISMATCH`) or dimension (`MALFORMED_ENCODING`) check rather than
+  with `NullPointerException`. No identifier, byte, scalar check or error class changes. The r3
+  vectors stay valid: their value lists have at most 16 elements and the §13.2 format has no null
+  elements, so no case's outcome changes; only their provenance hash differs (§13.1).
 
 ---
 

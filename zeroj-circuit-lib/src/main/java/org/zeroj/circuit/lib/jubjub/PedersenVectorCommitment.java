@@ -97,9 +97,10 @@ public final class PedersenVectorCommitment implements Commitment {
      * Strict disclosed verification under a bound policy (class V1, {@code commitment-profiles-v1}
      * §7 check 3, §12.3): {@code true} iff {@code Σ [v_i]·G_i + [r]·H_V} equals this commitment.
      *
-     * <p>Checks, in order: nulls (including null elements, while snapshotting the list); the
-     * policy's schema equals this commitment's ({@code PROFILE_MISMATCH}); dimension
-     * ({@code MALFORMED_ENCODING}); each value's check 1 in index order, then the blinding's
+     * <p>Checks, in order: nulls (including null elements, while snapshotting the list; the snapshot
+     * reads at most {@value PedersenVectorBases#MAX_DIMENSION} + 1 elements, so a longer list
+     * costs bounded work and fails the dimension check); the policy's schema equals this commitment's
+     * ({@code PROFILE_MISMATCH}); dimension ({@code MALFORMED_ENCODING}); each value's check 1 in index order, then the blinding's
      * ({@code NON_CANONICAL_SCALAR}); each value's check 3 in index order ({@code OUT_OF_RANGE});
      * then the equation, computed here on the variable-time public-scalar path. It never delegates
      * to {@link #verify}, whose width check would reject valid {@code residue-only} and
@@ -112,13 +113,14 @@ public final class PedersenVectorCommitment implements Commitment {
         Objects.requireNonNull(values, "values");
         Objects.requireNonNull(blinding, "blinding");
         Objects.requireNonNull(policy, "policy");
-        // The snapshot (which also rejects null elements) precedes the schema comparison (§12.3).
+        // The bounded snapshot (which also rejects null elements among those it reads) precedes the
+        // schema comparison (§12.3), and is the only copy: requireSnapshot checks it in place.
         List<BigInteger> snapshot = PedersenStrict.trustedSnapshot(values);
         if (!policy.schema().equals(schema)) {
             throw new CommitmentFormatException(CommitmentError.PROFILE_MISMATCH,
                     "the bound policy is for another schema than this commitment's");
         }
-        PedersenVectorBoundPolicy.CheckedOpening checked = policy.requireOpening(snapshot, blinding);
+        PedersenVectorBoundPolicy.CheckedOpening checked = policy.requireSnapshot(snapshot, blinding);
         JubjubPoint expected = PedersenVectorBases.blindingBase().scalarMul(checked.blinding());
         for (int i = 0; i < checked.values().size(); i++) {
             expected = expected.add(PedersenVectorBases.valueBase(i).scalarMul(checked.values().get(i)));

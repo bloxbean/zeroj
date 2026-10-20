@@ -5,6 +5,7 @@ import org.zeroj.api.commitment.CommitmentFormatException;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 
@@ -52,13 +53,26 @@ final class PedersenStrict {
         }
     }
 
-    /** An unmodifiable snapshot of {@code values} with every element {@link #trusted}; rejects nulls. */
+    /**
+     * Elements a vector snapshot reads at most: one past the largest schema dimension, so a longer
+     * list still fails the dimension check ({@code commitment-profiles-v1} §12.3).
+     */
+    static final int MAX_SNAPSHOT = PedersenVectorBases.MAX_DIMENSION + 1;
+
+    /**
+     * An unmodifiable snapshot of the first {@code min(size, }{@value #MAX_SNAPSHOT}{@code )} elements
+     * of {@code values}, in index order, each {@link #trusted}; a null among them is rejected. Work and
+     * memory are bounded by {@value #MAX_SNAPSHOT} elements whatever the list's size; a list longer than
+     * that yields a snapshot of exactly {@value #MAX_SNAPSHOT} elements, which no schema dimension
+     * matches. Callers use only the snapshot, never {@code values} again.
+     */
     static List<BigInteger> trustedSnapshot(List<BigInteger> values) {
-        BigInteger[] copy = List.copyOf(values).toArray(new BigInteger[0]);
-        for (int i = 0; i < copy.length; i++) {
-            copy[i] = trusted(copy[i]);
+        BigInteger[] copy = new BigInteger[MAX_SNAPSHOT];
+        int count = 0;
+        for (Iterator<BigInteger> it = values.iterator(); count < MAX_SNAPSHOT && it.hasNext(); count++) {
+            copy[count] = trusted(Objects.requireNonNull(it.next(), "values element"));
         }
-        return List.of(copy);
+        return List.of(Arrays.copyOf(copy, count));
     }
 
     /**

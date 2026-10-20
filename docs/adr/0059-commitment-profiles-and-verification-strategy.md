@@ -30,7 +30,7 @@ Bulletproof transcripts with #96, the G1 sigma-proof transcript with ADR-0051 D7
 
 ## Date
 
-2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3); 2026-10-17 (r7: accepted, design); 2026-10-17 (r8: M0–M3 implemented)
+2026-10-16 (r1); 2026-10-16 (r2: Q1–Q4 decided); 2026-10-16 (r3: review round 1); 2026-10-16 (r4: second review); 2026-10-16 (r5: second review, round 2); 2026-10-16 (r6: second review, round 3); 2026-10-17 (r7: accepted, design); 2026-10-17 (r8: M0–M3 implemented); 2026-10-20 (r9: implementation review F6)
 
 ## Context
 
@@ -714,7 +714,8 @@ measurements as part of its own milestones.
 | M0 | `67da5d4` | `docs/specs/commitment-profiles-v1.md` r3; signed off by maintainer Satya (A1 gate) | Claude 3 rounds, Codex 6 rounds, both SPEC READY |
 | M1 | `c5c57a7` | `org.zeroj.api.commitment` (14 types); typed `pedersen-jubjub-v1` commitment, `commitScalar`/`verifyScalar`, opening codecs, vector bound policies and strict `verifyOpening`; contracts on the bytes and vector types; strict error classes | Claude 2 rounds, Codex 4 rounds, both IMPLEMENTATION READY |
 | M2 | `8e6a059` | Independent generator and 518 vector cases (scalar 56/104, bytes 50/84, vector 74/150 positive/negative); Java loader with whole-file fixture validation | Claude 2 rounds (READY); Codex 3 rounds, the last with one P3 (expected-schema validation), fixed in `8e6a059` without a further Codex round |
-| M3 | this revision | Docs, support matrix, docsite verification matrix, non-normative spec pointers, spec r4 (metadata and a contract clarification) | Claude and Codex; outcome recorded on PR #98 with the M3 commit |
+| M3 | `455da47` | Docs, support matrix, docsite verification matrix, non-normative spec pointers, spec r4 (metadata and a contract clarification) | Claude 3 rounds, Codex 3 rounds, both IMPLEMENTATION READY |
+| Implementation review | this revision | Codex review of the whole PR at `455da47`: F6 (P2) an oversized vector list was copied in full before its dimension was checked; fixed by the bounded snapshot of spec r5 §12.3, with a regression test. F7 (P3) PR title and description updated | Codex, on PR #98 |
 
 Commands and results at `8e6a059` (Java 25.0.2-graal):
 
@@ -738,6 +739,9 @@ surface tests, subclass copies, wiped temporaries), I10 (paired legacy tests, fu
 Deviations and follow-ups recorded during implementation:
 
 - D6/M2 wording: the references are imported unmodified by a separate generator, not edited.
+- Spec r5 (§12.3): the strict vector list paths read at most 17 elements, so a null beyond the
+  17th element of an oversized list is reported by the schema or dimension check, not as
+  `NullPointerException`.
 - Spec r4 notes a follow-up: a codec's `INVALID_CONFIGURATION` during envelope decoding becomes a
   rejected verdict, while the opening step propagates it.
 - The `zeroj-api` commitment package is sealed in its jar; `org.zeroj.circuit.lib.jubjub` is not
@@ -855,3 +859,6 @@ for the record. These decisions do not replace design review of the ADR as a who
 - **r8 (2026-10-17, ADR-0059 M3):** Status records M0–M3 as implemented, experimental, with
   maturity unchanged; new "Implementation evidence" section; D6 and the M2 row note that the
   references are imported unmodified by a separate generator. No design change.
+- **r9 (2026-10-20, responds to the Codex implementation review of `455da47`):** F6 → spec r5
+  §12.3 bounded vector-list snapshot, recorded in the implementation evidence with its precedence
+  change; the M3 row cites its commit and reviews. No design change.
