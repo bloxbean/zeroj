@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "43c7b32e96fd231eca8b26abbb63c7bc002090b9",
+  "sourceRevision": "83609543b82650635403716479ec2fdf018ef106",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -36,7 +36,7 @@
       "description": "What ZeroJ's Beta, Experimental, Disabled and Assurance-only labels mean, the full support matrix, and what \"not for production\" means in practice.",
       "url": "https://zeroj.dev/start/status/",
       "markdown": "https://zeroj.dev/ai/pages/start/status.md",
-      "sha256": "cb06887ee7aa905298b92a6cb87a74c4a0fe5b979e0bbb04367dac96fa927d03"
+      "sha256": "431284e76f56f86c063f27a27d844f73ec024c38601dfd7b42313e420b2b853c"
     },
     {
       "title": "Zero-knowledge in plain English",
@@ -260,7 +260,7 @@
       "description": "Commit to a hidden number, open it later, add commitments together, and prove facts about the hidden value in a Groth16 circuit, with ZeroJ's pedersen-jubjub-v1 profile.",
       "url": "https://zeroj.dev/guides/confidential/pedersen/",
       "markdown": "https://zeroj.dev/ai/pages/guides/confidential/pedersen.md",
-      "sha256": "068fd639b8782ffec20f7d5d78b4287a5292f72073961aeaa531a27dd88950a9"
+      "sha256": "8ede57201abb12aeba0fa8e430e77c6fd3030ee4cf86536b3a535453f5765aff"
     },
     {
       "title": "ElGamal encryption",
@@ -393,7 +393,7 @@
       "description": "One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification, BBS, commitments and encryption.",
       "url": "https://zeroj.dev/reference/api-cheatsheet/",
       "markdown": "https://zeroj.dev/ai/pages/reference/api-cheatsheet.md",
-      "sha256": "76449ad0982f17dd8b64faaa7b168fae93b1e52f0594e0398d275116a7a03319"
+      "sha256": "ce16932a8f7f21206849a9b7beea44c04d2db06e137afeecba17a9efbde8de94"
     },
     {
       "title": "Configuration",
@@ -438,7 +438,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "9303b46291398e4478e05016c9eac6013083208a3fbaf2b7792c57ac42a76c48"
+      "sha256": "47f197fe87d5d3a36f9c5bc992ec9a2d906526085dfead905bedbf5834946195"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",

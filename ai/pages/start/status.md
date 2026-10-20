@@ -69,12 +69,13 @@ current release and the default in every recommendation.
 
 ### Commitments & encryption
 
-New in 0.1.0-pre13. All of these live in `zeroj-circuit-lib`.
+New in 0.1.0-pre13 unless a row says otherwise. All of these live in `zeroj-circuit-lib`.
 
 | Area | Modules | Status |
 |------|---------|--------|
 | Pedersen commitments in circuits (`ZkPedersen`) | `zeroj-circuit-lib` | **Ready on BLS12-381 Groth16, pending external review**. Creating commitments off-circuit is offline/isolated only. |
 | Pedersen homomorphic API (`ZkPedersenCommitment`, `ZkPedersen.assertBalanced`) and vector commitments (`ZkPedersenVector`) | `zeroj-circuit-lib` | **Experimental**, pending review and external review |
+| Byte commitments (`PedersenCommitment.commitBytes`, profile `pedersen-jubjub-bytes-v1`), new in 0.1.0-pre14 | `zeroj-circuit-lib` | **Experimental**, pending external review. Creating commitments is offline/isolated only. |
 | Exponential ElGamal and threshold DKG | `zeroj-circuit-lib` | **Experimental**. Secret operations are offline/isolated only. |
 | Encrypted DKG share delivery (HPKE, RFC 9180) | `zeroj-circuit-lib` | **Experimental**. Its assumption A1 (HPKE in place of private channels) awaits external review. |
 | Confidential notes (encrypted opening delivery) | `zeroj-circuit-lib` | **Experimental**. Assumptions A1–A3 await external review; secret operations are offline/isolated only. |

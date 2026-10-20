@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: 43c7b32e96fd231eca8b26abbb63c7bc002090b9
+Source revision: 83609543b82650635403716479ec2fdf018ef106
 
 ## Key facts
 
@@ -1215,12 +1215,13 @@ current release and the default in every recommendation.
 
 #### Commitments & encryption
 
-New in 0.1.0-pre13. All of these live in `zeroj-circuit-lib`.
+New in 0.1.0-pre13 unless a row says otherwise. All of these live in `zeroj-circuit-lib`.
 
 | Area | Modules | Status |
 |------|---------|--------|
 | Pedersen commitments in circuits (`ZkPedersen`) | `zeroj-circuit-lib` | **Ready on BLS12-381 Groth16, pending external review**. Creating commitments off-circuit is offline/isolated only. |
 | Pedersen homomorphic API (`ZkPedersenCommitment`, `ZkPedersen.assertBalanced`) and vector commitments (`ZkPedersenVector`) | `zeroj-circuit-lib` | **Experimental**, pending review and external review |
+| Byte commitments (`PedersenCommitment.commitBytes`, profile `pedersen-jubjub-bytes-v1`), new in 0.1.0-pre14 | `zeroj-circuit-lib` | **Experimental**, pending external review. Creating commitments is offline/isolated only. |
 | Exponential ElGamal and threshold DKG | `zeroj-circuit-lib` | **Experimental**. Secret operations are offline/isolated only. |
 | Encrypted DKG share delivery (HPKE, RFC 9180) | `zeroj-circuit-lib` | **Experimental**. Its assumption A1 (HPKE in place of private channels) awaits external review. |
 | Confidential notes (encrypted opening delivery) | `zeroj-circuit-lib` | **Experimental**. Assumptions A1–A3 await external review; secret operations are offline/isolated only. |
@@ -9388,6 +9389,7 @@ _The web version of this page has an interactive illustration here._
 | Vector commitments (`ZkPedersenVector`, `PedersenVectorCommitment`) | **Experimental**, pending spec and external review |
 | Creating commitments off-circuit (`PedersenCommitment.commit`, `randomBlinding`) | **Offline/isolated only**: variable-time arithmetic on secrets |
 | Verifying a disclosed opening (`PedersenCommitment.verify`, `decode`) | Fine anywhere: the opening is no longer secret to that verifier |
+| Committing to bytes or a document (`commitBytes`, `commitBytesToEnd`; profile [`pedersen-jubjub-bytes-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-jubjub-bytes-v1.md)) | **Experimental**; creating them is offline/isolated only. New in 0.1.0-pre14 |
 
 "Offline/isolated only" restricts *where* you run the secret-handling code: on the user's device or
 in a separate process, never in a service an attacker can time. It doesn't weaken the commitment's
@@ -9754,6 +9756,55 @@ The full worked example is `AnnotatedVectorCommitment` in
 [`zeroj-integration-tests`](https://github.com/bloxbean/zeroj/tree/main/zeroj-integration-tests/src/test/java/org/zeroj/examples/annotation),
 and the [credit gate](https://zeroj.dev/selective-disclosure/prove-a-rule/#over-a-committed-credential) shows it on
 Cardano.
+
+### 6. Commit to bytes or a document
+
+> **Note:** the APIs on this page are new in ZeroJ 0.1.0-pre14 and not in a release on Maven Central yet (the latest is 0.1.0-pre13). Use a development snapshot (`0.1.0-pre14-<commit>-SNAPSHOT`) from https://repo.bloxbean.org/maven/snapshots to try them.
+
+To commit to a file, a JSON message or any other binary data, use the byte profile
+[`pedersen-jubjub-bytes-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-jubjub-bytes-v1.md)
+([ADR-0058](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0058-pedersen-jubjub-byte-commitments.md)).
+It hashes the exact bytes, followed by their length as 8 big-endian bytes, to a scalar (RFC 9380
+hash-to-field with SHA-256; see the spec's §3 for the exact frame) and commits to that scalar with
+the same bases as above, so the result is the same 32-byte point format.
+
+```java
+BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom());   // offline, fresh every time
+PedersenBytesCommitment c = PedersenCommitment.commitBytes(documentBytes, r);
+byte[] published = c.toPointBytes();                                   // 32 bytes, the whole wire format
+
+// Someone you disclose the document and r to:
+boolean ok = PedersenCommitment.verifyBytes(PedersenBytesCommitment.decode(published), documentBytes, r);
+```
+
+Large files don't need to fit in memory. Stream them, with the exact length or with a maximum
+when the length isn't known up front; both give the same commitment as the array form:
+
+```java
+try (InputStream in = Files.newInputStream(path)) {           // you open and close the stream
+    c = PedersenCommitment.commitBytes(in, Files.size(path), r);  // exact length: shorter or longer fails
+}
+try (InputStream in = generator.open()) {
+    c = PedersenCommitment.commitBytesToEnd(in, 100L << 20, r);   // unknown length, at most 100 MiB
+}
+```
+
+Things to know:
+
+- **Every byte counts.** Nothing is normalized. Pick the text encoding yourself
+  (`StandardCharsets.UTF_8`); `"café"` in NFC and NFD commits differently, and so does JSON with
+  different whitespace or key order. If you need semantic equality, canonicalize in your own
+  versioned format first.
+- **The blinding must already be in range** (`0 ≤ r < l`); `commitBytes` rejects anything else
+  instead of reducing it. Use `randomBlinding`.
+- **`verifyBytes` is for a disclosed opening.** To check a document you're keeping private,
+  recompute with `commitBytes` and compare the points.
+- **The point doesn't say it's a byte commitment.** Whoever knows `(bytes, r)` also knows a
+  numeric opening of the same point. If it matters which profile and context a commitment was
+  issued under, store that association authenticated (for example in an issuer-signed record)
+  and check it.
+- **No circuit proves the hashing.** You can prove facts about the hashed scalar, but not that it
+  came from particular bytes.
 
 ### Commitments you didn't make
 
@@ -14560,6 +14611,7 @@ encrypting, decrypting, sealing notes, DKG) are offline/isolated only. See
 |---|---|
 | `BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom())` · `JubjubPoint c = PedersenCommitment.commit(v, r)` | `PedersenCommitment`, `JubjubPoint` (`…lib.jubjub`) |
 | `PedersenCommitment.verify(c, v, r)` · `PedersenCommitment.decode(bytes)` (canonical + subgroup check; not `JubjubPoint.fromBytes`) | `PedersenCommitment` (`…lib.jubjub`) |
+| Bytes (0.1.0-pre14): `PedersenCommitment.commitBytes(bytes, r)` · `commitBytes(in, length, r)` · `commitBytesToEnd(in, maxBytes, r)` · `verifyBytes(c, bytes, r)` · `verifyBytes(c, in, length, r)` · `verifyBytesToEnd(c, in, maxBytes, r)` · `PedersenBytesCommitment.decode(point32)` | `PedersenCommitment`, `PedersenBytesCommitment` (`…lib.jubjub`) |
 | In a circuit: `ZkPedersen.commit(zk, value, blinding).assertAffineEquals(zk, u, v)` (blinding `@Secret @UInt(bits = 252)`) | `ZkPedersen` (`…lib.zk`) |
 | `ZkPedersenCommitment.commit(zk, value, blinding)` · `ZkPedersen.assertBalanced(zk, List.of(Term.of(in)), List.of(Term.of(out), Term.amount(fee)))` | `ZkPedersenCommitment`, `ZkPedersen.Term` (`…lib.zk`) |
 | `ZkPedersenVector.commit(zk, ZkPedersenVector.bindSchema(zk, schema, schemaDigest), values, blinding)` | `ZkPedersenVector` (`…lib.zk`), `PedersenVectorSchema` (`…lib.jubjub`) |
