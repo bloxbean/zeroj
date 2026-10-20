@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "83609543b82650635403716479ec2fdf018ef106",
+  "sourceRevision": "d2dcc23e49b617e16dd4f60edc6a44b83afa02e7",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -36,7 +36,7 @@
       "description": "What ZeroJ's Beta, Experimental, Disabled and Assurance-only labels mean, the full support matrix, and what \"not for production\" means in practice.",
       "url": "https://zeroj.dev/start/status/",
       "markdown": "https://zeroj.dev/ai/pages/start/status.md",
-      "sha256": "431284e76f56f86c063f27a27d844f73ec024c38601dfd7b42313e420b2b853c"
+      "sha256": "9bb1961279d42109e27c36ca5a93bb42f3f93e6978d125b54e3eb338b2bed332"
     },
     {
       "title": "Zero-knowledge in plain English",
@@ -141,7 +141,7 @@
       "description": "Publish a number as a sealed commitment, prove facts about it, add commitments together and open them later, so balances, bids and totals stay private on a public ledger.",
       "url": "https://zeroj.dev/selective-disclosure/hide-a-number/",
       "markdown": "https://zeroj.dev/ai/pages/selective-disclosure/hide-a-number.md",
-      "sha256": "07c0417ba7b9ea22ff213c493552ad1dc233a0a3049d806f02fb0489d6c79b7b"
+      "sha256": "54fd97b667677e2adaab2ce9833cb34bdd4c40ad51cd7ea092d76592d227b70d"
     },
     {
       "title": "Tell chosen readers (confidential notes)",
@@ -260,7 +260,7 @@
       "description": "Commit to a hidden number, open it later, add commitments together, and prove facts about the hidden value in a Groth16 circuit, with ZeroJ's pedersen-jubjub-v1 profile.",
       "url": "https://zeroj.dev/guides/confidential/pedersen/",
       "markdown": "https://zeroj.dev/ai/pages/guides/confidential/pedersen.md",
-      "sha256": "8ede57201abb12aeba0fa8e430e77c6fd3030ee4cf86536b3a535453f5765aff"
+      "sha256": "8e1f1b2fa9e32d3481ca3cfb5f189ef70911ed905123beb1eb728f1bd16a36c9"
     },
     {
       "title": "ElGamal encryption",
@@ -393,7 +393,7 @@
       "description": "One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification, BBS, commitments and encryption.",
       "url": "https://zeroj.dev/reference/api-cheatsheet/",
       "markdown": "https://zeroj.dev/ai/pages/reference/api-cheatsheet.md",
-      "sha256": "ce16932a8f7f21206849a9b7beea44c04d2db06e137afeecba17a9efbde8de94"
+      "sha256": "c26d2a6ed4801355497e3fbc1dae8f8f90a6635f9417070fec75d35fb3dbb0bb"
     },
     {
       "title": "Configuration",
@@ -438,7 +438,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "47f197fe87d5d3a36f9c5bc992ec9a2d906526085dfead905bedbf5834946195"
+      "sha256": "2e29fc38fa2d3149a58dc0406913a15af9dcf8e9772776cf2c03cbcab59ff8a6"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",

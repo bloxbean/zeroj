@@ -36,7 +36,8 @@ BigInteger value = BigInteger.valueOf(1_000);
 BigInteger blinding = PedersenCommitment.randomBlinding(new SecureRandom());
 byte[] published = PedersenCommitment.commit(value, blinding).toBytes();       // 32 bytes
 
-// Verifier, later, given the opening (value, blinding)
+// Verifier, later, given the opening (value, blinding). verify is variable-time: run it where the
+// opening is already public or nobody it is still secret from can time you.
 JubjubPoint received = PedersenCommitment.decode(published);                    // checks the point
 boolean opens = PedersenCommitment.verify(received, value, blinding);           // true
 boolean lies = PedersenCommitment.verify(received, BigInteger.valueOf(1_001), blinding);  // false

@@ -138,9 +138,14 @@ bind the proof to the transaction in your own validator.
 
 ## Commitments & encryption
 
-New in 0.1.0-pre13; everything here is in `zeroj-circuit-lib`, in `org.zeroj.circuit.lib.jubjub`
-(host side) or `org.zeroj.circuit.lib.zk` (in circuits). Secret operations (creating commitments,
-encrypting, decrypting, sealing notes, DKG) are offline/isolated only. See
+New in 0.1.0-pre13 unless a row says otherwise. Unless noted, everything here is in
+`zeroj-circuit-lib`, in `org.zeroj.circuit.lib.jubjub` (host side) or `org.zeroj.circuit.lib.zk` (in
+circuits); the commitment contracts (envelope, keys, acceptance) are in `zeroj-api`, package
+`org.zeroj.api.commitment`. Secret operations (creating commitments, encrypting, decrypting, sealing
+notes, DKG) are offline/isolated only. Verifying a disclosed opening (`verify`, `verifyScalar`,
+`verifyBytes`, vector `verifyOpening`, `CommitmentAcceptance` with such a check) is variable-time:
+do it only where the opening is already public or nobody it is still secret from can time you,
+otherwise offline/isolated too. See
 [Commitments & encryption, explained](https://zeroj.dev/learn/commitments-and-encryption/).
 
 | Call | Class (package) |
@@ -148,6 +153,9 @@ encrypting, decrypting, sealing notes, DKG) are offline/isolated only. See
 | `BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom())` · `JubjubPoint c = PedersenCommitment.commit(v, r)` | `PedersenCommitment`, `JubjubPoint` (`…lib.jubjub`) |
 | `PedersenCommitment.verify(c, v, r)` · `PedersenCommitment.decode(bytes)` (canonical + subgroup check; not `JubjubPoint.fromBytes`) | `PedersenCommitment` (`…lib.jubjub`) |
 | Bytes (0.1.0-pre14): `PedersenCommitment.commitBytes(bytes, r)` · `commitBytes(in, length, r)` · `commitBytesToEnd(in, maxBytes, r)` · `verifyBytes(c, bytes, r)` · `verifyBytes(c, in, length, r)` · `verifyBytesToEnd(c, in, maxBytes, r)` · `PedersenBytesCommitment.decode(point32)` | `PedersenCommitment`, `PedersenBytesCommitment` (`…lib.jubjub`) |
+| Strict (0.1.0-pre14): `PedersenCommitment.commitScalar(v, r)` · `verifyScalar(c, v, r)` · `verifyScalar(c, v, r, amountBits)` · `PedersenScalarOpening.of(v, r).encode()` · `PedersenBlinding.encode(r)` | `PedersenCommitment`, `PedersenScalarCommitment`, `PedersenScalarOpening`, `PedersenBlinding` (`…lib.jubjub`) |
+| Vector bounds (0.1.0-pre14): `commitment.verifyOpening(values, r, PedersenVectorBoundPolicy.widened(schema, n))` · `schemaWidths(schema)` · `residueOnly(schema)` | `PedersenVectorCommitment`, `PedersenVectorBoundPolicy` (`…lib.jubjub`) |
+| Envelope and keys (0.1.0-pre14): `CommitmentEnvelope.encode(c)` · `CommitmentEnvelope.decode(bytes, PedersenScalarCommitment.CODEC)` · `CommitmentKey.of(c, codec)` · `CommitmentAcceptance.accept(bytes, codec, provenance, opening)` | `CommitmentEnvelope`, `CommitmentKey`, `CommitmentAcceptance` (`org.zeroj.api.commitment`) |
 | In a circuit: `ZkPedersen.commit(zk, value, blinding).assertAffineEquals(zk, u, v)` (blinding `@Secret @UInt(bits = 252)`) | `ZkPedersen` (`…lib.zk`) |
 | `ZkPedersenCommitment.commit(zk, value, blinding)` · `ZkPedersen.assertBalanced(zk, List.of(Term.of(in)), List.of(Term.of(out), Term.amount(fee)))` | `ZkPedersenCommitment`, `ZkPedersen.Term` (`…lib.zk`) |
 | `ZkPedersenVector.commit(zk, ZkPedersenVector.bindSchema(zk, schema, schemaDigest), values, blinding)` | `ZkPedersenVector` (`…lib.zk`), `PedersenVectorSchema` (`…lib.jubjub`) |

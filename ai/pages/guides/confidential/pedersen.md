@@ -28,7 +28,9 @@ _The web version of this page has an interactive illustration here._
 | In-circuit homomorphic API (the `ZkPedersenCommitment` wrapper and its `add`/`subtract`, `ZkPedersen.assertBalanced`, subgroup checks) | **Experimental**, pending review and external review |
 | Vector commitments (`ZkPedersenVector`, `PedersenVectorCommitment`) | **Experimental**, pending spec and external review |
 | Creating commitments off-circuit (`PedersenCommitment.commit`, `randomBlinding`) | **Offline/isolated only**: variable-time arithmetic on secrets |
-| Verifying a disclosed opening (`PedersenCommitment.verify`, `decode`) | Fine anywhere: the opening is no longer secret to that verifier |
+| Verifying a disclosed opening (`PedersenCommitment.verify`, `verifyScalar`, `verifyBytes`, vector `verify` and `verifyOpening`) | Where the opening is already public (for example published on-chain), or where nobody it is still secret from can time the verifier. Otherwise offline/isolated too |
+| Decoding a received commitment (`PedersenCommitment.decode`, `PedersenScalarCommitment.decode`) | Fine anywhere: the point is public |
+| Typed profiles, strict adapters, envelopes and keys (`commitScalar`, `verifyScalar`, vector `verifyOpening`, `CommitmentEnvelope`, `CommitmentKey`) | **Experimental**, pending external review; creating commitments is offline/isolated only. New in 0.1.0-pre14 |
 | Committing to bytes or a document (`commitBytes`, `commitBytesToEnd`; profile [`pedersen-jubjub-bytes-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-jubjub-bytes-v1.md)) | **Experimental**; creating them is offline/isolated only. New in 0.1.0-pre14 |
 
 "Offline/isolated only" restricts *where* you run the secret-handling code: on the user's device or
@@ -37,7 +39,8 @@ hiding or binding.
 
 ## Add the dependency
 
-Every Pedersen class is in `zeroj-circuit-lib`. Add it next to the modules from the
+Every Pedersen class is in `zeroj-circuit-lib` (the profile contracts of section 7 are in
+`zeroj-api`, which it brings in). Add it next to the modules from the
 [quickstart](https://zeroj.dev/start/quickstart/):
 
 ```groovy title="build.gradle"
@@ -437,14 +440,146 @@ Things to know:
   versioned format first.
 - **The blinding must already be in range** (`0 ≤ r < l`); `commitBytes` rejects anything else
   instead of reducing it. Use `randomBlinding`.
-- **`verifyBytes` is for a disclosed opening.** To check a document you're keeping private,
-  recompute with `commitBytes` and compare the points.
+- **`verifyBytes` is for a disclosed opening.** It uses variable-time arithmetic, so run it where
+  the opening is already public or nobody it is still secret from can time you. To check a
+  document you're keeping private, recompute with `commitBytes` offline and compare the points.
 - **The point doesn't say it's a byte commitment.** Whoever knows `(bytes, r)` also knows a
   numeric opening of the same point. If it matters which profile and context a commitment was
   issued under, store that association authenticated (for example in an issuer-signed record)
   and check it.
 - **No circuit proves the hashing.** You can prove facts about the hashed scalar, but not that it
   came from particular bytes.
+
+## 7. Profiles, envelopes and safe keys
+
+> **Note:** the APIs on this page are new in ZeroJ 0.1.0-pre14 and not in a release on Maven Central yet (the latest is 0.1.0-pre13). Use a development snapshot (`0.1.0-pre14-<commit>-SNAPSHOT`) from https://repo.bloxbean.org/maven/snapshots to try them.
+
+Each kind of commitment above is a registered **profile** with its own identifier:
+`pedersen-jubjub-v1` (one value), `pedersen-jubjub-vector-v1` (several values under a schema) and
+`pedersen-jubjub-bytes-v1` (exact bytes). The registry, the checks and the byte formats are in
+[`commitment-profiles-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/commitment-profiles-v1.md)
+([ADR-0059](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0059-commitment-profiles-and-verification-strategy.md)).
+The profiles that share bases produce the same points, so a point never tells you its profile:
+**your configuration does.**
+
+### Strict entry points
+
+`commit` and `verify` reduce their inputs mod `l`, so `commit(l + 5, r)` equals `commit(5, r)`.
+The strict forms refuse anything outside `[0, l)` instead, and can also check an amount bound:
+
+```java
+BigInteger r = PedersenCommitment.randomBlinding(new SecureRandom());          // offline
+PedersenScalarCommitment c = PedersenCommitment.commitScalar(BigInteger.valueOf(250), r);
+
+// Someone you disclose (250, r) to, who also requires the amount to fit in 64 bits:
+boolean ok = PedersenCommitment.verifyScalar(c, BigInteger.valueOf(250), r, 64);
+```
+
+`verifyScalar` checks a **disclosed** opening with variable-time arithmetic: use it where the
+opening is already public or nobody it is still secret from can time you. To check an opening
+you're keeping private, recompute with `commitScalar` offline and compare the points.
+
+A value or blinding outside `[0, l)` throws `CommitmentFormatException` with
+`NON_CANONICAL_SCALAR`; with a canonical value and blinding, a value at or above `2^64` throws it
+with `OUT_OF_RANGE`. Typed commitments add and subtract only with their own type: `c.add(other)`.
+
+A **sum of vector commitments** may no longer open under the schema widths, because its
+components can grow past them. Say which bound you expect:
+
+```java
+PedersenVectorCommitment total = a.add(b);                                // both under `schema`
+BigInteger sumBlinding = rA.add(rB).mod(JubjubCurve.SUBGROUP_ORDER);   // blindings add mod l
+boolean ok = total.verifyOpening(List.of(sumAmount, sumAsset), sumBlinding,
+        PedersenVectorBoundPolicy.widened(schema, 2));                    // each width + 1 bit
+```
+
+Reduce the summed blinding mod `l`: `verifyOpening` rejects any scalar outside `[0, l)`
+(`NON_CANONICAL_SCALAR`) instead of reducing it.
+
+`schemaWidths(schema)` is for commitments issued under the schema and `residueOnly(schema)` for
+differences, whose negative components open to `l − x`; a residue-only opening says nothing about
+integer amounts. The policy must be for the commitment's own schema. This is disclosed
+verification too, under the same timing rule as `verifyScalar`.
+
+### Storing commitments: the envelope
+
+To store or send a commitment off-chain together with its profile, wrap it in an envelope. It
+is `0x01`, the identifier's length and the identifier, then the 32-byte point:
+
+```java
+byte[] stored = CommitmentEnvelope.encode(c);                                  // 52 bytes
+PedersenScalarCommitment back = CommitmentEnvelope.decode(stored, PedersenScalarCommitment.CODEC);
+```
+
+`decode` takes the profile you **expect**, from your configuration. An envelope of another
+profile fails with `PROFILE_MISMATCH`, even when its point would verify.
+
+A vector envelope carries **no schema**. Decode it with `PedersenVectorCommitment.codec(schema)`
+for the schema your configuration or issuance record names. The envelope of a commitment made
+under another schema decodes without error and the result simply takes the codec's schema, so no
+later check can detect the substitution: `verifyOpening` and `CommitmentKey` reject only mixing
+schemas *after* decoding. Getting the schema right, from an authenticated issuance record, is
+yours.
+
+Envelopes are an off-chain format: datums and redeemers keep the raw 32-byte point, and circuits
+keep their public inputs (the affine `u`, `v`, plus the schema digest for vectors).
+
+### Map keys and acceptance
+
+Don't key a map by the point bytes: a byte commitment and a numeric commitment can share a
+point, and so can vector commitments under two schemas. Use `CommitmentKey`:
+
+```java
+CommitmentKey key = CommitmentKey.of(c, PedersenScalarCommitment.CODEC);
+```
+
+`CommitmentAcceptance` runs the three checks in order (decode under the expected profile, your
+provenance rule, the opening) and returns the first failure as a reason:
+
+```java
+boolean acceptDisclosed(byte[] stored, BigInteger value, BigInteger blinding) throws IOException {
+    CommitmentCheck check = CommitmentAcceptance.accept(stored, PedersenScalarCommitment.CODEC,
+            commitment -> issuer.recorded(commitment) ? ProvenancePolicy.Result.OK : ProvenancePolicy.Result.MISSING,
+            commitment -> PedersenCommitment.verifyScalar(commitment, value, blinding, 64));
+    return check.accepted();   // otherwise check.reason() says why
+}
+```
+
+Format failures, provenance results and a non-matching opening become a reason. Exceptions are
+not swallowed: anything your provenance rule throws, an opening check that reports a
+misconfiguration (`INVALID_CONFIGURATION`, such as an invalid `amountBits`), and I/O errors
+propagate. `accept` declares `IOException` because opening checks may read streams.
+
+A matching identifier in the envelope is not provenance. If it matters who issued a commitment,
+and under which profile and context, your provenance rule checks an authenticated record. The
+opening check is disclosed verification, under the same timing rule as `verifyBytes`.
+
+### What each profile can verify, and where
+
+From the spec's verification matrix (§14). "V1" checks a disclosed opening, "V3" a public
+relation such as a sum, "V4" a proof. Every row leaves authorization, replay protection and
+context binding to your application.
+
+| Profile | Class | Java (off-chain) | Cardano | Public afterwards |
+|---|---|---|---|---|
+| `pedersen-jubjub-v1` | V1 | `verify`, `verifyScalar` | Not native (no Jubjub builtins); only inside a proof | Value and blinding |
+| | V3 | Typed `add`/`subtract`/`negate` (residues mod `l`) | Inside a proof only | The deltas |
+| | V4 | Groth16/PlonK with `ZkPedersen` | `Groth16BLS12381Lib.verify` with `(u, v)` as public inputs | The public inputs |
+| `pedersen-jubjub-vector-v1` | V1 | `verify`, `verifyOpening` under a bound policy | Not native | Values and blinding |
+| | V3 | `add`/`subtract`, same schema only | Inside a proof only | The deltas |
+| | V4 | Groth16/PlonK with `ZkPedersenVector` | Groth16 verify with the schema digest as a public input, plus an issuance record | The public inputs, including the digest |
+| `pedersen-jubjub-bytes-v1` | V1 | `verifyBytes` (and stream forms) | Not native; no circuit proves the hashing | Payload and blinding |
+| | V3, V4 | Not offered | Not offered | — |
+| `pedersen-bls12-381-g1-v1` | V1 | Planned (#95) | Planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | Message and blinding |
+| | V3 | Planned (#95) | Planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | The deltas |
+| | V4 | Blocked (ADR-0051 D7; #96) | Blocked / feasibility (#96) | — |
+| `pedersen-bls12-381-g1-bytes-v1` | V1 only (no arithmetic on byte commitments) | Planned (#95) | Native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first (#95 measures and documents that limit); a supplied scalar authenticates only that scalar, not the bytes | Payload (or scalar) and blinding |
+
+V1 rows are disclosed, variable-time checks: run them where the opening is already public or
+nobody it is still secret from can time the verifier, otherwise offline/isolated. Disclosed
+openings on-chain are public forever. A relation proves residues, not balances: integer
+conservation needs a range proof per term or a circuit. Documents larger than the on-chain limit
+can only be committed and opened off-chain; on-chain references them by commitment.
 
 ## Commitments you didn't make
 
@@ -467,6 +602,9 @@ two rows.
 - **Commit offline.** `commit` and `randomBlinding` use variable-time arithmetic on secrets. Run
   them on the user's device or in an isolated process.
 - **Decode with `PedersenCommitment.decode`**, never `JubjubPoint.fromBytes`, for received bytes.
+- **Take the profile, and for vectors the schema, from your configuration**, never from data that
+  travels with the commitment. Decode envelopes with the codec you expect and key maps with
+  `CommitmentKey`.
 - **Range-bound every value that means a number.** Commitments bind values *modulo* `l`:
   `commit(v, r)` equals `commit(v + l, r)`. Integer meaning comes only from declared widths and
   `assertBalanced`. Off-circuit point sums carry no such check.
