@@ -143,6 +143,14 @@ uniform on `[0, l)` is below `2⁻²⁵⁹`.
 An opening `(v, r)` for `C` is accepted iff `C = [v mod l]·G + [r mod l]·H`. Opening
 verification handles disclosed values and may use variable-time arithmetic.
 
+> **Non-normative pointer (ADR-0059).** "Disclosed" is qualified by the V1 timing rule of
+> [`commitment-profiles-v1`](commitment-profiles-v1.md) §6.2: variable-time verification is appropriate only where the opening is
+> already public or no party from whom it is still secret can observe the verifier's timing;
+> otherwise verification is restricted to offline or isolated execution, like generation. The
+> strict entry points `commitScalar`/`verifyScalar`, which require `v, r ∈ [0, l)` instead of
+> reducing them, and the opening encoding are defined there (§7, §8.1, §12). This note changes no
+> rule of this document.
+
 ---
 
 ## 4. Point encoding

@@ -79,3 +79,7 @@ plan.md
 
 ### Durable local benchmark datasets (not removed by Gradle clean) ###
 /.benchmark-data/
+
+# Python reference generators (run with python3 -B; never commit bytecode)
+__pycache__/
+*.pyc

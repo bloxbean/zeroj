@@ -1,5 +1,14 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import org.zeroj.api.commitment.Commitment;
+import org.zeroj.api.commitment.CommitmentCodec;
+import org.zeroj.api.commitment.CommitmentError;
+import org.zeroj.api.commitment.CommitmentFormatException;
+import org.zeroj.api.commitment.CommitmentGroup;
+import org.zeroj.api.commitment.CommitmentKind;
+import org.zeroj.api.commitment.CommitmentProfile;
+import org.zeroj.api.commitment.CommitmentProfileId;
+
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
@@ -18,8 +27,19 @@ import java.util.Objects;
  * <p><b>Same execution restriction as {@link PedersenCommitment#commit}.</b> Generation runs
  * secret scalars through variable-time {@link BigInteger} arithmetic: generate offline or in an
  * isolated process (ADR-0038).
+ *
+ * <p><b>Strict verification (ADR-0059).</b> {@link #verifyOpening} checks an opening under an
+ * explicitly configured {@link PedersenVectorBoundPolicy}, so sums and differences can be opened;
+ * the legacy {@link #verify} keeps its schema-width check and its {@code false}-for-malformed
+ * behaviour. Equality stays reference identity: use {@code CommitmentKey} with
+ * {@link #codec(PedersenVectorSchema)} for maps and sets.
  */
-public final class PedersenVectorCommitment {
+public final class PedersenVectorCommitment implements Commitment {
+
+    /** The {@code pedersen-jubjub-vector-v1} descriptor. Compare with {@code ==}. */
+    public static final CommitmentProfile PROFILE = CommitmentProfile.define(
+            CommitmentProfileId.of("pedersen-jubjub-vector-v1"), CommitmentKind.VECTOR, CommitmentGroup.JUBJUB,
+            JubjubCurve.COMPRESSED_POINT_BYTES);
 
     private final PedersenVectorSchema schema;
     private final JubjubPoint point;
@@ -60,7 +80,64 @@ public final class PedersenVectorCommitment {
         return new PedersenVectorCommitment(schema, PedersenCommitment.decode(encoded));
     }
 
-    /** Returns {@code true} iff {@code (values, blinding)} opens this commitment under its schema. */
+    /**
+     * The codec of this profile bound to {@code schema}, which the caller takes from its trusted
+     * configuration or issuance record. Its context is {@code I2OSP(σ, 32)} for the schema digest
+     * {@code σ}; {@code requireContext} rejects a commitment of another schema
+     * ({@code PROFILE_MISMATCH}).
+     *
+     * @throws NullPointerException if {@code schema} is null
+     */
+    public static CommitmentCodec<PedersenVectorCommitment> codec(PedersenVectorSchema schema) {
+        Objects.requireNonNull(schema, "schema");
+        return new Codec(schema);
+    }
+
+    /**
+     * Strict disclosed verification under a bound policy (class V1, {@code commitment-profiles-v1}
+     * §7 check 3, §12.3): {@code true} iff {@code Σ [v_i]·G_i + [r]·H_V} equals this commitment.
+     *
+     * <p>Checks, in order: nulls (including null elements, while snapshotting the list; the snapshot
+     * reads at most {@value PedersenVectorBases#MAX_DIMENSION} + 1 elements, so a longer list
+     * costs bounded work and fails the dimension check); the policy's schema equals this commitment's
+     * ({@code PROFILE_MISMATCH}); dimension ({@code MALFORMED_ENCODING}); each value's check 1 in index order, then the blinding's
+     * ({@code NON_CANONICAL_SCALAR}); each value's check 3 in index order ({@code OUT_OF_RANGE});
+     * then the equation, computed here on the variable-time public-scalar path. It never delegates
+     * to {@link #verify}, whose width check would reject valid {@code residue-only} and
+     * {@code widened} openings. The timing rule of {@link PedersenCommitment#verifyScalar} applies.
+     *
+     * @throws NullPointerException      if an argument or element is null
+     * @throws CommitmentFormatException with the class of the first failure
+     */
+    public boolean verifyOpening(List<BigInteger> values, BigInteger blinding, PedersenVectorBoundPolicy policy) {
+        Objects.requireNonNull(values, "values");
+        Objects.requireNonNull(blinding, "blinding");
+        Objects.requireNonNull(policy, "policy");
+        // The bounded snapshot (which also rejects null elements among those it reads) precedes the
+        // schema comparison (§12.3), and is the only copy: requireSnapshot checks it in place.
+        List<BigInteger> snapshot = PedersenStrict.trustedSnapshot(values);
+        if (!policy.schema().equals(schema)) {
+            throw new CommitmentFormatException(CommitmentError.PROFILE_MISMATCH,
+                    "the bound policy is for another schema than this commitment's");
+        }
+        PedersenVectorBoundPolicy.CheckedOpening checked = policy.requireSnapshot(snapshot, blinding);
+        JubjubPoint expected = PedersenVectorBases.blindingBase().scalarMul(checked.blinding());
+        for (int i = 0; i < checked.values().size(); i++) {
+            expected = expected.add(PedersenVectorBases.valueBase(i).scalarMul(checked.values().get(i)));
+        }
+        return expected.projectiveEquals(point);
+    }
+
+    /**
+     * Returns {@code true} iff {@code (values, blinding)} opens this commitment under its schema,
+     * with each value in {@code [0, min(2^width, l))}; malformed input is {@code false}, and the
+     * blinding is reduced mod {@code l} (legacy behaviour, unchanged).
+     *
+     * <p><b>Timing rule (class V1, ADR-0059 A2).</b> This is variable-time disclosed verification:
+     * use it only where the opening is already public or no party from whom it is still secret can
+     * observe the verifier's timing; otherwise verify offline or in an isolated process. For sums,
+     * differences and strict error classes use {@link #verifyOpening}.
+     */
     public boolean verify(List<BigInteger> values, BigInteger blinding) {
         Objects.requireNonNull(blinding, "blinding");
         if (values == null || values.size() != schema.dimension()) {
@@ -106,11 +183,64 @@ public final class PedersenVectorCommitment {
         return point.toBytes();
     }
 
+    /** Returns {@link #PROFILE}. */
+    @Override
+    public CommitmentProfile profile() {
+        return PROFILE;
+    }
+
+    /** The same octets as {@link #toBytes()}: a fresh 32-byte point encoding, carrying no schema. */
+    @Override
+    public byte[] toPointBytes() {
+        return point.toBytes();
+    }
+
     private void requireSameSchema(PedersenVectorCommitment other) {
         Objects.requireNonNull(other, "other");
         if (!schema.equals(other.schema)) {
             throw new IllegalArgumentException("vector commitments under different schemas cannot be combined: "
                     + schema + " vs " + other.schema);
+        }
+    }
+
+    private static final class Codec implements CommitmentCodec<PedersenVectorCommitment> {
+        private final PedersenVectorSchema schema;
+        private final byte[] context;
+
+        Codec(PedersenVectorSchema schema) {
+            this.schema = schema;
+            this.context = new byte[PedersenStrict.SCALAR_BYTES];
+            // σ < p < 2^255, so it fits 32 octets.
+            PedersenStrict.writeScalar(schema.digest(), context, 0);
+        }
+
+        @Override
+        public CommitmentProfile profile() {
+            return PROFILE;
+        }
+
+        @Override
+        public Class<PedersenVectorCommitment> commitmentType() {
+            return PedersenVectorCommitment.class;
+        }
+
+        @Override
+        public PedersenVectorCommitment decodePoint(byte[] pointBytes) {
+            return new PedersenVectorCommitment(schema, PedersenStrict.decodePoint(pointBytes));
+        }
+
+        @Override
+        public byte[] keyContext() {
+            return context.clone();
+        }
+
+        @Override
+        public void requireContext(PedersenVectorCommitment commitment) {
+            Objects.requireNonNull(commitment, "commitment");
+            if (!schema.equals(commitment.schema)) {
+                throw new CommitmentFormatException(CommitmentError.PROFILE_MISMATCH,
+                        "vector commitment schema is not the codec's schema");
+            }
         }
     }
 
