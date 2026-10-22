@@ -12,9 +12,9 @@ test {
 
 // ADR-0060 D8: BuiltInProfileAliasTest loads zeroj-api and this module in a fresh class loader from
 // the running test task's own classpath, for every Test task that may run it.
-tasks.withType(Test).configureEach { Test t ->
-    def runtime = t.classpath
-    t.doFirst { t.systemProperty 'zeroj.test.runtimeClasspath', runtime.asPath }
+tasks.withType(Test).configureEach {
+    // Read at execution time: a task may assign its classpath after this hook is configured.
+    doFirst { Test running -> running.systemProperty 'zeroj.test.runtimeClasspath', running.classpath.asPath }
 }
 
 // ADR-0038 P4 benchmark matrix. Deliberately NOT a gate: nothing here asserts, because a
