@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'java-test-fixtures'
 }
 
 description = 'ZeroJ shared pure Java BLS12-381 primitives'
@@ -7,7 +8,33 @@ description = 'ZeroJ shared pure Java BLS12-381 primitives'
 dependencies {
     // ADR-0060 D7: the G1 Pedersen profiles implement the zeroj-api commitment contract.
     api project(':zeroj-api')
+
+    // ADR-0060 M3: the commitment-profiles-v1 §13 vector runner is a test fixture, shared with the
+    // blst provider's tests (zeroj-blst) so both providers run the same cases with the same code.
+    testFixturesApi 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    testFixturesImplementation project(':zeroj-test-vectors')
+    testImplementation project(':zeroj-test-vectors')
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 }
+
+// ADR-0060 M3 (following ADR-0046 in zeroj-crypto): the vector runner in src/testFixtures is test
+// code, not product code. Both test-fixtures variants are removed from the published Java component,
+// and metadata generation fails if one reappears; `check` runs that generation so a plain
+// `./gradlew build` catches it, not only the publish job.
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
+
+def moduleName = project.name
+tasks.withType(GenerateModuleMetadata).configureEach {
+    doLast {
+        def metadata = outputFile.get().asFile.text
+        if (metadata.contains('test-fixtures') || metadata.contains('testFixtures')) {
+            throw new GradleException("ADR-0060 M3: ${moduleName} must not publish a test-fixtures variant "
+                    + "(the G1 commitment vector runner is not product code)")
+        }
+    }
+}
+tasks.named('check') { dependsOn tasks.withType(GenerateModuleMetadata) }
 
 publishing {
     publications {
