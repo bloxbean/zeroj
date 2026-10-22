@@ -2,14 +2,18 @@
 
 ## Status
 
-**Proposed.** Addresses [issue #95](https://github.com/bloxbean/zeroj/issues/95), phase 3 of the
-#93–#96 Pedersen roadmap, and folds in [issue #99](https://github.com/bloxbean/zeroj/issues/99)
-(built-in profile identifiers can be pre-empted through `CommitmentProfile.define`). It admits the
-two identifiers ADR-0059 reserved, `pedersen-bls12-381-g1-v1` and
-`pedersen-bls12-381-g1-bytes-v1`. AI review is input to the decision, not the decision:
-acceptance is recorded only by a named human maintainer, and no AI verdict upgrades a maturity
-or security claim (AGENTS.md). Acceptance would be design acceptance only; it certifies no
-implementation, test or security property.
+**Accepted (design), 2026-10-22, by maintainer Satya.** Q1–Q6 are decided as leaned (option (a)
+in each; see "Design questions for the maintainer"). Implementation proceeds under the milestones
+below, with a maintainer sign-off after M0. Codex approved r2 (`d1c31ca`) as design review on
+2026-10-22 with no finding open. Acceptance is design acceptance only: it certifies no
+implementation, test or security property, and no AI verdict upgrades a maturity or security claim
+(AGENTS.md).
+
+Addresses [issue #95](https://github.com/bloxbean/zeroj/issues/95), phase 3 of the #93–#96
+Pedersen roadmap, and folds in [issue #99](https://github.com/bloxbean/zeroj/issues/99) (built-in
+profile identifiers can be pre-empted through `CommitmentProfile.define`). It specifies the two
+identifiers ADR-0059 reserved, `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1`, and
+admits them at M5 once the evidence exists (D1 lifecycle).
 
 **Risk: R3** for the basis set (D2), the byte-to-scalar mapping (D4) and secret handling in
 generation (D6); **R2** for point and opening encodings, validation, the Java API, the registry
@@ -17,7 +21,7 @@ change (D8), vectors and the on-chain library (D9).
 
 ## Date
 
-2026-10-21 (r1); 2026-10-21 (r2: review round 1)
+2026-10-21 (r1); 2026-10-21 (r2: review round 1); 2026-10-22 (r3: accepted, Q1–Q6 decided)
 
 ## Context
 
@@ -703,18 +707,22 @@ work.
 
 ## Design questions for the maintainer
 
-- **Q1 — Placement.** (a) `org.zeroj.bls12381.pedersen` in `zeroj-bls12381`, which adds a
-  `zeroj-api` dependency **(lean)**; (b) a new module; (c) `zeroj-circuit-lib`.
-- **Q2 — Value base.** (a) `G` and `H` both hashed **(lean)**; (b) `G = g₁`, `H` hashed.
-- **Q3 — Scalar-only bytes mode.** (a) None. A supplied-scalar check is a scalar-profile opening,
-  documented as authenticating only `s` **(lean)**. (b) An explicit scalar-only verification mode
-  on the bytes type.
-- **Q4 — #99.** (a) Built-in descriptors owned by `zeroj-api` (D8) **(lean)**; (b) reserved
-  identifiers rejected in `define`; (c) drop duplicate rejection.
-- **Q5 — On-chain deliverable.** (a) A published library plus test-source example validators
-  **(lean)**; (b) examples only.
-- **Q6 — ADR-0051 M5.** (a) This ADR takes the G1 bases out of ADR-0051 M5, and the sigma proofs
-  stay gated on D7 **(lean)**; (b) leave M5 intact and block this ADR on D7.
+All six were decided by maintainer Satya on 2026-10-22, each as leaned (option (a)). The other
+options are kept for the record.
+
+- **Q1 — Placement. Decided: (a).** (a) `org.zeroj.bls12381.pedersen` in `zeroj-bls12381`, which
+  adds a `zeroj-api` dependency; (b) a new module; (c) `zeroj-circuit-lib`.
+- **Q2 — Value base. Decided: (a).** (a) `G` and `H` both hashed; (b) `G = g₁`, `H` hashed.
+- **Q3 — Scalar-only bytes mode. Decided: (a).** (a) None. A supplied-scalar check is a
+  scalar-profile opening, documented as authenticating only `s`. (b) An explicit scalar-only
+  verification mode on the bytes type.
+- **Q4 — #99. Decided: (a).** (a) Built-in descriptors owned by `zeroj-api` (D8); (b) reserved
+  identifiers rejected in `define`; (c) drop duplicate rejection. The D8 alternative of a `define`
+  that returns the built-in instance is not taken: mixed versions stay unsupported.
+- **Q5 — On-chain deliverable. Decided: (a).** (a) A published library plus test-source example
+  validators; (b) examples only.
+- **Q6 — ADR-0051 M5. Decided: (a).** (a) This ADR takes the G1 bases out of ADR-0051 M5, and the
+  sigma proofs stay gated on D7; (b) leave M5 intact and block this ADR on D7.
 
 ## Revision history
 
@@ -738,3 +746,6 @@ work.
     empty-tag question (Related findings).
 
   No base, tag, mapping, encoding or other cryptographic choice changed.
+- **r3 (2026-10-22; after Codex approval of `d1c31ca8ba338f8e96c0769dbd600e4c22a1cde6`):** maintainer
+  Satya accepted the design and decided Q1–Q6 as leaned (a). Status, Date and the questions section
+  record it. No decision, invariant, milestone or cryptographic choice changed.
