@@ -49,10 +49,16 @@ final class MarkedBuiltinCounts {
             throw new AssertionError("marked run outcome " + result.isSuccess() + " differs from the expected " + expectSuccess);
         }
         long cpu = result.budgetConsumed().cpuSteps();
-        if (cpu % UNCOMPRESS_MARK >= UNCOMPRESS_MARK / 2) {
-            throw new AssertionError("unmarked work too large for the marks: " + cpu);
+        Counts counts = new Counts(cpu / UNCOMPRESS_MARK % 100, cpu / SCALAR_MUL_MARK % 100, cpu / MSM_MARK % 100);
+        // Exactness: the marked total must be the counts times the marks plus unmarked work below one
+        // uncompress mark, and no count may reach 100 (that would carry into the next digit pair).
+        long marked = counts.uncompress() * UNCOMPRESS_MARK + counts.scalarMul() * SCALAR_MUL_MARK
+                + counts.msm() * MSM_MARK;
+        long unmarked = cpu - marked;
+        if (unmarked < 0 || unmarked >= UNCOMPRESS_MARK / 2 || cpu >= 100 * MSM_MARK) {
+            throw new AssertionError("marked counts are not exact: cpu " + cpu);
         }
-        return new Counts(cpu / UNCOMPRESS_MARK % 100, cpu / SCALAR_MUL_MARK % 100, cpu / MSM_MARK % 100);
+        return counts;
     }
 
     private static JulcVm vm() {

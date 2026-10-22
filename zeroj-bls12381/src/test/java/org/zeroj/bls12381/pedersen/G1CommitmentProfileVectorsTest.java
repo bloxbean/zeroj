@@ -89,6 +89,9 @@ class G1CommitmentProfileVectorsTest {
             assertTrue(any(scalar, "negative", c -> c.get("operation").asText().equals("verifyOpening")
                     && bits.equals(c.get("input").path("amountBits").asText())
                     && c.get("error").asText().equals("INVALID_CONFIGURATION")), "amountBits " + bits);
+        }
+        // Registry r7 §13.4: deltaBits 254 is invalid too (a delta and its alias δ − q would both pass).
+        for (String bits : List.of("0", "254", "255")) {
             assertTrue(any(scalar, "negative", c -> c.get("operation").asText().equals("publicDelta")
                     && bits.equals(c.get("input").path("deltaBits").asText())
                     && c.get("error").asText().equals("INVALID_CONFIGURATION")), "deltaBits " + bits);

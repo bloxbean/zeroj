@@ -146,7 +146,7 @@ Every run, in every mode, first:
    `expectedProfileId` equal to the file's profile, and the §13.3 "Streams" rule.
 
 The header records provenance as the Jubjub files do: each specification's path, revision (where
-the document has one; pinned in the script as the revision the vectors implement: `r6` and `r1`),
+the document has one; pinned in the script as the revision the vectors implement: `r7` and `r2`),
 date and SHA-256, and the generator's path, SHA-256 and Python version.
 
 **`--check`** regenerates in memory and compares **byte for byte** with the files on disk. Any
@@ -209,7 +209,7 @@ would not be caught here.
 
 | File | Positive | Negative |
 |---|---|---|
-| `pedersen-bls12-381-g1-v1.json` | 88 | 172 |
+| `pedersen-bls12-381-g1-v1.json` | 86 | 174 |
 | `pedersen-bls12-381-g1-bytes-v1.json` | 58 | 124 |
 
 Both files: every §13.4 G1 point negative under `decodePoint` and `decodeEnvelope` (lengths 0, 32,
@@ -230,9 +230,12 @@ check 1 at `q`, `q + 1`, `−1` for `m` and `r` on `commit`, `verifyOpening` and
 negated point and swapped bases; openings of the wrong length (0, 32, 63, 65, 96 and 128
 octets); `relation` with
 wrap-around, subtract to a negative residue, doubling (`P + P`), `P + (−P) = O`, identity operands,
-and its negatives; `publicDelta` with `deltaBits` `1, 64, 252, 253, 254` at `±(2^k − 1)` (positive)
+and its negatives; `publicDelta` with `deltaBits` `1, 64, 252, 253` at `±(2^k − 1)` (positive)
 and `±2^k` (`OUT_OF_RANGE`), `δ = 0`, wrap-around both ways, identity input, a result equal to the
-identity, `±q` and `±2^300`, `deltaBits` `0, 255, −1, 2^31 − 1, −2^31`, and order cases; a bytes
+identity, `±q` and `±2^300`, `deltaBits` `0, 254, 255, −1, 2^31 − 1, −2^31`
+(`INVALID_CONFIGURATION`; at 254 a delta and its alias `δ − q` would both pass, so
+`2^254 − 1` and `2^254 − 1 − q` at width 254 are negatives, and `2^253 − 1 − q` at width 253 is
+`OUT_OF_RANGE`), and order cases; a bytes
 commitment verified as the scalar opening of its `s`; multi-defect order cases.
 
 Bytes: `hashToScalar` for the empty payload, `0x00`, ASCII `abc` and pattern payloads of 1, 55, 56,

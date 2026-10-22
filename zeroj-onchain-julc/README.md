@@ -145,7 +145,8 @@ public class MyOpening {
   after it; curve and subgroup validity come from the CIP-0381 element contract. The identity is
   accepted.
 - Check 1 (`[0, q)`), check 2 and the delta bound fail the script before any `scalarMul`; the VM tests
-  show it from the builtin trace. `applyPublicDelta` multiplies by `|δ|` and negates.
+  show it with exact builtin counts from a marked cost model. `applyPublicDelta` multiplies by
+  `|δ|` and negates.
 - `verifyBytesOpening` recomputes `HashBytesToScalarG1` with `sha2_256` (the `BbsHashToScalar`
   expansion over `payload ‖ I2OSP(n, 8)`); the payload is bounded by the transaction size.
 - Two `scalarMul` are used rather than a two-term `multiScalarMul`, which costs more (measured).

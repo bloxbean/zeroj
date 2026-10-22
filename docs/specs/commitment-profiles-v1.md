@@ -668,8 +668,8 @@ generation (two blinded schedules) and disclosed-verification code after their c
 
 **BLS12-381 G1.** The G1 Java binding (`zeroj-bls12381`, package `org.zeroj.bls12381.pedersen`)
 and its strict paths are [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) §8, which
-governs them. They follow the rows above with `q` for `l`, `amountBits` and `deltaBits` in
-`[1, 254]`, plus two steps of their own (the scalar snapshot of `BigInteger` arguments, and the
+governs them. They follow the rows above with `q` for `l`, `amountBits` in `[1, 254]` and
+`deltaBits` in `[1, 253]` (§7: a bounded delta must be unique mod `q`), plus two steps of their own (the scalar snapshot of `BigInteger` arguments, and the
 provider capability check on generation), the same
 closure properties as §12.2, and the same rule that argument checks precede curve work, digest
 acquisition and stream reads.
@@ -980,7 +980,9 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   that is not built in can still be disabled.
 - **r7 (2026-10-22, ADR-0060 M5):** admits `pedersen-bls12-381-g1-basis-v1`,
   `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1` as `active` (experimental), after
-  ADR-0060 M5 checked every prerequisite (§2.3); records their evidence and implementations (§4.5)
+  ADR-0060 M5 checked every prerequisite (§2.3), effective when ADR-0060's PR (#103) merges, which
+  records the maintainer's acceptance of the delta-width amendment; records their evidence and
+  implementations (§4.5)
   and the implemented V1/V3 cells, the measured on-chain payload bound and the choice of two
   `scalarMul` over a two-term MSM (§14). The public-delta rule now requires `2^{k_δ+1} − 1 ≤ q`, so a
   bounded delta is unique mod `q` (§7, public deltas; for G1 `k_δ ≤ 253`,

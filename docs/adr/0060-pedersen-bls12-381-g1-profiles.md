@@ -10,8 +10,10 @@ sign-off on 2026-10-22, which opened M2.
 
 **Implemented (M0–M5), experimental.** M2–M5 are implemented on PR #103; registry r7 admits
 `pedersen-bls12-381-g1-basis-v1`, `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1`
-as `active` after the M5 admission check. One design amendment was made during implementation
-(the public-delta width is at most 253, r5); see "Implementation evidence". Admission is not a
+as `active` after the M5 admission check, effective when PR #103 merges. One design amendment
+was made during implementation (the public-delta width is at most 253, r5), under the maintainer's
+standing instruction to finish without waiting; it awaits the maintainer's explicit acceptance on
+the PR. See "Implementation evidence". Admission is not a
 maturity or security claim: everything stays experimental until external review. Acceptance is design acceptance only: it certifies no
 implementation, test or security property, and no AI verdict upgrades a maturity or security claim
 (AGENTS.md).
@@ -733,14 +735,17 @@ Everything below is evidence, not a security claim (AGENTS.md). Measurements are
 
 | Prerequisite | Evidence |
 |---|---|
-| Accepted ADR | Accepted (design) 2026-10-22 by maintainer Satya |
+| Accepted ADR | Accepted (design) 2026-10-22 by maintainer Satya. The r5 amendment (delta width ≤ 253) was made under the maintainer's standing instruction of 2026-10-22 to finish every milestone without waiting for approval; it tightens a check and awaits the maintainer's explicit acceptance on PR #103 |
 | Normative spec | `pedersen-bls12-381-g1-v1` r1 signed off at M0; r2 (delta width) records the one amendment |
 | Three reproductions of `G` and `H` (D2) | Java `PedersenG1ReproductionTest`; the independent Python reference; on-chain `bls12_381_G1_hashToGroup` in the Julc VM (`PedersenG1LibVmTest`) and on Yaci DevKit (`G1PedersenNodeEvidenceE2ETest`) |
 | §13 vectors and their independent recomputation | 260 + 182 cases from the spec-only generator; recomputed with py_ecc by an independent reviewer and by a second reviewer's own code: no mismatch |
 | Descriptors | `CommitmentProfiles.PEDERSEN_BLS12_381_G1_V1`/`_BYTES_V1` (M1); `G1PedersenCommitment.PROFILE == CommitmentProfiles…` tested |
 | M4 on-chain parity | Every on-chain-applicable vector case gives the off-chain verdict in the Julc VM; strict decoding, `scalarMul` and MSM evidence agree between the VM and the DevKit node on every case; DevKit E2E of the three example flows with tampered negatives |
 
-Every prerequisite is met, so registry r7 records the three entries `active`.
+Every prerequisite has its evidence, so registry r7 records the three entries `active`. Because the
+r5 amendment is not yet explicitly accepted by a named maintainer, r7 takes effect only when PR #103
+is merged; merging records that acceptance. Until then the `main` registry (r5) keeps them
+`reserved`.
 
 ### Invariants
 

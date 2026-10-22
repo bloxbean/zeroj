@@ -2,8 +2,9 @@
 
 **Identifiers:** basis set `pedersen-bls12-381-g1-basis-v1`; commitment profiles
 `pedersen-bls12-381-g1-v1` (scalar) and `pedersen-bls12-381-g1-bytes-v1` (bytes).
-**Status:** Normative (ADR-0060 milestone M0). The registry lists all three entries as `reserved`
-until ADR-0060 M5 admits them ([`commitment-profiles-v1`](commitment-profiles-v1.md) §2.3).
+**Status:** Normative (ADR-0060 milestone M0; r2 from the M2–M4 review). Registry r7 lists all
+three entries as `active` after the ADR-0060 M5 admission check
+([`commitment-profiles-v1`](commitment-profiles-v1.md) §2.3).
 Experimental: not approved for value-bearing or mainnet use. "Normative" fixes the constants,
 bytes, checks, check order and error behaviour; it is not a maturity or security claim. This
 document governs if it and an implementation disagree.
@@ -416,7 +417,9 @@ provider. Decoding is shared code and identical for every provider.
   commitment is produced, and there is no fallback to public multiplication.
 - Generation checks that each provider result is a point on the curve (or the identity) and that
   their sum is a valid point of `𝔾₁`, so no provider can make it return a commitment that §4 would
-  reject. It cannot detect a provider that returns a valid but wrong point.
+  reject. It cannot detect a provider that returns a valid but wrong point. The on-curve checks
+  run variable-time field arithmetic on secret-derived points, so they sit inside the same
+  offline/isolated boundary as the rest of generation (§7).
 - Verification uses only public operations and works, with the same verdicts, for every provider.
   Its verdict trusts the provider's public multiplication: the provider is trusted code (ADR-0060
   threat model), and its results are only compared with a strictly decoded commitment.
@@ -514,8 +517,9 @@ The reference output and the M3 vector files also record `b0`, `b1` and `b2` for
 - **r2 (2026-10-22, ADR-0060 M2–M4 review):** the public-delta width is `1 ≤ k_δ ≤ 253`, not 254,
   so that an accepted delta is unique mod `q` (§6.4, §8): at 254 a delta and its alias `δ − q` both
   passed the bound (review finding; no shipped data used 254). §8 states what generation checks on
-  provider results and that verification trusts the provider; §7 states how a `BigInteger`
-  subclass's value is read. No constant, encoding, test value or other check changes.
+  provider results (inside the offline/isolated boundary) and that verification trusts the
+  provider; §7 states how a `BigInteger` subclass's value is read; the status line records the
+  registry r7 admission. No constant, encoding, test value or other check changes.
 - **r1 (2026-10-22):** initial specification (ADR-0060 M0), revised before publication after the
   M0 review round (three Claude reviewers and Codex): bytes binding and framing injectivity (§2.3,
   §5); bounded memory (§5.2); the scalar snapshot (§7, §8); exact Java signatures, public surface

@@ -170,6 +170,14 @@ class PedersenG1BuiltinEvidenceTest extends ContractTest {
         System.out.println("[measure] scalar opening, one MSM:       " + describe(msm.budgetConsumed()));
         assertEquals(true, two.isSuccess());
         assertEquals(true, msm.isSuccess());
+        // Positive controls for the marked counts: each variant runs exactly what it says.
+        PlutusData ctxTwo = context(PlutusData.bytes(c.toPointBytes()), PlutusData.integer(m), PlutusData.integer(r),
+                bool(false), PlutusData.integer(BigInteger.ZERO));
+        assertEquals(new MarkedBuiltinCounts.Counts(3, 2, 0),
+                MarkedBuiltinCounts.count(compiled(PedersenG1OpeningProbe.class), ctxTwo, true));
+        PlutusData ctxMsm = context(PlutusData.bytes(c.toPointBytes()), PlutusData.integer(m), PlutusData.integer(r));
+        assertEquals(new MarkedBuiltinCounts.Counts(3, 0, 1),
+                MarkedBuiltinCounts.count(compiled(PedersenG1MsmOpeningProbe.class), ctxMsm, true));
         // A record, not a gate (I11): the library's choice of two scalarMul rests on this comparison.
         System.out.println("[measure] MSM minus two scalarMul: "
                 + (msm.budgetConsumed().cpuSteps() - two.budgetConsumed().cpuSteps()) + " cpu");
@@ -207,11 +215,19 @@ class PedersenG1BuiltinEvidenceTest extends ContractTest {
     // ------------------------------------------------------------------ helpers
 
     private EvalResult run(Class<?> probe, PlutusData... fields) {
-        CompileResult result = compiled.computeIfAbsent(probe, p -> compileValidator(p, Path.of("src/test/java")));
+        CompileResult result = compiled(probe);
         Program program = result.program();
-        PlutusData ctx = spendingContext(TestDataBuilder.randomTxOutRef_typed(), PlutusData.integer(0))
+        return PV11.evaluateWithArgs(program, result.target().ledgerTarget(), List.of(context(fields)), null,
+                EvalOptions.DEFAULT);
+    }
+
+    private CompileResult compiled(Class<?> probe) {
+        return compiled.computeIfAbsent(probe, p -> compileValidator(p, Path.of("src/test/java")));
+    }
+
+    private PlutusData context(PlutusData... fields) {
+        return spendingContext(TestDataBuilder.randomTxOutRef_typed(), PlutusData.integer(0))
                 .redeemer(PlutusData.constr(0, fields)).buildPlutusData();
-        return PV11.evaluateWithArgs(program, result.target().ledgerTarget(), List.of(ctx), null, EvalOptions.DEFAULT);
     }
 
     private static boolean isSuccess(EvalResult r) {

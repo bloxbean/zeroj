@@ -6,13 +6,13 @@
       "path": "docs/specs/commitment-profiles-v1.md",
       "revision": "r7",
       "date": "2026-10-22",
-      "sha256": "ccd4bbc9a4d88fcc0e4203a0f9fb8502429fd7ebebdf2341132038c35233071b"
+      "sha256": "5f1d4c26e9d5025f818e20884632d678a5a12b5b3e84cd07a8a258effeb97025"
     },
     {
       "path": "docs/specs/pedersen-bls12-381-g1-v1.md",
       "revision": "r2",
       "date": "2026-10-22",
-      "sha256": "36f3d6c1b0c92722c704a028fa12ce1805e5f916c734a1ab6cbaea707d3ce732"
+      "sha256": "efa0aa106343161dbd6abf6d8525fdc21832983adfc2d454727e14c58683d26f"
     },
     {
       "path": "docs/specs/pedersen-jubjub-bytes-v1.md",

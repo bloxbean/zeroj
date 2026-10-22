@@ -45,8 +45,10 @@ secret-scalar boundary for protocols that need one. In this module they use
 fixed-schedule Java ladders, but they are not a full JVM constant-time guarantee:
 bit access, branching, point special cases, field reductions, JIT behavior, and
 GC remain outside that guarantee. Production workloads that carry high-value
-secrets should select a native provider with a stronger side-channel contract,
-such as `zeroj-blst`.
+secrets need a provider with an audited side-channel contract. The `zeroj-blst`
+provider is native, but ZeroJ has no evidence of a side-channel contract for its
+binding (its secret-scalar method is its public one), so it does not lift the
+offline/isolated restriction, for example for G1 Pedersen generation below.
 
 ## G1 Pedersen commitments (experimental)
 
