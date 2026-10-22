@@ -732,6 +732,16 @@ def run_self_test(verbose: bool = True) -> _Results:
     ns_enc[0] |= FLAG_COMPRESSED
     chk(f"D3 negative: x = {x_ns} (x^3+4 non-square) -> MALFORMED step 6",
         strict_decode(bytes(ns_enc)) == (MALFORMED, 6))
+    # Added with the spec's decoder table (ADR-0060 M0 review): a curve point outside the subgroup
+    # with x != 0, and a mixed-order point. Both use only this module's own decoder and arithmetic.
+    x4 = bytes([0x80]) + bytes(46) + b"\x04"
+    chk("D3 negative: x = 4 (smallest positive x on E) -> NOT_IN_SUBGROUP step 7",
+        strict_decode(x4) == (NOT_IN_SUBGROUP, 7))
+    g_basis, _ = derive_basis()
+    mixed = compress(point_add(g_basis, (0, 2)))
+    chk("D3 negative: G + (0, 2) (mixed order) -> NOT_IN_SUBGROUP step 7",
+        mixed.hex() == "b6ee2defa35097e6bbaea5ab251479b37157dedfcbc4b319181bf28298f048a66eb93dc0230190c18ae135644c2d3df4"
+        and strict_decode(mixed) == (NOT_IN_SUBGROUP, 7))
     nc = bytearray(i2osp(P_381 + 1, 48))  # non-canonical alias of x = 1; fits in 381 bits
     nc[0] |= FLAG_COMPRESSED
     chk("D3 negative: x = P_381 + 1 (non-canonical alias of 1) -> MALFORMED step 5",

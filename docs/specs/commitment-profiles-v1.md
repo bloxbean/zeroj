@@ -664,8 +664,10 @@ check would reject valid `residue-only` and `widened` openings (this refines ADR
 generation (two blinded schedules) and disclosed-verification code after their checks.
 
 **BLS12-381 G1.** The G1 Java binding (`zeroj-bls12381`, package `org.zeroj.bls12381.pedersen`)
-and its strict paths are [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) §8. They
-follow the rows above with `q` for `l`, `amountBits` and `deltaBits` in `[1, 254]`, the same
+and its strict paths are [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) §8, which
+governs them. They follow the rows above with `q` for `l`, `amountBits` and `deltaBits` in
+`[1, 254]`, plus two steps of their own (the scalar snapshot of `BigInteger` arguments, and the
+provider capability check on generation), the same
 closure properties as §12.2, and the same rule that argument checks precede curve work, digest
 acquisition and stream reads.
 

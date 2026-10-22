@@ -407,9 +407,13 @@ tasks.register('verifyNoBuiltinProfileDefine') {
             scanned.addAll(ss.output.classesDirs.files)
         }
     }
-    // Self-check: a compiled zeroj-api test that calls define (inside a lambda) must be detected.
-    def knownPositive = project(':zeroj-api').layout.buildDirectory
-            .file('classes/java/test/org/zeroj/api/commitment/CommitmentProfileIdTest.class').get().asFile
+    // Self-check fixtures (zeroj-api test classes): a lambda call, a method reference, a spaced static
+    // import and a comment-split qualified call must be detected; a comment/string mention must not.
+    def fixtureDir = project(':zeroj-api').layout.buildDirectory.dir('classes/java/test/org/zeroj/api/commitment').get().asFile
+    def knownPositives = ['CommitmentProfileIdTest.class', 'DefineCheckFixtures$MethodReference.class',
+                          'DefineCheckFixtures$StaticImport.class', 'DefineCheckFixtures$Qualified.class']
+            .collect { new File(fixtureDir, it) }
+    def knownNegative = new File(fixtureDir, 'DefineCheckFixtures$MentionOnly.class')
     dependsOn ':zeroj-api:testClasses'
     inputs.files(scanned).withPropertyName('classes').optional()
     def root = rootProject.rootDir
@@ -454,8 +458,13 @@ tasks.register('verifyNoBuiltinProfileDefine') {
             }
         }
 
-        if (!knownPositive.isFile() || !refersToDefine(knownPositive)) {
-            throw new GradleException("ADR-0060 D8 check is broken: it does not detect define in ${knownPositive}")
+        knownPositives.each { f ->
+            if (!f.isFile() || !refersToDefine(f)) {
+                throw new GradleException("ADR-0060 D8 check is broken: it does not detect define in ${f}")
+            }
+        }
+        if (!knownNegative.isFile() || refersToDefine(knownNegative)) {
+            throw new GradleException("ADR-0060 D8 check is broken: it flags a mere mention in ${knownNegative}")
         }
         def failures = []
         int classCount = 0

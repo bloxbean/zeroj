@@ -413,7 +413,7 @@ so where a validator might be tempted to use it.
   | `G1PedersenCommitment` | `pedersen-bls12-381-g1-v1` commitment | `PROFILE`, `CODEC`, `decode`, `toPointBytes`, `add`, `subtract`, `negate`, `withPublicDelta(BigInteger delta, int deltaBits)`, value equality over the encoding |
   | `G1PedersenBytesCommitment` | `pedersen-bls12-381-g1-bytes-v1` commitment | `PROFILE`, `CODEC`, `decode`, `toPointBytes`; no arithmetic |
   | `G1PedersenOpening`, `G1PedersenBlinding` | openings | the D5 encodings, with check 1 at construction and decoding |
-  | `G1Pedersen` | entry point | `pureJava()`, `withProvider(Bls12381Provider)`, `commitScalar`, `verifyScalar` (3 and 4 arguments), `randomBlinding`, `commitBytes`/`verifyBytes` (array, declared-length stream, bounded stream) |
+  | `G1Pedersen` | entry point | `pureJava()`, `withProvider(Bls12381Provider)`, `provider()`, `supportsGeneration()`, `commitScalar`, `verifyScalar` (3 and 4 arguments), `randomBlinding`, `commitBytes`/`verifyBytes` (array, declared-length stream, bounded stream). The exact signatures, the provider capability check and the check order are `pedersen-bls12-381-g1-v1` §8 |
 
   All types are final with no public constructor. The strict check order of the registry spec
   §12.3 applies, with G1 rows that use `amountBits ∈ [1, 254]`.

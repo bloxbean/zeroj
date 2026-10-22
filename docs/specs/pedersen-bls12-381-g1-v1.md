@@ -227,9 +227,14 @@ if `maxBytes` were read). All reading rules of that section are normative here, 
 - The implementation never closes, resets, marks, skips, seeks or reopens the stream, never
   queries `available()` and never retries.
 
-### 5.2 Memory
+### 5.2 Memory (off-chain implementations)
 
-The payload is fed to the digest once, in a single pass, for every source. The implementation
+This section binds off-chain implementations, including all three Java payload sources. An
+on-chain verifier (§9) computes the same octets with `sha2_256`, which takes a complete
+bytestring, so it may materialize the framed `b0` input; its payload size is bounded by the
+execution budget and the transaction size limits that ADR-0060 M4 measures.
+
+Off-chain, the payload is fed to the digest once, in a single pass, for every source. The implementation
 never copies or buffers the whole payload, never builds `msg` in memory and never allocates by the
 payload length; stream reads use a fixed-size buffer independent of `n` (ZeroJ: 8 KiB,
 non-normative). Auxiliary memory is `O(1)` in `n`. These are the requirements of
@@ -377,8 +382,10 @@ digest acquisition or stream read, and no input is reduced:
 | `verifyScalar` (3 args) | nulls → snapshot → `value` check 1 → `blinding` check 1 → equation (`false` on mismatch) |
 | `verifyScalar` (4 args) | nulls → `amountBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → snapshot → `value` check 1 → `blinding` check 1 → check 2 (`OUT_OF_RANGE`) → equation |
 | `withPublicDelta` | nulls → `deltaBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → snapshot → `|δ| < 2^{deltaBits}` (`OUT_OF_RANGE`) → arithmetic |
-| `G1PedersenOpening.of` / `decode` | nulls → snapshot / §6.1 → `value` check 1 → `blinding` check 1 |
-| `G1PedersenBlinding.encode` / `decode` | nulls → snapshot → `r` check 1 / §6.2 |
+| `G1PedersenOpening.of` | nulls → snapshot → `value` check 1 → `blinding` check 1 |
+| `G1PedersenOpening.decode` | null → §6.1 (length, then `m`, then `r`) |
+| `G1PedersenBlinding.encode` | null → snapshot → `r` check 1 |
+| `G1PedersenBlinding.decode` | null → §6.2 (length, then `r`) |
 | `commitBytes*` | nulls → generation supported (`UnsupportedOperationException`) → snapshot → `blinding` check 1 → declared length or maximum (`LENGTH_OUT_OF_RANGE`) → read and hash (§5.1) → curve work |
 | `verifyBytes*` | nulls → snapshot → `blinding` check 1 → declared length or maximum (`LENGTH_OUT_OF_RANGE`) → read and hash (§5.1) → curve work |
 | point decoders (`decode`, `CODEC.decodePoint`) | §4 |
@@ -391,12 +398,18 @@ provider. Decoding is shared code and identical for every provider.
   `g1SecretScalarMul` once on public data (`G` and the scalar 1). If it throws
   `UnsupportedOperationException`, the instance does not support generation
   (`supportsGeneration()` is false); any other exception propagates from `withProvider`. If it
-  returns a point other than `G`, `withProvider` fails with `IllegalStateException`. The probe never
-  sees a caller's value.
+  returns anything other than `G` (including `null`), `withProvider` fails with
+  `IllegalStateException`. The probe never sees a caller's value. It is a capability check, not a
+  known-answer test: provider parity on other scalars (`0`, `q − 1`, …) rests on the vectors and
+  the parity tests. `pureJava().supportsGeneration()` is true.
 - On an instance that does not support generation, every generation method fails with
   `UnsupportedOperationException` immediately after its null checks: before the snapshot, any
   check, digest acquisition or stream read, so no secret or payload octet is touched. There is no
   fallback to public multiplication.
+- On an instance that supports generation, an exception from the provider during generation
+  (including an `UnsupportedOperationException` it did not raise in the probe) propagates
+  unchanged; by then the arguments have been checked and, for bytes, the payload hashed. No
+  commitment is produced, and there is no fallback to public multiplication.
 - Verification uses only public operations and works, with the same verdicts, for every provider.
 - Generation gives byte-identical commitments for every provider that supports it.
 

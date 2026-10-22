@@ -65,7 +65,10 @@ It prints one `PASS`/`FAIL` line per check and a `SUMMARY` line, and exits non-z
   `0x80‖0^47` and `0xA0‖0^47` (`x = 0`, order-3 points) → `NOT_IN_SUBGROUP`; 0-, 47- and
   49-octet inputs → step 2; compression flag clear (`g1` with the top bit cleared, `0x40‖0^47`,
   `0^48`) → step 3; `x = P_381`, `x = P_381 + 1` and `x = 2^381 − 1` → step 5; the smallest
-  `x` with `x³ + 4` a non-square (`x = 1`) → step 6; `None` raises.
+  `x` with `x³ + 4` a non-square (`x = 1`) → step 6; `None` raises. Two cases were added by the
+  ADR author after the review of the spec's decoder table, using only this module's own decoder
+  and arithmetic: `x = 4` (a curve point outside the subgroup) and the mixed-order point
+  `G + (0, 2)`, both → `NOT_IN_SUBGROUP`.
 - Check 1 on scalars: `m = q`, `r = q`, `m = −1`, `r = −1` and a `bool` are rejected, never reduced.
 - Mutation sanity (outputs must change, not exact values): DST `-v1-` → `-v2-` changes `G`, `H`
   and `s`; swapping the messages swaps `G` and `H`; payload change changes `s`; dropping the

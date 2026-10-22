@@ -576,10 +576,10 @@ context binding to your application.
 | | V4 | Groth16/PlonK with `ZkPedersenVector` | Groth16 verify with the schema digest as a public input, plus an issuance record | The public inputs, including the digest |
 | `pedersen-jubjub-bytes-v1` | V1 | `verifyBytes` (and stream forms) | Not native; no circuit proves the hashing | Payload and blinding |
 | | V3, V4 | Not offered | Not offered | — |
-| `pedersen-bls12-381-g1-v1` | V1 | Planned (#95) | Planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | Message and blinding |
-| | V3 | Planned (#95) | Planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | The deltas |
+| `pedersen-bls12-381-g1-v1` (reserved) | V1 | Planned (ADR-0060) | Planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | Message and blinding |
+| | V3 | Planned (ADR-0060) | Planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | The deltas |
 | | V4 | Blocked (ADR-0051 D7; #96) | Blocked / feasibility (#96) | — |
-| `pedersen-bls12-381-g1-bytes-v1` | V1 only (no arithmetic on byte commitments) | Planned (#95) | Native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first (#95 measures and documents that limit); a supplied scalar authenticates only that scalar, not the bytes | Payload (or scalar) and blinding |
+| `pedersen-bls12-381-g1-bytes-v1` (reserved) | V1 only (no arithmetic on byte commitments) | Planned (ADR-0060) | Native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first (ADR-0060 measures and documents that limit). No scalar-only mode: checking a supplied scalar is a `pedersen-bls12-381-g1-v1` opening and authenticates only that scalar, not the bytes | Payload and blinding |
 
 V1 rows are disclosed, variable-time checks: run them where the opening is already public or
 nobody it is still secret from can time the verifier, otherwise offline/isolated. Disclosed
