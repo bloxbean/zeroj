@@ -177,7 +177,7 @@ first.
   They cover check 1 (accept `q`, reduce), every decoder step (skip subgroup, cofactor-clear,
   lenient infinity, reduce `x`, ignore the sort flag, no compression check), the encoder's sort
   flag, the envelope (no identifier compare, any version, length before identifier),
-  `amountBits`/`deltaBits` (255 accepted, validated before the point), check 2 (inclusive, before
+  `amountBits` (255 accepted) and `deltaBits` (254 accepted), each validated before the point, check 2 (inclusive, before
   check 1), the delta rule (bound before width, inclusive bound, no negation), swapped `G`/`H`, the
   byte mapping (length prefix, no length, modulo Jubjub `l`, no zero prefix), little-endian
   openings, reversed `subtract`, the bytes equation before check 1, and the opening decoder

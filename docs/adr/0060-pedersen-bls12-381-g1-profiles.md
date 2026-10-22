@@ -744,8 +744,8 @@ Everything below is evidence, not a security claim (AGENTS.md). Measurements are
 
 Every prerequisite has its evidence, so registry r7 records the three entries `active`. Because the
 r5 amendment is not yet explicitly accepted by a named maintainer, r7 takes effect only when PR #103
-is merged; merging records that acceptance. Until then the `main` registry (r5) keeps them
-`reserved`.
+is merged; merging records that acceptance. Until then the registry on `main` keeps the two
+profiles `reserved` and does not yet list the basis set.
 
 ### Invariants
 

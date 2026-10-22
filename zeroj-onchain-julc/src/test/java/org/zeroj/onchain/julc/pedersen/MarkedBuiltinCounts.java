@@ -33,8 +33,12 @@ final class MarkedBuiltinCounts {
     private static final long UNCOMPRESS_MARK = 10_000_000_000L;
     private static final long SCALAR_MUL_MARK = UNCOMPRESS_MARK * 100;
     private static final long MSM_MARK = SCALAR_MUL_MARK * 100;
+    private static final long UNCOMPRESS_REAL = 52_948_122L;
+    private static final long SCALAR_MUL_REAL = 76_433_006L;
+    private static final long MSM_REAL = 321_837_444L;
 
-    private static final JulcVm VM = vm();
+    private static final JulcVm VM = vm(true);
+    private static final JulcVm REAL = vm(false);
 
     record Counts(long uncompress, long scalarMul, long msm) {}
 
@@ -50,18 +54,23 @@ final class MarkedBuiltinCounts {
         }
         long cpu = result.budgetConsumed().cpuSteps();
         Counts counts = new Counts(cpu / UNCOMPRESS_MARK % 100, cpu / SCALAR_MUL_MARK % 100, cpu / MSM_MARK % 100);
-        // Exactness: the marked total must be the counts times the marks plus unmarked work below one
-        // uncompress mark, and no count may reach 100 (that would carry into the next digit pair).
-        long marked = counts.uncompress() * UNCOMPRESS_MARK + counts.scalarMul() * SCALAR_MUL_MARK
-                + counts.msm() * MSM_MARK;
-        long unmarked = cpu - marked;
-        if (unmarked < 0 || unmarked >= UNCOMPRESS_MARK / 2 || cpu >= 100 * MSM_MARK) {
-            throw new AssertionError("marked counts are not exact: cpu " + cpu);
+        // Exactness, checked against an independent run under the unmodified PV11 model: only the three
+        // marked intercepts differ between the runs, so the difference must be exactly the counts times
+        // (mark − real cost). A carry between digit pairs, or unmarked work reaching a mark, would make
+        // the decoded counts disagree with that difference. The real total must also stay far below the
+        // smallest mark.
+        EvalResult real = REAL.evaluateWithArgs(compiled.program(), compiled.target().ledgerTarget(),
+                List.of(context), null, EvalOptions.DEFAULT);
+        long realCpu = real.budgetConsumed().cpuSteps();
+        long expectedDifference = counts.uncompress() * (UNCOMPRESS_MARK - UNCOMPRESS_REAL)
+                + counts.scalarMul() * (SCALAR_MUL_MARK - SCALAR_MUL_REAL) + counts.msm() * (MSM_MARK - MSM_REAL);
+        if (real.isSuccess() != expectSuccess || realCpu >= UNCOMPRESS_MARK / 10 || cpu - realCpu != expectedDifference) {
+            throw new AssertionError("marked counts are not exact: marked cpu " + cpu + ", real cpu " + realCpu);
         }
         return counts;
     }
 
-    private static JulcVm vm() {
+    private static JulcVm vm(boolean marked) {
         long[] costs;
         try (InputStream in = JulcVm.class.getResourceAsStream("/cost-model/plutus-v3-pv11-costs-v1.params")) {
             if (in == null) {
@@ -73,13 +82,15 @@ final class MarkedBuiltinCounts {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        if (costs.length != 350 || costs[UNCOMPRESS_CPU] != 52_948_122L || costs[SCALAR_MUL_CPU] != 76_433_006L
-                || costs[MSM_CPU] != 321_837_444L) {
+        if (costs.length != 350 || costs[UNCOMPRESS_CPU] != UNCOMPRESS_REAL || costs[SCALAR_MUL_CPU] != SCALAR_MUL_REAL
+                || costs[MSM_CPU] != MSM_REAL) {
             throw new IllegalStateException("unexpected PV11 parameter layout");
         }
-        costs[UNCOMPRESS_CPU] = UNCOMPRESS_MARK;
-        costs[SCALAR_MUL_CPU] = SCALAR_MUL_MARK;
-        costs[MSM_CPU] = MSM_MARK;
+        if (marked) {
+            costs[UNCOMPRESS_CPU] = UNCOMPRESS_MARK;
+            costs[SCALAR_MUL_CPU] = SCALAR_MUL_MARK;
+            costs[MSM_CPU] = MSM_MARK;
+        }
         JulcVm vm = JulcVm.create();
         vm.setCostModelParams(costs, PlutusLanguage.PLUTUS_V3, 11, 0);
         return vm;
