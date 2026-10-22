@@ -5,7 +5,14 @@
 **Accepted (design), 2026-10-22, by maintainer Satya.** Q1–Q6 are decided as leaned (option (a)
 in each; see "Design questions for the maintainer"). Implementation proceeds under the milestones
 below, with a maintainer sign-off after M0. Codex approved r2 (`d1c31ca`) as design review on
-2026-10-22 with no finding open. Acceptance is design acceptance only: it certifies no
+2026-10-22 with no finding open. M0 received Codex SPEC READY at `2b7e9c5` and the maintainer's
+sign-off on 2026-10-22, which opened M2.
+
+**Implemented (M0–M5), experimental.** M2–M5 are implemented on PR #103; registry r7 admits
+`pedersen-bls12-381-g1-basis-v1`, `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1`
+as `active` after the M5 admission check. One design amendment was made during implementation
+(the public-delta width is at most 253, r5); see "Implementation evidence". Admission is not a
+maturity or security claim: everything stays experimental until external review. Acceptance is design acceptance only: it certifies no
 implementation, test or security property, and no AI verdict upgrades a maturity or security claim
 (AGENTS.md).
 
@@ -21,7 +28,8 @@ change (D8), vectors and the on-chain library (D9).
 
 ## Date
 
-2026-10-21 (r1); 2026-10-21 (r2: review round 1); 2026-10-22 (r3: accepted, Q1–Q6 decided)
+2026-10-21 (r1); 2026-10-21 (r2: review round 1); 2026-10-22 (r3: accepted, Q1–Q6 decided);
+2026-10-22 (r4: wording); 2026-10-23 (r5: implementation, delta-width amendment, evidence)
 
 ## Context
 
@@ -359,7 +367,8 @@ so where a validator might be tempted to use it.
   reject a wrong length with `MALFORMED_ENCODING`, then `m ≥ q`, then `r ≥ q` with
   `NON_CANONICAL_SCALAR`.
 - **V3 public delta:** `C_new = C_old + [δ]·G` for a signed `δ` with an application bound
-  `|δ| < 2^{k_δ}`, `1 ≤ k_δ ≤ 254`. The implementation multiplies `G` by the canonical `|δ|` and
+  `|δ| < 2^{k_δ}`, `1 ≤ k_δ ≤ 253` (253, not 254, so a bounded delta is unique mod `q`; spec r2).
+  The implementation multiplies `G` by the canonical `|δ|` and
   negates the result when `δ < 0`; it never passes a negative or out-of-range integer to a scalar
   multiplication, off-chain or on-chain. Sums use coefficients the verifier fixes, never ones the
   prover supplies. The result is a residue mod `q`. An integer reading needs the application's own
@@ -706,6 +715,129 @@ work.
 - #100, #101 and #102 (vector integer format, sealing, `INVALID_CONFIGURATION` asymmetry) stay
   separate.
 
+## Implementation evidence (M2–M5)
+
+Everything below is evidence, not a security claim (AGENTS.md). Measurements are in
+[`docs/benchmarks/pedersen-g1-2026-10-22.md`](../benchmarks/pedersen-g1-2026-10-22.md).
+
+### Deliverables
+
+| Milestone | Deliverables |
+|---|---|
+| M2 | `org.zeroj.bls12381.pedersen` in `zeroj-bls12381`: `G1Pedersen`, `G1PedersenCommitment`, `G1PedersenBytesCommitment`, `G1PedersenOpening`, `G1PedersenBlinding` (public), `G1PedersenStrict`, `G1PedersenBases`, `G1PedersenBytesHash` (package-private); `Bls12381Codecs.scalarFromBigEndian32`/`scalarToBigEndian32`; native-image entries for the three non-secret public types. Tests: decoder (every D3 step, an independent affine reference, 1,147-case differential by a reviewer), checks and their order, deltas, openings, envelopes and cross-profile/cross-curve substitution, streams and cleanup, hostile `BigInteger` subclasses, exact API surface, provider capability and schedule (counting stub providers), RFC 9380 J.9.1 (`P`, `u`), K.1 and K.2 known answers, pure-Java/blst parity. |
+| M3 | Independent generator `pedersen-g1-reference/emit_g1_commitment_vectors_v1.py` (written from the specs, never from Java; `--check`, `--self-test` with 30 generator mutants); `pedersen-bls12-381-g1-v1.json` and `-bytes-v1.json` in `zeroj-test-vectors`; the shared runner (`zeroj-bls12381` test fixtures, excluded from publication) run over both providers with identical outcomes; a reviewer's independent recomputation of every case with py_ecc found no mismatch. |
+| M4 | `PedersenG1Lib` in `zeroj-onchain-julc`; Julc VM tests over every on-chain-applicable vector case with exact builtin counts (a marked PV11 cost model, ADR-0056) proving that guards precede `scalarMul` and `uncompress`; builtin evidence for `uncompress`, `scalarMul` and MSM in the VM and on Yaci DevKit; `hashToGroup` reproduction of the bases in the VM and on DevKit; three example validators (opening, running total, byte opening) with tampered negatives in the VM and on DevKit; node/VM parity of strict decoding; the payload limit; MSM against two `scalarMul`. |
+| M5 | Registry r7 (admission); spec r2; the measurements document; module READMEs; the support matrix; the docsite Pedersen guide and API cheat sheet; the §15 Java harness (`./gradlew :zeroj-bls12381:g1PedersenBenchmark`); the ADR-0051 status note. |
+
+### Admission check (D1 lifecycle, M5)
+
+| Prerequisite | Evidence |
+|---|---|
+| Accepted ADR | Accepted (design) 2026-10-22 by maintainer Satya |
+| Normative spec | `pedersen-bls12-381-g1-v1` r1 signed off at M0; r2 (delta width) records the one amendment |
+| Three reproductions of `G` and `H` (D2) | Java `PedersenG1ReproductionTest`; the independent Python reference; on-chain `bls12_381_G1_hashToGroup` in the Julc VM (`PedersenG1LibVmTest`) and on Yaci DevKit (`G1PedersenNodeEvidenceE2ETest`) |
+| §13 vectors and their independent recomputation | 260 + 182 cases from the spec-only generator; recomputed with py_ecc by an independent reviewer and by a second reviewer's own code: no mismatch |
+| Descriptors | `CommitmentProfiles.PEDERSEN_BLS12_381_G1_V1`/`_BYTES_V1` (M1); `G1PedersenCommitment.PROFILE == CommitmentProfiles…` tested |
+| M4 on-chain parity | Every on-chain-applicable vector case gives the off-chain verdict in the Julc VM; strict decoding, `scalarMul` and MSM evidence agree between the VM and the DevKit node on every case; DevKit E2E of the three example flows with tampered negatives |
+
+Every prerequisite is met, so registry r7 records the three entries `active`.
+
+### Invariants
+
+- **I1:** three reproductions, above.
+- **I2:** every D3 step and its class tested, including both infinity negatives and the order-3,
+  `x = 4` and mixed-order points; round trip on every accepted input; node and VM agree.
+- **I3:** check 1 at `q − 1`, `q`, `q + 1`, `−1`; check 2 for `k ∈ {1, 64, 252, 253, 254}` and
+  invalid widths; on-chain, exact builtin counts show no `scalarMul` on any refused scalar, width or
+  delta; off-chain, every provider call goes through a canonical-scalar guard
+  (`requireMultipliable`), so a negative or out-of-range value is a bug that throws, never a
+  multiplication.
+- **I4:** the §10.2 values, three sources agreeing for every length and chunking, stream bounds
+  before any read or digest, the probe octet never hashed; the on-chain map agrees on every vector
+  payload a transaction can carry.
+- **I5:** typed API, `PROFILE_MISMATCH` for every cross-profile and Jubjub envelope; on-chain the
+  validator's configuration fixes the profile (documented in `PedersenG1Lib`).
+- **I6:** generation calls only `g1SecretScalarMul` (counting stub providers); no secret in any
+  message; redacted holders; wiped buffers; no constant-time claim.
+- **I7:** pure Java and blst give identical commitments and verdicts on every vector and on
+  parity sweeps. Decoding, envelopes, sums and deltas are shared pure-Java code, so parity there is
+  by construction; the providers differ only in the multiplications.
+- **I8, I9:** M1, unchanged; `git diff 2b7e9c5 -- zeroj-circuit-lib` is empty and no Jubjub
+  vector file changed.
+- **I10:** above (M4 parity).
+- **I11:** every figure is a record; no check was removed or weakened for speed.
+
+### Seeded faults
+
+Each fault was applied to the source alone, the affected suites run, and the source restored.
+Off-chain (the `org.zeroj.bls12381.pedersen` tests, 125 at the time), all killed:
+
+| Fault | Tests failing |
+|---|---:|
+| Reduce instead of reject (check 1) | 18 |
+| Skip the subgroup step | 11 |
+| Swap `G` and `H` | 97 |
+| Drop the length suffix of the byte map | 9 |
+| Use the Jubjub order `l` for `q` | 26 |
+| Signed delta passed to the multiplication | 7 |
+| Delta width 254 accepted | 3 |
+| Generation without the result checks | 1 |
+| Generation through the public multiplication | 5 |
+| Check 2 off by one | 9 |
+| Accept any infinity encoding | 9 |
+| No scalar snapshot | 3 |
+
+On-chain (the `zeroj-onchain-julc` Pedersen VM tests, 17): no check 1 (4), no length check before
+`uncompress` (1, through the exact `uncompress` count), delta width 254 accepted (2), signed delta
+passed to `scalarMul` (1, through the argument of the traced multiplication), no delta bound (2),
+length suffix dropped (4), `G` and `H` swapped (7): all killed.
+
+Two faults are equivalent and survive by construction:
+- **No canonical round trip on-chain.** The VM's and the node's `uncompress` already reject every
+  non-canonical encoding (builtin evidence), so removing `compress(point) == bytes` changes no
+  verdict. The check stays as defence in depth, because CIP-0381 does not specify which encodings
+  `uncompress` accepts.
+- **A negative delta multiplied directly off-chain.** `G1Point.scalarMul` negates internally, so
+  `[δ]·G` and `−[|δ|]·G` are the same point. The library routes the multiplication through
+  `requireMultipliable`, which throws on a negative value (the "signed delta" fault above); a
+  direct call bypassing it would not be observable, so that part of I3 rests on code structure.
+
+A second reviewer ran an independent mutation round in a separate copy of the repository, with
+the same outcome.
+
+### Changes made during implementation
+
+- **Delta width 253 (design amendment, r5).** A reviewer showed that at `k_δ = 254` both `δ` and
+  `δ − q` satisfy `|δ| < 2^254` and move a commitment to the same point, so a redeemer's delta was
+  not unique, contrary to this ADR's threat model. The signed range `(−2^k, 2^k)` holds at most `q`
+  integers exactly when `k ≤ 253`. D5, spec §6.4 and §8 (r2), registry §7 and §13.4 (r7), Java,
+  `PedersenG1Lib`, the generator and the vectors now use `1 ≤ k_δ ≤ 253`; check 2 keeps 254. The
+  maintainer had authorized completing all milestones without waiting for approval; this
+  amendment is listed for the maintainer's review on the PR.
+- **Generation checks on provider results.** Each provider result must be on the curve, and the
+  public sum must be a valid subgroup point, so two invalid results cannot cancel into a
+  commitment; verification trusts the provider's public multiplication (spec §8 r2).
+- **Lazy bases on-chain.** Julc evaluates zero-argument library methods once at script start; the
+  bases are decompressed only inside the operations that use them, saving about 106M steps for
+  decoding, sums and deltas.
+- **Exact builtin counts.** The Julc VM's builtin trace keeps only the last 20 builtins, so the
+  "no `scalarMul` before the guard" checks use a marked PV11 cost model instead.
+
+### Follow-ups (not in this ADR)
+
+- **Shared-primitive performance.** `PureJavaBls12381Provider` and the blst provider re-validate
+  their input points with an affine `[q]P` (about 4.3 ms) on every call; a Jacobian or
+  endomorphism subgroup check (about 0.6 ms for the Jacobian form) and a pre-validated-base path
+  for public verification would roughly halve verification time. Both are shared R3 primitives and
+  need their own design.
+- **Julc annotation processor.** After an edit to an `@OnchainLibrary`, a warm Gradle daemon can
+  fail `:zeroj-integration-tests:compileTestJava` with "Undefined variable"; `--stop` or a forked
+  compiler avoids it.
+- **`YaciHelper.findAllUtxos`** reads only the first page of 100 UTxOs.
+- **Vector format:** the order "value before blinding" and "`m` before `r`" cannot be pinned by
+  file cases (both give the same class), and length bounds on `verifyBytes*` have no file
+  operation; Java tests cover them.
+
 ## Design questions for the maintainer
 
 All six were decided by maintainer Satya on 2026-10-22, each as leaned (option (a)). The other
@@ -755,3 +887,8 @@ options are kept for the record.
   root), not `(0, ±2)`; D8 records that the `define`-returns-the-built-in alternative is not taken
   (Q4 decided). The spec-level fixes from the same round are in `pedersen-bls12-381-g1-v1` r1 and
   `commitment-profiles-v1` r6. No decision, invariant or milestone changed.
+- **r5 (2026-10-23; implementation of M2–M5, three Claude reviewers and Codex on the uncommitted
+  M2–M4 work):** Status and the "Implementation evidence" section record the implementation, the
+  admission check and the evidence. **Design amendment:** the public-delta width is `1 ≤ k_δ ≤ 253`
+  (D5, spec r2, registry r7), so that a bounded delta is unique mod `q`. No other decision,
+  invariant, base, tag, mapping or encoding changed.

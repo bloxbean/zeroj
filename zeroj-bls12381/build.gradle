@@ -36,6 +36,15 @@ tasks.withType(GenerateModuleMetadata).configureEach {
 }
 tasks.named('check') { dependsOn tasks.withType(GenerateModuleMetadata) }
 
+// ADR-0060 M5 / commitment-profiles-v1 §15: standalone G1 Pedersen benchmark harness. Records
+// numbers, asserts nothing; it launches its own JVM forks. Run: ./gradlew :zeroj-bls12381:g1PedersenBenchmark
+tasks.register('g1PedersenBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'ADR-0060: G1 Pedersen host benchmark (records only).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bls12381.pedersen.G1PedersenBenchmark'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {

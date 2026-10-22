@@ -1,11 +1,11 @@
 # ZeroJ Commitment Profiles v1 — Registry and Contract Specification
 
 **Document identifier:** `commitment-profiles-v1`
-**Status:** Normative (ADR-0059 milestone M0; G1 entries ADR-0060 milestone M0). Experimental: not approved for value-bearing or
+**Status:** Normative (ADR-0059 milestone M0; G1 entries ADR-0060, admitted at milestone M5). Experimental: not approved for value-bearing or
 mainnet use. "Normative" fixes identifiers, bytes, checks, check order and error behaviour; it
 is not a maturity or security claim. This document governs if it and an implementation
 disagree.
-**Date:** 2026-10-22 (r6)
+**Date:** 2026-10-22 (r7)
 
 This document is the registry of ZeroJ commitment profiles, basis sets and proof protocols, and
 the contract every implementation of them follows: the expected-profile rule, scalar checks,
@@ -83,15 +83,17 @@ document).
 | `pedersen-jubjub-v1` | commitment profile | active | §4.2 |
 | `pedersen-jubjub-vector-v1` | commitment profile | active | §4.3 |
 | `pedersen-jubjub-bytes-v1` | commitment profile | active | §4.4 |
-| `pedersen-bls12-381-g1-basis-v1` | basis set | reserved | §3.3; admitted only under ADR-0060 (issue #95) |
-| `pedersen-bls12-381-g1-v1` | commitment profile | reserved | §4.6; admitted only under ADR-0060 (issue #95) |
-| `pedersen-bls12-381-g1-bytes-v1` | commitment profile | reserved | §4.7; admitted only under ADR-0060 (issue #95) |
+| `pedersen-bls12-381-g1-basis-v1` | basis set | active | §3.3; admitted under ADR-0060 (issue #95) |
+| `pedersen-bls12-381-g1-v1` | commitment profile | active | §4.6; admitted under ADR-0060 (issue #95) |
+| `pedersen-bls12-381-g1-bytes-v1` | commitment profile | active | §4.7; admitted under ADR-0060 (issue #95) |
 
 The three G1 entries have their parameters fixed by
-[`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) and stay `reserved` until ADR-0060
-milestone M5 checks every admission prerequisite (§2.4, and ADR-0060 D1's three base
-reproductions and on-chain parity) and a later revision of this document records them `active`.
-A `CommitmentProfile` descriptor for a reserved profile (§12.1) does not make it active.
+[`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md). r7 admits them after ADR-0060
+milestone M5 checked every admission prerequisite (§2.4 and ADR-0060 D1): the accepted ADR, the
+normative specification, the three reproductions of the bases (Java, the independent Python
+reference, and on-chain `bls12_381_G1_hashToGroup` in the Julc VM and on Yaci DevKit), the §13
+vectors with their independent recomputation, the descriptors, and the M4 on-chain parity results.
+Admission does not change their maturity: like every profile, they are experimental.
 
 No proof protocol is registered.
 
@@ -157,7 +159,7 @@ Independent reproduction: `zeroj-circuit-lib/src/test/resources/pedersen-referen
 Independent reproduction: `zeroj-circuit-lib/src/test/resources/pedersen-vector-reference/`.
 Used by `pedersen-jubjub-vector-v1`.
 
-### 3.3 `pedersen-bls12-381-g1-basis-v1` (reserved)
+### 3.3 `pedersen-bls12-381-g1-basis-v1`
 
 `(G, H)` exactly as [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) §2 defines them:
 RFC 9380 `hash_to_curve` with the suite `BLS12381G1_XMD:SHA-256_SSWU_RO_` applied to the messages
@@ -248,10 +250,10 @@ Maintained separately from the core (§2.4).
 | `pedersen-jubjub-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
 | `pedersen-jubjub-vector-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-vector-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-vector-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
 | `pedersen-jubjub-bytes-v1` | active | experimental; generation offline/isolated only | ADR-0058, ADR-0059 | `pedersen-bytes-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-bytes-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
-| `pedersen-bls12-381-g1-v1` | reserved | not admitted; experimental once admitted; generation offline/isolated only | ADR-0060, ADR-0059 | `pedersen-g1-reference/` (Python reproduction of the bases and test values) | planned: `zeroj-bls12381` (pure Java, blst), `zeroj-onchain-julc` |
-| `pedersen-bls12-381-g1-bytes-v1` | reserved | as above | ADR-0060, ADR-0059 | as above | as above |
+| `pedersen-bls12-381-g1-v1` | active | experimental; generation offline/isolated only | ADR-0060, ADR-0059 | `pedersen-g1-reference/` (independent Python reproduction of the bases and test values); `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-bls12-381-g1-v1.json` (§13; independent generator `pedersen-g1-reference/emit_g1_commitment_vectors_v1.py`); [measurements](../benchmarks/pedersen-g1-2026-10-22.md) | `zeroj-bls12381` (pure Java and blst providers); `zeroj-onchain-julc` `PedersenG1Lib` |
+| `pedersen-bls12-381-g1-bytes-v1` | active | as above | ADR-0060, ADR-0059 | as above, with `pedersen-bls12-381-g1-bytes-v1.json` | as above |
 
-### 4.6 `pedersen-bls12-381-g1-v1` (reserved)
+### 4.6 `pedersen-bls12-381-g1-v1`
 
 | Field | Value |
 |---|---|
@@ -264,7 +266,7 @@ Maintained separately from the core (§2.4).
 | Public inputs | none |
 | Opening encoding | §8.4 |
 
-### 4.7 `pedersen-bls12-381-g1-bytes-v1` (reserved)
+### 4.7 `pedersen-bls12-381-g1-bytes-v1`
 
 | Field | Value |
 |---|---|
@@ -385,7 +387,8 @@ Three checks are distinct and MUST NOT be conflated.
    behaviour (§4.3).
 
 **Public deltas and coefficients (V3).** A delta `δ` in `C_new = C_old + [δ]·G` is a signed
-integer with an application bound `|δ| < 2^{k_δ}`, `2^{k_δ} ≤ q`; its residue is `δ mod q`. An
+integer with an application bound `|δ| < 2^{k_δ}`, `2^{k_δ+1} − 1 ≤ q` (so the bounded range holds
+no two integers that are congruent mod `q`: a delta is unique mod `q`); its residue is `δ mod q`. An
 implementation computes `[|δ|]·G` with a canonical scalar and negates the point when `δ < 0`; it
 never passes a negative or out-of-range integer to a scalar-multiplication primitive.
 Coefficients of a sum are small non-negative integers fixed by the verifier, never supplied by
@@ -465,8 +468,8 @@ envelope = 0x01                    # envelope format version
 | `pedersen-jubjub-v1` | 52 octets |
 | `pedersen-jubjub-vector-v1` | 59 octets |
 | `pedersen-jubjub-bytes-v1` | 58 octets |
-| `pedersen-bls12-381-g1-v1` (reserved) | 74 octets |
-| `pedersen-bls12-381-g1-bytes-v1` (reserved) | 80 octets |
+| `pedersen-bls12-381-g1-v1` | 74 octets |
+| `pedersen-bls12-381-g1-bytes-v1` | 80 octets |
 
 **Encoding** writes the commitment's own profile identifier and raw point. It trusts its input
 (producer side).
@@ -849,8 +852,8 @@ Per kind, additionally:
   negatives include a Jubjub identifier under a G1 codec and the other G1 profile's identifier
   (`PROFILE_MISMATCH`).
 - **G1 scalar:** `verifyOpening` with `amountBits` `254` accepted; `publicDelta` with `deltaBits`
-  `k` and `δ = ±(2^k − 1)` (positive), `±2^k` (`OUT_OF_RANGE`), and `deltaBits` `0` and `255`
-  (`INVALID_CONFIGURATION`).
+  `k ≤ 253` and `δ = ±(2^k − 1)` (positive), `±2^k` (`OUT_OF_RANGE`), and `deltaBits` `0`, `254`
+  and `255` (`INVALID_CONFIGURATION`; at 254 a delta and its alias `δ − q` would both pass).
 - **G1 bytes:** `hashToScalar` for the empty payload, a pattern payload and one longer than a
   SHA-256 block.
 - **vector:** a dimension mismatch (`MALFORMED_ENCODING`); a component of `2^{k_i}` under
@@ -887,10 +890,10 @@ authorization, replay protection and context binding to the application.
 | | V4 | Groth16/PlonK with `ZkPedersenVector` | `Groth16BLS12381Lib.verify` with `σ` as a public input and an issuance record | the public inputs, including `σ` |
 | `pedersen-jubjub-bytes-v1` | V1 | existing `verifyBytes*`, streaming to `2^61 − 256` octets | not native; not provided in a proof | payload and `r` |
 | | V3, V4 | not offered | not offered | — |
-| `pedersen-bls12-381-g1-v1` (reserved) | V1 | planned (ADR-0060 M2) | planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | message and `r` |
-| | V3 | planned (ADR-0060 M2) | planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | deltas |
+| `pedersen-bls12-381-g1-v1` | V1 | implemented (experimental): `G1Pedersen.verifyScalar` (ADR-0060 M2) | implemented (experimental): `PedersenG1Lib.verifyScalarOpening`/`verifyScalarOpeningBounded`: length check, `uncompress`, canonical round trip, check 1 on `m` and `r` and check 2 if requested, then two `scalarMul` (cheaper than a two-term MSM, measured), `add`, `equal` | message and `r` |
+| | V3 | implemented (experimental): `withPublicDelta`, `add`/`subtract`/`negate` | implemented (experimental): `applyPublicDelta` with the signed-delta rule, `add`/`subtract`/`negate`; sums with verifier-fixed coefficients | deltas |
 | | V4 | blocked (ADR-0051 D7; #96) | blocked / feasibility (#96) | — |
-| `pedersen-bls12-381-g1-bytes-v1` (reserved) | V1 | planned (ADR-0060 M2) | native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first; ADR-0060 M4 measures and documents that limit. No scalar-only mode: checking a supplied `(s, r)` is a `pedersen-bls12-381-g1-v1` opening and authenticates only `s` (§4.4) | payload and `r` |
+| `pedersen-bls12-381-g1-bytes-v1` | V1 | implemented (experimental): `G1Pedersen.verifyBytes*`, streaming to `2^61 − 256` octets | implemented (experimental): `PedersenG1Lib.verifyBytesOpening` recomputes the mapping with `sha2_256`; the payload is bounded by the transaction size, not the budget: about 14 KB in a redeemer with the script inline, 15 KB with a reference script, in a minimal transaction ([measurements](../benchmarks/pedersen-g1-2026-10-22.md)). No scalar-only mode: checking a supplied `(s, r)` is a `pedersen-bls12-381-g1-v1` opening and authenticates only `s` (§4.4) | payload and `r` |
 
 Disclosed openings on-chain are public forever. Relations prove residues, not balances: integer
 conservation needs a range proof per term or a circuit. Documents larger than the on-chain limit
@@ -975,6 +978,15 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   operations, removed the scalar alternative from the G1 bytes row of §14, and stated in §12.1 what
   the build check covers, that the guarantees are against public-API callers, and how a profile
   that is not built in can still be disabled.
+- **r7 (2026-10-22, ADR-0060 M5):** admits `pedersen-bls12-381-g1-basis-v1`,
+  `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1` as `active` (experimental), after
+  ADR-0060 M5 checked every prerequisite (§2.3); records their evidence and implementations (§4.5)
+  and the implemented V1/V3 cells, the measured on-chain payload bound and the choice of two
+  `scalarMul` over a two-term MSM (§14). The public-delta rule now requires `2^{k_δ+1} − 1 ≤ q`, so a
+  bounded delta is unique mod `q` (§7, public deltas; for G1 `k_δ ≤ 253`,
+  `pedersen-bls12-381-g1-v1.md` r2), and the G1 minimum set adds `deltaBits` `254` as
+  `INVALID_CONFIGURATION` (§13.4). No Jubjub identifier, byte, check, check order or error class
+  changes.
 
 ---
 

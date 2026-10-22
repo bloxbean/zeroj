@@ -38,6 +38,7 @@ compares it with BBS, predicates, encrypted deliveries and threshold decryption.
 | Decoding a received commitment (`PedersenCommitment.decode`, `PedersenScalarCommitment.decode`) | Fine anywhere: the point is public |
 | Typed profiles, strict adapters, envelopes and keys (`commitScalar`, `verifyScalar`, vector `verifyOpening`, `CommitmentEnvelope`, `CommitmentKey`) | **Experimental**, pending external review; creating commitments is offline/isolated only. New in 0.1.0-pre14 |
 | Committing to bytes or a document (`commitBytes`, `commitBytesToEnd`; profile [`pedersen-jubjub-bytes-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-jubjub-bytes-v1.md)) | **Experimental**; creating them is offline/isolated only. New in 0.1.0-pre14 |
+| BLS12-381 G1 commitments opened directly on Cardano (`G1Pedersen`, `PedersenG1Lib`; profiles [`pedersen-bls12-381-g1-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-bls12-381-g1-v1.md) and `-bytes-v1`) | **Experimental**, pending external review; creating them is offline/isolated only. New in 0.1.0-pre14 |
 
 "Offline/isolated only" restricts *where* you run the secret-handling code: on the user's device or
 in a separate process, never in a service an attacker can time. It doesn't weaken the commitment's
@@ -576,16 +577,70 @@ context binding to your application.
 | | V4 | Groth16/PlonK with `ZkPedersenVector` | Groth16 verify with the schema digest as a public input, plus an issuance record | The public inputs, including the digest |
 | `pedersen-jubjub-bytes-v1` | V1 | `verifyBytes` (and stream forms) | Not native; no circuit proves the hashing | Payload and blinding |
 | | V3, V4 | Not offered | Not offered | — |
-| `pedersen-bls12-381-g1-v1` (reserved) | V1 | Planned (ADR-0060) | Planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | Message and blinding |
-| | V3 | Planned (ADR-0060) | Planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | The deltas |
+| `pedersen-bls12-381-g1-v1` | V1 | `G1Pedersen.verifyScalar` (experimental, ADR-0060) | Native (experimental): `PedersenG1Lib.verifyScalarOpening`/`verifyScalarOpeningBounded`: length check, `uncompress`, canonical round trip, check 1 on `m` and `r` and check 2 if requested, then two `scalarMul`, `add`, `equal`; about 3.4% of a transaction's step limit | Message and blinding |
+| | V3 | `withPublicDelta` (`deltaBits ≤ 253`), typed `add`/`subtract`/`negate` (residues mod `q`) | Native (experimental): `applyPublicDelta` with the signed-delta rule, `add`/`subtract`/`negate`; sums with verifier-fixed coefficients | The deltas |
 | | V4 | Blocked (ADR-0051 D7; #96) | Blocked / feasibility (#96) | — |
-| `pedersen-bls12-381-g1-bytes-v1` (reserved) | V1 only (no arithmetic on byte commitments) | Planned (ADR-0060) | Native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first (ADR-0060 measures and documents that limit). No scalar-only mode: checking a supplied scalar is a `pedersen-bls12-381-g1-v1` opening and authenticates only that scalar, not the bytes | Payload and blinding |
+| `pedersen-bls12-381-g1-bytes-v1` | V1 only (no arithmetic on byte commitments) | `G1Pedersen.verifyBytes*`, streaming to `2^61 − 256` octets (experimental, ADR-0060) | Native (experimental): `PedersenG1Lib.verifyBytesOpening` recomputes the mapping with `sha2_256`. The transaction size, not the budget, bounds the payload: about 14 KB in a redeemer with the script inline, 15 KB with a reference script, in a minimal transaction. No scalar-only mode: checking a supplied scalar is a `pedersen-bls12-381-g1-v1` opening and authenticates only that scalar, not the bytes | Payload and blinding |
 
 V1 rows are disclosed, variable-time checks: run them where the opening is already public or
 nobody it is still secret from can time the verifier, otherwise offline/isolated. Disclosed
 openings on-chain are public forever. A relation proves residues, not balances: integer
 conservation needs a range proof per term or a circuit. Documents larger than the on-chain limit
 can only be committed and opened off-chain; on-chain references them by commitment.
+
+## 8. Open a commitment directly on Cardano (BLS12-381 G1)
+
+<SinceNotice since="0.1.0-pre14" />
+
+A Cardano validator has no Jubjub builtins, so it can only check a Jubjub commitment inside a
+proof. The G1 profiles put the commitment on BLS12-381's G1 curve instead, where Plutus V3 has
+builtins: a validator can open it, add commitments or apply a public delta **directly**, with no
+proof. The profiles are
+[`pedersen-bls12-381-g1-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-bls12-381-g1-v1.md)
+(a number) and `pedersen-bls12-381-g1-bytes-v1` (exact bytes), designed in
+[ADR-0060](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0060-pedersen-bls12-381-g1-profiles.md).
+A commitment is a 48-byte compressed point. The trade-off: no ZeroJ circuit proves facts about a
+G1 commitment's hidden value, so use it when you will **open** the value or move it by **public**
+amounts.
+
+Off-chain (`zeroj-bls12381`):
+
+```java
+G1Pedersen pedersen = G1Pedersen.pureJava();                       // or G1Pedersen.withProvider(provider)
+BigInteger r = G1Pedersen.randomBlinding(new SecureRandom());      // offline, fresh every time
+G1PedersenCommitment c = pedersen.commitScalar(BigInteger.valueOf(1_000), r);
+byte[] datum = c.toPointBytes();                                   // 48 bytes
+
+G1PedersenCommitment received = G1PedersenCommitment.decode(datum); // strict: rejects anything off the subgroup
+boolean ok = pedersen.verifyScalar(received, BigInteger.valueOf(1_000), r, 64); // value < 2^64 too
+G1PedersenCommitment next = received.withPublicDelta(BigInteger.valueOf(-250), 64); // opens to 750 with r
+```
+
+On-chain (`zeroj-onchain-julc`, `PedersenG1Lib`):
+
+```java
+var c = PedersenG1Lib.decodeCommitment(datum.commitment());        // 48 bytes, canonical, in the subgroup
+boolean opened = PedersenG1Lib.verifyScalarOpeningBounded(c, redeemer.value(), redeemer.blinding(),
+        BigInteger.valueOf(64));
+var moved = PedersenG1Lib.applyPublicDelta(c, redeemer.delta(), BigInteger.valueOf(64));
+```
+
+Things to know:
+
+- **Cost on Cardano.** A scalar opening costs about 341 million CPU steps, about 3.4% of a
+  transaction's limit; a byte opening about 346 to 395 million. The transaction size, not the
+  budget, limits a byte opening's payload: about 14 KB in a redeemer with the script inline, 15 KB
+  with a reference script. See the
+  [measurements](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/pedersen-g1-2026-10-22.md).
+- **An opened value is public forever.** Anyone can read the redeemer.
+- **Deltas and sums are residues mod `q`**, not balances. Bound them yourself; `deltaBits` is at
+  most 253 so that one delta has only one accepted form.
+- **The library checks the commitment, not your application.** Authorization, replay protection,
+  binding to the spent output and value conservation are the validator's job. Three example
+  validators (an opening, a running total, a byte opening) are in
+  [`zeroj-integration-tests`](https://github.com/bloxbean/zeroj/tree/main/zeroj-integration-tests/src/test/java/org/zeroj/examples/pedersen/g1).
+- **Creating commitments is offline/isolated only**, as for Jubjub; neither the pure-Java nor the
+  blst provider is constant-time.
 
 ## Commitments you didn't make
 
