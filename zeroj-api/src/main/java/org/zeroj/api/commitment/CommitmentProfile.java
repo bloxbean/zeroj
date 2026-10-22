@@ -7,11 +7,13 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * The descriptor of one commitment profile ({@code commitment-profiles-v1} §12.1).
  *
- * <p>Each profile has exactly one descriptor, held as a public constant by its profile module.
- * {@link #define} refuses an identifier that was already defined through this loaded class, so two
- * copies of a profile module sharing one {@code zeroj-api} fail at class initialization, which is
- * fail-closed. <b>Descriptors compare by identity</b>: every check uses {@code ==}, never
- * {@code equals}.
+ * <p>Each profile has exactly one descriptor per loaded copy of this class. The descriptors of the
+ * built-in ZeroJ profiles are created and registered while this class is initialised, before any
+ * caller can reach {@link #define}, and are published as {@link CommitmentProfiles} constants
+ * (ADR-0060 D8). {@link #define} refuses an identifier that is already defined through this loaded
+ * class, built-in or not, so no caller can pre-empt a built-in profile, and two definitions of one
+ * identifier never coexist. <b>Descriptors compare by identity</b>: every check uses {@code ==},
+ * never {@code equals}.
  *
  * <p>The descriptor is configuration, not provenance. The cryptographic definition of a profile
  * lives in its specification; this type carries only what the shared contracts need.
@@ -20,8 +22,22 @@ public final class CommitmentProfile {
 
     static final int MAX_POINT_ENCODING_LENGTH = 255;
 
-    // Scope: this class's defining class loader (spec §12.1).
+    // Scope: this class's defining class loader (spec §12.1). Declared before the built-ins, which
+    // register themselves in it during class initialisation.
     private static final Set<CommitmentProfileId> DEFINED = ConcurrentHashMap.newKeySet();
+
+    // Built-in descriptors (ADR-0060 D8), published through CommitmentProfiles. Point lengths are the
+    // compressed encodings: Jubjub 32 octets, BLS12-381 G1 48 octets.
+    static final CommitmentProfile PEDERSEN_JUBJUB_V1 =
+            builtIn("pedersen-jubjub-v1", CommitmentKind.SCALAR, CommitmentGroup.JUBJUB, 32);
+    static final CommitmentProfile PEDERSEN_JUBJUB_BYTES_V1 =
+            builtIn("pedersen-jubjub-bytes-v1", CommitmentKind.BYTES, CommitmentGroup.JUBJUB, 32);
+    static final CommitmentProfile PEDERSEN_JUBJUB_VECTOR_V1 =
+            builtIn("pedersen-jubjub-vector-v1", CommitmentKind.VECTOR, CommitmentGroup.JUBJUB, 32);
+    static final CommitmentProfile PEDERSEN_BLS12_381_G1_V1 =
+            builtIn("pedersen-bls12-381-g1-v1", CommitmentKind.SCALAR, CommitmentGroup.BLS12_381_G1, 48);
+    static final CommitmentProfile PEDERSEN_BLS12_381_G1_BYTES_V1 =
+            builtIn("pedersen-bls12-381-g1-bytes-v1", CommitmentKind.BYTES, CommitmentGroup.BLS12_381_G1, 48);
 
     private final CommitmentProfileId id;
     private final CommitmentKind kind;
@@ -36,8 +52,19 @@ public final class CommitmentProfile {
         this.pointEncodingLength = pointEncodingLength;
     }
 
+    private static CommitmentProfile builtIn(String id, CommitmentKind kind, CommitmentGroup group,
+                                             int pointEncodingLength) {
+        CommitmentProfileId profileId = CommitmentProfileId.of(id);
+        if (!DEFINED.add(profileId)) {
+            throw new IllegalStateException("built-in commitment profile " + id + " is listed twice");
+        }
+        return new CommitmentProfile(profileId, kind, group, pointEncodingLength);
+    }
+
     /**
-     * Defines the descriptor of a profile. Called once per profile, by the profile module.
+     * Defines the descriptor of a profile that is not built into ZeroJ. Called once per profile, by
+     * the profile module. The built-in profiles are already defined ({@link CommitmentProfiles}), so
+     * defining one of their identifiers is always rejected.
      *
      * @throws NullPointerException      if an argument is null
      * @throws CommitmentFormatException ({@code INVALID_CONFIGURATION}) if

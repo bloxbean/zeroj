@@ -388,6 +388,42 @@ tasks.register('verifyDefaultModuleSurface') {
 // so `./gradlew build` (root `check`) fails on a test-fixtures runtime edge or a removed module edge.
 tasks.named('check') { dependsOn 'verifyDefaultModuleSurface' }
 
+// === ADR-0060 D8 / I8 ===========================================================================
+// Built-in commitment-profile descriptors are created by zeroj-api (CommitmentProfiles). A profile
+// module that called the public CommitmentProfile.define for its own identifier would fail class
+// initialisation against this zeroj-api (the identifier is already registered), so no main source
+// outside zeroj-api may call define.
+tasks.register('verifyNoBuiltinProfileDefine') {
+    group = 'verification'
+    description = 'ADR-0060 D8: assert no module outside zeroj-api calls CommitmentProfile.define.'
+
+    def sources = rootProject.subprojects
+            .findAll { it.name != 'zeroj-api' }
+            .collect { it.file('src/main/java') }
+            .findAll { it.isDirectory() }
+    inputs.files(sources.collect { fileTree(it) { include '**/*.java' } })
+
+    doLast {
+        def call = ~/CommitmentProfile\s*\.\s*define\s*\(/
+        def staticImport = ~/import\s+static\s+org\.zeroj\.api\.commitment\.CommitmentProfile\.(define|\*)\s*;/
+        def failures = []
+        sources.each { dir ->
+            fileTree(dir) { include '**/*.java' }.each { f ->
+                def text = f.text
+                if (call.matcher(text).find() || staticImport.matcher(text).find()) {
+                    failures << rootProject.relativePath(f)
+                }
+            }
+        }
+        if (!failures.isEmpty()) {
+            throw new GradleException("ADR-0060 D8: built-in descriptors come from CommitmentProfiles; "
+                    + "CommitmentProfile.define is called in:\n  - " + failures.join("\n  - "))
+        }
+        logger.lifecycle("ADR-0060 D8 check passed: no main source outside zeroj-api calls CommitmentProfile.define.")
+    }
+}
+tasks.named('check') { dependsOn 'verifyNoBuiltinProfileDefine' }
+
 def getCheckedOutGitCommitHash() {
     try {
         grgit.head().abbreviatedId

@@ -4,10 +4,8 @@ import org.zeroj.api.commitment.Commitment;
 import org.zeroj.api.commitment.CommitmentCodec;
 import org.zeroj.api.commitment.CommitmentError;
 import org.zeroj.api.commitment.CommitmentFormatException;
-import org.zeroj.api.commitment.CommitmentGroup;
-import org.zeroj.api.commitment.CommitmentKind;
 import org.zeroj.api.commitment.CommitmentProfile;
-import org.zeroj.api.commitment.CommitmentProfileId;
+import org.zeroj.api.commitment.CommitmentProfiles;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -36,10 +34,8 @@ import java.util.Objects;
  */
 public final class PedersenVectorCommitment implements Commitment {
 
-    /** The {@code pedersen-jubjub-vector-v1} descriptor. Compare with {@code ==}. */
-    public static final CommitmentProfile PROFILE = CommitmentProfile.define(
-            CommitmentProfileId.of("pedersen-jubjub-vector-v1"), CommitmentKind.VECTOR, CommitmentGroup.JUBJUB,
-            JubjubCurve.COMPRESSED_POINT_BYTES);
+    /** The {@code pedersen-jubjub-vector-v1} descriptor, {@link CommitmentProfiles#PEDERSEN_JUBJUB_VECTOR_V1}. Compare with {@code ==}. */
+    public static final CommitmentProfile PROFILE = CommitmentProfiles.PEDERSEN_JUBJUB_VECTOR_V1;
 
     private final PedersenVectorSchema schema;
     private final JubjubPoint point;

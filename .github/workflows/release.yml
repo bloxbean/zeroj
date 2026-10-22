@@ -227,7 +227,7 @@ jobs:
         run: ./gradlew build --stacktrace
 
       - name: Assert the default graph has no assurance/benchmark/removed-provider edge
-        run: ./gradlew verifyDefaultModuleSurface --stacktrace
+        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine --stacktrace
 
       # Learns the artifactIds this build owns; unsigned, its staged files are discarded.
       - name: Discover the Maven publications
