@@ -7,7 +7,7 @@ until ADR-0060 M5 admits them ([`commitment-profiles-v1`](commitment-profiles-v1
 Experimental: not approved for value-bearing or mainnet use. "Normative" fixes the constants,
 bytes, checks, check order and error behaviour; it is not a maturity or security claim. This
 document governs if it and an implementation disagree.
-**Date:** 2026-10-22 (r1)
+**Date:** 2026-10-22 (r2)
 
 This document defines two Pedersen commitment profiles over the prime-order subgroup of the
 BLS12-381 curve `E: y² = x³ + 4` over `GF(P_381)`: a commitment to a scalar and a commitment to an
@@ -274,8 +274,11 @@ The payload travels separately as its exact octets. Decoding order: length other
 ### 6.4 Public relations (V3)
 
 - **Public delta.** `C_new = C_old + [δ]·G` for a signed integer `δ` with an application bound
-  `|δ| < 2^{k_δ}`, `1 ≤ k_δ ≤ 254`. A `k_δ` outside that range is `INVALID_CONFIGURATION`; a
-  `|δ| ≥ 2^{k_δ}` is `OUT_OF_RANGE`. The implementation computes `[|δ|]·G` with the canonical
+  `|δ| < 2^{k_δ}`, `1 ≤ k_δ ≤ 253`. A `k_δ` outside that range is `INVALID_CONFIGURATION`; a
+  `|δ| ≥ 2^{k_δ}` is `OUT_OF_RANGE`. The range `(−2^{k_δ}, 2^{k_δ})` holds `2^{k_δ+1} − 1`
+  integers, at most `q` exactly when `k_δ ≤ 253`, so an accepted delta is unique mod `q`. At 254,
+  both `δ` and `δ − q` would pass the bound for some `δ` and give the same point. (Check 2 keeps
+  254: `m` is non-negative and `2^254 < q`.) The implementation computes `[|δ|]·G` with the canonical
   scalar `|δ|` and negates the point when `δ < 0`. It never passes a negative or out-of-range
   integer to a scalar multiplication, off-chain or on-chain.
 - **Sums.** `add`, `subtract` and `negate` combine commitments of this profile only. Coefficients
@@ -309,7 +312,8 @@ The payload travels separately as its exact octets. Decoding order: length other
   `java.math.BigInteger` (an instance of exactly that class is used as is). Every later check, the
   arithmetic and any retained value use only that copy, so a subclass that misreports its value
   cannot pass a check with one value and be used with another. The temporary octets of the copy
-  are wiped.
+  are wiped. A subclass's value is the one its `toByteArray()` reports, read once; the caller
+  chooses its own value either way.
 - Owned buffers and digest outputs are wiped on every exit; the operation-owned digest is reset
   and never reused; nothing is cached, pooled or kept in thread-local storage. No secret appears in
   a log or exception message. `BigInteger` values cannot be wiped; this is best effort.
@@ -381,7 +385,7 @@ digest acquisition or stream read, and no input is reduced:
 | `commitScalar` | nulls → generation supported (`UnsupportedOperationException`) → snapshot → `value` check 1 → `blinding` check 1 → generate |
 | `verifyScalar` (3 args) | nulls → snapshot → `value` check 1 → `blinding` check 1 → equation (`false` on mismatch) |
 | `verifyScalar` (4 args) | nulls → `amountBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → snapshot → `value` check 1 → `blinding` check 1 → check 2 (`OUT_OF_RANGE`) → equation |
-| `withPublicDelta` | nulls → `deltaBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → snapshot → `|δ| < 2^{deltaBits}` (`OUT_OF_RANGE`) → arithmetic |
+| `withPublicDelta` | nulls → `deltaBits ∈ [1, 253]` (`INVALID_CONFIGURATION`) → snapshot → `|δ| < 2^{deltaBits}` (`OUT_OF_RANGE`) → arithmetic |
 | `G1PedersenOpening.of` | nulls → snapshot → `value` check 1 → `blinding` check 1 |
 | `G1PedersenOpening.decode` | null → §6.1 (length, then `m`, then `r`) |
 | `G1PedersenBlinding.encode` | null → snapshot → `r` check 1 |
@@ -410,7 +414,12 @@ provider. Decoding is shared code and identical for every provider.
   (including an `UnsupportedOperationException` it did not raise in the probe) propagates
   unchanged; by then the arguments have been checked and, for bytes, the payload hashed. No
   commitment is produced, and there is no fallback to public multiplication.
+- Generation checks that each provider result is a point on the curve (or the identity) and that
+  their sum is a valid point of `𝔾₁`, so no provider can make it return a commitment that §4 would
+  reject. It cannot detect a provider that returns a valid but wrong point.
 - Verification uses only public operations and works, with the same verdicts, for every provider.
+  Its verdict trusts the provider's public multiplication: the provider is trusted code (ADR-0060
+  threat model), and its results are only compared with a strictly decoded commitment.
 - Generation gives byte-identical commitments for every provider that supports it.
 
 ---
@@ -502,6 +511,11 @@ The reference output and the M3 vector files also record `b0`, `b1` and `b2` for
 
 ## 11. Revision history
 
+- **r2 (2026-10-22, ADR-0060 M2–M4 review):** the public-delta width is `1 ≤ k_δ ≤ 253`, not 254,
+  so that an accepted delta is unique mod `q` (§6.4, §8): at 254 a delta and its alias `δ − q` both
+  passed the bound (review finding; no shipped data used 254). §8 states what generation checks on
+  provider results and that verification trusts the provider; §7 states how a `BigInteger`
+  subclass's value is read. No constant, encoding, test value or other check changes.
 - **r1 (2026-10-22):** initial specification (ADR-0060 M0), revised before publication after the
   M0 review round (three Claude reviewers and Codex): bytes binding and framing injectivity (§2.3,
   §5); bounded memory (§5.2); the scalar snapshot (§7, §8); exact Java signatures, public surface

@@ -5,6 +5,8 @@ plugins {
 description = 'ZeroJ shared pure Java BLS12-381 primitives'
 
 dependencies {
+    // ADR-0060 D7: the G1 Pedersen profiles implement the zeroj-api commitment contract.
+    api project(':zeroj-api')
 }
 
 publishing {
