@@ -1,11 +1,11 @@
 # ZeroJ Commitment Profiles v1 — Registry and Contract Specification
 
 **Document identifier:** `commitment-profiles-v1`
-**Status:** Normative (ADR-0059 milestone M0). Experimental: not approved for value-bearing or
+**Status:** Normative (ADR-0059 milestone M0; G1 entries ADR-0060 milestone M0). Experimental: not approved for value-bearing or
 mainnet use. "Normative" fixes identifiers, bytes, checks, check order and error behaviour; it
 is not a maturity or security claim. This document governs if it and an implementation
 disagree.
-**Date:** 2026-10-20 (r5)
+**Date:** 2026-10-22 (r6)
 
 This document is the registry of ZeroJ commitment profiles, basis sets and proof protocols, and
 the contract every implementation of them follows: the expected-profile rule, scalar checks,
@@ -16,7 +16,9 @@ format and the verification matrix. The rationale is in
 The per-profile specifications stay authoritative for their algorithms:
 [`pedersen-jubjub-v1.md`](pedersen-jubjub-v1.md),
 [`pedersen-jubjub-vector-v1.md`](pedersen-jubjub-vector-v1.md) and
-[`pedersen-jubjub-bytes-v1.md`](pedersen-jubjub-bytes-v1.md). Nothing here changes a constant,
+[`pedersen-jubjub-bytes-v1.md`](pedersen-jubjub-bytes-v1.md) for Jubjub, and
+[`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) for the BLS12-381 G1 basis set and
+profiles. Nothing here changes a constant,
 base, hash, point encoding, circuit or key defined there. Two editorial interactions are noted
 where they arise: the envelope (§9) serializes a profile identifier next to a point, which
 `pedersen-jubjub-bytes-v1.md` §6.2 and §11 describe as out of that profile's own wire form; and
@@ -31,7 +33,7 @@ The key words MUST, MUST NOT and MAY are normative.
 
 | Symbol | Meaning |
 |---|---|
-| `q` | the prime order of a profile's group; for every Jubjub profile `q = l` |
+| `q` | the prime order of a profile's group; for every Jubjub profile `q = l`; for the BLS12-381 G1 profiles `q` is the order of the G1 prime-order subgroup (255 bits, `pedersen-bls12-381-g1-v1.md` §1), numerically equal to `p` |
 | `l` | `0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7` (252 bits; `2^251 < l < 2^252`) |
 | `p` | the BLS12-381 scalar field order (Jubjub base field), `pedersen-jubjub-v1.md` §1 |
 | `a ‖ b` | concatenation of octet strings |
@@ -81,8 +83,15 @@ document).
 | `pedersen-jubjub-v1` | commitment profile | active | §4.2 |
 | `pedersen-jubjub-vector-v1` | commitment profile | active | §4.3 |
 | `pedersen-jubjub-bytes-v1` | commitment profile | active | §4.4 |
-| `pedersen-bls12-381-g1-v1` | commitment profile | reserved | parameters undefined; issue #95 |
-| `pedersen-bls12-381-g1-bytes-v1` | commitment profile | reserved | parameters undefined; issue #95 |
+| `pedersen-bls12-381-g1-basis-v1` | basis set | reserved | §3.3; admitted only under ADR-0060 (issue #95) |
+| `pedersen-bls12-381-g1-v1` | commitment profile | reserved | §4.6; admitted only under ADR-0060 (issue #95) |
+| `pedersen-bls12-381-g1-bytes-v1` | commitment profile | reserved | §4.7; admitted only under ADR-0060 (issue #95) |
+
+The three G1 entries have their parameters fixed by
+[`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) and stay `reserved` until ADR-0060
+milestone M5 checks every admission prerequisite (§2.4, and ADR-0060 D1's three base
+reproductions and on-chain parity) and a later revision of this document records them `active`.
+A `CommitmentProfile` descriptor for a reserved profile (§12.1) does not make it active.
 
 No proof protocol is registered.
 
@@ -148,6 +157,21 @@ Independent reproduction: `zeroj-circuit-lib/src/test/resources/pedersen-referen
 Independent reproduction: `zeroj-circuit-lib/src/test/resources/pedersen-vector-reference/`.
 Used by `pedersen-jubjub-vector-v1`.
 
+### 3.3 `pedersen-bls12-381-g1-basis-v1` (reserved)
+
+`(G, H)` exactly as [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) §2 defines them:
+RFC 9380 `hash_to_curve` with the suite `BLS12381G1_XMD:SHA-256_SSWU_RO_` applied to the messages
+`"G"` and `"H"` under the tag
+`ZeroJ-pedersen-bls12-381-g1-basis-v1-BLS12381G1_XMD:SHA-256_SSWU_RO_`. Both are hash-derived.
+
+- `encode(G) = 80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e`
+- `encode(H) = 92e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65`
+
+Independent reproduction: `zeroj-bls12381/src/test/resources/pedersen-g1-reference/` (Python,
+written from RFC 9380 without reading the Java); on-chain `bls12_381_G1_hashToGroup` is the third
+reproduction ADR-0060 requires before admission. Used by `pedersen-bls12-381-g1-v1` and
+`pedersen-bls12-381-g1-bytes-v1`.
+
 ---
 
 ## 4. Commitment profiles
@@ -212,7 +236,8 @@ profile's **context**: a different schema is a `PROFILE_MISMATCH`.
 
 A validator that accepts a supplied scalar instead of the payload is performing a `scalar`
 opening of `s`, not a bytes opening: check 1 applies to the supplied scalar, and the check
-authenticates only that scalar, not any octets. Whether G1 offers such a mode is #95's decision.
+authenticates only that scalar, not any octets. The G1 bytes profile offers no such mode
+(`pedersen-bls12-381-g1-v1.md` §3.2).
 
 ### 4.5 Lifecycle metadata
 
@@ -223,6 +248,34 @@ Maintained separately from the core (§2.4).
 | `pedersen-jubjub-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
 | `pedersen-jubjub-vector-v1` | active | experimental; generation offline/isolated only | ADR-0051, ADR-0059 | `pedersen-vector-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-vector-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
 | `pedersen-jubjub-bytes-v1` | active | experimental; generation offline/isolated only | ADR-0058, ADR-0059 | `pedersen-bytes-reference/`; `zeroj-test-vectors/.../commitment-profiles-v1/pedersen-jubjub-bytes-v1.json` (§13; independent generator `commitment-vectors-reference/`) | pure Java, `zeroj-circuit-lib` |
+| `pedersen-bls12-381-g1-v1` | reserved | not admitted; experimental once admitted; generation offline/isolated only | ADR-0060, ADR-0059 | `pedersen-g1-reference/` (Python reproduction of the bases and test values) | planned: `zeroj-bls12381` (pure Java, blst), `zeroj-onchain-julc` |
+| `pedersen-bls12-381-g1-bytes-v1` | reserved | as above | ADR-0060, ADR-0059 | as above | as above |
+
+### 4.6 `pedersen-bls12-381-g1-v1` (reserved)
+
+| Field | Value |
+|---|---|
+| Kind | `scalar` |
+| Group | BLS12-381 G1 prime-order subgroup; `q` as §1; cofactor `0x396c8c005555e1568c00aaab0000aaab`; identity `0xC0 ‖ 0^47` accepted |
+| Basis set | `pedersen-bls12-381-g1-basis-v1` |
+| Message map | `C(m, r) = [m]·G + [r]·H` |
+| Scalar domain | `m, r ∈ [0, q)` on every operation (§7, check 1); homomorphic results are residues mod `q` |
+| Point encoding | 48-octet Zcash compressed, strict decoder `pedersen-bls12-381-g1-v1.md` §4 (received points MUST be in the prime-order subgroup; never cofactor-cleared) |
+| Public inputs | none |
+| Opening encoding | §8.4 |
+
+### 4.7 `pedersen-bls12-381-g1-bytes-v1` (reserved)
+
+| Field | Value |
+|---|---|
+| Kind | `bytes` |
+| Group | as §4.6 |
+| Basis set | `pedersen-bls12-381-g1-basis-v1` (shared with `pedersen-bls12-381-g1-v1`) |
+| Message map | `s = HashBytesToScalarG1(B)` (`pedersen-bls12-381-g1-v1.md` §5), then `C = [s]·G + [r]·H` |
+| Scalar domain | `r ∈ [0, q)` on every operation; `s` is recomputed by the verifier, never accepted as part of a bytes opening, and is in `[0, q)` by construction |
+| Point encoding | as §4.6 |
+| Public inputs | none |
+| Opening encoding | §8.4 |
 
 ---
 
@@ -313,7 +366,7 @@ Three checks are distinct and MUST NOT be conflated.
    `−1` are rejected.
 2. **Application amount bound (only when requested).** An application that reads `m` as an
    amount MAY additionally require `m < 2^k` for a configured `1 ≤ k ≤ ⌊log₂ q⌋` (for Jubjub,
-   `k ≤ 251`). A violation is `OUT_OF_RANGE`; a `k` outside that range is
+   `k ≤ 251`; for BLS12-381 G1, `k ≤ 254`). A violation is `OUT_OF_RANGE`; a `k` outside that range is
    `INVALID_CONFIGURATION`. This bound may reject a valid residue. It never applies to `r` or to
    a bytes-derived `s`, and opening decoders never apply it.
 3. **Vector bound policy.** A vector opening is checked under exactly one explicitly configured
@@ -390,7 +443,9 @@ Decoding is under a configured bound policy (and its schema), in this order:
 
 ### 8.4 G1 profiles
 
-Defined by #95's specification for its group order and encodings.
+`pedersen-bls12-381-g1-v1.md` §6: the layouts of §8.1 (scalar, 64 octets) and §8.2 (bytes,
+32 octets) with `q` in place of `l`. Decoding order: wrong length → `MALFORMED_ENCODING`; then
+`m ≥ q` (scalar only), then `r ≥ q` → `NON_CANONICAL_SCALAR`.
 
 ---
 
@@ -410,6 +465,8 @@ envelope = 0x01                    # envelope format version
 | `pedersen-jubjub-v1` | 52 octets |
 | `pedersen-jubjub-vector-v1` | 59 octets |
 | `pedersen-jubjub-bytes-v1` | 58 octets |
+| `pedersen-bls12-381-g1-v1` (reserved) | 74 octets |
+| `pedersen-bls12-381-g1-bytes-v1` (reserved) | 80 octets |
 
 **Encoding** writes the commitment's own profile identifier and raw point. It trusts its input
 (producer side).
@@ -447,6 +504,12 @@ the identity). For Jubjub, the two `u = 0` sign aliases are the identity alias
 `0100000000000000000000000000000000000000000000000000000000000080` and the order-2 point alias
 `00000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7edf3`; both are
 `MALFORMED_ENCODING` by rule 5, never `NOT_IN_SUBGROUP`.
+
+For the BLS12-381 G1 profiles the decoder is `pedersen-bls12-381-g1-v1.md` §4: its steps 2–6 are
+rule 2 here (`MALFORMED_ENCODING`) and its step 7 is rule 3 (`NOT_IN_SUBGROUP`). Exactly
+`0xC0 ‖ 0^47` is the identity and is returned without coordinate recovery; every other encoding
+with the infinity flag is `MALFORMED_ENCODING`. The finite encoding `0x80 ‖ 0^47` decodes to a
+point of order 3 and is `NOT_IN_SUBGROUP`.
 
 ---
 
@@ -496,7 +559,8 @@ they hold no secret.
 | `CommitmentProfileId` | `static of(String)` validates §2.1 (`INVALID_CONFIGURATION` otherwise); `value()`; `toAsciiBytes()` returns a fresh copy; value equality |
 | `CommitmentKind` (enum) | `SCALAR`, `BYTES`, `VECTOR` |
 | `CommitmentGroup` (enum) | `JUBJUB`, `BLS12_381_G1` |
-| `CommitmentProfile` | `static define(CommitmentProfileId id, CommitmentKind kind, CommitmentGroup group, int pointEncodingLength)` with `1 ≤ pointEncodingLength ≤ 255` (else `INVALID_CONFIGURATION`); accessors `id()`, `kind()`, `group()`, `pointEncodingLength()`. `define` rejects an identifier already defined through the same loaded `CommitmentProfile` class: the registry is a static set in `CommitmentProfile`, so its scope is that class's defining class loader (`INVALID_CONFIGURATION`). Each profile therefore has exactly one descriptor; two copies of a profile module sharing one `zeroj-api` fail at class initialization (`ExceptionInInitializerError`), which is fail-closed. Tests use test-only identifiers that are unique per JVM. **Identity equality**: checks compare descriptors with `==` |
+| `CommitmentProfile` | `static define(CommitmentProfileId id, CommitmentKind kind, CommitmentGroup group, int pointEncodingLength)` with `1 ≤ pointEncodingLength ≤ 255` (else `INVALID_CONFIGURATION`); accessors `id()`, `kind()`, `group()`, `pointEncodingLength()`. The registry is a static set in `CommitmentProfile`, so its scope is that class's defining class loader. The descriptors of the built-in profiles are created and registered while `CommitmentProfile` is initialised (ADR-0060 D8), so they exist before any caller can reach `define`. `define` rejects an identifier already defined through the same loaded class, built-in or not (`INVALID_CONFIGURATION`): the duplicate rule protects the built-ins rather than threatening them, and each profile has exactly one descriptor per loaded `zeroj-api`. No ZeroJ profile module calls `define` (enforced by the build); `define` is for profiles that are not built in, and tests use test-only identifiers that are unique per JVM. A profile module from a release before ADR-0060 M1 still calls `define` for its own built-in identifier and fails class initialization (`ExceptionInInitializerError`) against this `zeroj-api`; mixed versions are unsupported, and `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` are upgraded together. **Identity equality**: checks compare descriptors with `==` |
+| `CommitmentProfiles` | final constant holder, no public constructor or method: `PEDERSEN_JUBJUB_V1`, `PEDERSEN_JUBJUB_BYTES_V1`, `PEDERSEN_JUBJUB_VECTOR_V1`, `PEDERSEN_BLS12_381_G1_V1`, `PEDERSEN_BLS12_381_G1_BYTES_V1`, the built-in descriptors (point-encoding lengths 32, 32, 32, 48, 48). The profile modules' `PROFILE` constants are these instances. A constant for a `reserved` profile is not admission (§2.3) |
 | `Commitment` (interface) | `CommitmentProfile profile()`; `byte[] toPointBytes()` (fresh copy of the raw encoding). No arithmetic and no equality contract |
 | `CommitmentCodec<C extends Commitment>` (interface) | `profile()`; `Class<C> commitmentType()` (the exact concrete class); `C decodePoint(byte[])` (strict, §10; never returns null); `default byte[] keyContext()` (empty; the vector codec returns `I2OSP(σ, 32)`); `default void requireContext(C)` (no-op; the vector codec rejects a different schema with `PROFILE_MISMATCH`) |
 | `CommitmentEnvelope` | `public static byte[] encode(Commitment)`; `public static <C extends Commitment> C decode(byte[] envelope, CommitmentCodec<C> expected)` (§9) |
@@ -599,6 +663,12 @@ check would reject valid `residue-only` and `widened` openings (this refines ADR
 "validate first, then delegate" for the vector path). The scalar paths delegate to the existing
 generation (two blinded schedules) and disclosed-verification code after their checks.
 
+**BLS12-381 G1.** The G1 Java binding (`zeroj-bls12381`, package `org.zeroj.bls12381.pedersen`)
+and its strict paths are [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) §8. They
+follow the rows above with `q` for `l`, `amountBits` and `deltaBits` in `[1, 254]`, the same
+closure properties as §12.2, and the same rule that argument checks precede curve work, digest
+acquisition and stream reads.
+
 Legacy methods not listed here keep their behaviour, including their exception types; where one
 already threw `IllegalArgumentException` for malformed input it MAY throw the subclass with the
 §11 class. Nothing outside the Pedersen types of this package (for example `JubjubPoint` or the
@@ -660,7 +730,7 @@ negative cases of `verifyOpening`.
 
 | Operation | Kinds | `input` | `expected` |
 |---|---|---|---|
-| `decodePoint` | all | `pointHex` (+ `schema` for vector) | `uHex`, `vHex` (32-octet big-endian affine coordinates) |
+| `decodePoint` | all | `pointHex` (+ `schema` for vector) | Jubjub: `uHex`, `vHex` (32-octet big-endian affine coordinates). G1: `xHex`, `yHex` (48-octet big-endian affine coordinates), or `{"identity": "true"}` for the identity, which has no affine coordinates |
 | `commit` | scalar | `value`, `blinding` (strict `commitScalar`) | `pointHex` |
 | `commitLegacy` | scalar | `value`, `blinding` (legacy `commit`, any integers) | `pointHex` |
 | `commit` | bytes | `payload`, `blinding`; optional `declaredLength` (declared-length stream form) or `maxBytes` (`ToEnd` form) | `pointHex` |
@@ -675,6 +745,7 @@ negative cases of `verifyOpening`.
 | `decodeEnvelope` | all | `envelopeHex`, `expectedProfileId` (+ `schema` for vector) | `pointHex` |
 | `relation` | scalar, vector | `op` (`add`, `subtract`; `negate` for scalar only), `pointsHex` (array; one for `negate`) (+ `schema`) | `pointHex` |
 | `configurePolicy` | vector | `schema`, `policy` | `{"result": "ok"}` |
+| `publicDelta` | G1 scalar | `pointHex`, `delta` (signed), `deltaBits` | `pointHex` (`C + [δ]·G`, `pedersen-bls12-381-g1-v1.md` §6.4) |
 
 **Execution order.** A consumer executes each case in this order, and the expected `error` of a
 case with several defects is the first failure:
@@ -765,6 +836,17 @@ Per kind, additionally:
   `value = q` equals `value = 0`.
 - **bytes:** `hashToScalar` for the empty payload and at least one pattern payload; `commit` with
   `declaredLength` `"-1"` and `MAX_PAYLOAD_BYTES + 1` (`LENGTH_OUT_OF_RANGE`).
+- **G1 (both profiles):** the point negatives above are replaced by lengths 0, 47 and 49; the
+  compression flag clear; infinity with the sort flag; infinity with a nonzero coordinate bit;
+  `x ≥ P_381`; an `x` with `x³ + 4` not a square (all `MALFORMED_ENCODING`); `0x80 ‖ 0^47` (order
+  3), another curve point outside the subgroup, and a mixed-order point (a subgroup point plus the
+  order-3 point) (`NOT_IN_SUBGROUP`); the identity `0xC0 ‖ 0^47` is a positive. `amountBits` `0`
+  and `255` are `INVALID_CONFIGURATION`. Envelope negatives include a Jubjub identifier under a G1
+  codec and the other G1 profile's identifier (`PROFILE_MISMATCH`).
+- **G1 scalar:** `publicDelta` with `deltaBits` `k` and `δ = ±(2^k − 1)` (positive), `±2^k`
+  (`OUT_OF_RANGE`), and `deltaBits` `0` and `255` (`INVALID_CONFIGURATION`).
+- **G1 bytes:** `hashToScalar` for the empty payload, a pattern payload and one longer than a
+  SHA-256 block.
 - **vector:** a dimension mismatch (`MALFORMED_ENCODING`); a component of `2^{k_i}` under
   `schema-widths` (`OUT_OF_RANGE`) that is accepted under `residue-only` and under `widened`; a
   difference opened under `residue-only`; `policySchema` different from `schema`
@@ -798,10 +880,10 @@ authorization, replay protection and context binding to the application.
 | | V4 | Groth16/PlonK with `ZkPedersenVector` | `Groth16BLS12381Lib.verify` with `σ` as a public input and an issuance record | the public inputs, including `σ` |
 | `pedersen-jubjub-bytes-v1` | V1 | existing `verifyBytes*`, streaming to `2^61 − 256` octets | not native; not provided in a proof | payload and `r` |
 | | V3, V4 | not offered | not offered | — |
-| `pedersen-bls12-381-g1-v1` | V1 | planned (#95) | planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | message and `r` |
-| | V3 | planned (#95) | planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | deltas |
+| `pedersen-bls12-381-g1-v1` (reserved) | V1 | planned (ADR-0060 M2) | planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | message and `r` |
+| | V3 | planned (ADR-0060 M2) | planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | deltas |
 | | V4 | blocked (ADR-0051 D7; #96) | blocked / feasibility (#96) | — |
-| `pedersen-bls12-381-g1-bytes-v1` | V1 | planned (#95) | native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first; #95 measures and documents that limit. A supplied scalar authenticates only that scalar (§4.4) | payload (or scalar) and `r` |
+| `pedersen-bls12-381-g1-bytes-v1` (reserved) | V1 | planned (ADR-0060 M2) | native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first; #95 measures and documents that limit. A supplied scalar authenticates only that scalar (§4.4) | payload (or scalar) and `r` |
 
 Disclosed openings on-chain are public forever. Relations prove residues, not balances: integer
 conservation needs a range proof per term or a circuit. Documents larger than the on-chain limit
@@ -869,15 +951,30 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   with `NullPointerException`. No identifier, byte, scalar check or error class changes. The r3
   vectors stay valid: their value lists have at most 16 elements and the §13.2 format has no null
   elements, so no case's outcome changes; only their provenance hash differs (§13.1).
+- **r6 (2026-10-22, ADR-0060 M0):** fixes the parameters of the BLS12-381 G1 entries by reference
+  to the new [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md): a new basis set
+  `pedersen-bls12-381-g1-basis-v1` (§2.3, §3.3) and the core records of
+  `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1` (§4.6, §4.7), all three
+  `reserved` until ADR-0060 M5 admits them. Also: §1 notation for the G1 `q`; §4.4 records that G1
+  has no scalar-only bytes mode; §4.5 lifecycle rows; §7 the G1 check-2 bound `k ≤ 254`; §8.4 the
+  G1 opening encodings; §9 the G1 envelope lengths 74 and 80; §10 the G1 decoder and its identity
+  branch; §12.1 built-in descriptors owned by `zeroj-api` (`CommitmentProfiles`, ADR-0060 D8,
+  issue #99), with the duplicate rule now protecting them and the coordinated-upgrade requirement;
+  §12.3 the G1 binding; §13 G1 point fields, the `publicDelta` operation and G1 minimum sets; §14
+  cells still planned. No Jubjub identifier, byte, check, check order or error class changes, so
+  the Jubjub vectors stay valid.
 
 ---
 
 ## 17. References
 
-- [ADR-0059](../adr/0059-commitment-profiles-and-verification-strategy.md); ADR-0051 (D3a, D5,
-  D7, I11); ADR-0058; ADR-0045; ADR-0006.
+- [ADR-0059](../adr/0059-commitment-profiles-and-verification-strategy.md);
+  [ADR-0060](../adr/0060-pedersen-bls12-381-g1-profiles.md); ADR-0051 (D3a, D5, D7, I11);
+  ADR-0058; ADR-0045; ADR-0006.
 - [`pedersen-jubjub-v1.md`](pedersen-jubjub-v1.md), [`pedersen-jubjub-vector-v1.md`](pedersen-jubjub-vector-v1.md),
-  [`pedersen-jubjub-bytes-v1.md`](pedersen-jubjub-bytes-v1.md).
+  [`pedersen-jubjub-bytes-v1.md`](pedersen-jubjub-bytes-v1.md),
+  [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md).
+- RFC 9380, *Hashing to Elliptic Curves* (August 2023).
 - [CIP-0381](https://github.com/cardano-foundation/CIPs/blob/86b89208d3b2aabb5dcc5b778dfbe09096b4e114/CIP-0381/README.md)
   and [CIP-0133](https://github.com/cardano-foundation/CIPs/blob/86b89208d3b2aabb5dcc5b778dfbe09096b4e114/CIP-0133/README.md)
   at `86b89208d3b2aabb5dcc5b778dfbe09096b4e114`.
