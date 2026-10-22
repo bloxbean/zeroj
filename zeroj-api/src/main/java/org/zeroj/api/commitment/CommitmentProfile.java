@@ -11,9 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * built-in ZeroJ profiles are created and registered while this class is initialised, before any
  * caller can reach {@link #define}, and are published as {@link CommitmentProfiles} constants
  * (ADR-0060 D8). {@link #define} refuses an identifier that is already defined through this loaded
- * class, built-in or not, so no caller can pre-empt a built-in profile, and two definitions of one
- * identifier never coexist. <b>Descriptors compare by identity</b>: every check uses {@code ==},
- * never {@code equals}.
+ * class, built-in or not, so no caller of this API can pre-empt a built-in profile, and two
+ * definitions of one identifier never coexist. (In-process reflection can bypass any Java access
+ * rule and is outside this guarantee.) <b>Descriptors compare by identity</b>: every check uses
+ * {@code ==}, never {@code equals}.
  *
  * <p>The descriptor is configuration, not provenance. The cryptographic definition of a profile
  * lives in its specification; this type carries only what the shared contracts need.
@@ -64,7 +65,10 @@ public final class CommitmentProfile {
     /**
      * Defines the descriptor of a profile that is not built into ZeroJ. Called once per profile, by
      * the profile module. The built-in profiles are already defined ({@link CommitmentProfiles}), so
-     * defining one of their identifiers is always rejected.
+     * defining one of their identifiers is always rejected. A profile that is not built in is
+     * protected only by being defined first: if untrusted code defines its identifier earlier, the
+     * profile module's own {@code define} fails (fail-closed), so define such a descriptor before
+     * untrusted code runs.
      *
      * @throws NullPointerException      if an argument is null
      * @throws CommitmentFormatException ({@code INVALID_CONFIGURATION}) if

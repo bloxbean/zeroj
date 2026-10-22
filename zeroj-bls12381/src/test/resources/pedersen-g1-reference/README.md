@@ -25,8 +25,8 @@ the other Python references under `src/test/resources`), repository search resul
 No third-party Python package (such as `py_ecc`) is used; only the standard library (`hashlib`,
 `json`, `sys`).
 
-Every constant the code relies on (`P_381`, `q`, `b = 4`, `Z = 11`, `A'`, `B'`, the 56 isogeny
-coefficients, `h_eff`, the generator and the Zcash flag rules) was copied from the RFC or the CIP.
+Every constant the code relies on (`P_381`, `q`, `b = 4`, `Z = 11`, `A'`, `B'`, the 55 isogeny
+coefficients (53 explicit RFC constants and the two implicit leading 1s), `h_eff`, the generator and the Zcash flag rules) was copied from the RFC or the CIP.
 During development every transcribed RFC/CIP hex value (114 RFC items, including all J.9.1 and
 K.1 expected values, plus the CIP constants) was checked by string match against the
 whitespace-stripped source text; none differed. That check script is not part of this directory.

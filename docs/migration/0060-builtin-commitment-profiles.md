@@ -31,7 +31,9 @@ No commitment, encoding, base, vector, circuit or key changes.
    `zeroj-circuit-lib` binary from an earlier release still calls `define` for its own built-in
    identifier. Against the new `zeroj-api` that identifier is already registered, so the profile
    class fails with `ExceptionInInitializerError`, and every later use with
-   `NoClassDefFoundError`. Mixed versions are not supported.
+   `NoClassDefFoundError`. The reverse, a new `zeroj-circuit-lib` with an older `zeroj-api`, fails
+   with `NoClassDefFoundError: org/zeroj/api/commitment/CommitmentProfiles`. Mixed versions are not
+   supported.
 2. Import the ZeroJ BOM, which manages all three modules:
 
    ```groovy
@@ -48,4 +50,5 @@ No commitment, encoding, base, vector, circuit or key changes.
    `define`, with their own identifiers.
 
 ZeroJ's build enforces the rule for its own modules: `verifyNoBuiltinProfileDefine` fails if any
-main source outside `zeroj-api` calls `CommitmentProfile.define`.
+compiled non-test class outside `zeroj-api` references `CommitmentProfile.define` (a call, method
+reference or static import; string-based reflection is not detected).

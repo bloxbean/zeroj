@@ -72,7 +72,8 @@ class BuiltInProfileAliasTest {
 
     private static URL[] testClasspath() throws Exception {
         List<URL> urls = new ArrayList<>();
-        for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
+        String classpath = System.getProperty("zeroj.test.runtimeClasspath", System.getProperty("java.class.path"));
+        for (String entry : classpath.split(File.pathSeparator)) {
             if (!entry.isEmpty()) urls.add(new File(entry).toURI().toURL());
         }
         assertTrue(urls.size() > 1, "test runtime classpath is visible");

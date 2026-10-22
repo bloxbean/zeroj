@@ -81,7 +81,10 @@ Affine coordinates (48-octet big-endian):
    no implementation continues silently. (All checks pass for the values above.)
 2. Implementations use the pinned encodings and do not hash at run time. A test recomputes them.
 3. Both bases are random-oracle outputs, so no one, including the deriver, knows `log_H(G)`.
-   Binding rests on the discrete-logarithm problem in `𝔾₁` between `G` and `H`.
+   Binding of `pedersen-bls12-381-g1-v1` rests on the discrete-logarithm problem in `𝔾₁` between
+   `G` and `H`. Binding of `pedersen-bls12-381-g1-bytes-v1` to the octets `B` rests on that and on
+   the collision resistance of `HashBytesToScalarG1` (§5); the group size limits both to about
+   127 bits of generic security.
 4. Independent reproductions (ADR-0060 D2): the Java `Bls12381Hash.hashToG1`; a stand-alone
    Python implementation written from RFC 9380 without reading the Java
    (`zeroj-bls12381/src/test/resources/pedersen-g1-reference/`), which also passes all five RFC
@@ -198,6 +201,10 @@ s     = OS2IP(expand_message_xmd(msg, DST_S, 48)) mod q
 - `MAX_PAYLOAD_BYTES = 2^61 − 256 = 2305843009213693696`. The bound keeps `b0`'s input
   (`n + 128` octets) below SHA-256's message bound.
 - The reduction is within statistical distance `q / 2^384 < 2^-129` of uniform on `[0, q)`.
+- The framing is injective (`pedersen-jubjub-bytes-v1` §3.2): the trailing 56 octets of `b0`'s
+  input are the constant `I2OSP(48, 2) ‖ 0x00 ‖ DST_S ‖ 0x34`, the 8 octets before them are `n`,
+  and everything between the 64-octet prefix and those 8 octets is `B`. The reduced map to
+  `[0, q)` is not injective; binding to `B` relies on its collision resistance.
 
 ### 5.1 Payload sources and stream rules
 
@@ -219,6 +226,14 @@ if `maxBytes` were read). All reading rules of that section are normative here, 
   passed; no result and no curve work is produced before then.
 - The implementation never closes, resets, marks, skips, seeks or reopens the stream, never
   queries `available()` and never retries.
+
+### 5.2 Memory
+
+The payload is fed to the digest once, in a single pass, for every source. The implementation
+never copies or buffers the whole payload, never builds `msg` in memory and never allocates by the
+payload length; stream reads use a fixed-size buffer independent of `n` (ZeroJ: 8 KiB,
+non-normative). Auxiliary memory is `O(1)` in `n`. These are the requirements of
+`pedersen-jubjub-bytes-v1` §7 (ADR-0058 D6), restated here.
 
 ---
 
@@ -284,6 +299,12 @@ The payload travels separately as its exact octets. Decoding order: length other
   unsigned big-endian, reduced mod `q`; statistical distance below `2^-257` from uniform. The
   buffer is wiped on every exit. Entropy failure propagates; there is no fallback. `r` is never
   derived from the message and never reused across independent commitments.
+- **Scalar snapshot.** Every `BigInteger` argument of a strict path (`value`, `blinding`,
+  `delta`) is copied once, after the null checks and before its first check, to a plain
+  `java.math.BigInteger` (an instance of exactly that class is used as is). Every later check, the
+  arithmetic and any retained value use only that copy, so a subclass that misreports its value
+  cannot pass a check with one value and be used with another. The temporary octets of the copy
+  are wiped.
 - Owned buffers and digest outputs are wiped on every exit; the operation-owned digest is reset
   and never reused; nothing is cached, pooled or kept in thread-local storage. No secret appears in
   a log or exception message. `BigInteger` values cannot be wiped; this is best effort.
@@ -307,29 +328,77 @@ by `CommitmentFormatException`.
 | `G1PedersenBytesCommitment` | `pedersen-bls12-381-g1-bytes-v1`. `PROFILE` (`== CommitmentProfiles.PEDERSEN_BLS12_381_G1_BYTES_V1`), `CODEC`; `static decode(byte[])`; `profile()`; `toPointBytes()`; value equality over the encoding; no arithmetic |
 | `G1PedersenOpening` | `static of(BigInteger value, BigInteger blinding)`; `static decode(byte[])` (§6.1); `encode()`; `value()`; `blinding()` |
 | `G1PedersenBlinding` | `static byte[] encode(BigInteger r)`; `static BigInteger decode(byte[])` (§6.2) |
-| `G1Pedersen` | `static pureJava()`, `static withProvider(Bls12381Provider)`, `provider()`; `commitScalar(BigInteger value, BigInteger blinding)`; `verifyScalar(G1PedersenCommitment, BigInteger value, BigInteger blinding)` and the 4-argument form with `int amountBits`; `static randomBlinding(SecureRandom)`; `commitBytes(byte[], BigInteger)`, `commitBytes(InputStream, long length, BigInteger)`, `commitBytesToEnd(InputStream, long maxBytes, BigInteger)` and the matching `verifyBytes`/`verifyBytesToEnd` |
+| `G1Pedersen` | the entry point; methods below |
 | `Bls12381Codecs.scalarFromBigEndian32(byte[])`, `scalarToBigEndian32(BigInteger)` | canonical 32-octet big-endian scalar codec: wrong length or a value outside `[0, q)` is an `IllegalArgumentException`, never reduced |
+
+`G1Pedersen` (final; instances are immutable and thread-safe):
+
+```java
+static G1Pedersen pureJava();
+static G1Pedersen withProvider(Bls12381Provider provider);
+Bls12381Provider provider();
+boolean supportsGeneration();
+static BigInteger randomBlinding(SecureRandom random);
+
+G1PedersenCommitment commitScalar(BigInteger value, BigInteger blinding);
+boolean verifyScalar(G1PedersenCommitment commitment, BigInteger value, BigInteger blinding);
+boolean verifyScalar(G1PedersenCommitment commitment, BigInteger value, BigInteger blinding, int amountBits);
+
+G1PedersenBytesCommitment commitBytes(byte[] payload, BigInteger blinding);
+G1PedersenBytesCommitment commitBytes(InputStream payload, long length, BigInteger blinding) throws IOException;
+G1PedersenBytesCommitment commitBytesToEnd(InputStream payload, long maxBytes, BigInteger blinding) throws IOException;
+boolean verifyBytes(G1PedersenBytesCommitment commitment, byte[] payload, BigInteger blinding);
+boolean verifyBytes(G1PedersenBytesCommitment commitment, InputStream payload, long length, BigInteger blinding) throws IOException;
+boolean verifyBytesToEnd(G1PedersenBytesCommitment commitment, InputStream payload, long maxBytes, BigInteger blinding) throws IOException;
+```
+
+The name selects the meaning of the `long`: `commitBytes`/`verifyBytes` take an exact declared
+length, the `ToEnd` forms a maximum.
+
+**The exact public surface** (the allowlist for API-surface tests), beyond `Object`'s methods:
+
+- `G1PedersenCommitment`: fields `PROFILE`, `CODEC`; methods `decode`, `profile`, `toPointBytes`,
+  `add`, `subtract`, `negate`, `withPublicDelta`, `equals`, `hashCode`, `toString`.
+- `G1PedersenBytesCommitment`: fields `PROFILE`, `CODEC`; methods `decode`, `profile`,
+  `toPointBytes`, `equals`, `hashCode`, `toString`.
+- `G1PedersenOpening`: methods `of`, `decode`, `encode`, `value`, `blinding`, `toString`.
+- `G1PedersenBlinding`: methods `encode`, `decode`.
+- `G1Pedersen`: the methods listed above.
+- `Bls12381Codecs`: methods `scalarFromBigEndian32`, `scalarToBigEndian32` added.
+
+No other public or protected member, type or constructor is added.
 
 **Strict paths and check order.** Argument checks precede any curve operation on the inputs,
 digest acquisition or stream read, and no input is reduced:
 
 | Path | Order |
 |---|---|
-| `commitScalar` | nulls → `value` check 1 → `blinding` check 1 → generate |
-| `verifyScalar` (3 args) | nulls → `value` check 1 → `blinding` check 1 → equation (`false` on mismatch) |
-| `verifyScalar` (4 args) | nulls → `amountBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → `value` check 1 → `blinding` check 1 → check 2 (`OUT_OF_RANGE`) → equation |
-| `withPublicDelta` | nulls → `deltaBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → `|δ| < 2^{deltaBits}` (`OUT_OF_RANGE`) → arithmetic |
-| `G1PedersenOpening.of` / `decode` | nulls / §6.1 → `value` check 1 → `blinding` check 1 |
-| `G1PedersenBlinding.encode` / `decode` | nulls → `r` check 1 / §6.2 |
-| `commitBytes*`, `verifyBytes*` | nulls → `blinding` check 1 → declared length or maximum (`LENGTH_OUT_OF_RANGE`) → read and hash (§5.1) → curve work |
+| `commitScalar` | nulls → generation supported (`UnsupportedOperationException`) → snapshot → `value` check 1 → `blinding` check 1 → generate |
+| `verifyScalar` (3 args) | nulls → snapshot → `value` check 1 → `blinding` check 1 → equation (`false` on mismatch) |
+| `verifyScalar` (4 args) | nulls → `amountBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → snapshot → `value` check 1 → `blinding` check 1 → check 2 (`OUT_OF_RANGE`) → equation |
+| `withPublicDelta` | nulls → `deltaBits ∈ [1, 254]` (`INVALID_CONFIGURATION`) → snapshot → `|δ| < 2^{deltaBits}` (`OUT_OF_RANGE`) → arithmetic |
+| `G1PedersenOpening.of` / `decode` | nulls → snapshot / §6.1 → `value` check 1 → `blinding` check 1 |
+| `G1PedersenBlinding.encode` / `decode` | nulls → snapshot → `r` check 1 / §6.2 |
+| `commitBytes*` | nulls → generation supported (`UnsupportedOperationException`) → snapshot → `blinding` check 1 → declared length or maximum (`LENGTH_OUT_OF_RANGE`) → read and hash (§5.1) → curve work |
+| `verifyBytes*` | nulls → snapshot → `blinding` check 1 → declared length or maximum (`LENGTH_OUT_OF_RANGE`) → read and hash (§5.1) → curve work |
 | point decoders (`decode`, `CODEC.decodePoint`) | §4 |
-| `withProvider` | null → `NullPointerException` |
+| `withProvider` | null → `NullPointerException` → capability probe (above) |
 
 **Providers.** `G1Pedersen` takes an explicit `Bls12381Provider`; `pureJava()` uses the pure-Java
-provider. Decoding is shared code and identical for every provider. Generation and verification
-give byte-identical commitments and identical verdicts for every provider that implements the
-secret-scalar method; a provider without one fails generation with the provider's
-`UnsupportedOperationException` before any secret is used.
+provider. Decoding is shared code and identical for every provider.
+
+- **Capability, decided on public data.** `withProvider` calls the provider's
+  `g1SecretScalarMul` once on public data (`G` and the scalar 1). If it throws
+  `UnsupportedOperationException`, the instance does not support generation
+  (`supportsGeneration()` is false); any other exception propagates from `withProvider`. If it
+  returns a point other than `G`, `withProvider` fails with `IllegalStateException`. The probe never
+  sees a caller's value.
+- On an instance that does not support generation, every generation method fails with
+  `UnsupportedOperationException` immediately after its null checks: before the snapshot, any
+  check, digest acquisition or stream read, so no secret or payload octet is touched. There is no
+  fallback to public multiplication.
+- Verification uses only public operations and works, with the same verdicts, for every provider.
+- Generation gives byte-identical commitments for every provider that supports it.
 
 ---
 
@@ -343,7 +412,9 @@ A validator that opens or combines these commitments:
    and on `uncompress` failing the script otherwise;
 3. checks `bls12_381_G1_compress(point) == bytes` after `uncompress` and before the point is used
    (canonicality; CIP-0381 does not specify which encodings `uncompress` accepts). The identity
-   `0xC0 ‖ 0^47` is accepted;
+   `0xC0 ‖ 0^47` MUST be accepted, as off-chain. ADR-0060 M4 records what `uncompress` does with
+   it; if the builtin rejects it, the library recognises exactly that encoding after the length
+   check and uses the identity, without calling `uncompress`;
 4. applies check 1 to `m` and `r`, check 2 when requested, and the delta rule, **before** any
    `scalarMul` or `multiScalarMul` sees the value;
 5. for a bytes opening, recomputes `s` from the payload with §5 using `sha2_256`;
@@ -361,8 +432,9 @@ non-negative balances. Every opened value is public forever.
 
 ## 10. Test values
 
-All values below were computed by the Java implementation and by the independent Python
-reference (§2.3 rule 4), and agree byte for byte.
+The values of §10.1–§10.3 were computed by the Java implementation (`PedersenG1ReproductionTest`)
+and by the independent Python reference (§2.3 rule 4), and agree byte for byte. The §10.4 outcomes
+come from the Python reference; the Java strict decoder (ADR-0060 M2) is tested against them.
 
 ### 10.1 Bases
 
@@ -408,12 +480,20 @@ The reference output and the M3 vector files also record `b0`, `b1` and `b2` for
 | `00` ‖ … (compression flag clear) | `MALFORMED_ENCODING` (step 3) |
 | 47 or 49 octets | `MALFORMED_ENCODING` (step 2) |
 | `x = P_381` with the compression flag | `MALFORMED_ENCODING` (step 5) |
+| `80` ‖ `00`×46 ‖ `01` (`x = 1`; `x³ + 4 = 5` is not a square) | `MALFORMED_ENCODING` (step 6) |
+| `a0` ‖ `00`×47 (`x = 0`, sort flag: `(0, P_381 − 2)`, order 3) | `NOT_IN_SUBGROUP` (step 7) |
+| `80` ‖ `00`×46 ‖ `04` (`x = 4`, the smallest positive `x` of a curve point; not in `𝔾₁`) | `NOT_IN_SUBGROUP` (step 7) |
+| `b6ee2defa35097e6bbaea5ab251479b37157dedfcbc4b319181bf28298f048a66eb93dc0230190c18ae135644c2d3df4` (`G + (0, 2)`, mixed order) | `NOT_IN_SUBGROUP` (step 7) |
 
 ---
 
 ## 11. Revision history
 
-- **r1 (2026-10-22):** initial specification (ADR-0060 M0).
+- **r1 (2026-10-22):** initial specification (ADR-0060 M0), revised before publication after the
+  M0 review round (three Claude reviewers and Codex): bytes binding and framing injectivity (§2.3,
+  §5); bounded memory (§5.2); the scalar snapshot (§7, §8); exact Java signatures, public surface
+  and provider capability check (§8); on-chain identity handling (§9); test-value provenance and
+  more decoder cases (§10).
 
 ---
 

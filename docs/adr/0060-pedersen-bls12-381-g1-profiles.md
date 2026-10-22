@@ -289,7 +289,8 @@ form is not accepted. The strict decoder (registry spec §10) applies, in order:
 
 Steps 5–7 never run on an infinity encoding. Without that rule, the masked coordinate of
 `0xC0 ‖ 0^47` would read as `x = 0`. The finite encoding `0x80 ‖ 0^47` does have `x = 0`; it
-decodes to a curve point of order 3, `(0, ±2)`, and is rejected at step 7. The decoder never
+decodes to `(0, 2)` (the sort flag is clear, so `y` is the smaller root), a point of order 3, and is
+rejected at step 7. With the sort flag, `0xA0 ‖ 0^47` decodes to `(0, P_381 − 2)`, also of order 3. The decoder never
 clears the cofactor.
 
 This is the order `Bls12381Codecs.g1FromCompressed` already implements: it returns
@@ -453,8 +454,8 @@ so where a validator might be tempted to use it.
   with exactly a built-in's parameters. Old binaries would then keep working, and nothing could
   still pre-empt a built-in. It is rejected because it changes `define` from "always a new
   descriptor" to "sometimes an existing one", which every caller would have to reason about, in
-  order to support a mixed classpath that ZeroJ does not otherwise support. The maintainer can
-  choose it under Q4.
+  order to support a mixed classpath that ZeroJ does not otherwise support. Q4 was decided as (a),
+  so it is not taken.
 - Considered and rejected:
   - Rejecting reserved identifiers inside `define` would require a non-public path from
     `zeroj-circuit-lib` and `zeroj-bls12381` into `zeroj-api`.
@@ -631,7 +632,7 @@ work.
 - **Negative tests:**
   - Every D3 step:
     - infinity with the sort flag set, and infinity with a nonzero coordinate bit;
-    - `0x80 ‖ 0^47`, which decodes to `(0, ±2)` and is rejected with `NOT_IN_SUBGROUP`;
+    - `0x80 ‖ 0^47`, which decodes to `(0, 2)` and is rejected with `NOT_IN_SUBGROUP`;
     - the identity `0xC0 ‖ 0^47`, as a positive.
   - Streams: a declared length or maximum of −1 and of `MAX_PAYLOAD_BYTES + 1`, rejected before
     any read; one excess octet, rejected via the probe and not hashed; an early end.
@@ -749,3 +750,8 @@ options are kept for the record.
 - **r3 (2026-10-22; after Codex approval of `d1c31ca8ba338f8e96c0769dbd600e4c22a1cde6`):** maintainer
   Satya accepted the design and decided Q1–Q6 as leaned (a). Status, Date and the questions section
   record it. No decision, invariant, milestone or cryptographic choice changed.
+- **r4 (2026-10-22; M0/M1 review round 1, three Claude reviewers and Codex on `f600d7c`):** wording
+  only. D3 and the test list say `0x80 ‖ 0^47` decodes to `(0, 2)` (the sort flag picks the smaller
+  root), not `(0, ±2)`; D8 records that the `define`-returns-the-built-in alternative is not taken
+  (Q4 decided). The spec-level fixes from the same round are in `pedersen-bls12-381-g1-v1` r1 and
+  `commitment-profiles-v1` r6. No decision, invariant or milestone changed.

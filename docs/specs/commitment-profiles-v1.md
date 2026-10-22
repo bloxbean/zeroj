@@ -559,7 +559,7 @@ they hold no secret.
 | `CommitmentProfileId` | `static of(String)` validates §2.1 (`INVALID_CONFIGURATION` otherwise); `value()`; `toAsciiBytes()` returns a fresh copy; value equality |
 | `CommitmentKind` (enum) | `SCALAR`, `BYTES`, `VECTOR` |
 | `CommitmentGroup` (enum) | `JUBJUB`, `BLS12_381_G1` |
-| `CommitmentProfile` | `static define(CommitmentProfileId id, CommitmentKind kind, CommitmentGroup group, int pointEncodingLength)` with `1 ≤ pointEncodingLength ≤ 255` (else `INVALID_CONFIGURATION`); accessors `id()`, `kind()`, `group()`, `pointEncodingLength()`. The registry is a static set in `CommitmentProfile`, so its scope is that class's defining class loader. The descriptors of the built-in profiles are created and registered while `CommitmentProfile` is initialised (ADR-0060 D8), so they exist before any caller can reach `define`. `define` rejects an identifier already defined through the same loaded class, built-in or not (`INVALID_CONFIGURATION`): the duplicate rule protects the built-ins rather than threatening them, and each profile has exactly one descriptor per loaded `zeroj-api`. No ZeroJ profile module calls `define` (enforced by the build); `define` is for profiles that are not built in, and tests use test-only identifiers that are unique per JVM. A profile module from a release before ADR-0060 M1 still calls `define` for its own built-in identifier and fails class initialization (`ExceptionInInitializerError`) against this `zeroj-api`; mixed versions are unsupported, and `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` are upgraded together. **Identity equality**: checks compare descriptors with `==` |
+| `CommitmentProfile` | `static define(CommitmentProfileId id, CommitmentKind kind, CommitmentGroup group, int pointEncodingLength)` with `1 ≤ pointEncodingLength ≤ 255` (else `INVALID_CONFIGURATION`); accessors `id()`, `kind()`, `group()`, `pointEncodingLength()`. The registry is a static set in `CommitmentProfile`, so its scope is that class's defining class loader. The descriptors of the built-in profiles are created and registered while `CommitmentProfile` is initialised (ADR-0060 D8), so they exist before any caller can reach `define`. `define` rejects an identifier already defined through the same loaded class, built-in or not (`INVALID_CONFIGURATION`): the duplicate rule protects the built-ins rather than threatening them, and each profile has exactly one descriptor per loaded `zeroj-api`. These guarantees hold against callers of the public API; in-process reflection can bypass any Java access rule and is outside the threat model. No ZeroJ module calls `define` outside `zeroj-api` (the build's `verifyNoBuiltinProfileDefine` scans compiled non-test classes for a method or method-handle reference to `define`; string-based reflection is not detected). `define` is for profiles that are not built in, and tests use test-only identifiers that are unique per JVM. A profile that is not built in and defines its descriptor in a static initialiser can still be disabled, fail-closed, by an earlier `define` of its identifier; such a profile defines its descriptor before untrusted code runs, or is added to the built-ins. A profile module from a release before ADR-0060 M1 still calls `define` for its own built-in identifier and fails class initialization (`ExceptionInInitializerError`) against this `zeroj-api`; mixed versions are unsupported, and `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` are upgraded together. **Identity equality**: checks compare descriptors with `==` |
 | `CommitmentProfiles` | final constant holder, no public constructor or method: `PEDERSEN_JUBJUB_V1`, `PEDERSEN_JUBJUB_BYTES_V1`, `PEDERSEN_JUBJUB_VECTOR_V1`, `PEDERSEN_BLS12_381_G1_V1`, `PEDERSEN_BLS12_381_G1_BYTES_V1`, the built-in descriptors (point-encoding lengths 32, 32, 32, 48, 48). The profile modules' `PROFILE` constants are these instances. A constant for a `reserved` profile is not admission (§2.3) |
 | `Commitment` (interface) | `CommitmentProfile profile()`; `byte[] toPointBytes()` (fresh copy of the raw encoding). No arithmetic and no equality contract |
 | `CommitmentCodec<C extends Commitment>` (interface) | `profile()`; `Class<C> commitmentType()` (the exact concrete class); `C decodePoint(byte[])` (strict, §10; never returns null); `default byte[] keyContext()` (empty; the vector codec returns `I2OSP(σ, 32)`); `default void requireContext(C)` (no-op; the vector codec rejects a different schema with `PROFILE_MISMATCH`) |
@@ -713,11 +713,12 @@ them.
   `addedTerms` appears only for `widened`. A policy always applies to the case's `schema`, or to
   `policySchema` when present.
 - **Domains.** Every schema in a file is valid (`pedersen-jubjub-vector-v1.md` §4); schema
-  construction failures are not file cases. `version`, `width`, `amountBits` and `addedTerms`
-  are within the signed 32-bit range, and `declaredLength` and `maxBytes` within the signed
+  construction failures are not file cases. `version`, `width`, `amountBits`, `deltaBits` and
+  `addedTerms` are within the signed 32-bit range, and `declaredLength` and `maxBytes` within the signed
   64-bit range (a value outside these ranges is an invalid fixture); a value outside the domain that §7 or §12 assigns is a
   negative case with that class (for example `addedTerms` `"65537"` → `INVALID_CONFIGURATION`),
-  never a value a consumer must parse beyond the field's stated 32- or 64-bit range. `expectedProfileId` is a valid identifier
+  never a value a consumer must parse beyond the field's stated 32- or 64-bit range. `delta` is a
+  signed decimal integer of arbitrary size. `expectedProfileId` is a valid identifier
   (§2.1). `relation` has exactly two points `P₀ = pointsHex[0]`, `P₁ = pointsHex[1]` for `add`
   (`P₀ + P₁`) and `subtract` (`P₀ − P₁`), and one point `P₀` for `negate` (`−P₀`); any other cardinality is an invalid fixture, not a case, and a consumer
   rejects the file.
@@ -732,7 +733,7 @@ negative cases of `verifyOpening`.
 |---|---|---|---|
 | `decodePoint` | all | `pointHex` (+ `schema` for vector) | Jubjub: `uHex`, `vHex` (32-octet big-endian affine coordinates). G1: `xHex`, `yHex` (48-octet big-endian affine coordinates), or `{"identity": "true"}` for the identity, which has no affine coordinates |
 | `commit` | scalar | `value`, `blinding` (strict `commitScalar`) | `pointHex` |
-| `commitLegacy` | scalar | `value`, `blinding` (legacy `commit`, any integers) | `pointHex` |
+| `commitLegacy` | Jubjub scalar | `value`, `blinding` (legacy `commit`, any integers) | `pointHex` |
 | `commit` | bytes | `payload`, `blinding`; optional `declaredLength` (declared-length stream form) or `maxBytes` (`ToEnd` form) | `pointHex` |
 | `commit` | vector | `schema`, `values` (array), `blinding` (legacy `commit`, canonical inputs only) | `pointHex` |
 | `hashToScalar` | bytes | `payload` | `b0Hex`, `b1Hex`, `b2Hex`, `uniformBytesHex`, `scalar` |
@@ -751,11 +752,12 @@ negative cases of `verifyOpening`.
 case with several defects is the first failure:
 
 1. configuration: `schema`, then `policySchema` when present, then `policy` (`configurePolicy`,
-   the vector `verifyOpening`, `encodeOpening` and `decodeOpening`), then `amountBits` is read
-   (it is validated in step 3), then the codec;
+   the vector `verifyOpening`, `encodeOpening` and `decodeOpening`), then `amountBits` or
+   `deltaBits` is read (it is validated in step 3), then the codec;
 2. points: `pointHex`, then `pointsHex` in index order, under §10 (or `envelopeHex` under §9);
-3. the operation's own order (§8 for opening decoding, §12.3 for the strict methods, including
-   `amountBits` before the scalars in `verifyOpening`);
+3. the operation's own order (§8 for opening decoding, §12.3 and `pedersen-bls12-381-g1-v1.md`
+   §8 for the strict methods, including `amountBits` before the scalars in `verifyOpening` and
+   `deltaBits` before `delta` in `publicDelta`);
 4. the equation or arithmetic.
 
 Each file contains at least two multi-defect cases that pin this order, for example a bad
@@ -832,19 +834,21 @@ Every file contains at least:
 Per kind, additionally:
 
 - **scalar:** `verifyOpening` with `amountBits` `k` and value `2^k − 1` (positive) and `2^k`
-  (`OUT_OF_RANGE`); `amountBits` `0` and `252` (`INVALID_CONFIGURATION`); `commitLegacy` showing
-  `value = q` equals `value = 0`.
+  (`OUT_OF_RANGE`); `amountBits` `0` and `⌊log₂ q⌋ + 1` (`INVALID_CONFIGURATION`: `252` for
+  Jubjub, `255` for G1). Jubjub only: `commitLegacy` showing `value = q` equals `value = 0` (G1
+  has no legacy reducing method).
 - **bytes:** `hashToScalar` for the empty payload and at least one pattern payload; `commit` with
   `declaredLength` `"-1"` and `MAX_PAYLOAD_BYTES + 1` (`LENGTH_OUT_OF_RANGE`).
 - **G1 (both profiles):** the point negatives above are replaced by lengths 0, 47 and 49; the
   compression flag clear; infinity with the sort flag; infinity with a nonzero coordinate bit;
   `x ≥ P_381`; an `x` with `x³ + 4` not a square (all `MALFORMED_ENCODING`); `0x80 ‖ 0^47` (order
   3), another curve point outside the subgroup, and a mixed-order point (a subgroup point plus the
-  order-3 point) (`NOT_IN_SUBGROUP`); the identity `0xC0 ‖ 0^47` is a positive. `amountBits` `0`
-  and `255` are `INVALID_CONFIGURATION`. Envelope negatives include a Jubjub identifier under a G1
-  codec and the other G1 profile's identifier (`PROFILE_MISMATCH`).
-- **G1 scalar:** `publicDelta` with `deltaBits` `k` and `δ = ±(2^k − 1)` (positive), `±2^k`
-  (`OUT_OF_RANGE`), and `deltaBits` `0` and `255` (`INVALID_CONFIGURATION`).
+  order-3 point) (`NOT_IN_SUBGROUP`); the identity `0xC0 ‖ 0^47` is a positive. Envelope
+  negatives include a Jubjub identifier under a G1 codec and the other G1 profile's identifier
+  (`PROFILE_MISMATCH`).
+- **G1 scalar:** `verifyOpening` with `amountBits` `254` accepted; `publicDelta` with `deltaBits`
+  `k` and `δ = ±(2^k − 1)` (positive), `±2^k` (`OUT_OF_RANGE`), and `deltaBits` `0` and `255`
+  (`INVALID_CONFIGURATION`).
 - **G1 bytes:** `hashToScalar` for the empty payload, a pattern payload and one longer than a
   SHA-256 block.
 - **vector:** a dimension mismatch (`MALFORMED_ENCODING`); a component of `2^{k_i}` under
@@ -857,10 +861,11 @@ Per kind, additionally:
   `requireContext` and `verifyOpening`, not the envelope.
 
 Expected values come from an implementation independent of the code under test, with the
-generator provenance recorded in the header. JuLC tests (from #95, G1 profiles only) use the
-operations a validator performs (`decodePoint`, `verifyOpening`, `relation`) and assert script
-failure for each such negative case and success for each such positive case; envelope,
-opening-codec and configuration cases are off-chain only.
+generator provenance recorded in the header. JuLC tests (ADR-0060 M4, G1 profiles only) use the
+operations a validator performs (`decodePoint`, `verifyOpening`, `relation`, `publicDelta`, and
+`hashToScalar` through the on-chain byte mapping) and assert script failure for each such negative
+case and success for each such positive case; envelope, opening-codec and configuration cases are
+off-chain only.
 
 ---
 
@@ -883,7 +888,7 @@ authorization, replay protection and context binding to the application.
 | `pedersen-bls12-381-g1-v1` (reserved) | V1 | planned (ADR-0060 M2) | planned native: check 1 on `m` and `r`, check 2 if requested, then `uncompress`, two `scalarMul` or one non-empty MSM, `add`, `equal` | message and `r` |
 | | V3 | planned (ADR-0060 M2) | planned native: `C_new = C_old + [δ]·G` with the signed-delta rule; sums with verifier-fixed coefficients | deltas |
 | | V4 | blocked (ADR-0051 D7; #96) | blocked / feasibility (#96) | — |
-| `pedersen-bls12-381-g1-bytes-v1` (reserved) | V1 | planned (ADR-0060 M2) | native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first; #95 measures and documents that limit. A supplied scalar authenticates only that scalar (§4.4) | payload (or scalar) and `r` |
+| `pedersen-bls12-381-g1-bytes-v1` (reserved) | V1 | planned (ADR-0060 M2) | native only if the validator recomputes the mapping with `sha2_256`; limited by the execution budget and by the size of the carrying redeemer, datum or reference-input inline datum, whichever binds first; ADR-0060 M4 measures and documents that limit. No scalar-only mode: checking a supplied `(s, r)` is a `pedersen-bls12-381-g1-v1` opening and authenticates only `s` (§4.4) | payload and `r` |
 
 Disclosed openings on-chain are public forever. Relations prove residues, not balances: integer
 conservation needs a range proof per term or a circuit. Documents larger than the on-chain limit
@@ -962,7 +967,12 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   issue #99), with the duplicate rule now protecting them and the coordinated-upgrade requirement;
   §12.3 the G1 binding; §13 G1 point fields, the `publicDelta` operation and G1 minimum sets; §14
   cells still planned. No Jubjub identifier, byte, check, check order or error class changes, so
-  the Jubjub vectors stay valid.
+  the Jubjub vectors stay valid. Before publication, the M0 review round scoped `commitLegacy` and
+  the `amountBits` `252` rejection to Jubjub (G1 rejects `255`), added `deltaBits` and `delta` to
+  the §13.2 domains and the execution order, added `publicDelta` and `hashToScalar` to the JuLC
+  operations, removed the scalar alternative from the G1 bytes row of §14, and stated in §12.1 what
+  the build check covers, that the guarantees are against public-API callers, and how a profile
+  that is not built in can still be disabled.
 
 ---
 

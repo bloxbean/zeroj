@@ -391,35 +391,87 @@ tasks.named('check') { dependsOn 'verifyDefaultModuleSurface' }
 // === ADR-0060 D8 / I8 ===========================================================================
 // Built-in commitment-profile descriptors are created by zeroj-api (CommitmentProfiles). A profile
 // module that called the public CommitmentProfile.define for its own identifier would fail class
-// initialisation against this zeroj-api (the identifier is already registered), so no main source
-// outside zeroj-api may call define.
+// initialisation against this zeroj-api (the identifier is already registered), so no non-test code
+// outside zeroj-api may call define. The check reads the constant pool of every compiled non-test
+// class, so it sees calls, method references and static imports in any spelling, and never
+// comments or strings. String-based reflection is not detected.
 tasks.register('verifyNoBuiltinProfileDefine') {
     group = 'verification'
-    description = 'ADR-0060 D8: assert no module outside zeroj-api calls CommitmentProfile.define.'
+    description = 'ADR-0060 D8: assert no compiled non-test class outside zeroj-api references CommitmentProfile.define.'
 
-    def sources = rootProject.subprojects
-            .findAll { it.name != 'zeroj-api' }
-            .collect { it.file('src/main/java') }
-            .findAll { it.isDirectory() }
-    inputs.files(sources.collect { fileTree(it) { include '**/*.java' } })
+    def scanned = []
+    rootProject.subprojects.findAll { it.name != 'zeroj-api' }.each { sub ->
+        def sourceSets = sub.extensions.findByName('sourceSets')
+        sourceSets?.findAll { !it.name.toLowerCase().contains('test') || it.name == 'testFixtures' }?.each { ss ->
+            dependsOn ss.classesTaskName.with { "${sub.path}:${it}" }
+            scanned.addAll(ss.output.classesDirs.files)
+        }
+    }
+    // Self-check: a compiled zeroj-api test that calls define (inside a lambda) must be detected.
+    def knownPositive = project(':zeroj-api').layout.buildDirectory
+            .file('classes/java/test/org/zeroj/api/commitment/CommitmentProfileIdTest.class').get().asFile
+    dependsOn ':zeroj-api:testClasses'
+    inputs.files(scanned).withPropertyName('classes').optional()
+    def root = rootProject.rootDir
 
     doLast {
-        def call = ~/CommitmentProfile\s*\.\s*define\s*\(/
-        def staticImport = ~/import\s+static\s+org\.zeroj\.api\.commitment\.CommitmentProfile\.(define|\*)\s*;/
+        // Returns true if the class file's constant pool has a Methodref or InterfaceMethodref to
+        // org/zeroj/api/commitment/CommitmentProfile.define (method handles point at such an entry).
+        def refersToDefine = { File f ->
+            def input = new DataInputStream(new BufferedInputStream(new FileInputStream(f)))
+            try {
+                if (input.readInt() != 0xCAFEBABE as int) {
+                    throw new GradleException("not a class file: ${f}")
+                }
+                input.readUnsignedShort()
+                input.readUnsignedShort()
+                int count = input.readUnsignedShort()
+                def utf8 = [:]
+                def classes = [:]
+                def nameAndTypes = [:]
+                def methodRefs = []
+                for (int i = 1; i < count; i++) {
+                    int tag = input.readUnsignedByte()
+                    switch (tag) {
+                        case 1: utf8[i] = input.readUTF(); break
+                        case 3: case 4: input.readInt(); break
+                        case 5: case 6: input.readLong(); i++; break
+                        case 7: classes[i] = input.readUnsignedShort(); break
+                        case 8: case 16: case 19: case 20: input.readUnsignedShort(); break
+                        case 9: input.readUnsignedShort(); input.readUnsignedShort(); break
+                        case 10: case 11: methodRefs << [input.readUnsignedShort(), input.readUnsignedShort()]; break
+                        case 12: nameAndTypes[i] = input.readUnsignedShort(); input.readUnsignedShort(); break
+                        case 15: input.readUnsignedByte(); input.readUnsignedShort(); break
+                        case 17: case 18: input.readUnsignedShort(); input.readUnsignedShort(); break
+                        default: throw new GradleException("unknown constant-pool tag ${tag} in ${f}")
+                    }
+                }
+                return methodRefs.any { ref ->
+                    utf8[classes[ref[0]]] == 'org/zeroj/api/commitment/CommitmentProfile' && utf8[nameAndTypes[ref[1]]] == 'define'
+                }
+            } finally {
+                input.close()
+            }
+        }
+
+        if (!knownPositive.isFile() || !refersToDefine(knownPositive)) {
+            throw new GradleException("ADR-0060 D8 check is broken: it does not detect define in ${knownPositive}")
+        }
         def failures = []
-        sources.each { dir ->
-            fileTree(dir) { include '**/*.java' }.each { f ->
-                def text = f.text
-                if (call.matcher(text).find() || staticImport.matcher(text).find()) {
-                    failures << rootProject.relativePath(f)
+        int classCount = 0
+        scanned.findAll { it.isDirectory() }.each { dir ->
+            dir.eachFileRecurse { f ->
+                if (f.isFile() && f.name.endsWith('.class')) {
+                    classCount++
+                    if (refersToDefine(f)) failures << root.toPath().relativize(f.toPath()).toString()
                 }
             }
         }
         if (!failures.isEmpty()) {
             throw new GradleException("ADR-0060 D8: built-in descriptors come from CommitmentProfiles; "
-                    + "CommitmentProfile.define is called in:\n  - " + failures.join("\n  - "))
+                    + "CommitmentProfile.define is referenced by:\n  - " + failures.join("\n  - "))
         }
-        logger.lifecycle("ADR-0060 D8 check passed: no main source outside zeroj-api calls CommitmentProfile.define.")
+        logger.lifecycle("ADR-0060 D8 check passed: ${classCount} compiled non-test classes outside zeroj-api, none references CommitmentProfile.define.")
     }
 }
 tasks.named('check') { dependsOn 'verifyNoBuiltinProfileDefine' }

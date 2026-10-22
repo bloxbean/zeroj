@@ -8,6 +8,8 @@ test {
     // Non-native-field / hash gadgets build large constraint graphs (a single Ed25519 field
     // inverse is ~3M constraints); give the test JVM headroom so heavy gadget tests don't OOM.
     maxHeapSize = '4g'
+    // ADR-0060 D8: BuiltInProfileAliasTest loads zeroj-api and this module in a fresh class loader.
+    doFirst { systemProperty 'zeroj.test.runtimeClasspath', sourceSets.test.runtimeClasspath.asPath }
 }
 
 // ADR-0038 P4 benchmark matrix. Deliberately NOT a gate: nothing here asserts, because a

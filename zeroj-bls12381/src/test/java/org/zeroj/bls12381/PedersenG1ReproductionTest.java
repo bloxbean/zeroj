@@ -50,6 +50,10 @@ class PedersenG1ReproductionTest {
         G1Point h = Bls12381Hash.hashToG1(new byte[] {0x48}, DST_B);
         assertEquals(G, HEX.formatHex(Bls12381Codecs.g1ToCompressed(g)));
         assertEquals(H, HEX.formatHex(Bls12381Codecs.g1ToCompressed(h)));
+        assertEquals("00453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e", hex48(g.x().value()));
+        assertEquals("0ab307006d17731edfeef508a959c6c43f6ad8f72d27af8aa0645356ffe864fd0ced6dfa806e5b2b63c8850f7cfb691c", hex48(g.y().value()));
+        assertEquals("12e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65", hex48(h.x().value()));
+        assertEquals("01e0f1bf4e0e4e344cb2779b2dc6adec8b0b07caf8a9812c3b6f4b056af2d0fda0e7b05ffb16008ca855ffe55686184e", hex48(h.y().value()));
         for (G1Point p : new G1Point[] {g, h}) {
             assertFalse(p.isInfinity());
             assertTrue(p.isOnCurve());
@@ -103,6 +107,11 @@ class PedersenG1ReproductionTest {
                 "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650");
         assertCommitment(g, h, BigInteger.valueOf(12345), BigInteger.valueOf(67890),
                 "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4");
+    }
+
+    private static String hex48(BigInteger v) {
+        String s = v.toString(16);
+        return "0".repeat(96 - s.length()) + s;
     }
 
     private static void assertMapping(byte[] payload, String uniformHex, String scalar) {
