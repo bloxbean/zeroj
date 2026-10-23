@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "d2dcc23e49b617e16dd4f60edc6a44b83afa02e7",
+  "sourceRevision": "3e6a149e48248ffbbc187172dda9084c10c260dc",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -260,7 +260,7 @@
       "description": "Commit to a hidden number, open it later, add commitments together, and prove facts about the hidden value in a Groth16 circuit, with ZeroJ's pedersen-jubjub-v1 profile.",
       "url": "https://zeroj.dev/guides/confidential/pedersen/",
       "markdown": "https://zeroj.dev/ai/pages/guides/confidential/pedersen.md",
-      "sha256": "8e1f1b2fa9e32d3481ca3cfb5f189ef70911ed905123beb1eb728f1bd16a36c9"
+      "sha256": "948dee738cac7bd1873972a1aae5e2dafb085117be3279da265aa8ac2d97e0e1"
     },
     {
       "title": "ElGamal encryption",
@@ -393,7 +393,7 @@
       "description": "One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification, BBS, commitments and encryption.",
       "url": "https://zeroj.dev/reference/api-cheatsheet/",
       "markdown": "https://zeroj.dev/ai/pages/reference/api-cheatsheet.md",
-      "sha256": "c26d2a6ed4801355497e3fbc1dae8f8f90a6635f9417070fec75d35fb3dbb0bb"
+      "sha256": "f342b2d49fb91198a695f3c9d4e06417c9111b46c24de12338a3167a90c9e0fb"
     },
     {
       "title": "Configuration",
@@ -414,7 +414,7 @@
       "description": "Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.",
       "url": "https://zeroj.dev/reference/migration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/migration.md",
-      "sha256": "4048da5bf38681dda9e0673c8bf03e34ff8bcb079fdf751537a471aef3a2f091"
+      "sha256": "079b133616371c454ae1df3d386037a1c7b31bc16cc1d480250b2a5c942a43e1"
     },
     {
       "title": "Build with AI",
@@ -438,7 +438,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "2e29fc38fa2d3149a58dc0406913a15af9dcf8e9772776cf2c03cbcab59ff8a6"
+      "sha256": "b0f665d631a9060225d7c60174c90bb7531a8e8b1fe4916e8895bf7cbe74f144"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",

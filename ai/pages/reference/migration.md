@@ -221,14 +221,37 @@ tampered file can't slip through:
 Stores you create yourself with `Groth16Keys.setupToStore` are unchanged and still load with
 `Groth16Keys.load(dir)`. See [Prove with Groth16](https://zeroj.dev/guides/proving/groth16/#flow-3-keys-from-a-ceremony).
 
+## Built-in commitment profiles: upgrade `zeroj-api` with its profile modules
+
+From the release that ships ADR-0060 milestone M1, `zeroj-api` creates the descriptors of the
+built-in commitment profiles itself, in the new `CommitmentProfiles` class. The Jubjub `PROFILE`
+constants (`PedersenScalarCommitment.PROFILE` and its peers) are those same instances, so your
+source code is unchanged. A call to `CommitmentProfile.define` with a built-in identifier, which
+used to disable that profile for the rest of the JVM, is now rejected at the call
+(`INVALID_CONFIGURATION`).
+
+The binaries must match, though. Mixed versions are not supported:
+
+| Combination | Result |
+|---|---|
+| older `zeroj-circuit-lib`, new `zeroj-api` | `ExceptionInInitializerError` when a Pedersen profile class loads, then `NoClassDefFoundError` |
+| new `zeroj-circuit-lib`, older `zeroj-api` | `NoClassDefFoundError: org/zeroj/api/commitment/CommitmentProfiles` |
+
+Take `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` from one release, through the
+`zeroj-bom-core` platform or one pinned version, and check the resolved versions
+(`./gradlew dependencies` or `mvn dependency:tree`). The two BLS12-381 G1 descriptors in
+`CommitmentProfiles` are descriptors only: those profiles stay reserved until ADR-0060 admits them.
+
 ## Further reading
 
 Design notes: [ADR-0048](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0048-org-zeroj-namespace-and-central-portal-publishing.md),
-[ADR-0050](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0050-julc-pre17-org-julclang-and-typed-bls.md)
-and [ADR-0044](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0044-focused-module-surface-and-optional-provider-isolation.md).
+[ADR-0050](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0050-julc-pre17-org-julclang-and-typed-bls.md),
+[ADR-0044](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0044-focused-module-surface-and-optional-provider-isolation.md)
+and [ADR-0060](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0060-pedersen-bls12-381-g1-profiles.md).
 Full migration texts: [namespace](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0048-org-zeroj-namespace.md),
 [JuLC and `org.julclang`](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0050-julc-org-julclang.md),
-[module cleanup](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0044-module-cleanup.md).
+[module cleanup](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0044-module-cleanup.md),
+[built-in commitment profiles](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0060-builtin-commitment-profiles.md).
 
 ## Next steps
 
