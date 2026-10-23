@@ -10,6 +10,13 @@ test {
     maxHeapSize = '4g'
 }
 
+// ADR-0060 D8: BuiltInProfileAliasTest loads zeroj-api and this module in a fresh class loader from
+// the running test task's own classpath, for every Test task that may run it.
+tasks.withType(Test).configureEach {
+    // Read at execution time: a task may assign its classpath after this hook is configured.
+    doFirst { Test running -> running.systemProperty 'zeroj.test.runtimeClasspath', running.classpath.asPath }
+}
+
 // ADR-0038 P4 benchmark matrix. Deliberately NOT a gate: nothing here asserts, because a
 // timing assertion in CI is flaky and a harness that finds no leak proves nothing. The
 // deterministic add/double operation-count gate in SecretScalarScheduleTest is what CI

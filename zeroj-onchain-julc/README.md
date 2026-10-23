@@ -31,6 +31,7 @@ V3.
 | `org.zeroj.onchain.julc.plonk.codec` | `PlonKProverToCardano` | Working off-chain helper | Converts ZeroJ BLS12-381 PlonK proofs/VKs to compressed Cardano redeemer/parameter bytes |
 | `org.zeroj.onchain.julc.bbs.lib` | `BbsHashToScalar` | Working on-chain library | Reusable `@OnchainLibrary` BBS `hash_to_scalar` (`expand_message_xmd(SHA-256)`); ciphersuite-generic, composable by any BBS validator |
 | `org.zeroj.onchain.julc.bbs.lib` | `BbsProofVerify` | Working on-chain library (fixed profile) | Reusable `@OnchainLibrary` native BBS `ProofVerify` (T1/T2 + Fiat–Shamir challenge + pairing) for the SHA-256 ciphersuite. Current profile: 5-message credential disclosing 2 (~2.4×10⁹ CPU / 0.18M mem); arbitrary-disclosure generalization tracked as follow-up |
+| `org.zeroj.onchain.julc.pedersen.lib` | `PedersenG1Lib` | Experimental on-chain library | Reusable `@OnchainLibrary` for the BLS12-381 G1 Pedersen profiles (ADR-0060): strict 48-octet decoding, disclosed scalar and byte openings, public deltas and sums with the CIP-0381 builtins; guards run before every builtin |
 | `org.zeroj.onchain.julc.analysis` | `ScriptBudgetEstimator`, `OnChainFeasibility` | Planning helpers | Estimate Plutus CPU/memory budgets and report proof system / curve feasibility |
 | `org.zeroj.onchain.julc.deployment` | `ReferenceScriptDeployer` | Config helper | Describes CIP-0033 reference-script deployment patterns; does not submit transactions |
 
@@ -119,6 +120,40 @@ public class MyVerifier {
 The proof record is kept validator-local because Julc record decoding is
 validator-local today. Sharing `Groth16BLS12381Lib` still avoids duplicating the
 pairing and public-input folding logic.
+
+## G1 Pedersen commitments (on-chain)
+
+`PedersenG1Lib` opens and combines `pedersen-bls12-381-g1-v1` and `pedersen-bls12-381-g1-bytes-v1`
+commitments ([spec](../docs/specs/pedersen-bls12-381-g1-v1.md) §9, ADR-0060) with the CIP-0381
+builtins, with no SNARK. The off-chain half is `org.zeroj.bls12381.pedersen.G1Pedersen`.
+
+```java
+@SpendingValidator
+public class MyOpening {
+    record Opening(BigInteger value, BigInteger blinding) {}
+
+    @Entrypoint
+    static boolean validate(MyDatum datum, Opening o, ScriptContext ctx) {
+        JulcG1 c = PedersenG1Lib.decodeCommitment(datum.commitment());   // 48 octets, canonical
+        return PedersenG1Lib.verifyScalarOpeningBounded(c, o.value(), o.blinding(), BigInteger.valueOf(64))
+                && /* your own authorization, replay and context checks */ true;
+    }
+}
+```
+
+- `decodeCommitment` checks the length before `bls12_381_G1_uncompress` and `compress(point) == bytes`
+  after it; curve and subgroup validity come from the CIP-0381 element contract. The identity is
+  accepted.
+- Check 1 (`[0, q)`), check 2 and the delta bound fail the script before any `scalarMul`; the VM tests
+  show it with exact builtin counts from a marked cost model. `applyPublicDelta` multiplies by
+  `|δ|` and negates.
+- `verifyBytesOpening` recomputes `HashBytesToScalarG1` with `sha2_256` (the `BbsHashToScalar`
+  expansion over `payload ‖ I2OSP(n, 8)`); the payload is bounded by the transaction size.
+- Two `scalarMul` are used rather than a two-term `multiScalarMul`, which costs more (measured).
+- The library provides no authorization, replay protection, UTxO/context binding or non-negative
+  balances; an opened value is public forever. Example validators live in
+  `zeroj-integration-tests` (`org.zeroj.examples.pedersen.g1`). Costs and limits:
+  [`docs/benchmarks/pedersen-g1-2026-10-22.md`](../docs/benchmarks/pedersen-g1-2026-10-22.md).
 
 ## BBS selective disclosure (on-chain)
 

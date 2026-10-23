@@ -64,7 +64,8 @@ class JubjubCommitmentProfilesTest {
     @Test
     @DisplayName("A second descriptor for a registered identifier is INVALID_CONFIGURATION (fail-closed duplicate)")
     void duplicateDescriptor() {
-        // Force class initialization first, so this test cannot pre-empt the real definition.
+        // The built-in descriptors are registered by zeroj-api (ADR-0060 D8), so a define of their
+        // identifiers is rejected whatever the class-initialization order.
         assertSame(PedersenScalarCommitment.PROFILE, PedersenScalarCommitment.CODEC.profile());
         assertSame(PedersenBytesCommitment.PROFILE, PedersenBytesCommitment.CODEC.profile());
         assertSame(PedersenVectorCommitment.PROFILE, PedersenVectorCommitment.codec(SCHEMA_A).profile());

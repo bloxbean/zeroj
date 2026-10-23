@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CommitmentApiSurfaceTest {
 
     private static final List<Class<?>> VALUE_TYPES = List.of(CommitmentProfileId.class, CommitmentProfile.class,
+            CommitmentProfiles.class,
             CommitmentEnvelope.class, CommitmentKey.class, CommitmentCheck.class, CommitmentAcceptance.class);
 
     @Test

@@ -77,6 +77,9 @@ dependencies {
     // Test — off-chain BBS (build real presentations to differential-test the on-chain BBS gadgets).
     // Test-scope only: the on-chain BBS gadgets themselves have no zeroj-bbs dependency.
     testImplementation project(':zeroj-bbs')
+
+    // Test — ADR-0060 M4: the independent G1 Pedersen vectors, run through PedersenG1Lib in the VM.
+    testImplementation project(':zeroj-test-vectors')
 }
 
 test {

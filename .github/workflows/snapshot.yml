@@ -52,7 +52,7 @@ jobs:
         run: ./gradlew clean build -PskipSigning=true --stacktrace
 
       - name: Assert the default graph has no assurance/benchmark/removed-provider edge
-        run: ./gradlew verifyDefaultModuleSurface --stacktrace
+        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine --stacktrace
 
       # Snapshots go straight to the Central Portal snapshot repository; unlike a release there is
       # no staged deployment and nothing to approve.

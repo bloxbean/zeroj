@@ -3,10 +3,8 @@ package org.zeroj.circuit.lib.jubjub;
 import org.zeroj.api.commitment.Commitment;
 import org.zeroj.api.commitment.CommitmentCodec;
 import org.zeroj.api.commitment.CommitmentFormatException;
-import org.zeroj.api.commitment.CommitmentGroup;
-import org.zeroj.api.commitment.CommitmentKind;
 import org.zeroj.api.commitment.CommitmentProfile;
-import org.zeroj.api.commitment.CommitmentProfileId;
+import org.zeroj.api.commitment.CommitmentProfiles;
 
 import java.util.Arrays;
 import java.util.HexFormat;
@@ -36,10 +34,8 @@ import java.util.Objects;
  */
 public final class PedersenScalarCommitment implements Commitment {
 
-    /** The {@code pedersen-jubjub-v1} descriptor. Compare with {@code ==}. */
-    public static final CommitmentProfile PROFILE = CommitmentProfile.define(
-            CommitmentProfileId.of("pedersen-jubjub-v1"), CommitmentKind.SCALAR, CommitmentGroup.JUBJUB,
-            JubjubCurve.COMPRESSED_POINT_BYTES);
+    /** The {@code pedersen-jubjub-v1} descriptor, {@link CommitmentProfiles#PEDERSEN_JUBJUB_V1}. Compare with {@code ==}. */
+    public static final CommitmentProfile PROFILE = CommitmentProfiles.PEDERSEN_JUBJUB_V1;
 
     /** The {@code pedersen-jubjub-v1} codec: strict point decoding (spec §10), no context. */
     public static final CommitmentCodec<PedersenScalarCommitment> CODEC = new Codec();
