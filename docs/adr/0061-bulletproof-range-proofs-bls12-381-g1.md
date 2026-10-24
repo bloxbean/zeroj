@@ -10,8 +10,11 @@ roadmap. It defines the first proof protocol of the commitment-profile registry
 "V4 proof" cell that registry §14 lists as "blocked (ADR-0051 D7; #96)".
 
 Seven questions need a maintainer decision before acceptance (see "Design questions for the
-maintainer"). The two that matter most are the protocol variant (Q1) and the Fiat–Shamir transcript
-(Q2). This ADR records a lean on each and decides neither.
+maintainer"). **Q2 (the Fiat–Shamir transcript) was decided by maintainer Satya on 2026-10-24:
+stay on the official standards.** The transcript is `draft-irtf-cfrg-fiat-shamir-03` with
+SHAKE128, and points and scalars use the `draft-irtf-cfrg-sigma-protocols-03` §8.2 BLS12-381
+encodings (D3, "Note on the transcript decision"). Q1 and Q3–Q7 remain open, each with a recorded
+lean.
 
 **Risk: R3** for the proof protocol, the generator derivation (D2), the transcript (D3) and the
 prover's secret handling (D6). **R2** for the proof encoding and strict decoding (D4), the Java API
@@ -23,7 +26,7 @@ security property, and no AI review upgrades a maturity or security claim (AGENT
 
 ## Date
 
-2026-10-24 (r1)
+2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts)
 
 ## Context
 
@@ -77,7 +80,9 @@ ADR-0051 D7 (G1 sigma proofs) is **open and escalated**:
 
 D7 leans towards a ZeroJ Cardano ciphersuite built from `expand_message_xmd` with SHA-256, the
 construction already on-chain in `BbsHashToScalar`, but it decides nothing. A range proof faces the
-same choice (Q2). This ADR does not decide D7 either; Q2's answer can be reused there.
+same choice (Q2). For this protocol the maintainer chose the official drafts (D3), which gives up
+native on-chain verification. This ADR does not decide D7: its option (a) ("implement the CFRG
+ciphersuite exactly; no on-chain verification") could reuse the transcript code built here.
 
 ### Facts this design depends on
 
@@ -94,8 +99,9 @@ All paths are at `3e6a149` (the merge of ADR-0060) unless stated otherwise.
   `Bls12381Codecs.requireValid`, an affine `[q]P` of about 4.3 ms on macOS aarch64
   (`docs/benchmarks/pedersen-g1-2026-10-22.md`). Issue #104 tracks removing that repeat for
   trusted points; #28 tracks a faster subgroup check.
-- ZeroJ implements SHAKE256 for the BBS SHAKE suite (`Bls12381Hash.hashToScalarXofShake256`). It has
-  no SHAKE128 and no duplex-sponge transcript.
+- ZeroJ has its own Keccak-f[1600] permutation and SHAKE256 for the BBS SHAKE suite
+  (`Bls12381Hash.java`, `KECCAK_ROUND_CONSTANTS`, `hashToScalarXofShake256`). It has no SHAKE128 (the
+  same permutation at rate 168) and no duplex-sponge transcript.
 - The only Fiat–Shamir transcript in `zeroj-crypto` is the snarkjs-compatible Keccak-256 PlonK
   transcript (`transcript/FiatShamirTranscript.java`), which is specific to that format.
 
@@ -164,7 +170,7 @@ Any of these lets an observer learn or narrow `v`.
 - the verifier's configuration: the expected protocol and profile, `n`, the application context
   and the pinned generator set;
 - the selected `Bls12381Provider` as code;
-- SHA-256 (and SHAKE128 if Q2 picks it) as a random oracle;
+- SHA-256 (in hash-to-curve) and SHAKE128 (in the transcript) as random oracles;
 - on-chain, the node's builtins as an implementation of CIP-0381 and CIP-0133.
 
 **Adversaries and goals:**
@@ -231,20 +237,37 @@ Any of these lets an observer learn or narrow `v`.
    - §8: protocols that need a random oracle "MUST NOT use a nonuniform encoding";
    - §8.8.1: the suite `BLS12381G1_XMD:SHA-256_SSWU_RO_`;
    - Appendices J.9.1 and K.1.
-7. **draft-irtf-cfrg-fiat-shamir-03** (2026-08-17) and **draft-irtf-cfrg-sigma-protocols-03**
-   (2026-08-17). These are Q2 option (b), and the encoding profile this ADR follows in any case:
-   - sigma-03 §8.2: BLS12-381 G1 points are 48-octet compressed, and infinity is "neither produced
-     … nor accepted"; scalars are 32-octet big-endian in `[0, q)`;
-   - fiat-shamir-03 §5.1–§5.2: the session identifier, and the instance absorbed first;
-   - fiat-shamir-03 §4.2.3: scalars are derived from `Ns + 16` octets.
-8. **dalek/zkcrypto `bulletproofs`** at `04bce4e66013ff857ed462fd4206210544101461` (2025-09-13),
+7. **draft-irtf-cfrg-fiat-shamir-03** (2026-08-17, expires 2027-02-18). Normative for the
+   transcript (D3):
+   - §3.2: the XOF duplex sponge (`Init`, `Absorb`, `Squeeze`);
+   - §4.2.2–§4.2.3: `DecodeUint` and `DecodeField`, `Ns + 16` octets read little-endian;
+   - §5.1: `DeriveSessionID` and the tag requirements, including the application context;
+   - §5.2: the instance is absorbed first, and its encoding is prefix-free;
+   - §6: serialization and deserialization (§6.2.5: validate group elements and reject the
+     identity);
+   - §8.5: instance encoding and CVE-2022-29566;
+   - §9.1: SHAKE128;
+   - Appendix B: test vectors, with a machine-readable JSON copy in the draft's repository.
+8. **draft-irtf-cfrg-sigma-protocols-03** (2026-08-17). Normative for the codecs (D3, D4):
+   - §8.2: the `sigma-proofs_Shake128_BLS12381` ciphersuite (`Ne = 48`, `Ns = 32`, SHAKE128);
+     compressed G1, where infinity is "neither produced … nor accepted"; deserialization "MUST
+     perform full point validation"; big-endian scalars in `[0, q)`;
+   - Table 1: "about 120-bit" security;
+   - Appendix A.3: test vectors over BLS12-381 G1, including `pedersen_commitment`.
+
+   The protocol itself (§4, linear relations) is not used.
+9. **FIPS 202** (SHA-3 standard: SHAKE128). Not fetched for r2; it will be pinned and fetched at
+   M0. SHAKE128 is tested against fiat-shamir-03 Appendix B.2 and against an implementation ZeroJ
+   did not write (CPython's `hashlib.shake_128`).
+10. **dalek/zkcrypto `bulletproofs`** at `04bce4e66013ff857ed462fd4206210544101461` (2025-09-13),
    MIT: the notes in `docs/notes-rp.md` and `docs/notes-ipp.md`, and the transcript order in
    `src/transcript.rs` and `src/range_proof/mod.rs`.
-   - This is a secondary written specification and a cross-check of the algebra. It is not a
-     vector source, because it uses Ristretto255 and Merlin.
+   - This is a secondary written specification and an external oracle for the protocol's
+     algebra (M2). Its vectors cannot be used for this protocol directly, because it uses
+     Ristretto255 and Merlin.
    - This ADR's deviations from dalek are listed in D3 and D5.
-9. **CIP-0381** and **CIP-0133** at `86b89208d3b2aabb5dcc5b778dfbe09096b4e114`, as pinned by ADR-0060.
-10. **ZeroJ:**
+11. **CIP-0381** and **CIP-0133** at `86b89208d3b2aabb5dcc5b778dfbe09096b4e114`, as pinned by ADR-0060.
+12. **ZeroJ:**
     - `commitment-profiles-v1` r7 (§5, §6.2, §6.4, §7, §10, §13, §14, §15);
     - `pedersen-bls12-381-g1-v1` r2;
     - ADR-0021: the pure-Java provider is not constant-time;
@@ -332,56 +355,89 @@ U      = hash_to_curve("U", DST_BP)
   challenge. This ADR follows the paper's fixed `u` (`U` above). The change is listed so that the
   dalek notes are not misread as this protocol.
 
-### D3 — Transcript and challenges (R3; the construction is Q2)
+### D3 — Transcript and challenges (R3; Q2 decided: the CFRG drafts)
 
-**Required content, whichever construction Q2 picks.** The transcript is strong Fiat–Shamir in the
-sense of Dao et al. Every challenge is a function of everything before it:
+**Construction.** The non-interactive argument uses the duplex-sponge Fiat–Shamir transformation of
+`draft-irtf-cfrg-fiat-shamir-03`, instantiated with **SHAKE128** (§3.2, §9.1). It uses the codecs of
+the `sigma-proofs_Shake128_BLS12381` ciphersuite of `draft-irtf-cfrg-sigma-protocols-03` §8.2:
 
-1. **Session identifier:** the protocol identifier `bulletproof-range-bls12-381-g1-v1` and the
-   transcript-construction version.
-2. **Public parameters:** the consumed profile identifier `pedersen-bls12-381-g1-v1`; the basis set
-   identifier and the compressed `G`, `H`; the generator set identifier and `D_gens`.
-3. **Instance:** `n` (as `I2OSP(n, 4)`), the application context `ctx`, and the compressed `V`.
-4. **First round:** `A`, `S`, then challenges `y` and `z`.
-5. **Second round:** `T₁`, `T₂`, then challenge `x`.
-6. **Third round:** `t̂`, `τ_x`, `μ`, then challenge `x_u` (the inner-product argument's
-   Protocol 1 challenge for `u`).
-7. **Inner-product rounds:** for `j = 1 … k`, `L_j` and `R_j`, then challenge `x_j`.
+| Item | Rule |
+|---|---|
+| Group elements (`Ne = 48`) | compressed G1 (pairing-friendly-curves Appendix C; M0 confirms it is the ADR-0060 Zcash form); the point at infinity is "neither produced … nor accepted"; full point validation on input |
+| Scalars (`Ns = 32`) | big-endian `I2OSP`; deserialization fails unless the value is in `[0, q)` |
+| Challenges | `DecodeField(Squeeze(Ns + 16), q, 1)`: 48 squeezed octets read **little-endian** (`LE2IP`) and reduced mod `q`; bias at most 2^−128 (fiat-shamir-03 §4.2.2–§4.2.3; sigma-03 §8) |
 
-**Encoding rules:**
-- **Labels.** Every absorbed item carries a distinct label and an explicit length. No label is a
-  prefix of another, and the encoding is prefix-free (fiat-shamir-03 §5.2).
-- **Context.** `ctx` is caller-supplied octets of at most 1,024 octets, absorbed with its length.
-  An empty context is allowed but discouraged. The verifier supplies `ctx` from its own
-  configuration and state (on Yano-X, for example, a chain identifier and message domain), never
-  from the proof.
-- **Scalar challenges** are derived from at least 48 uniform octets, reduced mod `q`. The bias is
-  at most 2^−128 (fiat-shamir-03 §4.2.3; BBS `hash_to_scalar`).
-- **Zero challenges.** If any challenge is `0`, the verifier rejects. The prover restarts with fresh
-  nonces. The paper draws challenges from `Z*_q`; the BP+ audit (ZenGo X 2021, §5.2) and Tari
-  enforce this check; dalek does not.
+In the XOF duplex sponge (§3.2), each challenge is SHAKE128 over everything so far: the session
+identifier padded to the 168-octet rate, the encoded instance, and the encoded prover messages up
+to that round. Consecutive squeezes in one round (`y`, then `z`) continue one output stream.
 
-**Q2: the construction.** There are three options, and the ADR does not decide:
+Only the transcript and the codecs come from the drafts. The interactive protocol is the paper's
+range proof. No draft specifies Bulletproofs, so the order of absorbs and squeezes below is this
+ADR's, written in the drafts' framework.
 
-- **(a) A ZeroJ SHA-256 chain on RFC 9380 `expand_message_xmd`.**
-  - Each absorb updates a chained state, `h_i = SHA-256(h_{i−1} ‖ label ‖ I2OSP(len, 4) ‖ data)`.
-  - Each challenge is `OS2IP(expand_message_xmd(h_i ‖ label, DST_C, 48)) mod q`, the same
-    expansion as BBS `hash_to_scalar` and `BbsHashToScalar` on-chain.
-  - This sketch is illustrative; M0 pins the exact bytes.
-  - It can be recomputed on Plutus, but no outside implementation exists.
-- **(b) `draft-irtf-cfrg-fiat-shamir-03` with SHAKE128**, and sigma-03 §8.2 encodings.
-  - It is on the standards track and has test vectors (Appendix B).
-  - The draft can still change. ZeroJ has no SHAKE128 or duplex sponge yet, and Plutus cannot
-    recompute it, so L1 verification is ruled out.
-- **(c) Merlin (STROBE-128)**, as in dalek and Tari.
-  - It is the most-used transcript for Bulletproofs.
-  - It has no published vectors (merlin.cool lists them as "TBD") and needs a Java STROBE port.
-    Plutus cannot recompute it, since CIP-0101 exposes only the `keccak_256` hash, not the
-    permutation.
-  - dalek's labels do not absorb the generators, so this ADR would add them.
+**Session identifier** (fiat-shamir-03 §5.1). `session_id = DeriveSessionID(tag)`. The tag is
+US-ASCII, built from fixed fields with an unambiguous delimiter, and identifies:
+- the argument and its version: `bulletproof-range-bls12-381-g1-v1`;
+- the codec and hash suite: `sigma-proofs_Shake128_BLS12381` and `fiat-shamir-03`;
+- the round structure and the bit width `n` (which fixes the number of rounds, so §5.1
+  requirement 2 puts it in the tag; it is also absorbed in the instance as part of the statement);
+- the **application context** `ctx`, as §5.1 requirement 3 asks.
 
-**Changing the construction.** Changing any of these items, or the construction, needs a new
-protocol identifier (registry §5).
+`ctx` is caller-supplied, at most 1,024 octets, encoded so the tag stays unambiguous (M0 pins the
+encoding). An empty context is allowed but discouraged. The verifier supplies `ctx` from its own
+configuration and state (on Yano-X, for example, a chain identifier and message domain), never
+from the proof.
+
+**Instance** (fiat-shamir-03 §5.2). The instance is absorbed first, before any prover message, with
+a prefix-free encoding of:
+- the consumed profile identifier `pedersen-bls12-381-g1-v1`;
+- the bases `G` and `H`;
+- the generator-set identifier and `D_gens` (D2);
+- `n` as `SerializeUint`;
+- the commitment `V`.
+
+This makes every challenge depend on the public parameters and the statement. That is the strong
+Fiat–Shamir of Dao et al., and the fix for Frozen Heart.
+
+**Rounds** (each prover message is absorbed through the codec before the next squeeze):
+
+1. Absorb `A`, `S`; squeeze `y`, then `z`.
+2. Absorb `T₁`, `T₂`; squeeze `x`.
+3. Absorb `t̂`, `τ_x`, `μ`; squeeze `x_u`, the inner-product argument's Protocol 1 challenge for
+   `u`.
+4. For `j = 1 … k`: absorb `L_j`, `R_j`; squeeze `x_j`.
+
+**Zero challenges.** If any challenge is `0`, the verifier rejects, and the prover restarts with
+fresh nonces. The paper draws challenges from `Z*_q`; the BP+ audit (ZenGo X 2021, §5.2) and Tari
+enforce this check; dalek does not.
+
+**Security level.** sigma-03 Table 1 rates the BLS12-381 G1 suite at "about 120-bit"
+pre-quantum. That is the curve's level, not a property of this protocol.
+
+**Changing the transcript.** Changing any item above, the codec, or the draft version needs a new
+protocol identifier (registry §5). The identifier pins `-03`. A later draft revision that changes
+bytes is a new protocol version, not an update.
+
+**Note on the transcript decision (maintainer, 2026-10-24).** The r1 lean was a ZeroJ SHA-256
+chain on `expand_message_xmd`, which Plutus can recompute. It was dropped because **no official
+test vector exists for such a chain.** Only its parts have one: RFC 9380 Appendix K.1 for
+`expand_message_xmd`, and the BBS vectors for `hash_to_scalar`. The chaining, labels and absorb
+order would be checked only by implementations ZeroJ writes itself.
+
+The CFRG drafts publish official vectors for exactly the layer this ADR depends on:
+- fiat-shamir-03 Appendix B: the codecs, the SHAKE128 sponge and an example protocol's transcript;
+- sigma-03 Appendix A.3: complete proofs in `sigma-proofs_Shake128_BLS12381`, over BLS12-381 G1,
+  including `pedersen_commitment` relations.
+
+The maintainer's decision is to **stay on the official standards for the transcript and the
+encodings.** The consequences:
+- native Plutus verification of this protocol is ruled out, because Plutus has no SHAKE128
+  (D8);
+- if Cardano verification is wanted later, a SHA-256 transcript becomes a separate protocol
+  identifier under its own ADR, and is reviewed as a ZeroJ-specific construction.
+
+Merlin (dalek, Tari) was not chosen either. It has no published vectors, and Plutus cannot
+recompute it.
 
 ### D4 — Proof encoding and strict decoding (R2)
 
@@ -391,8 +447,8 @@ The proof is a fixed sequence:
 A ‖ S ‖ T₁ ‖ T₂ ‖ t̂ ‖ τ_x ‖ μ ‖ L_1 ‖ R_1 ‖ … ‖ L_k ‖ R_k ‖ a ‖ b
 ```
 
-- **Points:** 48-octet compressed G1, decoded with the ADR-0060 D3 strict decoder (steps 1–7).
-- **Scalars:** 32-octet big-endian, canonical: check 1, `[0, q)`; never reduced.
+- **Points:** 48-octet compressed G1, decoded with the ADR-0060 D3 strict decoder (steps 1–7), which is the sigma-03 §8.2 full validation. M0 confirms that sigma-03's reference encoding (pairing-friendly-curves Appendix C) is byte-identical to the ADR-0060 encoding on the A.3 vectors.
+- **Scalars:** 32-octet big-endian, canonical: check 1, `[0, q)`; never reduced (sigma-03 §8.2.2).
 - **Length:** exactly `48·(4 + 2k) + 32·5` octets.
 
 | `n` | `k` | Proof length |
@@ -408,11 +464,14 @@ A ‖ S ‖ T₁ ‖ T₂ ‖ t̂ ‖ τ_x ‖ μ ‖ L_1 ‖ R_1 ‖ … ‖ L_
 2. The proof length must equal the length for that `n`, **before anything is decoded or indexed**.
    This rules out the Monero 2026 out-of-bounds class.
 3. Every point decodes strictly. **The identity is rejected for every proof point** (`A`, `S`, `T₁`,
-   `T₂`, `L_j`, `R_j`), as sigma-03 §8.2 and dalek do. An honest prover produces the identity with
+   `T₂`, `L_j`, `R_j`), as sigma-03 §8.2 requires (dalek does the same). An honest prover produces the identity with
    negligible probability, and if it does, it restarts.
 4. Every scalar passes check 1 (`t̂`, `τ_x`, `μ`, `a` and `b`).
-5. `V` is decoded with the profile's own decoder, which accepts the identity (ADR-0060 D3). A
-   commitment to `v = 0, γ = 0` is valid, and a verifier that refuses it does so as policy.
+5. `V` is decoded with the profile's own decoder (ADR-0060 D3). The decoder accepts the
+   identity, but this protocol then **rejects an identity `V`**, because the sigma-03 §8.2 codec
+   neither produces nor accepts infinity. The profile itself is unchanged: the identity remains a
+   valid `pedersen-bls12-381-g1-v1` commitment for openings and relations. It just cannot carry a
+   range proof. An honest committer with a uniform `γ` produces it with negligible probability.
 
 The verdict is a single "invalid proof" outcome for steps 2–5, plus a distinct
 "invalid configuration" outcome for step 1. The error carries no secret and no partial
@@ -494,17 +553,25 @@ keeps the surface reviewable.
 - No API accepts nonces, generators or a transcript from the caller.
 - Native-image `reflect-config.json` entries are added for the public types.
 
-### D8 — Cardano L1: a measured feasibility spike only (R2)
+### D8 — Cardano L1: no verifier for this protocol; a measured cost study (R2)
 
-This ADR publishes **no on-chain library**. Registry §14 keeps the L1 cell at "feasibility (#96)"
-until a later ADR revision admits one with measurements.
+**Why no verifier.** A Plutus V3 validator cannot verify `bulletproof-range-bls12-381-g1-v1`. Its
+challenges are SHAKE128 outputs (D3), and Plutus V3 has no SHAKE128 builtin. A validator that took
+the challenges from its redeemer would not be a verifier, because the challenges must be computed,
+not supplied. So this ADR publishes **no on-chain library**, and registry §14 records the L1 cell
+for this protocol as "not native (SHAKE128 transcript)".
 
-**Estimate before measurement.** A Plutus V3 verifier must decompress:
+**What the cost study measures.** Issue #96 asks for a measured Cardano feasibility report. The
+algebra (decompression and both MSMs) is the same under any transcript, so measuring it tells a
+future ADR whether a separate, Cardano-specific protocol is worth specifying. Such a protocol would
+need a SHA-256 transcript of its own, a new identifier, and its own review (D3 note).
+
+**Estimate before measurement.** A Plutus V3 verifier would have to decompress:
 - every generator it uses (`2n`, plus `G`, `H` and `U`);
 - `V`;
 - every proof point.
 
-It then runs two MSMs. From the PV11 parameters above:
+It would then run two MSMs. From the PV11 parameters above:
 
 | `n` | Points decompressed | MSM terms | Estimated CPU steps (decompression + MSM only) |
 |---:|---:|---:|---:|
@@ -518,14 +585,14 @@ These are **estimates**. They exclude:
 - script overhead;
 - the 16.5M memory budget, which may bind first.
 
-By this estimate a 64-bit proof does not fit one transaction, and a 32-bit proof is uncertain.
+By this estimate a 64-bit proof would not fit one transaction, and a 32-bit proof is uncertain.
 
-**M4 measures** `n = 16, 32, 64` in the JuLC VM under PV11:
+**M4 measures** the algebra for `n = 16, 32, 64` in the JuLC VM under PV11, in test sources only:
 - CPU, memory and script size;
-- cost against the transaction limits;
-- whether option (a) of Q2 recomputes the challenges.
+- cost against the transaction limits.
 
-Per Q5, it may also include a DevKit run. The spike code stays in test sources.
+The measured script takes the challenges as inputs and is labelled **not a verifier**. It is never
+published or admitted. The report states feasible or infeasible per width, and nothing more.
 
 ### D9 — Yano-X: a deterministic verifier contract, not a plugin (R2)
 
@@ -578,13 +645,19 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 - **Aggregated proofs (`m > 1`) in v1.** They save space for multi-output transactions but add
   generator-set growth and the `m`-bound class Monero just fixed. Deferred to a later version.
 - **One merged verification equation with a transcript-derived weight.** Rejected for v1 (D5).
+- **A ZeroJ SHA-256 transcript on `expand_message_xmd` (r1 lean).** Plutus can recompute it, but
+  there is no official vector for the composed transcript; only its parts have one. Rejected by
+  the maintainer for this protocol (D3 note). A Cardano-specific variant would be a separate
+  protocol under its own ADR.
+- **Merlin (STROBE-128).** Used by dalek and Tari. It has no published vectors, needs a Java STROBE
+  port, and Plutus cannot recompute it. Rejected.
 
 ## Exact invariants
 
 | # | Invariant | Decisions | Evidence required |
 |---|---|---|---|
 | I1 | The generator set is reproduced independently twice (Java, Python), matches `D_gens`, and passes the D2 distinctness checks | D2 | M0 |
-| I2 | Strong Fiat–Shamir: changing any item of D3 (protocol id, profile id, `G`, `H`, `D_gens`, `n`, `ctx`, `V`, or any prover message) changes every later challenge; the Frozen Heart forgery recipe is rejected | D3 | M1 tests; M2 vectors with intermediate challenges |
+| I2 | Strong Fiat–Shamir: changing any item of D3 (the session-tag fields, including `n` and `ctx`; the instance items profile id, `G`, `H`, `D_gens` and `V`; or any prover message) changes every later challenge; the Frozen Heart forgery recipe is rejected | D3 | M1 tests; M2 vectors with intermediate challenges |
 | I3 | Strict decoding: `n` only from configuration; the exact length is checked before any decoding; every proof point is strict and not the identity; every scalar is canonical | D4 | M1 negatives; M2 vector negatives |
 | I4 | A zero challenge is rejected by the verifier and never emitted by the prover | D3 | M1 test seam |
 | I5 | Completeness: honest proofs verify for `v ∈ {0, 1, 2^n − 1}` and random values at each `n`; the prover refuses `v ≥ 2^n` before curve work | D6 | M1 |
@@ -594,6 +667,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | I9 | No change to the G1 Pedersen profiles, their vectors or `PedersenG1Lib` | — | Byte-identical vectors; unchanged tests |
 | I10 | Resource bounds: verification work is a fixed function of `n ≤ 64`; inputs are rejected before work | D4, D5 | M1 tests; M3 measurements |
 | I11 | Measurements are records, never security evidence | D8, D9 | — |
+| I12 | Transcript conformance: the Java SHAKE128, XOF duplex sponge and codecs reproduce every fiat-shamir-03 Appendix B vector and the challenges of every sigma-03 Appendix A.3 `sigma-proofs_Shake128_BLS12381` vector; SHAKE128 also agrees with CPython's `hashlib.shake_128` | D3, D4 | M0 (Python), M1 (Java) |
 
 ## Compatibility
 
@@ -608,13 +682,13 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 
 | Milestone | Entry gate | Deliverables | Exit |
 |---|---|---|---|
-| **M0** spec and independent reference | ADR accepted; Q1–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, transcript bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. A stand-alone Python reference (stdlib only, on the ADR-0060 M0 BLS12-381 reference), written from the paper and the spec without reading Java: prover, verifier and generator derivation, printing intermediate challenges | Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
-| **M1** Java | M0 signed off | Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, unit and negative tests (I2–I8, I10), API surface test, seeded faults (below) | Module suites green; seeded faults killed |
-| **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side independently (for example on py_ecc). blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches |
+| **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes fiat-shamir-03 Appendix B and reproduces the sigma-03 A.3 BLS12-381 challenges (I12); Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
+| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested against fiat-shamir-03 Appendix B, sigma-03 A.3 (a test-only harness reproduces the A.3 `pedersen_commitment` and `discrete_logarithm` challenges) and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, unit and negative tests (I2–I8, I10, I12), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
+| **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side with separate code (for example on py_ecc). **External algebra check against dalek:** the Python protocol code is parameterised by group and transcript, run on ristretto255 (RFC 9496, fetched and pinned at M2, with its vectors) with Merlin and dalek's deviations (D2, D5), and must verify dalek's published test proofs (`tests/range_proof.rs`, `n` = 8–64) and produce proofs dalek 5.0.0 verifies. blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches; the dalek check passes in both directions |
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
-| **M4** Cardano feasibility spike | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64 (generators, transcript recomputation if Q2 = (a), both checks). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
+| **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
 | **M5** Yano-X contract | M3 | Verifier contract in the spec (D9). Reference confidential-accounting state machine in `zeroj-integration-tests` test sources with authorization, replay, the D3a rule and limits, plus a negative suite. Handoff note for a Yano-X ADR | Tests green |
-| **M6** docs and admission | M1–M5 | Registry r8 makes the entries `active` (experimental) if every prerequisite holds: accepted ADR, spec, I1, M2 vectors with independent recomputation, M3 measurements. The §14 V4 cell is updated. Module README, support matrix, docsite page, ADR implementation-evidence section | Admission recorded; otherwise entries stay `reserved` with the gap stated |
+| **M6** docs and admission | M1–M5 | Registry r8 makes the entries `active` (experimental) if every prerequisite holds: accepted ADR, spec, I1, I12, M2 vectors with independent recomputation and the dalek check, M3 measurements. The §14 V4 cell is updated. Module README, support matrix, docsite page, ADR implementation-evidence section | Admission recorded; otherwise entries stay `reserved` with the gap stated |
 
 **Seeded faults M1 must kill:**
 - drop `V`, `n`, `ctx` or `D_gens` from the transcript;
@@ -630,18 +704,36 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 
 ## Verification and test strategy
 
-- **Independent implementation.** The M0 Python reference is written from the paper and the spec
-  only, by an author who does not read the Java, on the independent ADR-0060 M0 curve code. It is
-  the vector source.
-  - No values are derived from the code under test.
-  - Fixed nonces come from a documented test-only expansion, so the vectors are reproducible.
-- **Cross-implementation.** Java↔Python proofs in both directions. A reviewer recomputes the
+**Where the evidence comes from.** Each layer has a different source, and only some of them are
+outside ZeroJ:
+
+| Layer | Official or external evidence | Written by ZeroJ |
+|---|---|---|
+| SHAKE128 | fiat-shamir-03 Appendix B.2; CPython `hashlib.shake_128` | Java SHAKE128 |
+| Duplex sponge and codecs | fiat-shamir-03 Appendix B | Java and Python implementations |
+| Transcript over BLS12-381 G1 | sigma-03 Appendix A.3 (`sigma-proofs_Shake128_BLS12381`) | the test-only A.3 harness |
+| Generators (hash-to-curve) | RFC 9380 J.9.1 and K.1 (already in the tests) | the D2 derivation |
+| Bulletproof algebra | dalek 5.0.0 test proofs and verifier, through the group-generic Python code (M2); the paper | Java, and the Python second implementation |
+| The protocol's own vectors | none exist: no standard, no BLS12-381 implementation | the M2 vector file |
+
+**The Python implementation is ZeroJ's own.** It is not an official or third-party reference. It
+is independent in a narrower sense:
+- it is written by a separate author (an agent instructed not to read the Java), in another
+  language, from the paper and the specifications only;
+- it uses `hashlib` for SHA-256 and SHAKE128 and the ADR-0060 M0 curve code, whose correctness is
+  anchored on the RFC 9380 vectors and a reviewer's py_ecc recomputation.
+
+Agreement between Java and Python shows that two implementations read the specification the same
+way. It does not show that the specification is right. That is why the dalek check and external
+review matter.
+
+**Rules:**
+- No values are derived from the code under test. Fixed nonces come from a documented test-only
+  expansion, so the vectors are reproducible.
+- **Cross-implementation:** Java↔Python proofs in both directions. A reviewer recomputes the
   verifier with separate code (py_ecc), as for ADR-0060.
-- **Published vectors.** RFC 9380 J.9.1 and K.1 cover the hash-to-curve layer, and are already in
-  the tests. If Q2 = (b), fiat-shamir-03 Appendix B covers the transcript.
-  - No published Bulletproof vectors exist for BLS12-381.
-  - dalek's Ristretto vectors cannot be reused. A group-generic cross-check against dalek is
-    recorded as optional extra scope, not planned.
+- **Bulletproof vectors:** none are published for BLS12-381. dalek's Ristretto vectors are used
+  only through the group-generic Python code (M2), never as vectors for this protocol.
 - **Adversarial cases:**
   - the Frozen Heart recipe;
   - transcript-item omission (each item in turn);
@@ -662,19 +754,21 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 - ZeroJ gets its first setup-free proof over a commitment, and its first registered proof protocol.
 - Applications can check that hidden G1-committed amounts are non-negative and bounded. Off-chain
   balance arguments then become sound under ADR-0051 D3a.
-- A second Fiat–Shamir construction enters the codebase, beside the PlonK transcript. Q2 decides
-  whether it is ZeroJ-specific or a CFRG draft. Either way it is a long-lived compatibility
-  commitment.
+- The CFRG duplex-sponge transcript (SHAKE128) enters the codebase, beside the PlonK transcript. It
+  is reusable for ADR-0051 D7 option (a). The protocol identifier pins draft `-03`, so a later
+  draft revision means a new protocol version.
 - Verification cost depends on MSM support (#22) and on trusted-point handling (#104). Without
   them, a 64-bit verification would spend about 150 × 4.3 ms ≈ 0.65 s on input re-validation alone
   (an estimate from the ADR-0060 measurement). M3 records the real figure.
-- On-chain verification is probably limited to narrow widths (D8). On-chain range checks today are
-  better served by Jubjub commitments in a Groth16 circuit.
+- No native on-chain verification for this protocol (D8). On-chain range checks today are better
+  served by Jubjub commitments in a Groth16 circuit (ADR-0051). A Cardano-specific variant would
+  need its own transcript and ADR.
 
 ## Risks and production/audit gates
 
-- **Novel composition.** There is no BLS12-381 reference and no standard. If Q2 = (a), the
-  transcript is ZeroJ-specific.
+- **Novel composition.** There is no Bulletproofs standard and no BLS12-381 reference
+  implementation. The transcript and codecs follow the CFRG drafts, but placing the paper's rounds
+  in them (D3) is this ADR's own composition.
   - **External cryptographic review of the spec (generators, transcript, encoding and verifier)
     is required before any value-bearing use.**
   - Q7 asks whether it must also come before admission as `active` (experimental).
@@ -682,8 +776,9 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
   any transcript change is mandatory.
 - **Side channels in proving.** Proving is offline/isolated only (ADR-0038). There is no
   constant-time claim.
-- **Draft drift (Q2 = (b)).** A future fiat-shamir draft can change the bytes. The identifier
-  pins `-03`.
+- **Draft drift.** fiat-shamir-03 and sigma-03 are Internet-Drafts and expire on 2027-02-18. A
+  later revision can change bytes. The identifier pins `-03`; proofs under it stay verifiable, and a
+  new revision means a new protocol version.
 - **Performance.** Without #22 and #104, verification may be too slow for per-block use on
   Yano-X. M3 measures before any recommendation is made.
 - **Maturity.** Experimental. Test counts, vectors, AI review and on-chain execution are not
@@ -693,8 +788,8 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 
 - **#22 (provider MSM) and #104 (re-validation of trusted points)** decide verification speed. They
   are shared R3 primitives with their own designs.
-- **ADR-0051 D7** (G1 sigma proofs) stays open. If Q2 picks (a), D7's option (b) can reuse that
-  construction, but this ADR does not decide D7.
+- **ADR-0051 D7** (G1 sigma proofs) stays open. Its option (a) ("implement the CFRG ciphersuite
+  exactly") could reuse the SHAKE128 transcript built here; this ADR does not decide D7.
 - **Aggregated range proofs and multi-proof batching** are a later version.
 - **A Jubjub ↔ G1 bridge** proving two commitments hold the same value (ADR-0051 D8).
 
@@ -703,13 +798,30 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | # | Question | Options | Lean |
 |---|---|---|---|
 | Q1 | Protocol variant | (a) Bulletproofs (ePrint 2017/1066, 2022-04-14), one value per proof; (b) Bulletproofs+ | **(a)**: most independent review and written specification; BP+ saves 112 octets at `n = 64` |
-| Q2 | Fiat–Shamir construction (D3) | (a) ZeroJ SHA-256 chain on `expand_message_xmd`, recomputable on Plutus; (b) CFRG fiat-shamir-03 with SHAKE128, standards-track but Java-only; (c) Merlin | **(a)**, with mandatory external review: it keeps L1 possible for narrow widths and is the same lean as ADR-0051 D7. Choose (b) if standards alignment matters more than L1 |
+| Q2 | Fiat–Shamir construction (D3) | (a) ZeroJ SHA-256 chain on `expand_message_xmd`, recomputable on Plutus; (b) CFRG fiat-shamir-03 with SHAKE128 and sigma-03 BLS12-381 codecs; (c) Merlin | **Decided (b)** by maintainer Satya, 2026-10-24: stay on the official standards. The composed transcript in (a) would have no official vectors (D3 note) |
 | Q3 | Verifier combination (D5) | (a) two separate checks, deterministic; (b) one MSM with a transcript-derived weight; (c) one MSM with a random weight | **(a)**: deterministic and specified; the cost is one extra MSM intercept |
 | Q4 | Yano-X deliverable (D9) | (a) verifier contract plus a reference state machine in ZeroJ test sources, with the plugin in `yano-x` under its own ADR; (b) the Yano-X plugin in this ADR | **(a)**: avoids a ZeroJ → Yano dependency; Yano-X first needs an `org.zeroj` upgrade |
-| Q5 | Cardano scope (D8) | (a) JuLC VM spike only; (b) spike plus a DevKit run; (c) publish an on-chain library | **(a)**, with (b) if M4 finds a width that fits |
+| Q5 | Cardano scope (D8) | (a) a JuLC VM cost study of the algebra, labelled "not a verifier"; (b) no on-chain work beyond the estimate | **(a)**: the issue asks for a measured feasibility report, and the result tells a future ADR whether a Cardano-specific variant is worth specifying |
 | Q6 | Widths | (a) `{16, 32, 64}`; (b) add 8 | **(a)**: the issue's set; 8 adds little |
 | Q7 | When external review is required | (a) before value-bearing use, with admission as `active` (experimental) allowed after M6; (b) before admission | **(a)**: matches how ADR-0060 admitted its entries as experimental |
 
 ## Revision history
 
 - **r1 (2026-10-24):** initial proposal.
+- **r2 (2026-10-24; maintainer decision before the first review of `7b96210`):** Q2 decided as (b).
+  The maintainer stays on the official standards because the r1 lean (a ZeroJ SHA-256 chain) has
+  no official vectors.
+  - **D3:** rewritten on fiat-shamir-03 (XOF duplex, SHAKE128, `DeriveSessionID` with the context
+    in the tag, the instance absorbed first) and the sigma-03 §8.2 codecs (challenges are 48
+    octets, little-endian, mod `q`), with a note on the decision.
+  - **D4:** an identity `V` is now rejected (the sigma-03 codec); M0 confirms the encodings are
+    byte-identical.
+  - **D8:** no on-chain verifier for this protocol (Plutus has no SHAKE128); M4 becomes a cost
+    study labelled "not a verifier"; Q5 reworded.
+  - **Evidence:** I12 added (fiat-shamir-03 Appendix B, sigma-03 A.3, `hashlib.shake_128`); M0, M1
+    and M2 updated; the dalek algebra check moved from optional to M2.
+  - **Verification strategy:** now has a table of which layers are checked externally, and states
+    plainly that the Python implementation is ZeroJ's own.
+  - **References:** fiat-shamir-03 and sigma-03 split and made normative; FIPS 202 added (pinned at
+    M0).
+  - Alternatives, consequences, risks and related findings updated.
