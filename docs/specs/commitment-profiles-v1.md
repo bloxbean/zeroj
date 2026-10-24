@@ -1,11 +1,12 @@
 # ZeroJ Commitment Profiles v1 — Registry and Contract Specification
 
 **Document identifier:** `commitment-profiles-v1`
-**Status:** Normative (ADR-0059 milestone M0; G1 entries ADR-0060, admitted at milestone M5). Experimental: not approved for value-bearing or
+**Status:** Normative (ADR-0059 milestone M0; G1 entries ADR-0060, admitted at milestone M5; the
+first proof protocol and its generator set reserved by ADR-0061 milestone M0). Experimental: not approved for value-bearing or
 mainnet use. "Normative" fixes identifiers, bytes, checks, check order and error behaviour; it
 is not a maturity or security claim. This document governs if it and an implementation
 disagree.
-**Date:** 2026-10-22 (r7)
+**Date:** 2026-10-24 (r8)
 
 This document is the registry of ZeroJ commitment profiles, basis sets and proof protocols, and
 the contract every implementation of them follows: the expected-profile rule, scalar checks,
@@ -18,7 +19,8 @@ The per-profile specifications stay authoritative for their algorithms:
 [`pedersen-jubjub-vector-v1.md`](pedersen-jubjub-vector-v1.md) and
 [`pedersen-jubjub-bytes-v1.md`](pedersen-jubjub-bytes-v1.md) for Jubjub, and
 [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md) for the BLS12-381 G1 basis set and
-profiles. Nothing here changes a constant,
+profiles, and [`bulletproof-range-bls12-381-g1-v1.md`](bulletproof-range-bls12-381-g1-v1.md) for the
+first proof protocol and its generator set. Nothing here changes a constant,
 base, hash, point encoding, circuit or key defined there. Two editorial interactions are noted
 where they arise: the envelope (§9) serializes a profile identifier next to a point, which
 `pedersen-jubjub-bytes-v1.md` §6.2 and §11 describe as out of that profile's own wire form; and
@@ -67,9 +69,20 @@ identifier equal to any existing or withdrawn entry or to a reserved document na
 reservation, which turns it active; every other admission of a reserved identifier is rejected.
 A withdrawn entry stays listed.
 
+An implementation whose public API can define registry entries MUST reject, as
+`INVALID_CONFIGURATION`, every identifier already used by an entry of any type and every reserved
+document name. In Java, `CommitmentProfile`'s own initialisation seeds the shared set before any
+caller can reach `define`. The set covers:
+- the built-in profiles;
+- the basis-set identifiers;
+- the proof-protocol and generator-set identifiers;
+- the reserved document names.
+
+Before ADR-0061 M1, `define` checked only profile identifiers; M1 closes that gap.
+
 To prevent collisions, the document names of ZeroJ's other specifications and formats are
 reserved and never admissible as registry entries: `commitment-profiles-v1`,
-`zeroj-commitment-vectors-v1`, `confidential-note-jubjub-v1`, `elgamal-jubjub-v1`,
+`zeroj-commitment-vectors-v1`, `zeroj-proof-vectors-v1`, `confidential-note-jubjub-v1`, `elgamal-jubjub-v1`,
 `elgamal-jubjub-threshold-v1`, `dkg-share-delivery-hpke-v1`, `jubjub-eddsa-v1` (the document
 name of the suite `ZeroJ-JubjubEdDSA-v1`) and `jubjub-eddsa-hedged-v1` (the candidate
 document).
@@ -86,6 +99,8 @@ document).
 | `pedersen-bls12-381-g1-basis-v1` | basis set | active | §3.3; admitted under ADR-0060 (issue #95) |
 | `pedersen-bls12-381-g1-v1` | commitment profile | active | §4.6; admitted under ADR-0060 (issue #95) |
 | `pedersen-bls12-381-g1-bytes-v1` | commitment profile | active | §4.7; admitted under ADR-0060 (issue #95) |
+| `bulletproof-bls12-381-g1-gens-v1` | basis set (generator set) | reserved | §3.4; may be admitted only under ADR-0061 (issue #96) |
+| `bulletproof-range-bls12-381-g1-v1` | proof protocol | reserved | §5.1; may be admitted only under ADR-0061 (issue #96) |
 
 The three G1 entries have their parameters fixed by
 [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md). r7 admits them after ADR-0060
@@ -95,7 +110,8 @@ reference, and on-chain `bls12_381_G1_hashToGroup` in the Julc VM and on Yaci De
 vectors with their independent recomputation, the descriptors, and the M4 on-chain parity results.
 Admission does not change their maturity: like every profile, they are experimental.
 
-No proof protocol is registered.
+No proof protocol is active. `bulletproof-range-bls12-381-g1-v1` and its generator set are
+reserved by ADR-0061 M0 (r8); ADR-0061 M6 admits them only after every §2.4 prerequisite holds.
 
 **Protocols using a profile** (not commitment profiles; their identifiers are reserved, §2.2):
 
@@ -112,7 +128,13 @@ A commitment profile, basis set or proof protocol is admitted only with:
 2. a normative specification;
 3. an independent reproduction of its constants (bases, domain strings, transcript labels),
    written without reading the implementation under test;
-4. vectors in the format of §13;
+4. vectors in the format of §13, or, for a proof protocol, in the protocol-specific
+   `zeroj-proof-vectors-v1` format its specification defines
+   (`bulletproof-range-bls12-381-g1-v1.md` §11) under the §13.2 value conventions. A basis set
+   used only by one proof protocol, such as `bulletproof-bls12-381-g1-gens-v1`, is covered by
+   that protocol's file when the file lists every encoding of the set with its digest and has
+   positive cases that use every element. For `bulletproof-range-bls12-381-g1-v1` that means at
+   least one `n = 64` proof;
 5. for a commitment profile or proof protocol, one public Java constant carrying its
    identifier: a `CommitmentProfile` descriptor (§12.1) for a profile; for a proof protocol, a
    descriptor type fixed when the first protocol is admitted, holding an identifier validated by
@@ -173,6 +195,26 @@ Independent reproduction: `zeroj-bls12381/src/test/resources/pedersen-g1-referen
 written from RFC 9380 without reading the Java); on-chain `bls12_381_G1_hashToGroup` is the third
 reproduction ADR-0060 requires before admission. Used by `pedersen-bls12-381-g1-v1` and
 `pedersen-bls12-381-g1-bytes-v1`.
+
+### 3.4 `bulletproof-bls12-381-g1-gens-v1` (reserved)
+
+`(G_0, …, G_63, H_0, …, H_63, U)` exactly as
+[`bulletproof-range-bls12-381-g1-v1.md`](bulletproof-range-bls12-381-g1-v1.md) §2 defines them:
+RFC 9380 `hash_to_curve` with the suite `BLS12381G1_XMD:SHA-256_SSWU_RO_` applied to
+`"G" ‖ I2OSP(i, 4)`, `"H" ‖ I2OSP(i, 4)` and `"U"` under the tag
+`ZeroJ-bulletproof-bls12-381-g1-gens-v1-BLS12381G1_XMD:SHA-256_SSWU_RO_`. All are hash-derived. The
+set is used together with `pedersen-bls12-381-g1-basis-v1`: the §3 conditions hold across the
+union (131 points), not only within this set. Its digest `D_gens` (SHA-256 over the 129 compressed
+encodings, in order) is
+`69abb9e71b740d9be84f63bb146a63467ee452654340f1b09e8be6101e00ef19`.
+
+Reproductions:
+- Java `Bls12381Hash.hashToG1` (`BulletproofGeneratorReproductionTest`);
+- the stand-alone Python implementation in
+  `zeroj-bls12381/src/test/resources/bulletproof-g1-reference/`, written without reading the Java;
+- a py_ecc reproduction by the ADR-0061 design reviewer.
+
+Used only by `bulletproof-range-bls12-381-g1-v1`.
 
 ---
 
@@ -296,8 +338,25 @@ Changing any transcript element requires a new protocol identifier; a transcript
 replaced under an existing identifier. Adding a protocol does not change or rename the
 commitment profile it consumes.
 
-No proof protocol is registered. G1 sigma protocols (ADR-0051 D7, escalated) and range proofs
-(issue #96) will be admitted under §2.4.
+No proof protocol is active. G1 sigma protocols (ADR-0051 D7, escalated) will be admitted under
+§2.4.
+
+### 5.1 `bulletproof-range-bls12-381-g1-v1` (reserved)
+
+The record, fixed by [`bulletproof-range-bls12-381-g1-v1.md`](bulletproof-range-bls12-381-g1-v1.md):
+
+1. **Consumes:** `pedersen-bls12-381-g1-v1` only. Never the bytes profile.
+2. **Statement:** for a commitment `V ≠ O`, the prover knows `(v, γ)` with `V = [v]·G + [γ]·H` and
+   `0 ≤ v < 2^n` as integers, `n ∈ {16, 32, 64}` taken from the verifier's configuration.
+3. **Transcript:** `draft-irtf-cfrg-fiat-shamir-03` (SHAKE128 XOF duplex sponge) with the
+   `sigma-proofs_Shake128_BLS12381` codecs of `draft-irtf-cfrg-sigma-protocols-03` §8.2. The
+   session tag carries the protocol, the suite, `n` and the application context. The instance
+   carries the profile, `G`, `H`, the generator-set digest, `n` and `V`. The proof is the NARG
+   string of 736, 832 or 928 octets (spec §5–§6).
+4. **Binding rule (§6.4):** protocol, profile, every base (through `G`, `H` and `D_gens`), the
+   commitment `V`, the width and the application context.
+
+There is no on-chain verifier: Plutus V3 has no SHAKE128 (spec §12).
 
 ---
 
@@ -520,21 +579,26 @@ point of order 3 and is `NOT_IN_SUBGROUP`.
 
 | Class | Meaning | Java | On-chain |
 |---|---|---|---|
-| `MALFORMED_ENCODING` | a structural, length or curve-encoding defect | `CommitmentFormatException` | script fails |
+| `MALFORMED_ENCODING` | a structural, length or curve-encoding defect; for a proof protocol, also a well-formed encoding its codec rejects (an identity proof point) | `CommitmentFormatException` | script fails |
 | `NOT_IN_SUBGROUP` | a valid curve point outside the prime-order subgroup | `CommitmentFormatException` | script fails |
 | `NON_CANONICAL_SCALAR` | check 1 failed | `CommitmentFormatException` | script fails |
-| `OUT_OF_RANGE` | check 2 or check 3 failed | `CommitmentFormatException` | script fails |
+| `OUT_OF_RANGE` | check 2 or check 3 failed; for a range-proof prover, a value at or above `2^n` | `CommitmentFormatException` | script fails |
 | `LENGTH_OUT_OF_RANGE` | a `bytes` declared length or maximum outside `[0, MAX_PAYLOAD_BYTES]` | `CommitmentFormatException` | script fails |
 | `PROFILE_MISMATCH` | a label, codec, class, descriptor or schema other than the expected one | `CommitmentFormatException` | script fails |
-| `INVALID_CONFIGURATION` | an invalid identifier string, amount-bound width, bound policy, descriptor point-encoding length or duplicate descriptor | `CommitmentFormatException` | (configuration; not on-chain) |
+| `INVALID_CONFIGURATION` | an invalid identifier string, amount-bound width, bound policy, descriptor point-encoding length or duplicate descriptor; for a proof protocol, an unsupported width or an application context outside its length bounds | `CommitmentFormatException` | (configuration; not on-chain) |
+| `INVALID_STATEMENT` | a prover asked to prove a statement the proof protocol excludes (`bulletproof-range-bls12-381-g1-v1`: an identity commitment) | `CommitmentFormatException` (added in ADR-0061 M1) | (prover only; not on-chain) |
 | `OPENING_MISMATCH` | a well-formed opening that does not satisfy the commitment equation | verification returns `false` | script fails |
 | `PROVENANCE_MISSING` | the application has no authenticated issuance record | `CommitmentCheck` only | script fails |
 | `PROVENANCE_MISMATCH` | the record does not bind this point, profile and context | `CommitmentCheck` only | script fails |
 
 `CommitmentFormatException` extends `IllegalArgumentException`, so callers catching
-`IllegalArgumentException` keep working. It carries only the seven format classes above it in the
-table (`MALFORMED_ENCODING` through `INVALID_CONFIGURATION`); constructing one with
-`OPENING_MISMATCH` or a `PROVENANCE_*` class is itself an `IllegalArgumentException`. It retains
+`IllegalArgumentException` keep working. It carries only the eight format classes the table marks
+`CommitmentFormatException`: `MALFORMED_ENCODING` through `INVALID_CONFIGURATION`, and
+`INVALID_STATEMENT`. Constructing one with `OPENING_MISMATCH` or a `PROVENANCE_*` class is itself
+an `IllegalArgumentException`. In Java, `CommitmentError.INVALID_STATEMENT` is **appended** after
+`PROVENANCE_MISMATCH`, so existing ordinals do not shift, and the format-class test is an explicit
+set rather than an ordinal comparison (ADR-0061 M1). `INVALID_STATEMENT` never appears in a
+`CommitmentCheck`. It retains
 no secret value, and no message contains one.
 
 A missing argument on a strict path (§12.3) is a `NullPointerException`. Stream failures stay
@@ -580,7 +644,7 @@ returns a commitment, `provenance.check` returns exactly `OK`, and `opening.matc
 `true` — evaluated in that order. Otherwise it returns the first failure:
 
 - a `CommitmentFormatException` from envelope decoding, or from the opening check with a reason
-  other than `INVALID_CONFIGURATION` → its reason;
+  other than `INVALID_CONFIGURATION` or `INVALID_STATEMENT` → its reason;
 - `MISSING` → `PROVENANCE_MISSING`; `MISMATCH` → `PROVENANCE_MISMATCH`;
 - `false` → `OPENING_MISMATCH`.
 
@@ -589,7 +653,9 @@ Every other throwable propagates unchanged: `IOException`, `IllegalStateExceptio
 `IllegalArgumentException`, any other runtime exception, **any** exception thrown by the
 provenance callback (including a `CommitmentFormatException`), and a `CommitmentFormatException`
 with `INVALID_CONFIGURATION` from the opening check (a verifier misconfiguration, not a data
-verdict). Implementations map exceptions per step, not with one handler around all three steps.
+verdict). A `CommitmentFormatException` with `INVALID_STATEMENT` also propagates unchanged from
+any step: it is a prover refusal, never a verdict on received data, so it never becomes a
+`CommitmentCheck` (§11). ADR-0061 M1 adds the callback regressions. Implementations map exceptions per step, not with one handler around all three steps.
 No path converts a failure or an exception into acceptance. `accept` does not return the decoded
 commitment; decoding the same envelope again with the same codec is deterministic: it yields the
 same profile, context and point octets and an equal `CommitmentKey`. (It need not yield an
@@ -892,7 +958,7 @@ authorization, replay protection and context binding to the application.
 | | V3, V4 | not offered | not offered | — |
 | `pedersen-bls12-381-g1-v1` | V1 | implemented (experimental): `G1Pedersen.verifyScalar` (ADR-0060 M2) | implemented (experimental): `PedersenG1Lib.verifyScalarOpening`/`verifyScalarOpeningBounded`: length check, `uncompress`, canonical round trip, check 1 on `m` and `r` and check 2 if requested, then two `scalarMul` (cheaper than a two-term MSM, measured), `add`, `equal` | message and `r` |
 | | V3 | implemented (experimental): `withPublicDelta`, `add`/`subtract`/`negate` | implemented (experimental): `applyPublicDelta` with the signed-delta rule, `add`/`subtract`/`negate`; sums with verifier-fixed coefficients | deltas |
-| | V4 | blocked (ADR-0051 D7; #96) | blocked / feasibility (#96) | — |
+| | V4 | planned (ADR-0061; `bulletproof-range-bls12-381-g1-v1`, reserved) | not native: the transcript uses SHAKE128, which Plutus V3 lacks; ADR-0061 M4 is a cost study labelled "not a verifier" | `V`, `n` and the application context |
 | `pedersen-bls12-381-g1-bytes-v1` | V1 | implemented (experimental): `G1Pedersen.verifyBytes*`, streaming to `2^61 − 256` octets | implemented (experimental): `PedersenG1Lib.verifyBytesOpening` recomputes the mapping with `sha2_256`; the payload is bounded by the transaction size, not the budget: about 14 KB in a redeemer with the script inline, 15 KB with a reference script, in a minimal transaction ([measurements](../benchmarks/pedersen-g1-2026-10-22.md)). No scalar-only mode: checking a supplied `(s, r)` is a `pedersen-bls12-381-g1-v1` opening and authenticates only `s` (§4.4) | payload and `r` |
 
 Disclosed openings on-chain are public forever. Relations prove residues, not balances: integer
@@ -989,6 +1055,27 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   `pedersen-bls12-381-g1-v1.md` r2), and the G1 minimum set adds `deltaBits` `254` as
   `INVALID_CONFIGURATION` (§13.4). No Jubjub identifier, byte, check, check order or error class
   changes.
+- **r8 (2026-10-24, ADR-0061 M0):** reserves the first proof protocol and its generator set.
+  - **Registry:** `bulletproof-range-bls12-381-g1-v1` (§5.1) and `bulletproof-bls12-381-g1-gens-v1`
+    (§3.4) are added as `reserved`, admissible only under ADR-0061. The vector schema name
+    `zeroj-proof-vectors-v1` is reserved (§2.2).
+  - **Error classes:** `INVALID_STATEMENT` is added to §11 for prover refusals.
+  - **Admission:** §2.4 item 4 now allows a proof protocol's vectors in its own
+    `zeroj-proof-vectors-v1` format.
+  - **Error-class meanings (M0 review):** `MALFORMED_ENCODING`, `OUT_OF_RANGE` and
+    `INVALID_CONFIGURATION` are extended for proof protocols. `INVALID_STATEMENT` is the eighth
+    class `CommitmentFormatException` carries, appended in Java with an explicit format-class
+    set.
+  - **Namespace (M0 review):** §2.2 now requires a public `define` to reject the identifiers of
+    every registry type and the reserved document names. In Java, `CommitmentProfile`'s own
+    initialisation seeds that set (ADR-0061 M1).
+  - **Matrix:** the §14 V4 cell for `pedersen-bls12-381-g1-v1` is updated (Java planned; no
+    native L1).
+  - **Unchanged:** no existing identifier, cryptographic byte, profile check or vector.
+    Intentionally changed: §2.2 makes a public `define` reject identifiers it used to accept
+    (basis-set and proof-protocol identifiers, and the reserved document names), and §12.1 lets
+    `INVALID_STATEMENT` propagate from `CommitmentAcceptance`. A caller that relied on defining
+    such an identifier gets `INVALID_CONFIGURATION` after ADR-0061 M1.
 
 ---
 
