@@ -540,7 +540,8 @@ itself reject.
   - it is created at run time and never accepted from a caller;
   - it is never created in a static initialiser that a native-image build could run at build
     time;
-  - the prover fails closed without an operating-system-backed source.
+  - the prover fails closed unless the source's algorithm is on the spec §7.3 allowlist
+    (`NativePRNG`, `NativePRNGNonBlocking`, `DRBG`, `Windows-PRNG`).
 
   Restarts are bounded at 8 attempts. Exhausting them raises `IllegalStateException`, and no
   proof is emitted.
@@ -550,8 +551,9 @@ itself reject.
     `zeroj-bls12381`, guarded by its module-metadata check;
   - production code has at most a package-private hook that accepts a nonce-source object, never
     a seed;
-  - an API-surface reflection test asserts that no public or protected member accepts a seed, a
-    nonce, a nonce source or a `SecureRandom`.
+  - an API-surface reflection test asserts that no public or protected member of
+    `org.zeroj.bls12381.bulletproofs` accepts a seed, a nonce, a nonce source or a
+    `SecureRandom`.
 
   The M0 security review showed why this matters: three same-seed proofs of one opening reveal
   `γ`, and from it `v`.
@@ -628,6 +630,9 @@ the first protocol, and r1–r4 did not define that type. M0 found the gap.
 - **Constants.** It is exposed from a constants class beside `CommitmentProfiles` (provisionally
   `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`). `G1RangeProof` re-exports it as
   `PROTOCOL`.
+- **Acceptance mapping.** `CommitmentAcceptance` lets a `CommitmentFormatException` with
+  `INVALID_STATEMENT` propagate unchanged from any step, and never turns it into a
+  `CommitmentCheck` (registry §12.1). M1 adds callback regressions for this.
 - **Error class.** `CommitmentError` gains `INVALID_STATEMENT`, which registry r8 §11 adds, for
   the prover's identity-commitment refusal. It is **appended** after `PROVENANCE_MISMATCH`, so no
   existing ordinal shifts, and is carried by `CommitmentFormatException` like the other prover
@@ -641,6 +646,8 @@ the first protocol, and r1–r4 did not define that type. M0 found the gap.
   - a forked-JVM pre-emption regression whose **first** action is `CommitmentProfile.define` of
     the protocol and generator-set identifiers, after which `ProofProtocols` and the range-proof
     classes still load and work;
+  - the seeded reserved set equals the registry §2.3 table plus the §2.2 reserved names, so later
+    reservations cannot drift;
   - the API-surface tests.
 
 **Alternative rejected.** Reusing `CommitmentProfile` for protocols. A proof protocol is not a
@@ -753,7 +760,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | I2 | Strong Fiat–Shamir: changing any item of D3 (the session-tag fields, including `n` and `ctx`; the instance items profile id, `G`, `H`, `D_gens` and `V`; or any prover message) changes every later challenge; the Frozen Heart forgery recipe is rejected | D3 | M1 tests; M2 vectors with intermediate challenges |
 | I3 | Strict decoding: `n` only from configuration; the exact length is checked before any decoding; every proof point is strict and not the identity; every scalar is canonical | D4 | M1 negatives; M2 vector negatives |
 | I4 | A zero challenge is rejected by the verifier and never emitted by the prover | D3 | M1 test seam |
-| I5 | Completeness, for commitments that are not the identity: honest proofs verify for `v ∈ {0, 1, 2^n − 1}` (with `γ ≠ 0`) and random values at each `n`. The prover refuses `v ≥ 2^n` and the identity opening `(0, 0)` before curve work, with tests for both, and accepts `(0, γ ≠ 0)` | D1, D4, D6 | M1 |
+| I5 | Completeness, for commitments that are not the identity: honest proofs verify for `v ∈ {0, 1, 2^n − 1}` (with `γ ≠ 0`) and random values at each `n`. The prover refuses `v ≥ 2^n` before any curve work, and an opening whose commitment is the identity (`(0, 0)`) after computing `V` and before any proof work. Both refusals are tested, and `(0, γ ≠ 0)` is accepted | D1, D4, D6 | M1 |
 | I6 | Rejection of every single-byte or single-element tamper; of a proof checked under another `n`, `ctx`, `V` or protocol; and of an out-of-range value forced through a test-only prover | D3–D5 | M1, M2 |
 | I7 | Determinism: the verdict is a pure function of its inputs; no randomness or unordered iteration on the verification path; identical verdicts on pure Java and blst and across runs | D5, D9 | M1, M2, M3 |
 | I8 | Secret handling: proving only through `g1SecretScalarMul` for secret scalars; fresh nonces; no nonce API; best-effort wiping; no constant-time claim | D6 | M1 schedule test with a counting provider stub |
@@ -765,9 +772,16 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 
 ## Compatibility
 
-- **Additive.** A new package in `zeroj-bls12381`, a new spec, a new vector file and a registry
-  revision (r8) that adds `reserved` entries at M0 and makes them `active` at M6. No existing
-  profile, encoding or API changes.
+- **Additive, with two intentional tightenings.** A new package in `zeroj-bls12381`, a new spec,
+  a new vector file and a registry revision (r8) that adds `reserved` entries at M0 and makes them
+  `active` at M6. No existing profile, cryptographic encoding or vector changes. Two existing
+  behaviours do change, at M1:
+  - `CommitmentProfile.define` rejects identifiers it used to accept: basis-set and
+    proof-protocol identifiers, and the reserved document names (D7a, registry §2.2);
+  - `CommitmentError` gains an appended member, and `CommitmentAcceptance` lets
+    `INVALID_STATEMENT` propagate (registry §12.1).
+
+  Callers that defined such identifiers get `INVALID_CONFIGURATION`.
 - **Transcript versioning.** Any change to D2, D3 or D4 after admission needs a new protocol
   identifier, and proofs under the old identifier stay verifiable under it.
 - **Yano-X.** Using the verifier needs a Yano-X dependency upgrade to an `org.zeroj` release (D9).
@@ -777,7 +791,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | Milestone | Entry gate | Deliverables | Exit |
 |---|---|---|---|
 | **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes the I12 vector scope; Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
-| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor, the shared reserved set and `INVALID_STATEMENT` in `zeroj-api`, the test-only nonce source in `zeroj-bls12381` `testFixtures` (metadata guard re-run), an API-surface reflection test that no public member accepts a seed, nonce, nonce source or `SecureRandom`, unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
+| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor, the shared reserved set and `INVALID_STATEMENT` in `zeroj-api`, the test-only nonce source in `zeroj-bls12381` `testFixtures` (metadata guard re-run), an API-surface reflection test (scoped to `org.zeroj.bls12381.bulletproofs`) that no public member accepts a seed, nonce, nonce source or `SecureRandom`, the `SecureRandom` algorithm allowlist, unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
 | **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side with separate code (for example on py_ecc). **External algebra check against dalek:** the Python protocol code is parameterised by group and transcript, run on ristretto255 (RFC 9496, fetched and pinned at M2, with its vectors) with Merlin and dalek's deviations (D2, D5), and must verify dalek's published test proofs (`tests/range_proof.rs`, `n` = 8–64) and produce proofs dalek 5.0.0 verifies. blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches; the dalek check passes in both directions |
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
 | **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
@@ -965,6 +979,11 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     - D7a pins where identifiers are reserved, extends the `define` rejection to every registry
       type and the reserved names, and fixes how `INVALID_STATEMENT` enters the enum;
     - the CFRG vector licence must be confirmed before merge.
+  - **Codex M0 round 2:**
+    - the `INVALID_STATEMENT` propagation rule in `CommitmentAcceptance`;
+    - I5 refusal timing;
+    - compatibility now names the two intentional tightenings;
+    - registry §2.4 covers the generator set's vectors through the protocol file.
   - **D4 amendment (same sign-off; Codex M0 F2):** proof fields are decoded in proof order, as
     fiat-shamir-03 §6.2 reads a NARG string, instead of all points before all scalars. `V` is
     decoded after the proof's format checks, so the length is still checked before anything is

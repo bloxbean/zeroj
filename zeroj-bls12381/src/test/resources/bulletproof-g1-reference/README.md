@@ -301,3 +301,16 @@ and that its prover and verifier are consistent with each other. It is not evide
 or zero-knowledge, and it is not a production-safety claim. An error shared by the spec text and
 this implementation would not be caught here. Cross-checking against the Java implementation and
 external code, and review, remain necessary.
+
+## Integration notes (not by the second implementer)
+
+- **External confirmation of the trace pin** (M0 review round 2, at `dd73317`). `PIN_TRACE` is
+  the script's own output. It was recomputed with code that is not this script: the CFRG drafts'
+  PoC `poc/fiat_shamir.py` (commit `91cc933`), py_ecc 8.0.0, and two reviewers' independent
+  verifiers and provers. The tag, session id, instance, all eight challenges and `V` matched. Both
+  checks held, and the independent provers reproduced `proofHex` byte for byte. `D_gens` and the
+  129 encodings are also reproduced by py_ecc and by Java `Bls12381Hash.hashToG1`.
+- **One test assertion tightened by the integrator** (reviewer (c) round-2 F10). The direct
+  decoder check on sigma-03 A.3.2 now requires the exact class for each vector: `A5` gives
+  `NOT_IN_SUBGROUP`; `A1`, `A3`, `A4` and `A6` give `MALFORMED_ENCODING`; `B1` and `B2` give
+  `NON_CANONICAL_SCALAR`. Before, it accepted any rejection. No protocol code changed.

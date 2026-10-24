@@ -74,8 +74,7 @@ an application applies ADR-0051 D3a:
 - each side's maximum, `Σ coefficient·(2^{n_i} − 1)` plus any public terms at their bounds, is
   below `q`.
 
-A range proof on a **derived** commitment, such as `V₁ − V₂`, shows `v₁ − v₂ ∈ [0, 2^n)` only
-mod `q`. It implies the integer statement `v₁ ≥ v₂` only if `v₁` and `v₂` are themselves bounded,
+A range proof on a **derived** commitment, such as `V₁ − V₂`, shows `(v₁ − v₂) mod q ∈ [0, 2^n)`. It implies the integer statement `v₁ ≥ v₂` only if `v₁` and `v₂` are themselves bounded,
 for example each proved below `2^{n'}` with `2^{n'} + 2^n ≤ q`.
 
 ---
@@ -363,8 +362,12 @@ After round `k`, `a⃗` and `b⃗` have length 1. Their entries are the scalars 
     caller-seeded `SHA1PRNG` would be deterministic.
   - It never creates it in a static initialiser that a native-image build could run at build
     time.
-  - It fails closed if no operating-system-backed source is available. An RNG backed by
-    `Math.random`, as found in the GraalVM Web Image proof of concept, is not acceptable.
+  - It fails closed unless the source is operating-system-backed. Java gives no generic test for
+    that, so the rule is an allowlist: the prover accepts only a `SecureRandom` whose
+    `getAlgorithm()` is `NativePRNG`, `NativePRNGNonBlocking`, `DRBG` or `Windows-PRNG`, and
+    otherwise raises `IllegalStateException` before any work. A unit test covers the allowlist.
+    Targets that cannot provide one of these do not ship the prover; the GraalVM Web Image proof
+    of concept, with its `Math.random`-backed RNG, is one.
 - The prover restarts with all-fresh nonces if any of `A`, `S`, `T₁`, `T₂`, `L_j`, `R_j` is `O`,
   or any challenge is `0`. Both happen with negligible probability.
 - Restarts are bounded at **8 attempts**. Exhausting them raises an `IllegalStateException`, and
@@ -395,8 +398,10 @@ ADR-0046 fences its deterministic prover:
   security boundary in the classpath world, so the hook accepts only a source object, never a
   seed. The only implementation of that source in published code is the §7.3 `SecureRandom`
   source.
-- An API-surface reflection test asserts that no public or protected member accepts a seed, a
-  nonce, a nonce source or a `SecureRandom`.
+- An API-surface reflection test asserts that no public or protected member of the
+  `org.zeroj.bls12381.bulletproofs` package, including nested types, accepts a seed, a nonce, a
+  nonce source or a `SecureRandom`. The existing `G1Pedersen.randomBlinding(SecureRandom)` is
+  outside that scope.
 
 Misuse is not a side issue. Three test-nonce proofs of one opening under the same seed reveal `γ`
 by solving the three `τ_x` equations, and from `γ`, `v` (reviewer (b), M0).
@@ -609,6 +614,7 @@ fields, and decimal integers.
   "profileId": "pedersen-bls12-381-g1-v1",
   "generatorSetId": "bulletproof-bls12-381-g1-gens-v1",
   "generatorDigestHex": "<D_gens>",
+  "generators": [ { "name": "G_0", "compressedHex": "..." } ],
   "spec": [ { "path": "...", "revision": "...", "date": "...", "sha256": "..." } ],
   "generator": { "script": "...", "scriptSha256": "...", "python": "..." },
   "positive": [
@@ -625,6 +631,9 @@ fields, and decimal integers.
 }
 ```
 
+- **`generators`** lists all 129 encodings in Appendix A order, and the file has at least one
+  `n = 64` positive case. Together these cover the generator set's admission vectors (registry
+  §2.4 item 4).
 - **Positive cases:**
   - the prover with the §7.5 test nonces, for `value` and `blinding`, at `bits` and `ctxHex`,
     MUST produce `proofHex`;

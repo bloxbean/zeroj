@@ -130,7 +130,11 @@ A commitment profile, basis set or proof protocol is admitted only with:
    written without reading the implementation under test;
 4. vectors in the format of §13, or, for a proof protocol, in the protocol-specific
    `zeroj-proof-vectors-v1` format its specification defines
-   (`bulletproof-range-bls12-381-g1-v1.md` §11) under the §13.2 value conventions;
+   (`bulletproof-range-bls12-381-g1-v1.md` §11) under the §13.2 value conventions. A basis set
+   used only by one proof protocol, such as `bulletproof-bls12-381-g1-gens-v1`, is covered by
+   that protocol's file when the file lists every encoding of the set with its digest and has
+   positive cases that use every element. For `bulletproof-range-bls12-381-g1-v1` that means at
+   least one `n = 64` proof;
 5. for a commitment profile or proof protocol, one public Java constant carrying its
    identifier: a `CommitmentProfile` descriptor (§12.1) for a profile; for a proof protocol, a
    descriptor type fixed when the first protocol is admitted, holding an identifier validated by
@@ -640,7 +644,7 @@ returns a commitment, `provenance.check` returns exactly `OK`, and `opening.matc
 `true` — evaluated in that order. Otherwise it returns the first failure:
 
 - a `CommitmentFormatException` from envelope decoding, or from the opening check with a reason
-  other than `INVALID_CONFIGURATION` → its reason;
+  other than `INVALID_CONFIGURATION` or `INVALID_STATEMENT` → its reason;
 - `MISSING` → `PROVENANCE_MISSING`; `MISMATCH` → `PROVENANCE_MISMATCH`;
 - `false` → `OPENING_MISMATCH`.
 
@@ -649,7 +653,9 @@ Every other throwable propagates unchanged: `IOException`, `IllegalStateExceptio
 `IllegalArgumentException`, any other runtime exception, **any** exception thrown by the
 provenance callback (including a `CommitmentFormatException`), and a `CommitmentFormatException`
 with `INVALID_CONFIGURATION` from the opening check (a verifier misconfiguration, not a data
-verdict). Implementations map exceptions per step, not with one handler around all three steps.
+verdict). A `CommitmentFormatException` with `INVALID_STATEMENT` also propagates unchanged from
+any step: it is a prover refusal, never a verdict on received data, so it never becomes a
+`CommitmentCheck` (§11). ADR-0061 M1 adds the callback regressions. Implementations map exceptions per step, not with one handler around all three steps.
 No path converts a failure or an exception into acceptance. `accept` does not return the decoded
 commitment; decoding the same envelope again with the same codec is deterministic: it yields the
 same profile, context and point octets and an equal `CommitmentKey`. (It need not yield an
@@ -1065,7 +1071,11 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
     initialisation seeds that set (ADR-0061 M1).
   - **Matrix:** the §14 V4 cell for `pedersen-bls12-381-g1-v1` is updated (Java planned; no
     native L1).
-  - **Unchanged:** no existing identifier, byte, check, check order or vector.
+  - **Unchanged:** no existing identifier, cryptographic byte, profile check or vector.
+    Intentionally changed: §2.2 makes a public `define` reject identifiers it used to accept
+    (basis-set and proof-protocol identifiers, and the reserved document names), and §12.1 lets
+    `INVALID_STATEMENT` propagate from `CommitmentAcceptance`. A caller that relied on defining
+    such an identifier gets `INVALID_CONFIGURATION` after ADR-0061 M1.
 
 ---
 

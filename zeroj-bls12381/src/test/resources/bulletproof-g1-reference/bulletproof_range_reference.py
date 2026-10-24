@@ -1616,8 +1616,15 @@ def selftest_conformance(res: _Results) -> None:
                     scalar_deserialize(narg[:32])
                 return False, "accepted"
             except BulletproofError as e:
-                want = "NON_CANONICAL_SCALAR" if "/B" in short else e.error_class
-                return e.error_class == want, e.error_class
+                # Pinned classes (spec §3): A5 is an on-curve point outside the subgroup; A1, A3,
+                # A4 (the infinity encoding) and A6 are malformed; B1, B2 are non-canonical scalars.
+                if "/B" in short:
+                    want = "NON_CANONICAL_SCALAR"
+                elif short.endswith("A5"):
+                    want = "NOT_IN_SUBGROUP"
+                else:
+                    want = "MALFORMED_ENCODING"
+                return e.error_class == want, f"{e.error_class} (want {want})"
         res.guard("sigma-invalid", f"{short} rejected directly by the §3 decoder", direct)
 
 
