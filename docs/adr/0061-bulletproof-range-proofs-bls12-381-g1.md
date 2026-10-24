@@ -507,9 +507,9 @@ reuses the value base as the inner-product element. This design uses the indepen
 **Prover input** is a `G1PedersenOpening` `(m, r)` and the width `n`. Before any curve work, the
 prover refuses deterministically:
 - `m ≥ 2^n`;
-- an opening whose commitment is the identity. The only such canonical opening is
-  `(m, r) = (0, 0)`, since `V = O` with `m < 2^n < q` forces `r = 0`, because `G` and `H` are
-  independent.
+- an opening whose commitment is the identity. The prover checks the commitment itself, not just
+  the pair. The opening `(0, 0)` is the known case. Any other opening of the identity would reveal
+  `log_H(G)`, so finding one is as hard as breaking binding.
 
 The refusal is a fixed error. The prover never re-blinds the caller's commitment, and never retries
 nonces for this case: no nonce choice can make an identity `V` acceptable under D4. An opening
@@ -857,8 +857,9 @@ layer it happens at; a vector that fails during decoding has no challenge to com
     scope. In sigma-03, the scope is the four A.3.1 valid proofs and all 32 A.3.2 adversarial
     vectors, separating challenge checks from rejection checks and the layer each rejection
     happens at. I12, M0 and M1 are aligned to it.
-  - **F2:** the D1 statement now excludes the identity `V`. The D6 prover refuses the identity
-    opening `(0, 0)` deterministically, with no re-blinding and no nonce retry. I5 is qualified,
+  - **F2:** the D1 statement now excludes the identity `V`. The D6 prover refuses any opening whose
+    commitment is the identity (`(0, 0)` is the known case) deterministically, with no re-blinding
+    and no nonce retry. I5 is qualified,
     with tests for `(0, 0)` refused and `(0, γ ≠ 0)` accepted. The stale "pending Q2" in D1 is
     removed.
   - **F3:** D5 now gives the separate-check cost as one extra intercept and one extra term
