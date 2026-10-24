@@ -362,12 +362,20 @@ After round `k`, `a⃗` and `b⃗` have length 1. Their entries are the scalars 
     caller-seeded `SHA1PRNG` would be deterministic.
   - It never creates it in a static initialiser that a native-image build could run at build
     time.
-  - It fails closed unless the source is operating-system-backed. Java gives no generic test for
-    that, so the rule is an allowlist: the prover accepts only a `SecureRandom` whose
-    `getAlgorithm()` is `NativePRNG`, `NativePRNGNonBlocking`, `DRBG` or `Windows-PRNG`, and
-    otherwise raises `IllegalStateException` before any work. A unit test covers the allowlist.
-    Targets that cannot provide one of these do not ship the prover; the GraalVM Web Image proof
-    of concept, with its `Math.random`-backed RNG, is one.
+  - **The entropy behind it is trusted platform configuration.** Java gives no way to verify
+    entropy quality. A stock `DRBG` instance will run on a configured non-entropy seed source
+    (Codex M0 F8 reproduced this with `-Djava.security.egd=file:/dev/zero`). The JDK, its security
+    providers and properties (`securerandom.source`, `securerandom.strongAlgorithms`,
+    `java.security.egd`) and the operating system's entropy source are therefore part of the
+    trusted deployment, like the provider code. A misconfigured runtime defeats the hiding and
+    zero-knowledge of every proof it makes.
+  - As a **sanity check only**, the prover accepts a `SecureRandom` only if its `getAlgorithm()` is
+    `NativePRNG`, `NativePRNGNonBlocking`, `DRBG` or `Windows-PRNG`, and otherwise raises
+    `IllegalStateException` before any work. This rejects an obviously wrong or substituted
+    algorithm. It does not establish that the entropy is real.
+  - Targets that cannot provide such a source do not ship the prover. The GraalVM Web Image proof
+    of concept, with its `Math.random`-backed RNG, is one. The deployment documentation (ADR-0061
+    M6) states the entropy trust assumption.
 - The prover restarts with all-fresh nonces if any of `A`, `S`, `T₁`, `T₂`, `L_j`, `R_j` is `O`,
   or any challenge is `0`. Both happen with negligible probability.
 - Restarts are bounded at **8 attempts**. Exhausting them raises an `IllegalStateException`, and

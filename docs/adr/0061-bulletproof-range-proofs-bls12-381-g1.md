@@ -173,6 +173,9 @@ Any of these lets an observer learn or narrow `v`.
 - the verifier's configuration: the expected protocol and profile, `n`, the application context
   and the pinned generator set;
 - the selected `Bls12381Provider` as code;
+- for the prover, the runtime's entropy configuration: the JDK `SecureRandom` providers and
+  security properties, and the operating system's entropy source. Java cannot verify it, and a
+  misconfigured runtime defeats hiding;
 - SHA-256 (in hash-to-curve) and SHAKE128 (in the transcript) as random oracles;
 - on-chain, the node's builtins as an implementation of CIP-0381 and CIP-0133.
 
@@ -540,8 +543,10 @@ itself reject.
   - it is created at run time and never accepted from a caller;
   - it is never created in a static initialiser that a native-image build could run at build
     time;
-  - the prover fails closed unless the source's algorithm is on the spec §7.3 allowlist
-    (`NativePRNG`, `NativePRNGNonBlocking`, `DRBG`, `Windows-PRNG`).
+  - the runtime's entropy configuration (JDK providers and security properties, the OS entropy
+    source) is **trusted deployment configuration**, because Java cannot verify entropy quality;
+  - an algorithm allowlist (`NativePRNG`, `NativePRNGNonBlocking`, `DRBG`, `Windows-PRNG`) is a
+    sanity check that rejects an obviously wrong source, not proof of entropy (Codex M0 F8).
 
   Restarts are bounded at 8 attempts. Exhausting them raises `IllegalStateException`, and no
   proof is emitted.
@@ -791,7 +796,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | Milestone | Entry gate | Deliverables | Exit |
 |---|---|---|---|
 | **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes the I12 vector scope; Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
-| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor, the shared reserved set and `INVALID_STATEMENT` in `zeroj-api`, the test-only nonce source in `zeroj-bls12381` `testFixtures` (metadata guard re-run), an API-surface reflection test (scoped to `org.zeroj.bls12381.bulletproofs`) that no public member accepts a seed, nonce, nonce source or `SecureRandom`, the `SecureRandom` algorithm allowlist, unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
+| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor, the shared reserved set and `INVALID_STATEMENT` in `zeroj-api`, the test-only nonce source in `zeroj-bls12381` `testFixtures` (metadata guard re-run), an API-surface reflection test (scoped to `org.zeroj.bls12381.bulletproofs`) that no public member accepts a seed, nonce, nonce source or `SecureRandom`, the `SecureRandom` algorithm allowlist (a sanity-check test only; entropy configuration is trusted), unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
 | **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side with separate code (for example on py_ecc). **External algebra check against dalek:** the Python protocol code is parameterised by group and transcript, run on ristretto255 (RFC 9496, fetched and pinned at M2, with its vectors) with Merlin and dalek's deviations (D2, D5), and must verify dalek's published test proofs (`tests/range_proof.rs`, `n` = 8–64) and produce proofs dalek 5.0.0 verifies. blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches; the dalek check passes in both directions |
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
 | **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
@@ -979,6 +984,8 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     - D7a pins where identifiers are reserved, extends the `define` rejection to every registry
       type and the reserved names, and fixes how `INVALID_STATEMENT` enters the enum;
     - the CFRG vector licence must be confirmed before merge.
+  - **Codex M0 round 3 (F8):** the runtime's entropy configuration is now a stated trust
+    assumption, and the `SecureRandom` algorithm allowlist is kept as a sanity check only.
   - **Codex M0 round 2:**
     - the `INVALID_STATEMENT` propagation rule in `CommitmentAcceptance`;
     - I5 refusal timing;
