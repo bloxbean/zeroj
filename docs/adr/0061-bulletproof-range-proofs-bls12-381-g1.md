@@ -386,8 +386,10 @@ US-ASCII, built from fixed fields with an unambiguous delimiter, and identifies:
   requirement 2 puts it in the tag; it is also absorbed in the instance as part of the statement);
 - the **application context** `ctx`, as §5.1 requirement 3 asks.
 
-`ctx` is caller-supplied, at most 1,024 octets, encoded so the tag stays unambiguous (M0 pins the
-encoding). An empty context is allowed but discouraged. The verifier supplies `ctx` from its own
+`ctx` is caller-supplied, **1 to 1,024 octets** (r5: non-empty, and unique to the application),
+encoded so the tag stays unambiguous (spec §5.1). r1–r4 allowed an empty context; M0 found that an
+empty one identifies only the protocol, so two applications that both used it could accept each
+other's proofs. The verifier supplies `ctx` from its own
 configuration and state (on Yano-X, for example, a chain identifier and message domain), never
 from the proof.
 
@@ -563,10 +565,41 @@ keeps the surface reviewable.
   proof bytes and decodes them with D4.
 
 **Rules:**
-- There is no API that verifies without a context argument; callers pass an empty array
-  explicitly.
+- There is no API that verifies without a context argument, and an empty context is
+  `INVALID_CONFIGURATION` (r5).
 - No API accepts nonces, generators or a transcript from the caller.
 - Native-image `reflect-config.json` entries are added for the public types.
+
+### D7a — Proof-protocol descriptor in `zeroj-api` (R2; added in r5, pending the maintainer's acceptance at the M0 sign-off)
+
+**The gap.** `commitment-profiles-v1` §2.4 item 5 admits a proof protocol only with "a descriptor
+type fixed when the first protocol is admitted, holding an identifier validated by §2.1". This is
+the first protocol, and r1–r4 did not define that type. M0 found the gap.
+
+**Decision:**
+- **The type.** `zeroj-api` gains a final descriptor type for proof protocols in
+  `org.zeroj.api.commitment`, provisionally `ProofProtocol`; M1 fixes the name in the spec. It
+  holds:
+  - the identifier, validated by the registry §2.1 grammar;
+  - the consumed `CommitmentProfile` descriptor;
+  - the generator-set identifier.
+- **Built-in only.** The descriptor for `bulletproof-range-bls12-381-g1-v1` is created and
+  registered in `zeroj-api`'s own static initialisation, as ADR-0060 D8 does for
+  `CommitmentProfile`. It shares the one registry namespace (§2.2), so `CommitmentProfile.define`
+  cannot take its identifier. There is **no public `define` for proof protocols** in v1.
+- **Constants.** It is exposed from a constants class beside `CommitmentProfiles` (provisionally
+  `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`). `G1RangeProof` re-exports it as
+  `PROTOCOL`.
+- **Error class.** `CommitmentError` gains `INVALID_STATEMENT`, which registry r8 §11 adds, for
+  the prover's identity-commitment refusal.
+- **Tests (M1):**
+  - every field of the descriptor;
+  - `define` of the protocol identifier is rejected;
+  - a forked-JVM pre-emption regression, as ADR-0060 M1 has for profiles;
+  - the API-surface tests.
+
+**Alternative rejected.** Reusing `CommitmentProfile` for protocols. A proof protocol is not a
+commitment profile: it has no kind, group encoding or opening.
 
 ### D8 — Cardano L1: no verifier for this protocol; a measured cost study (R2)
 
@@ -683,6 +716,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | I10 | Resource bounds: verification work is a fixed function of `n ≤ 64`; inputs are rejected before work | D4, D5 | M1 tests; M3 measurements |
 | I11 | Measurements are records, never security evidence | D8, D9 | — |
 | I12 | Transcript conformance on the vector sets listed under "Conformance vector scope" (Verification strategy): the fiat-shamir-03 codec and SHAKE128 vectors; the sigma-03 A.3.1 valid proofs for `discrete_logarithm` and `pedersen_commitment`, where the session identifier and challenges are reproduced and the proof verifies; and every A.3.2 adversarial vector, as rejections, or acceptances for the four non-reject `F` controls. SHAKE128 also agrees with CPython's `hashlib.shake_128` | D3, D4 | M0 (Python), M1 (Java) |
+| I13 | The proof-protocol descriptor (D7a) is built-in, registered before any external `define`, and its identifier cannot be pre-empted | D7a | M1 tests, including a forked-JVM regression |
 
 ## Compatibility
 
@@ -698,7 +732,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | Milestone | Entry gate | Deliverables | Exit |
 |---|---|---|---|
 | **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes the I12 vector scope; Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
-| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, unit and negative tests (I2–I8, I10, I12), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
+| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor and `INVALID_STATEMENT` in `zeroj-api`, unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
 | **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side with separate code (for example on py_ecc). **External algebra check against dalek:** the Python protocol code is parameterised by group and transcript, run on ristretto255 (RFC 9496, fetched and pinned at M2, with its vectors) with Merlin and dalek's deviations (D2, D5), and must verify dalek's published test proofs (`tests/range_proof.rs`, `n` = 8–64) and produce proofs dalek 5.0.0 verifies. blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches; the dalek check passes in both directions |
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
 | **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
@@ -824,7 +858,7 @@ layer it happens at; a vector that fails during decoding has no challenge to com
 
 ## Design questions for the maintainer
 
-All seven were decided by maintainer Satya on 2026-10-24. The other options are kept for the record.
+All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later design addition that awaits the maintainer's acceptance at the M0 sign-off. The other options are kept for the record.
 
 | # | Question | Options | Decision |
 |---|---|---|---|
@@ -873,3 +907,10 @@ All seven were decided by maintainer Satya on 2026-10-24. The other options are 
 - **r4 (2026-10-24):** accepted (design) by maintainer Satya. Q1 and Q3–Q7 are decided as leaned
   (a); Q2 was already decided (b) in r2. Codex's APPROVED review of `ca30142` is recorded. A
   maintainer sign-off follows M0.
+- **r5 (2026-10-24, M0):** new **D7a**: a built-in proof-protocol descriptor in `zeroj-api` with
+  no public `define`, plus `CommitmentError.INVALID_STATEMENT`. Registry §2.4 item 5 requires a
+  descriptor type for the first proof protocol, and r1–r4 did not define one. D7a awaits the
+  maintainer's acceptance at the M0 sign-off. I13 is added.
+  - **D3/D7 amendment (same sign-off):** the application context must now be non-empty (1 to
+    1,024 octets). M0's second implementation found that an empty context lets proofs move
+    between applications that both use it.
