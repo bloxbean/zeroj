@@ -2,31 +2,34 @@
 
 ## Status
 
-**Proposed** (design only; no implementation in this PR).
+**Accepted (design), 2026-10-24, by maintainer Satya.** Q1–Q7 are decided: Q2 as (b) in r2, and
+Q1 and Q3–Q7 as leaned (a) (see "Design questions for the maintainer"). Codex approved r2
+(`ca3014261031f8144cc70b2a31be82a1d4b4eda4`) as design review on 2026-10-24, with no P0–P2
+finding; its three P3 findings are addressed in r3. Implementation proceeds in PR #105 under the
+milestones below, **with a maintainer sign-off after M0** before any Java (M1).
 
 Addresses [issue #96](https://github.com/bloxbean/zeroj/issues/96), phase 4 of the #93–#96 Pedersen
 roadmap. It defines the first proof protocol of the commitment-profile registry
 (`commitment-profiles-v1` §5): a range proof over `pedersen-bls12-381-g1-v1` commitments, the
 "V4 proof" cell that registry §14 lists as "blocked (ADR-0051 D7; #96)".
 
-Seven questions need a maintainer decision before acceptance (see "Design questions for the
-maintainer"). **Q2 (the Fiat–Shamir transcript) was decided by maintainer Satya on 2026-10-24:
-stay on the official standards.** The transcript is `draft-irtf-cfrg-fiat-shamir-03` with
-SHAKE128, and points and scalars use the `draft-irtf-cfrg-sigma-protocols-03` §8.2 BLS12-381
-encodings (D3, "Note on the transcript decision"). Q1 and Q3–Q7 remain open, each with a recorded
-lean.
+**Q2 (the Fiat–Shamir transcript)** was decided on 2026-10-24: stay on the official standards.
+The transcript is `draft-irtf-cfrg-fiat-shamir-03` with SHAKE128, and points and scalars use the
+`draft-irtf-cfrg-sigma-protocols-03` §8.2 BLS12-381 encodings (D3, "Note on the transcript
+decision").
 
 **Risk: R3** for the proof protocol, the generator derivation (D2), the transcript (D3) and the
 prover's secret handling (D6). **R2** for the proof encoding and strict decoding (D4), the Java API
 (D7), the registry entry (D1), the Yano-X verifier contract (D9) and the Cardano feasibility spike
 (D8).
 
-Accepting this ADR would be design acceptance only. It would certify no implementation, test or
-security property, and no AI review upgrades a maturity or security claim (AGENTS.md).
+Acceptance is design acceptance only. It certifies no implementation, test or security property,
+and no AI review upgrades a maturity or security claim (AGENTS.md).
 
 ## Date
 
-2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts)
+2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts); 2026-10-24 (r3: review
+round 1); 2026-10-24 (r4: accepted, Q1–Q7 decided)
 
 ## Context
 
@@ -821,15 +824,17 @@ layer it happens at; a vector that fails during decoding has no challenge to com
 
 ## Design questions for the maintainer
 
-| # | Question | Options | Lean |
+All seven were decided by maintainer Satya on 2026-10-24. The other options are kept for the record.
+
+| # | Question | Options | Decision |
 |---|---|---|---|
-| Q1 | Protocol variant | (a) Bulletproofs (ePrint 2017/1066, 2022-04-14), one value per proof; (b) Bulletproofs+ | **(a)**: most independent review and written specification; BP+ saves 112 octets at `n = 64` |
+| Q1 | Protocol variant | (a) Bulletproofs (ePrint 2017/1066, 2022-04-14), one value per proof; (b) Bulletproofs+ | **Decided (a)**: most independent review and written specification; BP+ saves 112 octets at `n = 64` |
 | Q2 | Fiat–Shamir construction (D3) | (a) ZeroJ SHA-256 chain on `expand_message_xmd`, recomputable on Plutus; (b) CFRG fiat-shamir-03 with SHAKE128 and sigma-03 BLS12-381 codecs; (c) Merlin | **Decided (b)** by maintainer Satya, 2026-10-24: stay on the official standards. The composed transcript in (a) would have no official vectors (D3 note) |
-| Q3 | Verifier combination (D5) | (a) two separate checks, deterministic; (b) one MSM with a transcript-derived weight; (c) one MSM with a random weight | **(a)**: deterministic and specified; the cost is one extra MSM intercept |
-| Q4 | Yano-X deliverable (D9) | (a) verifier contract plus a reference state machine in ZeroJ test sources, with the plugin in `yano-x` under its own ADR; (b) the Yano-X plugin in this ADR | **(a)**: avoids a ZeroJ → Yano dependency; Yano-X first needs an `org.zeroj` upgrade |
-| Q5 | Cardano scope (D8) | (a) a JuLC VM cost study of the algebra, labelled "not a verifier"; (b) no on-chain work beyond the estimate | **(a)**: the issue asks for a measured feasibility report, and the result tells a future ADR whether a Cardano-specific variant is worth specifying |
-| Q6 | Widths | (a) `{16, 32, 64}`; (b) add 8 | **(a)**: the issue's set; 8 adds little |
-| Q7 | When external review is required | (a) before value-bearing use, with admission as `active` (experimental) allowed after M6; (b) before admission | **(a)**: matches how ADR-0060 admitted its entries as experimental |
+| Q3 | Verifier combination (D5) | (a) two separate checks, deterministic; (b) one MSM with a transcript-derived weight; (c) one MSM with a random weight | **Decided (a)**: deterministic and specified; the cost is one extra MSM intercept |
+| Q4 | Yano-X deliverable (D9) | (a) verifier contract plus a reference state machine in ZeroJ test sources, with the plugin in `yano-x` under its own ADR; (b) the Yano-X plugin in this ADR | **Decided (a)**: avoids a ZeroJ → Yano dependency; Yano-X first needs an `org.zeroj` upgrade |
+| Q5 | Cardano scope (D8) | (a) a JuLC VM cost study of the algebra, labelled "not a verifier"; (b) no on-chain work beyond the estimate | **Decided (a)**: the issue asks for a measured feasibility report, and the result tells a future ADR whether a Cardano-specific variant is worth specifying |
+| Q6 | Widths | (a) `{16, 32, 64}`; (b) add 8 | **Decided (a)**: the issue's set; 8 adds little |
+| Q7 | When external review is required | (a) before value-bearing use, with admission as `active` (experimental) allowed after M6; (b) before admission | **Decided (a)**: matches how ADR-0060 admitted its entries as experimental |
 
 ## Revision history
 
@@ -865,3 +870,6 @@ layer it happens at; a vector that fails during decoding has no challenge to com
   - **F3:** D5 now gives the separate-check cost as one extra intercept and one extra term
     (`2n + 2k + 9` against `2n + 2k + 8`), and notes that the paper's count reuses the value base
     where this design uses an independent `U`.
+- **r4 (2026-10-24):** accepted (design) by maintainer Satya. Q1 and Q3–Q7 are decided as leaned
+  (a); Q2 was already decided (b) in r2. Codex's APPROVED review of `ca30142` is recorded. A
+  maintainer sign-off follows M0.
