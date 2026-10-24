@@ -8,6 +8,20 @@ Q1 and Q3–Q7 as leaned (a) (see "Design questions for the maintainer"). Codex 
 finding; its three P3 findings are addressed in r3. Implementation proceeds in PR #105 under the
 milestones below, **with a maintainer sign-off after M0** before any Java (M1).
 
+**M0 implemented and reviewed (2026-10-24); awaiting the maintainer's sign-off.** M0 delivered:
+- the normative spec `bulletproof-range-bls12-381-g1-v1` r1;
+- registry r8, with the new entries `reserved`;
+- an independent Python second implementation, with CFRG conformance (I12);
+- the three-way generator reproduction (I1).
+
+Review loop: three Claude reviewers report SPEC READY. Codex approved in round 4, after
+CHANGES REQUESTED in rounds 1–3, all resolved. The sign-off also covers the r5 design additions,
+which await acceptance:
+- D7a, the proof-protocol descriptor;
+- the non-empty context;
+- the D4 decoding order;
+- the D6 nonce, seam and entropy rules.
+
 Addresses [issue #96](https://github.com/bloxbean/zeroj/issues/96), phase 4 of the #93–#96 Pedersen
 roadmap. It defines the first proof protocol of the commitment-profile registry
 (`commitment-profiles-v1` §5): a range proof over `pedersen-bls12-381-g1-v1` commitments, the
