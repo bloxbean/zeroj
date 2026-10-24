@@ -294,11 +294,11 @@ Register a proof protocol under `commitment-profiles-v1` §5:
 |---|---|
 | Identifier | `bulletproof-range-bls12-381-g1-v1` |
 | Consumes | `pedersen-bls12-381-g1-v1` only |
-| Statement | the prover knows `(v, γ)` with `V = [v]·G + [γ]·H` and `0 ≤ v < 2^n` as integers |
+| Statement | for a commitment `V` that is **not the identity**, the prover knows `(v, γ)` with `V = [v]·G + [γ]·H` and `0 ≤ v < 2^n` as integers (D4 rule 5) |
 | Widths | `n ∈ {16, 32, 64}`; the verifier takes `n` from its configuration, never from the proof |
 | Values per proof | one (`m = 1`); aggregation is deferred |
 | Generator set | `bulletproof-bls12-381-g1-gens-v1` (D2) |
-| Transcript | D3 (pending Q2) |
+| Transcript | D3 |
 | Proof encoding | D4 |
 | Binding rule | D3: protocol, profile, generator set, `n`, `V` and the application context |
 
@@ -491,7 +491,10 @@ equations separately** (Q3):
 **Why two equations, not one.** The paper and dalek merge the two equations into one MSM with a
 random weight `c`. A random `c` makes the verdict depend on randomness, which a Yano-X `apply`
 forbids. A transcript-derived `c` is not specified by any pinned reference. Checking the two
-equations separately is deterministic and costs one extra MSM intercept (5 more terms off-chain).
+equations separately is deterministic. It costs one extra MSM intercept and one extra term, because
+`H` appears in both checks: `2n + 2k + 9` terms in total, against `2n + 2k + 8` for the union of the
+same bases, so 149 against 148 at `n = 64`. The paper's smaller count, `2n + 2 log₂ n + 7`, also
+reuses the value base as the inner-product element. This design uses the independent `U` (D2).
 
 **Arithmetic and resources:**
 - All scalar arithmetic is mod `q` on canonical values.
@@ -501,8 +504,17 @@ equations separately is deterministic and costs one extra MSM intercept (5 more 
 
 ### D6 — Proving and secrets (R3)
 
-**Prover input** is a `G1PedersenOpening` `(m, r)` and the width `n`. The prover refuses
-`m ≥ 2^n` before any curve work. It never produces a proof it would itself reject.
+**Prover input** is a `G1PedersenOpening` `(m, r)` and the width `n`. Before any curve work, the
+prover refuses deterministically:
+- `m ≥ 2^n`;
+- an opening whose commitment is the identity. The only such canonical opening is
+  `(m, r) = (0, 0)`, since `V = O` with `m < 2^n < q` forces `r = 0`, because `G` and `H` are
+  independent.
+
+The refusal is a fixed error. The prover never re-blinds the caller's commitment, and never retries
+nonces for this case: no nonce choice can make an identity `V` acceptable under D4. An opening
+`(0, r)` with `r ≠ 0` is valid and proves `v = 0`. The prover never produces a proof it would
+itself reject.
 
 **Randomness.**
 - Nonces (`α`, `ρ`, `τ₁`, `τ₂`, `s_L`, `s_R`) are fresh per proof.
@@ -660,14 +672,14 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | I2 | Strong Fiat–Shamir: changing any item of D3 (the session-tag fields, including `n` and `ctx`; the instance items profile id, `G`, `H`, `D_gens` and `V`; or any prover message) changes every later challenge; the Frozen Heart forgery recipe is rejected | D3 | M1 tests; M2 vectors with intermediate challenges |
 | I3 | Strict decoding: `n` only from configuration; the exact length is checked before any decoding; every proof point is strict and not the identity; every scalar is canonical | D4 | M1 negatives; M2 vector negatives |
 | I4 | A zero challenge is rejected by the verifier and never emitted by the prover | D3 | M1 test seam |
-| I5 | Completeness: honest proofs verify for `v ∈ {0, 1, 2^n − 1}` and random values at each `n`; the prover refuses `v ≥ 2^n` before curve work | D6 | M1 |
+| I5 | Completeness, for commitments that are not the identity: honest proofs verify for `v ∈ {0, 1, 2^n − 1}` (with `γ ≠ 0`) and random values at each `n`. The prover refuses `v ≥ 2^n` and the identity opening `(0, 0)` before curve work, with tests for both, and accepts `(0, γ ≠ 0)` | D1, D4, D6 | M1 |
 | I6 | Rejection of every single-byte or single-element tamper; of a proof checked under another `n`, `ctx`, `V` or protocol; and of an out-of-range value forced through a test-only prover | D3–D5 | M1, M2 |
 | I7 | Determinism: the verdict is a pure function of its inputs; no randomness or unordered iteration on the verification path; identical verdicts on pure Java and blst and across runs | D5, D9 | M1, M2, M3 |
 | I8 | Secret handling: proving only through `g1SecretScalarMul` for secret scalars; fresh nonces; no nonce API; best-effort wiping; no constant-time claim | D6 | M1 schedule test with a counting provider stub |
 | I9 | No change to the G1 Pedersen profiles, their vectors or `PedersenG1Lib` | — | Byte-identical vectors; unchanged tests |
 | I10 | Resource bounds: verification work is a fixed function of `n ≤ 64`; inputs are rejected before work | D4, D5 | M1 tests; M3 measurements |
 | I11 | Measurements are records, never security evidence | D8, D9 | — |
-| I12 | Transcript conformance: the Java SHAKE128, XOF duplex sponge and codecs reproduce every fiat-shamir-03 Appendix B vector and the challenges of every sigma-03 Appendix A.3 `sigma-proofs_Shake128_BLS12381` vector; SHAKE128 also agrees with CPython's `hashlib.shake_128` | D3, D4 | M0 (Python), M1 (Java) |
+| I12 | Transcript conformance on the vector sets listed under "Conformance vector scope" (Verification strategy): the fiat-shamir-03 codec and SHAKE128 vectors; the sigma-03 A.3.1 valid proofs for `discrete_logarithm` and `pedersen_commitment`, where the session identifier and challenges are reproduced and the proof verifies; and every A.3.2 adversarial vector, as rejections, or acceptances for the four non-reject `F` controls. SHAKE128 also agrees with CPython's `hashlib.shake_128` | D3, D4 | M0 (Python), M1 (Java) |
 
 ## Compatibility
 
@@ -682,8 +694,8 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 
 | Milestone | Entry gate | Deliverables | Exit |
 |---|---|---|---|
-| **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes fiat-shamir-03 Appendix B and reproduces the sigma-03 A.3 BLS12-381 challenges (I12); Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
-| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested against fiat-shamir-03 Appendix B, sigma-03 A.3 (a test-only harness reproduces the A.3 `pedersen_commitment` and `discrete_logarithm` challenges) and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, unit and negative tests (I2–I8, I10, I12), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
+| **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes the I12 vector scope; Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
+| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, unit and negative tests (I2–I8, I10, I12), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
 | **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side with separate code (for example on py_ecc). **External algebra check against dalek:** the Python protocol code is parameterised by group and transcript, run on ristretto255 (RFC 9496, fetched and pinned at M2, with its vectors) with Merlin and dalek's deviations (D2, D5), and must verify dalek's published test proofs (`tests/range_proof.rs`, `n` = 8–64) and produce proofs dalek 5.0.0 verifies. blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches; the dalek check passes in both directions |
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
 | **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
@@ -726,6 +738,20 @@ is independent in a narrower sense:
 Agreement between Java and Python shows that two implementations read the specification the same
 way. It does not show that the specification is right. That is why the dalek check and external
 review matter.
+
+**Conformance vector scope (I12).** The scope covers the vectors for the functions this protocol
+uses, not every vector in the two appendices.
+
+| Source | In scope | Out of scope, and why |
+|---|---|---|
+| fiat-shamir-03 B.1 (codec) | B.1.1, B.1.2, B.1.4–B.1.8, B.1.10, B.1.11: variable-length strings, unsigned integers, `DecodeUint`, big-endian prime-field serialization, and their rejections | B.1.3 and B.1.9 (degree-2 extension fields, unused); B.1.12 and B.1.13 (the Appendix A sumcheck example over Mersenne31, unused) |
+| fiat-shamir-03 B.2 (SHAKE128) | B.2.1–B.2.11: sponge behaviour, `DeriveSessionID`, `DecodeUint` | B.2.12 and B.2.13 (sumcheck example) |
+| fiat-shamir-03 B.3 (TurboSHAKE128) | none | this design selects SHAKE128 |
+| sigma-03 A.3.1 (14 valid proofs) | `discrete_logarithm` and `pedersen_commitment`, batchable and compact (4). Checks: the session identifier is reproduced, every challenge is reproduced, and the proof verifies | `dleq`, `pedersen_commitment_dleq`, `bbs_blind_commitment_computation`, `elgamal_decryption` and `dleq_derived_element` (10): they need general linear-relation machinery beyond the transcript layer this ADR uses |
+| sigma-03 A.3.2 (32 adversarial vectors, all `discrete_logarithm`) | All 32, through the harness. 28 must be rejected; the four non-reject controls (`batchable/F1`, `compact/F1`, `batchable/F2`, `compact/F2`) must be accepted. A1, A3–A6 (points) and B1, B2 (scalars) must fail **at deserialization, before any challenge is derived**, and also run directly against the D4 point and scalar decoders. C1 and C2 are length failures; D, E, F and H are verification-layer failures | — |
+
+Valid-proof checks assert reproduced challenges. Rejection checks assert only the rejection and the
+layer it happens at; a vector that fails during decoding has no challenge to compare.
 
 **Rules:**
 - No values are derived from the code under test. Fixed nonces come from a documented test-only
@@ -825,3 +851,16 @@ review matter.
   - **References:** fiat-shamir-03 and sigma-03 split and made normative; FIPS 202 added (pinned at
     M0).
   - Alternatives, consequences, risks and related findings updated.
+- **r3 (2026-10-24; responds to the review of `ca30142`, Verdict APPROVED with three P3 findings):**
+  - **F1:** a "Conformance vector scope" table lists the in-scope fiat-shamir-03 B.1 and B.2
+    vectors. B.3 (TurboSHAKE128), the extension-field vectors and the sumcheck vectors are out of
+    scope. In sigma-03, the scope is the four A.3.1 valid proofs and all 32 A.3.2 adversarial
+    vectors, separating challenge checks from rejection checks and the layer each rejection
+    happens at. I12, M0 and M1 are aligned to it.
+  - **F2:** the D1 statement now excludes the identity `V`. The D6 prover refuses the identity
+    opening `(0, 0)` deterministically, with no re-blinding and no nonce retry. I5 is qualified,
+    with tests for `(0, 0)` refused and `(0, γ ≠ 0)` accepted. The stale "pending Q2" in D1 is
+    removed.
+  - **F3:** D5 now gives the separate-check cost as one extra intercept and one extra term
+    (`2n + 2k + 9` against `2n + 2k + 8`), and notes that the paper's count reuses the value base
+    where this design uses an independent `U`.
