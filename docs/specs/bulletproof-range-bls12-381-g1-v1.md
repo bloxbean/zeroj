@@ -11,6 +11,19 @@ This document fixes every byte of the protocol: the generators, the transcript, 
 proof encoding, the prover and the verifier. An implementation that follows it exactly produces
 and accepts the same proofs as any other.
 
+`sigma-proofs_Shake128_BLS12381` means its definition in `draft-irtf-cfrg-sigma-protocols-03`, and
+the transcript is that of `draft-irtf-cfrg-fiat-shamir-03`. A new protocol identifier is required
+for any change to:
+- a constant;
+- the tag;
+- the transcript;
+- a codec;
+- a pinned draft revision.
+
+A transcript is never replaced under an existing identifier (registry §5).
+
+The key words MUST, MUST NOT, SHOULD and MAY are normative, as in RFC 2119 and RFC 8174.
+
 The protocol is the single-value range proof of Bünz et al., *Bulletproofs* (ePrint 2017/1066,
 revision of 2022-04-14), §4.1–§4.2 with the inner-product argument of §3 (Protocols 1 and 2) and
 the verifier of §6.2. It is made non-interactive with the duplex-sponge Fiat–Shamir transformation
@@ -45,6 +58,25 @@ Status: experimental. Nothing here is a security or production claim.
 
 Vectors are indexed from `0`. A vector of length `t` is split as `a[:t/2]` (indices `0 … t/2 − 1`)
 and `a[t/2:]` (indices `t/2 … t − 1`).
+
+### 1.1 Statement and its integer meaning
+
+For a commitment `V ≠ O` of `pedersen-bls12-381-g1-v1`, the prover shows knowledge of `(v, γ)`
+with `V = [v]·G + [γ]·H` and `0 ≤ v < 2^n` **as integers**, where `n ∈ {16, 32, 64}` comes from
+the verifier's configuration. Because `2^n ≤ 2^64 < q`, the committed residue has exactly one
+representative in `[0, 2^n)`. That representative is what the proof bounds.
+
+A range proof is not a balance. To read a relation between commitments as integer conservation,
+an application applies ADR-0051 D3a:
+- every term on both sides carries its own verified range proof, at the width that application
+  configured for it;
+- coefficients are small non-negative integers fixed by the verifier, never chosen by the prover;
+- each side's maximum, `Σ coefficient·(2^{n_i} − 1)` plus any public terms at their bounds, is
+  below `q`.
+
+A range proof on a **derived** commitment, such as `V₁ − V₂`, shows `v₁ − v₂ ∈ [0, 2^n)` only
+mod `q`. It implies the integer statement `v₁ ≥ v₂` only if `v₁` and `v₂` are themselves bounded,
+for example each proved below `2^{n'}` with `2^{n'} + 2^n ≤ q`.
 
 ---
 
@@ -134,7 +166,7 @@ The tag is US-ASCII:
 tag = "ZeroJ:bulletproof-range-bls12-381-g1-v1"
     ‖ "/DSFS-fiat-shamir-03-sigma-proofs_Shake128_BLS12381"
     ‖ "/N" ‖ D3(n)
-    ‖ "/A96S96.A96S48.A96S48.(A96S48)x" ‖ D1(k) ‖ ".A64"
+    ‖ "/A96S96.A96S48.A96S48.(A96S48)x" ‖ D1(k)
     ‖ "/CTX" ‖ D4(len(ctx)) ‖ ":" ‖ hex(ctx)
 
 session_id = DeriveSessionID(tag)
@@ -151,13 +183,29 @@ session_id = DeriveSessionID(tag)
   context.
 - Every field before `ctx` has a fixed width or a fixed delimiter, and `ctx` carries its length,
   so no two `(n, ctx)` pairs give the same tag.
-- The round string records the absorb (`A`) and squeeze (`S`) octet counts of §5.3, as
-  fiat-shamir-03 §5.1 requirement 2 asks.
+
+**What `ctx` must contain, and what the proof does not give.**
+- `ctx` begins with a namespace under the application's control, for example
+  `"https://example.com/payroll/v1"` or a chain identifier with a message domain. Two applications
+  that choose the same `ctx` accept each other's proofs.
+- An application that builds `ctx` from several fields encodes them injectively itself, with
+  fixed widths or length prefixes (fiat-shamir-03 §5.1 gives the `("SV1", "22")` /
+  `("SV12", "2")` example). The tag is injective only in the bytes of `ctx`.
+- Within one `ctx`, a proof for `V` is valid wherever `V` appears. An application that needs a
+  proof bound to one message, sender or epoch puts that binding into `ctx`, as fiat-shamir-03 §8.3
+  recommends for freshness.
+- Replay protection, ownership and authorization are the application's job. The proof
+  establishes only the §1.1 statement.
+- fiat-shamir-03 §5.1 requirement 2 (the order and types of the codecs) is met by the protocol
+  identifier together with the ciphersuite `sigma-proofs_Shake128_BLS12381`, which fix every
+  message's type and encoding in §5.3. The round string adds the absorb (`A`) and squeeze (`S`)
+  octet counts. It lists only absorbs and squeezes: the trailing `a`, `b` are never absorbed
+  (§5.3).
 
 Example (`n = 16`, `ctx = "hello"`):
 
 ```
-ZeroJ:bulletproof-range-bls12-381-g1-v1/DSFS-fiat-shamir-03-sigma-proofs_Shake128_BLS12381/N016/A96S96.A96S48.A96S48.(A96S48)x4.A64/CTX0005:68656c6c6f
+ZeroJ:bulletproof-range-bls12-381-g1-v1/DSFS-fiat-shamir-03-sigma-proofs_Shake128_BLS12381/N016/A96S96.A96S48.A96S48.(A96S48)x4/CTX0005:68656c6c6f
 ```
 
 ### 5.2 Instance
@@ -204,11 +252,10 @@ for j = 1 … k:
 # a and b end the NARG string. They are not absorbed: no challenge follows them.
 ```
 
-The tag's final `.A64` describes those 64 trailing octets of the NARG string. It does not mean an
-absorb. An implementation that absorbed them would still derive the same challenges.
+An implementation that absorbed them would still derive the same challenges.
 
-`ser` is §3's serialization. The bytes absorbed are exactly the proof bytes (§6), in order: the
-proof is the NARG string (fiat-shamir-03 §6).
+`ser` is §3's serialization. The bytes absorbed are exactly the proof bytes (§6) in order, except
+the final 64 octets (`a`, `b`). The proof is the NARG string (fiat-shamir-03 §6).
 
 **Zero challenges.** If any of `y`, `z`, `x`, `x_u`, `x_1 … x_k` is `0`, the proof is rejected by
 the verifier, and an honest prover restarts with fresh nonces (§7.3).
@@ -311,24 +358,50 @@ After round `k`, `a⃗` and `b⃗` have length 1. Their entries are the scalars 
   from a cryptographically secure source, `OS2IP` reduced mod `q`. This is the sampler of
   `G1Pedersen.randomBlinding`.
 - No API accepts nonces from the caller. Reusing nonces across two proofs leaks the witness.
+- **The prover owns its randomness source.**
+  - It creates its own `SecureRandom` at run time, and never accepts one from the caller: a
+    caller-seeded `SHA1PRNG` would be deterministic.
+  - It never creates it in a static initialiser that a native-image build could run at build
+    time.
+  - It fails closed if no operating-system-backed source is available. An RNG backed by
+    `Math.random`, as found in the GraalVM Web Image proof of concept, is not acceptable.
 - The prover restarts with all-fresh nonces if any of `A`, `S`, `T₁`, `T₂`, `L_j`, `R_j` is `O`,
   or any challenge is `0`. Both happen with negligible probability.
+- Restarts are bounded at **8 attempts**. Exhausting them raises an `IllegalStateException`, and
+  no proof is emitted.
 
 ### 7.4 Secret handling
 
-- `A`, `S`, `T₁` and `T₂` involve secret scalars. They are computed with the provider's
-  secret-scalar entry point (`g1SecretScalarMul`), never the public one.
+- `V` (§7.1), `A`, `S`, `T₁` and `T₂` involve secret scalars. They are computed with the
+  provider's secret-scalar entry point (`g1SecretScalarMul`), never the public one, as
+  `G1Pedersen.commitScalar` does for `V`.
 - `A` is computed as a full sum over all `2n` generators, with scalars `0` or `1` on `G_i` and `0`
-  or `q − 1` on `H_i`, so that which generators are added does not depend on the bits of `v`.
-  This is a schedule property, not a constant-time guarantee.
+  or `q − 1` on `H_i`. The **sequence of calls** therefore does not depend on the bits of `v`. The
+  cost of each call can still depend on its scalar (`0`, `1` and `q − 1` differ sharply in a
+  variable-time multiplier), and the §7.1 comparison `v < 2^n` also depends on `v`. This is a
+  schedule property, not a constant-time guarantee.
 - After `x`, the vectors `l` and `r` are blinded by `s_L` and `s_R`; paper §4.1 sends them in the
   clear. The inner-product rounds use the public multiplication.
 - Temporary arrays holding secrets are wiped (best-effort) when the prover returns.
 
 ### 7.5 Test-only deterministic nonces
 
-Vectors need reproducible proofs, so implementations provide a **package-private test seam that
-is never public API**. It replaces §7.3's source with:
+Vectors need reproducible proofs, so implementations provide a test seam. It is fenced the way
+ADR-0046 fences its deterministic prover:
+- The seed → nonce expansion below lives **only in test or test-fixture code**, never in a
+  published artifact. In Java that is the unpublished `testFixtures` source set of
+  `zeroj-bls12381`, guarded by its module-metadata check.
+- Production code exposes at most a package-private nonce-source hook. Package-private is not a
+  security boundary in the classpath world, so the hook accepts only a source object, never a
+  seed. The only implementation of that source in published code is the §7.3 `SecureRandom`
+  source.
+- An API-surface reflection test asserts that no public or protected member accepts a seed, a
+  nonce, a nonce source or a `SecureRandom`.
+
+Misuse is not a side issue. Three test-nonce proofs of one opening under the same seed reveal `γ`
+by solving the three `τ_x` equations, and from `γ`, `v` (reviewer (b), M0).
+
+The seam replaces §7.3's source with:
 
 ```
 nonce_ds = Init(DeriveSessionID("ZeroJ:bulletproof-range-bls12-381-g1-v1/test-nonces-v1"))
@@ -337,8 +410,8 @@ nonces, in this order: α, ρ, s_L[0 … n−1], s_R[0 … n−1], τ₁, τ₂
 each = LE2IP(nonce_ds.Squeeze(48)) mod q   (one continuous output stream)
 ```
 
-If §7.3 would restart, a test-nonce prover fails instead, and the vector generator picks another
-seed.
+If §7.3 would restart, a test-nonce prover fails closed instead, and the vector generator picks
+another seed.
 
 The nonces depend only on the seed, not on `v`, `γ`, `n` or `ctx`. Every positive vector therefore
 uses its own seed: two proofs with the same nonces would leak their witnesses, which is exactly
@@ -353,23 +426,33 @@ Inputs:
 - the commitment `V`, as a decoded `pedersen-bls12-381-g1-v1` commitment or as 48 octets;
 - the proof octets.
 
-The verifier never takes `n` or `ctx` from the proof.
+The verifier never takes `n` or `ctx` from the proof. An API that accepts an already-decoded proof
+object uses only the configured `n`. If the object was decoded for a different width, the result
+is `MALFORMED_ENCODING` at the `length` layer, exactly as for a wrong-length octet string. The
+proof is never reinterpreted at another width.
 
 ### 8.1 Decoding, in order
 
 | Step | Rule | Outcome |
 |---|---|---|
 | 1 | `n ∉ {16, 32, 64}`, or `len(ctx) ∉ [1, 1024]` | `INVALID_CONFIGURATION` |
-| 2 | `V` given as octets: the profile's strict decoder (`pedersen-bls12-381-g1-v1.md` §4). A `V` given as a decoded `pedersen-bls12-381-g1-v1` commitment is already valid by construction | the decoder's classes (`MALFORMED_ENCODING`, `NOT_IN_SUBGROUP`) |
-| 3 | `len(proof) ≠ 48·(4 + 2k) + 160` | `MALFORMED_ENCODING`, before anything is decoded or indexed |
-| 4 | the proof's fields **in proof order** (§6, as fiat-shamir-03 §6.2 reads a NARG string): each group element by §3's deserializer, each scalar by §3's deserializer. The first failure is reported | group element: `MALFORMED_ENCODING` (including `O`) or `NOT_IN_SUBGROUP`; scalar: `NON_CANONICAL_SCALAR` |
+| 2 | `len(proof) ≠ 48·(4 + 2k) + 160` | `MALFORMED_ENCODING`, **before anything is decoded or indexed** (including `V`) |
+| 3 | the proof's fields **in proof order** (§6, as fiat-shamir-03 §6.2 reads a NARG string): each group element by §3's deserializer, each scalar by §3's deserializer. The first failure is reported | group element: `MALFORMED_ENCODING` (including `O`) or `NOT_IN_SUBGROUP`; scalar: `NON_CANONICAL_SCALAR` |
+| 4 | `V` given as octets: the profile's strict decoder (`pedersen-bls12-381-g1-v1.md` §4). A `V` given already decoded MUST be a validated element of the prime-order subgroup (for example, the `G1PedersenCommitment` type). An API MUST NOT accept raw coordinates for `V` without the strict decoder's on-curve and subgroup checks | the decoder's classes (`MALFORMED_ENCODING`, `NOT_IN_SUBGROUP`) |
 | 5 | `V = O` | verification returns **false**: no valid proof exists for an identity `V` |
 
-Steps 3 and 4 are the proof's format checks. A format failure raises the class; it carries no
-secret and no partial verification state. A well-formed proof against an identity `V` is not a
-format failure, so step 5 comes after them. The proof fields in order are `A`, `S`, `T₁`, `T₂`
-(points), `t̂`, `τ_x`, `μ` (scalars), `L_1`, `R_1`, …, `L_k`, `R_k` (points), and `a`, `b`
-(scalars).
+Steps 2 and 3 are the proof's format checks, and step 4 is `V`'s. A format failure raises the
+class; it carries no secret and no partial verification state. A well-formed proof against an
+identity `V` is not a format failure, so step 5 comes last. The proof fields in order are `A`, `S`,
+`T₁`, `T₂` (points), `t̂`, `τ_x`, `μ` (scalars), `L_1`, `R_1`, …, `L_k`, `R_k` (points), and `a`,
+`b` (scalars).
+
+**Why a non-subgroup `V` matters.** A point with a small-order component, such as
+`[7]·G + [11]·H + (0, 2)` where `(0, 2)` has order 3, has no Pedersen opening. Yet check 1 can still
+pass for it when the integer representative of `−z² mod q` in `[0, q)` is divisible by 3. That
+happens for about one challenge in three, because the multiplier applies that representative to
+the order-3 component. The subgroup
+check on `V` is therefore required for soundness, not only for hygiene (Codex M0 F1).
 
 ### 8.2 Challenges
 
@@ -396,6 +479,10 @@ s_i = Π_{j=1…k} x_j^{e(i, j)},   e(i, j) = +1 if bit (k − j) of i is 1, els
 Bit `k − j` is the `j`-th most significant of the `k` bits of `i`, so `x_1` (the first round)
 selects the half of the vector. `s_i⁻¹` is the same product with every exponent negated.
 
+Paper (99) says "the jth bit of i − 1" without fixing the bit order. Most-significant-first is the
+order the folding of Protocol 2 (29)–(30) forces. Least-significant-first rejects honest proofs.
+For example, with `n = 16` and `i = 1` (bits `0001`): `s_1 = x_1⁻¹·x_2⁻¹·x_3⁻¹·x_4`.
+
 **Check 2** (paper (105), with the independent `U`; `2n + 2k + 4` terms). Paper (105) writes
 `g^{x_u·(a·b − t̂)}`, using the value base as the inner-product element. This protocol uses the
 independent generator `U` (§2, Protocol 1), so an implementation of the paper's equation as printed
@@ -420,8 +507,13 @@ the verdict does not depend on which one fails, only the `layer` record does.
 - Verification uses no randomness and no unordered iteration.
 - Its work is bounded by a function of `n` from configuration, never by proof contents; it may
   stop early on a format failure.
-- Its verdict is a pure function of `(V, proof, n, ctx)` and the pinned constants, identical on
-  every provider.
+- Its **verdict** is one of: accept; reject (`false`); or a raised error class (§9). It is a pure
+  function of `(V, proof, n, ctx)` and the pinned constants, identical on every provider.
+- No provider may throw on adversarial but well-formed input inside the checks: zero scalars,
+  coefficients that are zero mod `q`, and identity partial sums. All scalars passed to the
+  provider are reduced into `[0, q)` first. An unexpected provider exception would split a
+  replicated host.
+- The `layer` of §11 is diagnostic only. Hosts MUST NOT branch consensus behaviour on it.
 - An implementation MAY evaluate each check with one multi-scalar multiplication, or term by term;
   the verdict is the same.
 - It MUST NOT merge the two checks with a random weight (ADR-0061 D5).
@@ -439,7 +531,7 @@ The proof protocol uses the registry classes of `commitment-profiles-v1` §11, p
 | `NOT_IN_SUBGROUP` | verifier | a proof point or `V` outside the subgroup |
 | `NON_CANONICAL_SCALAR` | prover, verifier | check 1 failed (`v`, `γ`, or a proof scalar) |
 | `OUT_OF_RANGE` | prover | `v ≥ 2^n` |
-| `INVALID_STATEMENT` (new) | prover | `V = O` |
+| `INVALID_STATEMENT` (new) | prover | `V = O`; carried by `CommitmentFormatException` like the other prover refusals (registry §11) |
 | (verification returns `false`) | verifier | `V = O`, a zero challenge, or a failed check |
 
 ---
@@ -539,7 +631,7 @@ fields, and decimal integers.
   - the verifier MUST accept it;
   - `sessionIdHex` and `challenges` MUST be reproduced.
 - **Negative cases:** the verifier MUST give `expected`. `layer` records where it fails. Failures
-  in decoding `V` (§8.1 step 2) and an identity `V` (step 5) both use `statement`.
+  in decoding `V` (§8.1 step 4) and an identity `V` (step 5) both use `statement`.
 - A missing (null) argument is a `NullPointerException`. An argument of the wrong type is an
   API-binding error, not a vector case (registry §11).
 - **Prover refusals** (§7.1) are listed separately in M2 under `proverNegative`, with the same
@@ -567,10 +659,13 @@ A host that runs the verifier inside a replicated state machine relies on these 
    verification path.
 3. Every provider gives the same verdict.
 4. The proof length is known from `n` before decoding. Work is bounded by `n ≤ 64`.
-5. `n` and `ctx` come from the host's configuration and state, never from the message.
+5. `n` and `ctx` come from the host's configuration and state, never from the message. A host
+   that supports several widths picks `n` for each term by its own state rule, never from the
+   proof length.
 6. The verifier provides **no** authorization, replay protection or balance rule. The host
-   applies them, including the integer-balance rule of ADR-0051 D3a with each term's width taken
-   from its verified proof.
+   applies them, including the integer-balance rule of §1.1 (ADR-0051 D3a), using for each term
+   the configured `n` under which that term's proof verified.
+7. "Verdict" has the §8.4 meaning, and `layer` is diagnostic only.
 
 ---
 
@@ -579,15 +674,24 @@ A host that runs the verifier inside a replicated state machine relies on these 
 - **r1 (2026-10-24):** initial specification (ADR-0061 M0), with Appendix A pinned. Before publication it incorporated
   the M0 second implementation's findings:
   - `ctx` must be non-empty;
-  - the proof is decoded in proof order, and the identity-`V` verdict comes after the format
-    checks;
+  - the proof is decoded in proof order after the length check, `V` is decoded after the proof's
+    format checks, a decoded `V` must be a validated subgroup element (the Codex M0 review), and
+    the identity-`V` verdict comes last;
   - the check evaluation order, the `layer` rule and the `U` deviation from paper (105) are
     stated;
   - `a` and `b` are not absorbed;
   - work is bounded by `n`;
   - deriving the generators includes subgroup membership;
   - each vector uses its own nonce seed;
-  - the sigma-03 A.3.2 scope is described accurately.
+  - the sigma-03 A.3.2 scope is described accurately;
+  - the round string in the tag no longer ends with `.A64` (reviewer (a) F2);
+  - requirement 2 is met through the protocol and ciphersuite identifiers;
+  - the change rule and the MSB-first example are stated;
+  - from the M0 security review: the statement and integer meaning (§1.1); `ctx` guidance; `V` is
+    computed with the secret entry point and the schedule claim is narrowed (§7.4); constraints on
+    the nonce source and a restart bound (§7.3); the test seam fenced as ADR-0046 does (§7.5);
+    decoded-proof width (§8); the verdict definition, provider no-throw rule and `layer` as
+    diagnostic only (§8.4, §13).
 
 ## 15. References
 

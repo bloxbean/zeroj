@@ -36,4 +36,4 @@ ADR-0061 does not use. Which vectors are in scope is set in
 The vectors come from IETF documents, which are subject to BCP 78 and the IETF Trust's Legal
 Provisions Relating to IETF Documents (https://trustee.ietf.org/license-info). The source
 repository declares no licence of its own. They are included as test data with this attribution.
-Redistribution is to be confirmed by the maintainer before release.
+Redistribution is to be confirmed by the maintainer before this directory is merged (ADR-0061 M0 sign-off).

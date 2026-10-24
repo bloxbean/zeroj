@@ -69,6 +69,17 @@ identifier equal to any existing or withdrawn entry or to a reserved document na
 reservation, which turns it active; every other admission of a reserved identifier is rejected.
 A withdrawn entry stays listed.
 
+An implementation whose public API can define registry entries MUST reject, as
+`INVALID_CONFIGURATION`, every identifier already used by an entry of any type and every reserved
+document name. In Java, `CommitmentProfile`'s own initialisation seeds the shared set before any
+caller can reach `define`. The set covers:
+- the built-in profiles;
+- the basis-set identifiers;
+- the proof-protocol and generator-set identifiers;
+- the reserved document names.
+
+Before ADR-0061 M1, `define` checked only profile identifiers; M1 closes that gap.
+
 To prevent collisions, the document names of ZeroJ's other specifications and formats are
 reserved and never admissible as registry entries: `commitment-profiles-v1`,
 `zeroj-commitment-vectors-v1`, `zeroj-proof-vectors-v1`, `confidential-note-jubjub-v1`, `elgamal-jubjub-v1`,
@@ -117,7 +128,9 @@ A commitment profile, basis set or proof protocol is admitted only with:
 2. a normative specification;
 3. an independent reproduction of its constants (bases, domain strings, transcript labels),
    written without reading the implementation under test;
-4. vectors in the format of §13;
+4. vectors in the format of §13, or, for a proof protocol, in the protocol-specific
+   `zeroj-proof-vectors-v1` format its specification defines
+   (`bulletproof-range-bls12-381-g1-v1.md` §11) under the §13.2 value conventions;
 5. for a commitment profile or proof protocol, one public Java constant carrying its
    identifier: a `CommitmentProfile` descriptor (§12.1) for a profile; for a proof protocol, a
    descriptor type fixed when the first protocol is admitted, holding an identifier validated by
@@ -562,22 +575,26 @@ point of order 3 and is `NOT_IN_SUBGROUP`.
 
 | Class | Meaning | Java | On-chain |
 |---|---|---|---|
-| `MALFORMED_ENCODING` | a structural, length or curve-encoding defect | `CommitmentFormatException` | script fails |
+| `MALFORMED_ENCODING` | a structural, length or curve-encoding defect; for a proof protocol, also a well-formed encoding its codec rejects (an identity proof point) | `CommitmentFormatException` | script fails |
 | `NOT_IN_SUBGROUP` | a valid curve point outside the prime-order subgroup | `CommitmentFormatException` | script fails |
 | `NON_CANONICAL_SCALAR` | check 1 failed | `CommitmentFormatException` | script fails |
-| `OUT_OF_RANGE` | check 2 or check 3 failed | `CommitmentFormatException` | script fails |
+| `OUT_OF_RANGE` | check 2 or check 3 failed; for a range-proof prover, a value at or above `2^n` | `CommitmentFormatException` | script fails |
 | `LENGTH_OUT_OF_RANGE` | a `bytes` declared length or maximum outside `[0, MAX_PAYLOAD_BYTES]` | `CommitmentFormatException` | script fails |
 | `PROFILE_MISMATCH` | a label, codec, class, descriptor or schema other than the expected one | `CommitmentFormatException` | script fails |
-| `INVALID_CONFIGURATION` | an invalid identifier string, amount-bound width, bound policy, descriptor point-encoding length or duplicate descriptor | `CommitmentFormatException` | (configuration; not on-chain) |
+| `INVALID_CONFIGURATION` | an invalid identifier string, amount-bound width, bound policy, descriptor point-encoding length or duplicate descriptor; for a proof protocol, an unsupported width or an application context outside its length bounds | `CommitmentFormatException` | (configuration; not on-chain) |
+| `INVALID_STATEMENT` | a prover asked to prove a statement the proof protocol excludes (`bulletproof-range-bls12-381-g1-v1`: an identity commitment) | `CommitmentFormatException` (added in ADR-0061 M1) | (prover only; not on-chain) |
 | `OPENING_MISMATCH` | a well-formed opening that does not satisfy the commitment equation | verification returns `false` | script fails |
-| `INVALID_STATEMENT` | a prover asked to prove a statement the proof protocol excludes (`bulletproof-range-bls12-381-g1-v1`: an identity commitment) | prover exception (class added in ADR-0061 M1) | (prover only; not on-chain) |
 | `PROVENANCE_MISSING` | the application has no authenticated issuance record | `CommitmentCheck` only | script fails |
 | `PROVENANCE_MISMATCH` | the record does not bind this point, profile and context | `CommitmentCheck` only | script fails |
 
 `CommitmentFormatException` extends `IllegalArgumentException`, so callers catching
-`IllegalArgumentException` keep working. It carries only the seven format classes above it in the
-table (`MALFORMED_ENCODING` through `INVALID_CONFIGURATION`); constructing one with
-`OPENING_MISMATCH` or a `PROVENANCE_*` class is itself an `IllegalArgumentException`. It retains
+`IllegalArgumentException` keep working. It carries only the eight format classes the table marks
+`CommitmentFormatException`: `MALFORMED_ENCODING` through `INVALID_CONFIGURATION`, and
+`INVALID_STATEMENT`. Constructing one with `OPENING_MISMATCH` or a `PROVENANCE_*` class is itself
+an `IllegalArgumentException`. In Java, `CommitmentError.INVALID_STATEMENT` is **appended** after
+`PROVENANCE_MISMATCH`, so existing ordinals do not shift, and the format-class test is an explicit
+set rather than an ordinal comparison (ADR-0061 M1). `INVALID_STATEMENT` never appears in a
+`CommitmentCheck`. It retains
 no secret value, and no message contains one.
 
 A missing argument on a strict path (§12.3) is a `NullPointerException`. Stream failures stay
@@ -1037,6 +1054,15 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
     (§3.4) are added as `reserved`, admissible only under ADR-0061. The vector schema name
     `zeroj-proof-vectors-v1` is reserved (§2.2).
   - **Error classes:** `INVALID_STATEMENT` is added to §11 for prover refusals.
+  - **Admission:** §2.4 item 4 now allows a proof protocol's vectors in its own
+    `zeroj-proof-vectors-v1` format.
+  - **Error-class meanings (M0 review):** `MALFORMED_ENCODING`, `OUT_OF_RANGE` and
+    `INVALID_CONFIGURATION` are extended for proof protocols. `INVALID_STATEMENT` is the eighth
+    class `CommitmentFormatException` carries, appended in Java with an explicit format-class
+    set.
+  - **Namespace (M0 review):** §2.2 now requires a public `define` to reject the identifiers of
+    every registry type and the reserved document names. In Java, `CommitmentProfile`'s own
+    initialisation seeds that set (ADR-0061 M1).
   - **Matrix:** the §14 V4 cell for `pedersen-bls12-381-g1-v1` is updated (Java planned; no
     native L1).
   - **Unchanged:** no existing identifier, byte, check, check order or vector.

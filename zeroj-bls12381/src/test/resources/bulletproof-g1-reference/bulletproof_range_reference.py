@@ -2,9 +2,9 @@
 """Stand-alone second implementation of `bulletproof-range-bls12-381-g1-v1` (ZeroJ ADR-0061 M0).
 
 Written only from:
-  * the ZeroJ specification `bulletproof-range-bls12-381-g1-v1.md` (draft r1 as amended with the
-    M0 second-implementation findings: non-empty ctx, proof-order decoding, identity-V verdict
-    after the format checks; see its §14) and the profile it
+  * the ZeroJ specification `bulletproof-range-bls12-381-g1-v1.md` (draft r1 as revised after M0
+    review round 1: tag without ".A64", length-first decoding, fully validated decoded V,
+    8-attempt restart bound; see its §14 and README.md for the exact file hash) and the profile it
     consumes, `pedersen-bls12-381-g1-v1.md` (r2: bases G, H and the strict point decoder of §4);
   * Bünz et al., *Bulletproofs*, ePrint 2017/1066 (§3 Protocols 1-2, §4.1-§4.2, §6.2);
   * draft-irtf-cfrg-fiat-shamir-03 (duplex sponge, codecs, session identifiers);
@@ -661,6 +661,7 @@ def validate_instance(inst: LinearRelation):
 
 
 _SIGMA_CHALLENGES_DERIVED = 0
+_SIGMA_CHALLENGE_OFFSET = 0  # TEST-ONLY seam: added to every derived challenge (mod q)
 
 
 def sigma_derive_challenge(tag: bytes, inst: LinearRelation, commitment_bytes: bytes) -> int:
@@ -670,7 +671,7 @@ def sigma_derive_challenge(tag: bytes, inst: LinearRelation, commitment_bytes: b
     ds = DuplexSponge(derive_session_id(tag))
     ds.absorb(serialize_linear_relation(inst))
     ds.absorb(commitment_bytes)
-    return decode_field(ds.squeeze(NS + 16), Q, 1)
+    return (decode_field(ds.squeeze(NS + 16), Q, 1) + _SIGMA_CHALLENGE_OFFSET) % Q
 
 
 def sigma_verify(tag: bytes, instance_bytes: bytes, narg: bytes, flavor: str):
@@ -811,7 +812,7 @@ def generators() -> Generators:
 
 # ---------------------------------------------------------------------------
 # Transcript (spec §5) — with two TEST-ONLY seams used by the self-test:
-#   _TRANSCRIPT_MUTATION  (None or one of "drop_V", "drop_ctx", "drop_Dgens", "swap_GH")
+#   _TRANSCRIPT_MUTATION  (None or one of "drop_V", "drop_ctx", "drop_Dgens", "drop_n", "swap_GH")
 #   _CHALLENGE_HOOK       (None or callable(name, value) -> value; used to force a zero challenge)
 # ---------------------------------------------------------------------------
 
@@ -824,7 +825,7 @@ def session_tag(n: int, ctx: bytes) -> bytes:
     tag = (PROTOCOL_ID
            + b"/DSFS-fiat-shamir-03-sigma-proofs_Shake128_BLS12381"
            + b"/N" + b"%03d" % n
-           + b"/A96S96.A96S48.A96S48.(A96S48)x" + b"%d" % k + b".A64")
+           + b"/A96S96.A96S48.A96S48.(A96S48)x" + b"%d" % k)
     if _TRANSCRIPT_MUTATION != "drop_ctx":
         tag += b"/CTX" + b"%04d" % len(ctx) + b":" + bytes(ctx).hex().encode("ascii")
     return tag
@@ -838,7 +839,8 @@ def encode_instance(n: int, v_bytes: bytes) -> bytes:
     out = serialize_varlen_string(PROFILE_ID) + g_enc + h_enc + serialize_varlen_string(GENSET_ID)
     if _TRANSCRIPT_MUTATION != "drop_Dgens":
         out += gens.digest
-    out += serialize_uint(n, 2 ** 32)
+    if _TRANSCRIPT_MUTATION != "drop_n":
+        out += serialize_uint(n, 2 ** 32)
     if _TRANSCRIPT_MUTATION != "drop_V":
         out += v_bytes
     return out
@@ -874,14 +876,21 @@ def _challenge_dict(ch: dict, k: int) -> dict:
 # ---------------------------------------------------------------------------
 
 def _check_configuration(n, ctx) -> None:
-    if isinstance(n, bool) or not isinstance(n, int) or n not in BITS:
+    # A wrong argument type is an API-binding error, not a vector case (spec §11): TypeError.
+    if isinstance(n, bool) or not isinstance(n, int):
+        raise TypeError("n must be an int")
+    if not isinstance(ctx, (bytes, bytearray)):
+        raise TypeError("ctx must be bytes")
+    if n not in BITS:
         raise InvalidConfiguration("n not in {16, 32, 64}", "configuration")
-    if not isinstance(ctx, (bytes, bytearray)) or not 1 <= len(ctx) <= MAX_CTX:
+    if not 1 <= len(ctx) <= MAX_CTX:
         raise InvalidConfiguration("len(ctx) not in [1, 1024]", "configuration")
 
 
 def _check1(name: str, s) -> int:
-    if isinstance(s, bool) or not isinstance(s, int) or not 0 <= s < Q:
+    if isinstance(s, bool) or not isinstance(s, int):
+        raise TypeError(f"{name} must be an int")
+    if not 0 <= s < Q:
         raise NonCanonicalScalar(f"{name} outside [0, q)", "scalar")
     return s
 
@@ -1042,16 +1051,24 @@ def _prove_core(v, gamma, n, ctx, V, nonces, a_l_override=None):
     return proof, trace
 
 
-def prove(v: int, gamma: int, n: int, ctx: bytes, max_attempts: int = 8):
-    """Public prover: CSPRNG nonces (§7.3), restarts with all-fresh nonces.  Returns (V, proof)."""
+MAX_PROVER_ATTEMPTS = 8  # §7.3
+
+
+class ProverRestartsExhausted(RuntimeError):
+    """§7.3: the Python analogue of Java's IllegalStateException; no proof is emitted."""
+
+
+def prove(v: int, gamma: int, n: int, ctx: bytes):
+    """Public prover: CSPRNG nonces (§7.3), restarts with all-fresh nonces, at most 8 attempts.
+    Returns (V octets, proof)."""
     V = _prover_preamble(v, gamma, n, ctx)
-    for _ in range(max_attempts):
+    for _ in range(MAX_PROVER_ATTEMPTS):
         try:
             proof, trace = _prove_core(v, gamma, n, bytes(ctx), V, _csprng_nonces(n))
             return trace["commitment"], proof
         except _Restart:
             continue
-    raise RuntimeError("prover: too many restarts (should happen with negligible probability)")
+    raise ProverRestartsExhausted(f"prover: {MAX_PROVER_ATTEMPTS} attempts exhausted")
 
 
 def _prove_with_test_nonces(v: int, gamma: int, n: int, ctx: bytes, seed: bytes):
@@ -1115,30 +1132,36 @@ def _s_vector(xs, n: int, k: int):
     return s, s_inv
 
 
+def _validate_decoded_v(V):
+    """§8.1 step 4 for a V given already decoded: an affine tuple is NOT trusted; it must pass the
+    full on-curve and prime-order-subgroup checks.  None is O."""
+    if V is None:
+        return None
+    if not (isinstance(V, tuple) and len(V) == 2 and all(isinstance(c, int) and not isinstance(c, bool)
+                                                         for c in V)):
+        raise TypeError("decoded V must be an affine (x, y) tuple of ints, or None for O")
+    if not C.on_curve_e(V):
+        raise MalformedEncoding("decoded V is not on the curve", "statement")
+    if not C.in_subgroup(V):
+        raise NotInSubgroup("decoded V is not in the prime-order subgroup", "statement")
+    return V
+
+
 def verify_detailed(V, proof: bytes, n: int, ctx: bytes) -> dict:
-    """Spec §8 (r1 as amended).  `V` is 48 octets, or an already-decoded commitment (affine tuple,
-    or None for O).  Format failures raise a BulletproofError subclass (with .layer); otherwise
-    returns a dict with `verdict` (bool), `layer` and the recomputed challenges."""
+    """Spec §8.  `V` is 48 octets, or an already-decoded commitment (affine tuple, or None for O),
+    which is fully validated.  Format failures raise a BulletproofError subclass (with .layer);
+    otherwise returns a dict with `verdict` (bool), `layer`, `check1`, `check2` and challenges."""
     # Step 1: configuration
     _check_configuration(n, ctx)
     ctx = bytes(ctx)
     k = LOG2[n]
-    # Step 2: V octets through the profile's strict decoder (a decoded V is valid by construction)
-    if isinstance(V, (bytes, bytearray)):
-        try:
-            v_pt = g1_decode_profile(bytes(V))
-        except BulletproofError as e:
-            e.layer = "statement"
-            raise
-    else:
-        v_pt = V
-        if v_pt is not None and not C.on_curve_e(v_pt):
-            raise MalformedEncoding("decoded commitment not on curve", "statement")
-    # Step 3: proof length
+    # Step 2: proof length, before anything is decoded (including V)
+    if not isinstance(proof, (bytes, bytearray)):
+        raise TypeError("proof must be bytes")
     proof = bytes(proof)
     if len(proof) != proof_length(n):
         raise MalformedEncoding(f"proof length {len(proof)} != {proof_length(n)}", "length")
-    # Step 4: the proof's fields in proof order; first failure reported
+    # Step 3: the proof's fields in proof order; first failure reported
     pts, scs = [], []
     for kind, off in _field_layout(n):
         try:
@@ -1150,7 +1173,16 @@ def verify_detailed(V, proof: bytes, n: int, ctx: bytes) -> dict:
             e.layer = kind
             e.detail = f"{kind} at offset {off}: {e.detail}"
             raise
-    # Step 5: V = O -> false (after the format checks)
+    # Step 4: V
+    if isinstance(V, (bytes, bytearray)):
+        try:
+            v_pt = g1_decode_profile(bytes(V))
+        except BulletproofError as e:
+            e.layer = "statement"
+            raise
+    else:
+        v_pt = _validate_decoded_v(V)
+    # Step 5: V = O -> false
     if v_pt is None:
         return {"verdict": False, "layer": "statement", "detail": "V = O"}
     v_bytes = g1_serialize(v_pt)
@@ -1317,6 +1349,16 @@ class _Results:
         sys.stdout.flush()
         return cond
 
+    def guard(self, group: str, name: str, fn) -> bool:
+        """Run fn() -> (cond, detail) or bool; an unexpected exception is a counted FAIL line."""
+        try:
+            r = fn()
+        except Exception as e:  # noqa: BLE001
+            return self.check(group, name, False, f"unexpected {type(e).__name__}: {e}")
+        if isinstance(r, tuple):
+            return self.check(group, name, bool(r[0]), str(r[1]))
+        return self.check(group, name, bool(r))
+
     def report(self, group: str, name: str, cond: bool, detail: str = "") -> bool:
         """Reported but not gated (spec §10: the ten extra A.3.1 vectors)."""
         g = self.reported.setdefault(group, [0, 0])
@@ -1347,6 +1389,69 @@ def _replace(b: bytes, off: int, new: bytes) -> bytes:
     return b[:off] + new + b[off + len(new):]
 
 
+# ---------------------------------------------------------------------------
+# Known-answer pins (fixed literals).  D_gens and the 129 encodings were independently confirmed
+# by py_ecc and the Java implementation (spec Appendix A).  The trace record is this script's own
+# output for the fixed example, pinned so that any change to the transcript, codecs or nonce
+# expansion fails the self-test; the coordinator re-confirms it with external code.
+# ---------------------------------------------------------------------------
+
+PIN_DST_BP_HEX = ("5a65726f4a2d62756c6c657470726f6f662d626c7331322d3338312d67312d67656e732d76312d"
+                  "424c53313233383147315f584d443a5348412d3235365f535357555f524f5f")
+PIN_D_GENS_HEX = "69abb9e71b740d9be84f63bb146a63467ee452654340f1b09e8be6101e00ef19"
+PIN_G0_HEX = ("82ca0040fdcaae82d1dd666dbddaa09c3cd9546ab3a31150cd56385b167c7e0a"
+              "c100305d0896a5615281c9aa8712190b")
+PIN_H63_HEX = ("82c6faca133082265707f8e2422692c79663999e3e87b919dddccfd3a67c23dc"
+               "ff5a5910bf58425b02deebcc56aa327b")
+PIN_U_HEX = ("aaf94b4c700852ac8db3659ccfe7b0bbb7157c18ee881878fe1c2222b7eb31d7"
+             "3943af9a7d1c341dd2a1eb49eec7696e")
+GENERATORS_FILE = os.path.join(_HERE, "generators-v1.json")
+
+PIN_TRACE = {
+    "tag": "ZeroJ:bulletproof-range-bls12-381-g1-v1/DSFS-fiat-shamir-03-sigma-proofs_Shake128_BLS12381/N016/A96S96.A96S48.A96S48.(A96S48)x4/CTX0005:68656c6c6f",
+    "sessionIdHex": "aefa01ae578defec57e942213978543a2e26bdf81ae69ac9e95dd3bda9ec7556",
+    "commitmentHex": (
+        "8c64f7f6919d77f06e79c9520d3af99c6064884d1bc3e1d8b97b63f0d2841cce045ba9fb77e7080fb5c3dae5"
+        "6624701e"),
+    "instanceHex": (
+        "18000000706564657273656e2d626c7331322d3338312d67312d763180453f5474382da080469962f6e656ba"
+        "694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e92e04e91b89753df710400b2"
+        "8abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab652000000062756c6c"
+        "657470726f6f662d626c7331322d3338312d67312d67656e732d763169abb9e71b740d9be84f63bb146a6346"
+        "7ee452654340f1b09e8be6101e00ef19100000008c64f7f6919d77f06e79c9520d3af99c6064884d1bc3e1d8"
+        "b97b63f0d2841cce045ba9fb77e7080fb5c3dae56624701e"),
+    "challenges": {
+        "y": "36209000129655033253065255429180358080765337968981070404285725434891481435214",
+        "z": "46633051618233588676975911499950183005061894917303926296959925736837968283823",
+        "x": "47228359020218805564661947561577753834407574540194626925198606108420299900437",
+        "xu": "22143072433137489460645211340386941818930014091100376110692679921738536006978",
+        "xj": ["17735452590663590884174088837940452346824915976231644005372727082559053307244",
+               "32939508233770058845369227004198000974479372739028121348871062643559301637578",
+               "23879541988904653189122953040323391798477936798697311940928051176925699361449",
+               "41826612228844513380365295144238554927794368972212012150612085629501841288776"],
+    },
+    "proofHex": (
+        "adad082dfddd9ed67f1ac22ccc4969c702769d58ba89787a2926cf8c47e5d272f602f9b2fbe8d934cc861b9a"
+        "4f537024a7f48ddec6a36c2841d0ca9705e00a7829d2fb4ab35489e38f78049d95b9a9ad26455a25459e89eb"
+        "58209867c8fc27faac3886e6dc0a05715afebce3f4539b49577cea41e76a8ff61eeb21b859c25cf41da4407c"
+        "1bf3d4ed2da0c1f1e4b4df18912af42a08f1601d89265c1aa4e349f615ed30d32b2a7d8863643ced634bb04e"
+        "3236c966c3d5b39f7f0c9785e622b0046b3b50bcd8a594c77d878381f49008fe1142cafc9bc6e1c3c33df220"
+        "f1f0fdf2419ccdb4dbaf404b0a61ba44304561bdf7fdc6fd325240b89fde47ad99a84b320d90f8d7c6219272"
+        "5f2682f3bebf68f55e0b7662860dc9ace08538fe2af90f8887c36d60e42e7035d6a495baca385c9bb063eb63"
+        "31588a5964c52ff5b0bdf2c05146f2aea07094ac66628ad1860215a682c2261fb17700d6ccfd2013a25519d0"
+        "4a50fe394a95a6b805b4e473625f0d1fd61ba4019f0ef3b56e1764a76ba735ca84cddf30c5ec832e06b53c72"
+        "4efc73144324b89cd08db9610a9dc7dccb99070df9e3ada009cab374ef6da4220a4f0372936a35b480afdd21"
+        "2a13739342c19765c3e0beb723fa110839bf3185d75a17b25ceb98143b11d1d9efae7d9773eb3d53b1fa434e"
+        "fd1be991dd8074d6b69ee86a7eba8732b72dd3802f6628588fbe5246aa8011e4963ce8ecbfde7cd3454dcddb"
+        "95af1dbc6a5f62cd951b91673fead403b214e52d10a48689df063f06ccb062ffe409a3bd61f046457372920d"
+        "4b57717aa48f892922c123bb2f0e85bbd0e970631e7091d664477011d78428d0475c8671bee756df4c160f59"
+        "66d3a5b4652f1621994df89e6046c08781470de8e6a7a642ac8e4a72d3ca88c5e360c2020f2bb603540318bd"
+        "e0a587efac7952d1b11f634f3079f728fb44f75f9aa11a0a287794e5ac374163b9be164487311f236a4649c1"
+        "32c22f2a088521aa9c6305e07047ba0786d3e680d20c33ebf9e531bb6588f086"),
+}
+
+
+
 def selftest_conformance(res: _Results) -> None:
     vdir = _find_vectors_dir()
     if not res.check("conformance", "vector directory found", vdir is not None,
@@ -1355,16 +1460,16 @@ def selftest_conformance(res: _Results) -> None:
         return
     for fname, want in VECTOR_SHA256.items():
         path = os.path.join(vdir, fname)
-        got = hashlib.sha256(open(path, "rb").read()).hexdigest() if os.path.isfile(path) else "missing"
-        res.check("conformance", f"{fname} SHA-256 == spec §10 pin", got == want, got)
+        res.guard("conformance", f"{fname} SHA-256 == spec §10 pin",
+                  lambda path=path, want=want: (lambda got: (got == want, got))(
+                      hashlib.sha256(open(path, "rb").read()).hexdigest()))
     # fiat-shamir-03 B.1
     codec = json.load(open(os.path.join(vdir, "fiatShamirCodecVectors.json")))
     seen = set()
     for v in codec:
         nm = v["Name"]
         if nm in FS_CODEC_IN_SCOPE:
-            ok, info = run_fs_codec_vector(v)
-            res.check("fs-codec", v["Id"], ok, info[:80])
+            res.guard("fs-codec", v["Id"], lambda v=v: (lambda r: (r[0], r[1][:80]))(run_fs_codec_vector(v)))
             seen.add(nm)
         elif nm in FS_CODEC_OUT_OF_SCOPE:
             print(f"SKIP [fs-codec] {v['Id']} (out of scope: {FS_CODEC_OUT_OF_SCOPE[nm]})")
@@ -1378,8 +1483,7 @@ def selftest_conformance(res: _Results) -> None:
     for v in shake:
         nm = v["Name"]
         if nm in FS_SHAKE_IN_SCOPE:
-            ok, info = run_fs_shake_vector(v)
-            res.check("fs-shake128", v["Id"], ok, info[:64])
+            res.guard("fs-shake128", v["Id"], lambda v=v: (lambda r: (r[0], r[1][:64]))(run_fs_shake_vector(v)))
             seen.add(nm)
         elif nm in FS_SHAKE_OUT_OF_SCOPE:
             print(f"SKIP [fs-shake128] {v['Id']} (out of scope: {FS_SHAKE_OUT_OF_SCOPE[nm]})")
@@ -1387,233 +1491,277 @@ def selftest_conformance(res: _Results) -> None:
             res.check("fs-shake128", v["Id"], False, "unexpected vector")
     res.check("fs-shake128", "all 11 in-scope SHAKE128 vectors present", seen == FS_SHAKE_IN_SCOPE,
               str(sorted(FS_SHAKE_IN_SCOPE - seen)))
-    # the emulated reader against one-shot SHAKE128 of the concatenated input (§3.2 XOF form)
-    sid = bytes(range(32))
-    ds = DuplexSponge(sid)
-    ds.absorb(b"abc")
-    s1 = ds.squeeze(100) + ds.squeeze(200)
-    one = hashlib.shake_128(sid + bytes(136) + b"abc").digest(300)
-    ds.absorb(b"def")
-    s2 = ds.squeeze(50)
-    two = hashlib.shake_128(sid + bytes(136) + b"abcdef").digest(50)
-    res.check("fs-shake128", "duplex = XOF(session_id||zeros(136)||inputs) (stream + interleave)",
-              s1 == one and s2 == two)
 
-    # sigma-03 §8.2 generator encoding
+    def oneshot():
+        sid = bytes(range(32))
+        ds = DuplexSponge(sid)
+        ds.absorb(b"abc")
+        s1 = ds.squeeze(100) + ds.squeeze(200)
+        ds.absorb(b"def")
+        s2 = ds.squeeze(50)
+        return (s1 == hashlib.shake_128(sid + bytes(136) + b"abc").digest(300)
+                and s2 == hashlib.shake_128(sid + bytes(136) + b"abcdef").digest(50)), ""
+    res.guard("fs-shake128", "duplex = XOF(session_id||zeros(136)||inputs) (stream + interleave)", oneshot)
+
     res.check("sigma-03", "G1 generator compress == sigma-03 §8.2.1 hex",
               C.compress(G1_GEN).hex() == "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f1"
                                           "71bac586c55e83ff97a1aeffb3af00adb22c6bb")
+    global _SIGMA_CHALLENGE_OFFSET
+
+    def sigma_outcome(tag, inst_b, narg, flavor):
+        try:
+            ok, layer, detail, ch = sigma_verify(tag, inst_b, narg, flavor)
+            return ok, layer, detail
+        except SigmaReject as e:
+            return False, e.layer, e.detail
+
     # A.3.1 valid
     valid = json.load(open(os.path.join(vdir, "sigma-proofs_Shake128_BLS12381.json")))
     wanted = {f"sigma-protocols/bls12381/{r}/{f}" for r in ("discrete_logarithm", "pedersen_commitment")
               for f in ("batchable", "compact")}
     seen = set()
     for v in valid:
-        if v["Id"] not in wanted:
-            # Spec §10: the generic sparse-relation harness also verifies the other ten A.3.1
-            # vectors; they are reported separately and are not part of the gate.
-            tag = v["Tag"].encode("ascii")
-            try:
-                ok = sigma_verify(tag, bytes.fromhex(v["Instance"]), bytes.fromhex(v["NargString"]),
-                                  v["Flavor"])[0]
-            except SigmaReject:
-                ok = False
-            res.report("sigma-valid-extra", v["Id"] + " (not gated) SessionId + verifies",
-                      ok and derive_session_id(tag).hex() == v["SessionId"])
-            continue
-        seen.add(v["Id"])
         tag = v["Tag"].encode("ascii")
-        sid = derive_session_id(tag)
-        res.check("sigma-valid", v["Id"] + " SessionId from Tag", sid.hex() == v["SessionId"], sid.hex())
         inst_b = bytes.fromhex(v["Instance"])
         narg = bytes.fromhex(v["NargString"])
-        try:
-            ok, layer, _, ch = sigma_verify(tag, inst_b, narg, v["Flavor"])
-        except SigmaReject as e:
-            ok, layer, ch = False, e.layer, None
-        if v["Flavor"] == "batchable":
+        if v["Id"] not in wanted:
+            # spec §10: the harness also verifies the other ten; reported, not gated
+            try:
+                ok = sigma_outcome(tag, inst_b, narg, v["Flavor"])[0] and \
+                    derive_session_id(tag).hex() == v["SessionId"]
+            except Exception as e:  # noqa: BLE001
+                ok = False
+            res.report("sigma-valid-extra", v["Id"] + " SessionId + verifies", ok)
+            continue
+        seen.add(v["Id"])
+        vid = v["Id"]
+        res.guard("sigma-valid", vid + " SessionId from Tag",
+                  lambda tag=tag, v=v: (lambda sid: (sid == v["SessionId"], sid))(derive_session_id(tag).hex()))
+        res.guard("sigma-valid", vid + " verifies (challenge re-derived from tag, instance, commitment)",
+                  lambda: (lambda r: (r[0] and v["Expected"] == "accept", r[1]))(
+                      sigma_outcome(tag, inst_b, narg, v["Flavor"])))
+
+        def under_offset():
+            global _SIGMA_CHALLENGE_OFFSET
+            _SIGMA_CHALLENGE_OFFSET = 1
+            try:
+                r = sigma_outcome(tag, inst_b, narg, v["Flavor"])
+            finally:
+                _SIGMA_CHALLENGE_OFFSET = 0
+            return (not r[0] and r[1] == "verification"), r[1]
+        res.guard("sigma-valid", vid + " fails when the derived challenge is +1 (challenge is bound)",
+                  under_offset)
+
+        def tampered_response():
             inst = parse_linear_relation(inst_b)
-            neq = len(inst.equations)
-            ch2 = sigma_derive_challenge(tag, inst, narg[:NE * neq])
-            res.check("sigma-valid", v["Id"] + " challenge recomputed", ch == ch2 and ch is not None,
-                      f"c={ch2}")
-        else:
-            res.check("sigma-valid", v["Id"] + " challenge recomputed == NARG challenge",
-                      ok and ch == OS2IP(narg[:NS]), f"c={OS2IP(narg[:NS])}")
-        res.check("sigma-valid", v["Id"] + " verifies", ok and v["Expected"] == "accept", layer)
-        # the published witness satisfies the published instance: map(witness) == image
-        inst = parse_linear_relation(inst_b)
-        wb = bytes.fromhex(v["Witness"])
-        wit = [OS2IP(wb[i:i + NS]) for i in range(0, len(wb), NS)]
-        res.check("sigma-valid", v["Id"] + " witness satisfies instance",
-                  all(jeq(m, i) for m, i in zip(sigma_map(inst, wit), sigma_image(inst))))
+            off = NE * len(inst.equations) if v["Flavor"] == "batchable" else NS
+            r0 = OS2IP(narg[off:off + NS])
+            bad = narg[:off] + scalar_serialize((r0 + 1) % Q) + narg[off + NS:]
+            r = sigma_outcome(tag, inst_b, bad, v["Flavor"])
+            return (not r[0] and r[1] == "verification"), r[1]
+        res.guard("sigma-valid", vid + " fails with response[0] + 1", tampered_response)
+
+        def witness_ok():
+            inst = parse_linear_relation(inst_b)
+            wb = bytes.fromhex(v["Witness"])
+            wit = [OS2IP(wb[i:i + NS]) for i in range(0, len(wb), NS)]
+            return all(jeq(m, i) for m, i in zip(sigma_map(inst, wit), sigma_image(inst))), ""
+        res.guard("sigma-valid", vid + " published witness satisfies instance", witness_ok)
     res.check("sigma-valid", "all 4 in-scope valid vectors present", seen == wanted)
 
-    # A.3.2 adversarial
-    global _SIGMA_CHALLENGES_DERIVED
+    # A.3.2 adversarial: expected outcome and layer for every class
     adv = json.load(open(os.path.join(vdir, "sigma-proofs-invalid_Shake128_BLS12381.json")))
     res.check("sigma-invalid", "32 adversarial vectors in file", len(adv) == 32, str(len(adv)))
-    early = {"batchable/A1", "batchable/A3", "batchable/A4", "batchable/A5", "batchable/A6",
-             "batchable/B1", "compact/B2"}
     controls = {"batchable/F1", "compact/F1", "batchable/F2", "compact/F2"}
-    n_rej = n_acc = 0
+
+    def expected_for(short):
+        letter = short.split("/")[1][0]
+        if short in controls:
+            return "accept", "accept", None
+        return {"A": ("reject", "deserialize-point", 0), "B": ("reject", "deserialize-scalar", 0),
+                "C": ("reject", "length", 0), "D": ("reject", "simulated-commitment-identity", 0),
+                "E": ("reject", "instance-validation", 0), "F": ("reject", "verification", 1),
+                "H": ("reject", "verification", 1)}[letter]
+    tally = {"accept": 0, "reject": 0}
     for v in adv:
         short = v["Id"].split("/", 3)[3]
-        before = _SIGMA_CHALLENGES_DERIVED
-        try:
-            ok, layer, detail, _ = sigma_verify(v["Tag"].encode("ascii"), bytes.fromhex(v["Instance"]),
-                                                bytes.fromhex(v["NargString"]), v["Flavor"])
-        except SigmaReject as e:
-            ok, layer, detail = False, e.layer, e.detail
-        derived = _SIGMA_CHALLENGES_DERIVED - before
-        outcome = "accept" if ok else "reject"
-        n_acc += ok
-        n_rej += not ok
-        good = outcome == v["Expected"]
-        if short in early:
-            good = good and layer.startswith("deserialize") and derived == 0
-        if short in controls:
-            good = good and ok
-        res.check("sigma-invalid", f"{short:<14} {outcome:<6} layer={layer}",
-                  good, f"{detail}; challenges derived={derived}")
-    res.check("sigma-invalid", "28 rejected / 4 accepted", n_rej == 28 and n_acc == 4,
-              f"rejected={n_rej} accepted={n_acc}")
-    # A1, A3-A6 directly against the §3 point decoder and B1/B2 against the scalar decoder
+
+        def one(v=v, short=short):
+            global _SIGMA_CHALLENGES_DERIVED
+            want_out, want_layer, want_derived = expected_for(short)
+            before = _SIGMA_CHALLENGES_DERIVED
+            ok, layer, detail = sigma_outcome(v["Tag"].encode("ascii"), bytes.fromhex(v["Instance"]),
+                                              bytes.fromhex(v["NargString"]), v["Flavor"])
+            derived = _SIGMA_CHALLENGES_DERIVED - before
+            out = "accept" if ok else "reject"
+            tally[out] += 1
+            good = (out == v["Expected"] == want_out and layer == want_layer
+                    and (want_derived is None or derived == want_derived))
+            return good, f"{out} at {layer} (want {want_out} at {want_layer}); challenges derived={derived}"
+        res.guard("sigma-invalid", f"{short:<14}", one)
+    res.check("sigma-invalid", "28 rejected / 4 accepted", tally == {"accept": 4, "reject": 28}, str(tally))
     for v in adv:
         short = v["Id"].split("/", 3)[3]
         narg = bytes.fromhex(v["NargString"])
-        if short in ("batchable/A1", "batchable/A3", "batchable/A4", "batchable/A5", "batchable/A6"):
+        if short[short.index("/") + 1] not in "AB":
+            continue
+
+        def direct(short=short, narg=narg):
             try:
-                g1_deserialize(narg[:48])
-                r = "accepted"
+                if short.endswith(("A1", "A3", "A4", "A5", "A6")):
+                    g1_deserialize(narg[:48])
+                elif short == "batchable/B1":
+                    scalar_deserialize(narg[48:80])
+                else:
+                    scalar_deserialize(narg[:32])
+                return False, "accepted"
             except BulletproofError as e:
-                r = e.error_class
-            res.check("sigma-invalid", f"{short} direct §3 point decoder rejects", r != "accepted", r)
-        if short == "batchable/B1":
-            try:
-                scalar_deserialize(narg[48:80])
-                r = "accepted"
-            except BulletproofError as e:
-                r = e.error_class
-            res.check("sigma-invalid", f"{short} direct §3 scalar decoder rejects",
-                      r == "NON_CANONICAL_SCALAR", r)
-        if short == "compact/B2":
-            try:
-                scalar_deserialize(narg[:32])
-                r = "accepted"
-            except BulletproofError as e:
-                r = e.error_class
-            res.check("sigma-invalid", f"{short} direct §3 scalar decoder rejects",
-                      r == "NON_CANONICAL_SCALAR", r)
+                want = "NON_CANONICAL_SCALAR" if "/B" in short else e.error_class
+                return e.error_class == want, e.error_class
+        res.guard("sigma-invalid", f"{short} rejected directly by the §3 decoder", direct)
 
 
 def selftest_generators(res: _Results) -> None:
-    res.check("generators", "DST_BP is 70 octets", len(DST_BP) == 70, str(len(DST_BP)))
+    res.check("generators", "DST_BP bytes == pinned hex (70 octets)",
+              DST_BP.hex() == PIN_DST_BP_HEX and len(DST_BP) == 70, DST_BP.hex()[:24] + "...")
     try:
         gens = generators()
-        ok = True
-        info = ""
-    except GeneratorCheckFailure as e:
-        ok, info = False, str(e)
+        ok, info = True, ""
+    except Exception as e:  # noqa: BLE001
+        ok, info = False, f"{type(e).__name__}: {e}"
     res.check("generators", "derivation + §2.2 checks (131 points: none O, pairwise != +-)", ok, info)
     if not ok:
         return
     allpts = gens.Gvec + gens.Hvec + [gens.U, gens.G, gens.H]
-    # brute-force pairwise check, independent of the x-coordinate shortcut
-    bad = 0
-    for i in range(len(allpts)):
-        for j in range(i + 1, len(allpts)):
-            if allpts[i] == allpts[j] or allpts[i] == C.point_neg(allpts[j]):
-                bad += 1
-    res.check("generators", "pairwise P != Q and P != -Q (brute force, 8515 pairs)", bad == 0)
-    res.check("generators", "129 encodings, 6192 octets hashed",
-              len(gens.encodings) == 129 and len(b"".join(gens.encodings)) == 6192)
-    res.check("generators", "every generator in G1 ([q]P = O, on curve)",
-              all(C.on_curve_e(p) and C.in_subgroup(p) for p in allpts))
-    res.check("generators", "every encoding strict-decodes back to its point",
-              all(g1_deserialize(e) == p for e, p in zip(gens.encodings, gens.Gvec + gens.Hvec + [gens.U])))
-    g_re, h_re = C.derive_basis()
-    res.check("generators", "profile G, H pinned (pedersen §2.2) == RFC 9380 recomputation",
-              g_re == gens.G and h_re == gens.H and C.compress(g_re).hex() == PINNED_G_HEX
-              and C.compress(h_re).hex() == PINNED_H_HEX)
-    res.check("generators", "G_5 message is 47 00 00 00 05",
-              gens.Gvec[5] == C.hash_to_curve(bytes.fromhex("4700000005"), DST_BP))
-    res.check("generators", "D_gens = SHA-256(encodings)",
-              gens.digest == hashlib.sha256(b"".join(gens.encodings)).digest(), gens.digest.hex())
-    # curve arithmetic cross-check: own Jacobian vs module affine
-    rnd = [3, 12345, Q - 1, Q - 2, (1 << 200) + 17, OS2IP(hashlib.sha256(b"k").digest()) % Q]
-    good = True
-    for p in (G1_GEN, gens.G, gens.U):
-        for kk in rnd:
-            if to_affine(jmul(to_jac(p), kk)) != C.scalar_mul(kk, p):
-                good = False
-        if to_affine(jadd(to_jac(p), to_jac(p))) != C.point_add(p, p):
-            good = False
-        if to_affine(jadd(to_jac(p), to_jac(gens.H))) != C.point_add(p, gens.H):
-            good = False
-        if not is_inf(jadd(to_jac(p), jneg(to_jac(p)))):
-            good = False
-    res.check("generators", "Jacobian arithmetic == curve module affine arithmetic", good)
+
+    def brute():
+        bad = sum(1 for i in range(len(allpts)) for j in range(i + 1, len(allpts))
+                  if allpts[i] == allpts[j] or allpts[i] == C.point_neg(allpts[j]))
+        return bad == 0, f"{bad} bad pairs"
+    res.guard("generators", "pairwise P != Q and P != -Q (brute force, 8515 pairs)", brute)
+    res.guard("generators", "every generator on the curve and in G1 ([q]P = O)",
+              lambda: (all(C.on_curve_e(p) and C.in_subgroup(p) for p in allpts), ""))
+    res.guard("generators", "every encoding strict-decodes back to its point",
+              lambda: (all(g1_deserialize(e) == p for e, p in
+                           zip(gens.encodings, gens.Gvec + gens.Hvec + [gens.U])), ""))
+    res.guard("generators", "profile G, H pinned (pedersen §2.2) == RFC 9380 recomputation",
+              lambda: (lambda gh: (gh[0] == gens.G and gh[1] == gens.H
+                                   and C.compress(gh[0]).hex() == PINNED_G_HEX
+                                   and C.compress(gh[1]).hex() == PINNED_H_HEX, ""))(C.derive_basis()))
+    res.guard("generators", "G_5 message is 47 00 00 00 05",
+              lambda: (gens.Gvec[5] == C.hash_to_curve(bytes.fromhex("4700000005"), DST_BP), ""))
+    res.check("generators", "D_gens == pinned literal (Appendix A)",
+              gens.digest.hex() == PIN_D_GENS_HEX, gens.digest.hex())
+    res.check("generators", "G_0, H_63, U == pinned literals",
+              gens.encodings[0].hex() == PIN_G0_HEX and gens.encodings[127].hex() == PIN_H63_HEX
+              and gens.encodings[128].hex() == PIN_U_HEX)
+
+    def vs_file():
+        d = json.load(open(GENERATORS_FILE))
+        enc = [g["compressedHex"] for g in d["generators"]]
+        names = [g["name"] for g in d["generators"]]
+        want_names = [f"G_{i}" for i in range(64)] + [f"H_{i}" for i in range(64)] + ["U"]
+        mism = [i for i in range(129) if i >= len(enc) or enc[i] != gens.encodings[i].hex()]
+        good = (len(enc) == 129 and names == want_names and not mism and d["D_gens"] == PIN_D_GENS_HEX
+                and d["DSTHex"] == PIN_DST_BP_HEX
+                and hashlib.sha256(b"".join(bytes.fromhex(e) for e in enc)).hexdigest() == PIN_D_GENS_HEX)
+        return good, f"mismatches at {mism[:5]}" if mism else "129/129 match"
+    res.guard("generators", "all 129 encodings == generators-v1.json (and its digest == pin)", vs_file)
+
+    def arith():
+        rnd = [3, 12345, Q - 1, Q - 2, (1 << 200) + 17, OS2IP(hashlib.sha256(b"k").digest()) % Q]
+        for p in (G1_GEN, gens.G, gens.U):
+            for kk in rnd:
+                if to_affine(jmul(to_jac(p), kk)) != C.scalar_mul(kk, p):
+                    return False, "jmul"
+            if to_affine(jadd(to_jac(p), to_jac(p))) != C.point_add(p, p):
+                return False, "dbl"
+            if to_affine(jadd(to_jac(p), to_jac(gens.H))) != C.point_add(p, gens.H):
+                return False, "add"
+            if not is_inf(jadd(to_jac(p), jneg(to_jac(p)))):
+                return False, "neg"
+        return True, ""
+    res.guard("generators", "Jacobian arithmetic == curve module affine arithmetic", arith)
 
 
 def selftest_transcript_shapes(res: _Results) -> None:
     ex = ("ZeroJ:bulletproof-range-bls12-381-g1-v1/DSFS-fiat-shamir-03-sigma-proofs_Shake128_BLS12381"
-          "/N016/A96S96.A96S48.A96S48.(A96S48)x4.A64/CTX0005:68656c6c6f")
-    res.check("transcript", "§5.1 example tag reproduced", session_tag(16, b"hello").decode() == ex)
+          "/N016/A96S96.A96S48.A96S48.(A96S48)x4/CTX0005:68656c6c6f")
+    res.check("transcript", "§5.1 example tag reproduced (no trailing .A64)",
+              session_tag(16, b"hello").decode() == ex)
     res.check("transcript", "1-octet ctx tag ends with /CTX0001:00",
-              session_tag(64, b"\x00").endswith(b"/N064/A96S96.A96S48.A96S48.(A96S48)x6.A64/CTX0001:00"))
+              session_tag(64, b"\x00").endswith(b"/N064/A96S96.A96S48.A96S48.(A96S48)x6/CTX0001:00"))
     inst = encode_instance(16, g1_serialize(generators().G))
     res.check("transcript", "instance length 4+24+96+4+32+32+4+48 = 244", len(inst) == 244, str(len(inst)))
     for n, ln in ((16, 736), (32, 832), (64, 928)):
         res.check("transcript", f"proof_length({n}) == {ln}", proof_length(n) == ln)
 
 
+def selftest_known_answer(res: _Results) -> None:
+    """The fixed --print-trace example against pinned literals."""
+    try:
+        proof, trace = _prove_with_test_nonces(TRACE_VALUE, TRACE_BLINDING, 16, TRACE_CTX, TRACE_SEED)
+    except Exception as e:  # noqa: BLE001
+        res.check("known-answer", "trace prover runs", False, f"{type(e).__name__}: {e}")
+        return
+    ch = _challenge_dict(trace["challenges"], 4)
+    res.check("known-answer", "tag == pin", trace["tag"].decode() == PIN_TRACE["tag"])
+    res.check("known-answer", "sessionIdHex == pin", trace["sessionId"].hex() == PIN_TRACE["sessionIdHex"],
+              trace["sessionId"].hex())
+    res.check("known-answer", "commitmentHex == pin", trace["commitment"].hex() == PIN_TRACE["commitmentHex"])
+    res.check("known-answer", "instanceHex == pin", trace["instance"].hex() == PIN_TRACE["instanceHex"])
+    for name in ("y", "z", "x", "xu"):
+        res.check("known-answer", f"challenge {name} == pin", ch[name] == PIN_TRACE["challenges"][name], ch[name])
+    for j in range(4):
+        res.check("known-answer", f"challenge x_{j + 1} == pin",
+                  ch["xj"][j] == PIN_TRACE["challenges"]["xj"][j], ch["xj"][j])
+    res.check("known-answer", "proofHex == pin", proof.hex() == PIN_TRACE["proofHex"])
+    res.guard("known-answer", "pinned proof verifies against pinned commitment",
+              lambda: (lambda d: (d["verdict"] and _challenge_dict(d["challenges"], 4) == PIN_TRACE["challenges"],
+                                  d["layer"]))(
+                  verify_detailed(bytes.fromhex(PIN_TRACE["commitmentHex"]), bytes.fromhex(PIN_TRACE["proofHex"]),
+                                  16, TRACE_CTX)))
+
+
 def selftest_roundtrips(res: _Results) -> None:
-    gens = generators()
     for n in BITS:
         cases = [("v=0 nonzero blinding", 0, 7777777),
                  ("v=1", 1, 98765),
                  ("v=2^n-1", (1 << n) - 1, Q - 3),
                  ("v=random", secrets.randbelow(1 << n), secrets.randbelow(Q - 1) + 1)]
+        ctx = b"ctx-" + bytes([n])
         for label, v, gamma in cases:
             seed = hashlib.sha256(b"selftest-seed" + label.encode() + bytes([n])).digest()
-            try:
-                proof, trace = _prove_with_test_nonces(v, gamma, n, b"ctx-" + bytes([n]), seed)
-            except Exception as e:  # pragma: no cover
-                res.check("roundtrip", f"n={n} {label}", False, f"prover raised {e!r}")
-                continue
-            det = verify_detailed(trace["commitment"], proof, n, b"ctx-" + bytes([n]))
-            ok = (len(proof) == proof_length(n) and det["verdict"]
-                  and det["challenges"] == trace["challenges"]
-                  and det["sessionId"] == trace["sessionId"])
-            res.check("roundtrip", f"n={n} {label} (v={v}) test nonces", ok,
-                      f"len={len(proof)} layer={det['layer']}")
-            if label == "v=0 nonzero blinding" or label == "v=random":
-                proof2, _ = _prove_with_test_nonces(v, gamma, n, b"ctx-" + bytes([n]), seed)
-                res.check("roundtrip", f"n={n} {label} deterministic for a fixed seed", proof2 == proof)
-            if label == "v=random":
-                res.check("roundtrip", f"n={n} {label} recursive IPA verifier agrees",
-                          _verify_ipa_recursive(trace["commitment"], proof, n, b"ctx-" + bytes([n])))
-        # CSPRNG prover
-        v = secrets.randbelow(1 << n)
-        vb, proof = prove(v, secrets.randbelow(Q - 1) + 1, n, b"csprng")
-        res.check("roundtrip", f"n={n} CSPRNG prover (v={v})",
-                  verify(vb, proof, n, b"csprng") and len(proof) == proof_length(n))
-        # commitment as decoded point
-        res.check("roundtrip", f"n={n} V given as decoded commitment",
-                  verify(g1_decode_profile(vb), proof, n, b"csprng"))
-    # ctx boundary 1024
-    proof, trace = _prove_with_test_nonces(5, 6, 16, bytes(1024), bytes(32))
-    res.check("roundtrip", "ctx of exactly 1024 octets accepted",
-              verify(trace["commitment"], proof, 16, bytes(1024)))
-    proof, trace = _prove_with_test_nonces(7, 8, 16, b"\x00", bytes([7]) * 32)
-    res.check("roundtrip", "ctx of exactly 1 octet accepted",
-              verify(trace["commitment"], proof, 16, b"\x00"))
-    # different seeds give different proofs
-    p1, _ = _prove_with_test_nonces(5, 6, 16, b"seeds", bytes(32))
-    p2, _ = _prove_with_test_nonces(5, 6, 16, b"seeds", bytes(31) + b"\x01")
-    res.check("roundtrip", "different seeds -> different proofs", p1 != p2)
-    _ = gens
+
+            def rt(v=v, gamma=gamma, seed=seed, label=label):
+                proof, trace = _prove_with_test_nonces(v, gamma, n, ctx, seed)
+                det = verify_detailed(trace["commitment"], proof, n, ctx)
+                ok = (len(proof) == proof_length(n) and det["verdict"]
+                      and det["challenges"] == trace["challenges"] and det["sessionId"] == trace["sessionId"])
+                if label in ("v=0 nonzero blinding", "v=random"):
+                    ok = ok and _prove_with_test_nonces(v, gamma, n, ctx, seed)[0] == proof
+                if label == "v=random":
+                    ok = ok and _verify_ipa_recursive(trace["commitment"], proof, n, ctx)
+                return ok, f"len={len(proof)} layer={det['layer']}"
+            res.guard("roundtrip", f"n={n} {label} (v={v}) test nonces: verifies, challenges reproduced"
+                      + ("; deterministic" if label in ("v=0 nonzero blinding", "v=random") else "")
+                      + ("; recursive IPA agrees" if label == "v=random" else ""), rt)
+
+        def csprng():
+            v = secrets.randbelow(1 << n)
+            vb, proof = prove(v, secrets.randbelow(Q - 1) + 1, n, b"csprng")
+            return (verify(vb, proof, n, b"csprng") and len(proof) == proof_length(n)
+                    and verify(g1_decode_profile(vb), proof, n, b"csprng")), f"v={v}"
+        res.guard("roundtrip", f"n={n} CSPRNG prover; V as octets and as validated decoded point", csprng)
+
+    def boundary(ctx, seed):
+        proof, trace = _prove_with_test_nonces(5, 6, 16, ctx, seed)
+        return verify(trace["commitment"], proof, 16, ctx), ""
+    res.guard("roundtrip", "ctx of exactly 1024 octets accepted", lambda: boundary(bytes(1024), bytes(32)))
+    res.guard("roundtrip", "ctx of exactly 1 octet accepted", lambda: boundary(b"\x00", bytes([7]) * 32))
+    res.guard("roundtrip", "different seeds -> different proofs",
+              lambda: (_prove_with_test_nonces(5, 6, 16, b"seeds", bytes(32))[0]
+                       != _prove_with_test_nonces(5, 6, 16, b"seeds", bytes(31) + b"\x01")[0], ""))
 
 
 def selftest_refusals(res: _Results) -> None:
@@ -1623,8 +1771,8 @@ def selftest_refusals(res: _Results) -> None:
             got = "no error"
         except BulletproofError as e:
             got = e.error_class
-        except Exception as e:  # noqa
-            got = f"other {type(e).__name__}"
+        except Exception as e:  # noqa: BLE001
+            got = type(e).__name__
         res.check("prover-refusal", label, got == expected, got)
 
     for n in BITS:
@@ -1634,41 +1782,69 @@ def selftest_refusals(res: _Results) -> None:
     refusal("v = -1", lambda: prove(-1, 5, 16, b"app"), "NON_CANONICAL_SCALAR")
     refusal("gamma = q", lambda: prove(3, Q, 16, b"app"), "NON_CANONICAL_SCALAR")
     refusal("gamma = -1", lambda: prove(3, -1, 16, b"app"), "NON_CANONICAL_SCALAR")
-    refusal("v = True (bool)", lambda: prove(True, 5, 16, b"app"), "NON_CANONICAL_SCALAR")
     refusal("(0, 0) opens the identity", lambda: prove(0, 0, 16, b"app"), "INVALID_STATEMENT")
     for bad_n in (0, 8, 17, 128, -16, 63):
         refusal(f"bad n = {bad_n}", lambda bad_n=bad_n: prove(1, 1, bad_n, b"app"), "INVALID_CONFIGURATION")
-    refusal("n = '16' (str)", lambda: prove(1, 1, "16", b"app"), "INVALID_CONFIGURATION")
     refusal("ctx of 1025 octets", lambda: prove(1, 1, 16, bytes(1025)), "INVALID_CONFIGURATION")
     refusal("empty ctx", lambda: prove(1, 1, 16, b""), "INVALID_CONFIGURATION")
-    refusal("ctx not bytes (str)", lambda: prove(1, 1, 16, "app"), "INVALID_CONFIGURATION")
-    refusal("order: empty ctx and v = q -> configuration first", lambda: prove(Q, 1, 16, b""),
-            "INVALID_CONFIGURATION")
     refusal("test-nonce prover empty ctx", lambda: _prove_with_test_nonces(1, 1, 16, b"", bytes(32)),
             "INVALID_CONFIGURATION")
-    # order: configuration before scalars before range
-    refusal("order: bad n and v = q -> configuration first", lambda: prove(Q, 1, 8, b"app"), "INVALID_CONFIGURATION")
-    refusal("order: v = q and gamma = q -> NON_CANONICAL", lambda: prove(Q, Q, 16, b"app"), "NON_CANONICAL_SCALAR")
+    # wrong argument types are API-binding errors (spec §11), not vector cases
+    refusal("API binding: v = True (bool) -> TypeError", lambda: prove(True, 5, 16, b"app"), "TypeError")
+    refusal("API binding: n = '16' (str) -> TypeError", lambda: prove(1, 1, "16", b"app"), "TypeError")
+    refusal("API binding: ctx = 'app' (str) -> TypeError", lambda: prove(1, 1, 16, "app"), "TypeError")
+    # order: configuration, then check 1, then range, then INVALID_STATEMENT
+    refusal("order: empty ctx and v = q -> configuration first", lambda: prove(Q, 1, 16, b""),
+            "INVALID_CONFIGURATION")
+    refusal("order: bad n and v = q -> configuration first", lambda: prove(Q, 1, 8, b"app"),
+            "INVALID_CONFIGURATION")
+    refusal("order: v = q and gamma = q -> NON_CANONICAL", lambda: prove(Q, Q, 16, b"app"),
+            "NON_CANONICAL_SCALAR")
     refusal("order: v = 2^16 and gamma = q -> NON_CANONICAL first", lambda: prove(1 << 16, Q, 16, b"app"),
             "NON_CANONICAL_SCALAR")
     refusal("order: (0,0) with ctx 1025 -> configuration first", lambda: prove(0, 0, 16, bytes(1025)),
             "INVALID_CONFIGURATION")
-    # test-nonce prover: same refusals
     refusal("test-nonce prover v = 2^16", lambda: _prove_with_test_nonces(1 << 16, 1, 16, b"app", bytes(32)),
             "OUT_OF_RANGE")
 
+    # §7.1: the refusals happen before any curve work
+    def no_curve_work():
+        global jmul
+        calls = {"n": 0}
+        real = jmul
+
+        def counting(pj, k):
+            calls["n"] += 1
+            return real(pj, k)
+        jmul = counting
+        try:
+            for fn in (lambda: prove(1, 1, 8, b"app"), lambda: prove(Q, 1, 16, b"app"),
+                       lambda: prove(1 << 16, 1, 16, b"app")):
+                try:
+                    fn()
+                except BulletproofError:
+                    pass
+        finally:
+            jmul = real
+        return calls["n"] == 0, f"{calls['n']} scalar multiplications"
+    res.guard("prover-refusal", "configuration/check-1/range refusals do no curve work", no_curve_work)
+
 
 def selftest_verifier_negatives(res: _Results) -> None:
-    global _CHALLENGE_HOOK
+    global _CHALLENGE_HOOK, _S_BIT_ORDER
     n, ctx = 16, b"negatives"
     k = LOG2[n]
     v, gamma = 40000, 31337
     proof, trace = _prove_with_test_nonces(v, gamma, n, ctx, bytes(range(32)))
     Vb = trace["commitment"]
-    res.check("verifier-neg", "baseline accepts", classify(Vb, proof, n, ctx) == ("true", "accept"))
+    res.guard("verifier-neg", "baseline accepts", lambda: (classify(Vb, proof, n, ctx) == ("true", "accept"), ""))
 
-    def expect(label, got, allowed):
-        res.check("verifier-neg", label, got[0] in allowed and got[0] != "true", f"{got[0]} at {got[1]}")
+    def expect(label, thunk, allowed, layer=None, group="verifier-neg"):
+        def run():
+            got = thunk()
+            good = got[0] in allowed and got[0] != "true" and (layer is None or got[1] == layer)
+            return good, f"{got[0]} at {got[1]}"
+        res.guard(group, label, run)
 
     names = ["A", "S", "T1", "T2"] + [f"{p}_{j}" for j in range(1, k + 1) for p in ("L", "R")]
     poffs = _point_offsets(n)
@@ -1676,204 +1852,295 @@ def selftest_verifier_negatives(res: _Results) -> None:
     soffs = _scalar_offsets(n)
     other_pt = g1_serialize(G1_GEN)
     REJ = {"false", "MALFORMED_ENCODING", "NOT_IN_SUBGROUP", "NON_CANONICAL_SCALAR"}
-    # substitutions
     for nm, off in zip(names, poffs):
-        expect(f"substitute {nm} by another valid point", classify(Vb, _replace(proof, off, other_pt), n, ctx),
-               {"false"})
+        expect(f"substitute {nm} by another valid point",
+               lambda off=off: classify(Vb, _replace(proof, off, other_pt), n, ctx), {"false"})
     for nm, off in zip(snames, soffs):
-        s = OS2IP(proof[off:off + 32])
-        expect(f"substitute {nm} by {nm}+1", classify(Vb, _replace(proof, off, scalar_serialize((s + 1) % Q)), n, ctx),
-               {"false"})
-    # bit flips at each position class
+        expect(f"substitute {nm} by {nm}+1",
+               lambda off=off: classify(Vb, _replace(proof, off, scalar_serialize(
+                   (OS2IP(proof[off:off + 32]) + 1) % Q)), n, ctx), {"false"})
     for nm, off in zip(names, poffs):
-        expect(f"flip compression bit of {nm}", classify(Vb, _flip(proof, off, 0x80), n, ctx), {"MALFORMED_ENCODING"})
-        expect(f"flip infinity bit of {nm}", classify(Vb, _flip(proof, off, 0x40), n, ctx), {"MALFORMED_ENCODING"})
-        expect(f"flip sort bit of {nm} (-P)", classify(Vb, _flip(proof, off, 0x20), n, ctx), {"false"})
-        expect(f"flip x LSB of {nm}", classify(Vb, _flip(proof, off + 47, 0x01), n, ctx), REJ)
-        expect(f"flip x middle bit of {nm}", classify(Vb, _flip(proof, off + 24, 0x10), n, ctx), REJ)
+        expect(f"flip compression bit of {nm}", lambda off=off: classify(Vb, _flip(proof, off, 0x80), n, ctx),
+               {"MALFORMED_ENCODING"}, "point")
+        expect(f"flip infinity bit of {nm}", lambda off=off: classify(Vb, _flip(proof, off, 0x40), n, ctx),
+               {"MALFORMED_ENCODING"}, "point")
+        expect(f"flip sort bit of {nm} (-P)", lambda off=off: classify(Vb, _flip(proof, off, 0x20), n, ctx),
+               {"false"})
+        expect(f"flip x LSB of {nm}", lambda off=off: classify(Vb, _flip(proof, off + 47, 0x01), n, ctx), REJ)
+        expect(f"flip x middle bit of {nm}", lambda off=off: classify(Vb, _flip(proof, off + 24, 0x10), n, ctx),
+               REJ)
     for nm, off in zip(snames, soffs):
-        expect(f"flip top bit of {nm} (>= q)", classify(Vb, _flip(proof, off, 0x80), n, ctx),
-               {"NON_CANONICAL_SCALAR"})
-        expect(f"flip LSB of {nm}", classify(Vb, _flip(proof, off + 31, 0x01), n, ctx), {"false"})
-    # length
-    expect("truncated by one octet", classify(Vb, proof[:-1], n, ctx), {"MALFORMED_ENCODING"})
-    expect("extended by one octet", classify(Vb, proof + b"\x00", n, ctx), {"MALFORMED_ENCODING"})
-    expect("empty proof", classify(Vb, b"", n, ctx), {"MALFORMED_ENCODING"})
-    expect("proof of n=32 length under n=16", classify(Vb, proof + bytes(96), n, ctx), {"MALFORMED_ENCODING"})
-    # identity / invalid proof points
+        expect(f"flip top bit of {nm} (>= q)", lambda off=off: classify(Vb, _flip(proof, off, 0x80), n, ctx),
+               {"NON_CANONICAL_SCALAR"}, "scalar")
+        expect(f"flip LSB of {nm}", lambda off=off: classify(Vb, _flip(proof, off + 31, 0x01), n, ctx), {"false"})
+    expect("truncated by one octet", lambda: classify(Vb, proof[:-1], n, ctx), {"MALFORMED_ENCODING"}, "length")
+    expect("extended by one octet", lambda: classify(Vb, proof + b"\x00", n, ctx), {"MALFORMED_ENCODING"}, "length")
+    expect("empty proof", lambda: classify(Vb, b"", n, ctx), {"MALFORMED_ENCODING"}, "length")
+    expect("proof of n=32 length under n=16", lambda: classify(Vb, proof + bytes(96), n, ctx),
+           {"MALFORMED_ENCODING"}, "length")
     for nm, off in (("A", poffs[0]), ("T2", poffs[3]), ("R_4", poffs[-1])):
-        expect(f"identity encoding as {nm}", classify(Vb, _replace(proof, off, C.IDENTITY_ENCODING), n, ctx),
-               {"MALFORMED_ENCODING"})
-    expect("order-3 point (0x80||0^47) as S", classify(Vb, _replace(proof, poffs[1], b"\x80" + bytes(47)), n, ctx),
-           {"NOT_IN_SUBGROUP"})
-    expect("x = P_381 as L_1", classify(Vb, _replace(proof, poffs[4], bytes([0x80 | (P_381 >> 376)]) +
-                                                    I2OSP(P_381, 48)[1:]), n, ctx), {"MALFORMED_ENCODING"})
-    # non-canonical scalars s + q
+        expect(f"identity encoding as {nm}",
+               lambda off=off: classify(Vb, _replace(proof, off, C.IDENTITY_ENCODING), n, ctx),
+               {"MALFORMED_ENCODING"}, "point")
+    expect("order-3 point (0x80||0^47) as S",
+           lambda: classify(Vb, _replace(proof, poffs[1], b"\x80" + bytes(47)), n, ctx), {"NOT_IN_SUBGROUP"}, "point")
+    expect("x = P_381 as L_1",
+           lambda: classify(Vb, _replace(proof, poffs[4], bytes([0x80 | (P_381 >> 376)]) + I2OSP(P_381, 48)[1:]),
+                            n, ctx), {"MALFORMED_ENCODING"}, "point")
     for nm, off in zip(snames, soffs):
-        s = OS2IP(proof[off:off + 32])
-        expect(f"non-canonical {nm} + q", classify(Vb, _replace(proof, off, I2OSP(s + Q, 32)), n, ctx),
-               {"NON_CANONICAL_SCALAR"})
-    # wrong statement / configuration
-    expect("verified under n = 32", classify(Vb, proof, 32, ctx), {"MALFORMED_ENCODING"})
-    expect("verified under n = 64", classify(Vb, proof, 64, ctx), {"MALFORMED_ENCODING"})
-    expect("verified under a different ctx", classify(Vb, proof, n, ctx + b"!"), {"false"})
-    r = classify(Vb, proof, n, b"")
-    res.check("verifier-neg", "verified under empty ctx -> INVALID_CONFIGURATION",
-              r == ("INVALID_CONFIGURATION", "configuration"), str(r))
-    r = classify(C.IDENTITY_ENCODING, proof, n, b"")
-    res.check("verifier-neg", "empty ctx + identity V -> INVALID_CONFIGURATION",
-              r == ("INVALID_CONFIGURATION", "configuration"), str(r))
-    expect("verified under a 1-octet prefix of ctx", classify(Vb, proof, n, ctx[:1]), {"false"})
-    other_V = g1_serialize(to_affine(commit(v + 1, gamma)))
-    expect("verified against a different V (v+1)", classify(other_V, proof, n, ctx), {"false"})
-    expect("verified against -V", classify(_flip(Vb, 0, 0x20), proof, n, ctx), {"false"})
-    r = classify(C.IDENTITY_ENCODING, proof, n, ctx)
-    res.check("verifier-neg", "V = identity -> false at statement", r == ("false", "statement"), str(r))
-    r = classify(None, proof, n, ctx)
-    res.check("verifier-neg", "V = O (decoded) -> false at statement", r == ("false", "statement"), str(r))
-    r = classify(b"\x80" + bytes(47), proof, n, ctx)
-    res.check("verifier-neg", "V outside subgroup -> NOT_IN_SUBGROUP", r[0] == "NOT_IN_SUBGROUP", str(r))
-    r = classify(Vb[:47], proof, n, ctx)
-    res.check("verifier-neg", "V of 47 octets -> MALFORMED_ENCODING", r[0] == "MALFORMED_ENCODING", str(r))
-    r = classify(Vb, proof, 8, ctx)
-    res.check("verifier-neg", "n = 8 -> INVALID_CONFIGURATION", r[0] == "INVALID_CONFIGURATION", str(r))
-    r = classify(Vb, proof, n, bytes(1025))
-    res.check("verifier-neg", "ctx 1025 -> INVALID_CONFIGURATION", r[0] == "INVALID_CONFIGURATION", str(r))
-    # swapped L/R
+        expect(f"non-canonical {nm} + q",
+               lambda off=off: classify(Vb, _replace(proof, off, I2OSP(OS2IP(proof[off:off + 32]) + Q, 32)), n, ctx),
+               {"NON_CANONICAL_SCALAR"}, "scalar")
+    expect("verified under n = 32", lambda: classify(Vb, proof, 32, ctx), {"MALFORMED_ENCODING"}, "length")
+    expect("verified under n = 64", lambda: classify(Vb, proof, 64, ctx), {"MALFORMED_ENCODING"}, "length")
+    expect("verified under a different ctx", lambda: classify(Vb, proof, n, ctx + b"!"), {"false"})
+    expect("verified under a 1-octet prefix of ctx", lambda: classify(Vb, proof, n, ctx[:1]), {"false"})
+    expect("verified under empty ctx", lambda: classify(Vb, proof, n, b""), {"INVALID_CONFIGURATION"},
+           "configuration")
+    expect("empty ctx + identity V", lambda: classify(C.IDENTITY_ENCODING, proof, n, b""),
+           {"INVALID_CONFIGURATION"}, "configuration")
+    expect("verified against a different V (v+1)",
+           lambda: classify(g1_serialize(to_affine(commit(v + 1, gamma))), proof, n, ctx), {"false"})
+    expect("verified against -V", lambda: classify(_flip(Vb, 0, 0x20), proof, n, ctx), {"false"})
+    expect("V = identity octets -> false at statement", lambda: classify(C.IDENTITY_ENCODING, proof, n, ctx),
+           {"false"}, "statement")
+    expect("V = O (decoded None) -> false at statement", lambda: classify(None, proof, n, ctx), {"false"}, "statement")
+    expect("V octets outside subgroup -> NOT_IN_SUBGROUP", lambda: classify(b"\x80" + bytes(47), proof, n, ctx),
+           {"NOT_IN_SUBGROUP"}, "statement")
+    expect("V of 47 octets -> MALFORMED_ENCODING", lambda: classify(Vb[:47], proof, n, ctx),
+           {"MALFORMED_ENCODING"}, "statement")
+    expect("n = 8 -> INVALID_CONFIGURATION", lambda: classify(Vb, proof, 8, ctx), {"INVALID_CONFIGURATION"},
+           "configuration")
+    expect("ctx 1025 -> INVALID_CONFIGURATION", lambda: classify(Vb, proof, n, bytes(1025)),
+           {"INVALID_CONFIGURATION"}, "configuration")
     lr = proof[288:288 + 96]
-    expect("L_1 and R_1 swapped", classify(Vb, _replace(proof, 288, lr[48:] + lr[:48]), n, ctx), {"false"})
-    # decoding order (§8.1)
-    r = classify(Vb, proof, 8, bytes(1025))
-    res.check("verifier-order", "bad n + bad ctx -> INVALID_CONFIGURATION", r[0] == "INVALID_CONFIGURATION", str(r))
-    r = classify(b"\x80" + bytes(47), proof, 8, ctx)
-    res.check("verifier-order", "bad n + bad V -> INVALID_CONFIGURATION (step 1 first)",
-              r[0] == "INVALID_CONFIGURATION", str(r))
-    r = classify(C.IDENTITY_ENCODING, proof[:-1], n, ctx)
-    res.check("verifier-order", "V = O + bad length -> MALFORMED_ENCODING (format before step 5)",
-              r == ("MALFORMED_ENCODING", "length"), str(r))
-    r = classify(C.IDENTITY_ENCODING, _replace(proof, poffs[0], C.IDENTITY_ENCODING), n, ctx)
-    res.check("verifier-order", "V = O + identity A -> MALFORMED_ENCODING at point",
-              r == ("MALFORMED_ENCODING", "point"), str(r))
-    r = classify(C.IDENTITY_ENCODING, _flip(proof, soffs[4], 0x80), n, ctx)
-    res.check("verifier-order", "V = O + non-canonical b -> NON_CANONICAL_SCALAR",
-              r == ("NON_CANONICAL_SCALAR", "scalar"), str(r))
-    r = classify(C.IDENTITY_ENCODING, proof, n, ctx)
-    res.check("verifier-order", "V = O + well-formed proof -> false at statement (step 5)",
-              r == ("false", "statement"), str(r))
-    r = classify(Vb[:47], proof[:-1], n, ctx)
-    res.check("verifier-order", "bad V + bad length -> V's class (step 2 first)",
-              r[0] == "MALFORMED_ENCODING" and r[1] == "statement", str(r))
-    bad_both = _replace(_flip(proof, soffs[0], 0x80), poffs[-1], C.IDENTITY_ENCODING)
-    r = classify(Vb, bad_both, n, ctx)
-    res.check("verifier-order", "bad t_hat (offset 192) + identity R_4 (later) -> NON_CANONICAL (proof order)",
-              r == ("NON_CANONICAL_SCALAR", "scalar"), str(r))
-    bad_mid = _replace(_flip(proof, soffs[2], 0x80), poffs[1], C.IDENTITY_ENCODING)
-    r = classify(Vb, bad_mid, n, ctx)
-    res.check("verifier-order", "identity S + bad mu (later) -> MALFORMED_ENCODING at point",
-              r == ("MALFORMED_ENCODING", "point"), str(r))
-    bad_tail = _replace(_flip(proof, soffs[3], 0x80), poffs[-1], b"\x80" + bytes(47))
-    r = classify(Vb, bad_tail, n, ctx)
-    res.check("verifier-order", "non-subgroup R_4 + bad a (later) -> NOT_IN_SUBGROUP at point",
-              r == ("NOT_IN_SUBGROUP", "point"), str(r))
-    bad_two = _replace(_replace(proof, poffs[1], b"\x80" + bytes(47)), poffs[3], C.IDENTITY_ENCODING)
-    r = classify(Vb, bad_two, n, ctx)
-    res.check("verifier-order", "non-subgroup S before identity T2 -> NOT_IN_SUBGROUP (proof order)",
-              r[0] == "NOT_IN_SUBGROUP", str(r))
+    expect("L_1 and R_1 swapped", lambda: classify(Vb, _replace(proof, 288, lr[48:] + lr[:48]), n, ctx), {"false"})
+
+    # §8.1 step 4: a decoded V is not trusted.  Regression: V' = [7]G + [11]H + (0, 2), where (0, 2)
+    # has order 3, has no Pedersen opening; it must be NOT_IN_SUBGROUP, never true/false via check 1.
+    order3 = (0, 2)
+    v_mixed = C.point_add(to_affine(commit(7, 11)), order3)
+
+    def mixed_decoded():
+        assert C.on_curve_e(v_mixed) and not C.in_subgroup(v_mixed)
+        got = classify(v_mixed, proof, n, ctx)
+        return got == ("NOT_IN_SUBGROUP", "statement"), f"{got}"
+    res.guard("verifier-neg", "regression: decoded V' = [7]G+[11]H+(0,2) -> NOT_IN_SUBGROUP", mixed_decoded)
+    expect("V' = [7]G+[11]H+(0,2) as octets -> NOT_IN_SUBGROUP",
+           lambda: classify(C.compress(v_mixed), proof, n, ctx), {"NOT_IN_SUBGROUP"}, "statement")
+    expect("decoded V = order-3 point (0,2) -> NOT_IN_SUBGROUP", lambda: classify(order3, proof, n, ctx),
+           {"NOT_IN_SUBGROUP"}, "statement")
+    expect("decoded V off the curve -> MALFORMED_ENCODING", lambda: classify((1, 1), proof, n, ctx),
+           {"MALFORMED_ENCODING"}, "statement")
+
+    def mixed_proof():
+        # a proof for the subgroup part [7]G + [11]H, offered against V' (both ways in)
+        p7, t7 = _prove_with_test_nonces(7, 11, n, ctx, bytes([9]) * 32)
+        a = classify(v_mixed, p7, n, ctx)
+        b = classify(C.compress(v_mixed), p7, n, ctx)
+        return a == b == ("NOT_IN_SUBGROUP", "statement") and verify(t7["commitment"], p7, n, ctx), f"{a} / {b}"
+    res.guard("verifier-neg", "honest proof for [7]G+[11]H offered against V' -> NOT_IN_SUBGROUP", mixed_proof)
+
+    # decoding order (§8.1): configuration, length, proof fields in order, V, V = O
+    og = "verifier-order"
+    expect("bad n + bad ctx -> INVALID_CONFIGURATION", lambda: classify(Vb, proof, 8, bytes(1025)),
+           {"INVALID_CONFIGURATION"}, "configuration", og)
+    expect("bad n + bad V -> INVALID_CONFIGURATION", lambda: classify(b"\x80" + bytes(47), proof, 8, ctx),
+           {"INVALID_CONFIGURATION"}, "configuration", og)
+    expect("bad V + bad length -> length class (length before V)", lambda: classify(Vb[:47], proof[:-1], n, ctx),
+           {"MALFORMED_ENCODING"}, "length", og)
+    expect("non-subgroup V + identity A -> MALFORMED_ENCODING at point (fields before V)",
+           lambda: classify(b"\x80" + bytes(47), _replace(proof, poffs[0], C.IDENTITY_ENCODING), n, ctx),
+           {"MALFORMED_ENCODING"}, "point", og)
+    expect("47-octet V + non-canonical b -> NON_CANONICAL_SCALAR (fields before V)",
+           lambda: classify(Vb[:47], _flip(proof, soffs[4], 0x80), n, ctx), {"NON_CANONICAL_SCALAR"}, "scalar", og)
+    expect("decoded non-subgroup V + bad length -> length class",
+           lambda: classify(v_mixed, proof[:-1], n, ctx), {"MALFORMED_ENCODING"}, "length", og)
+    expect("non-subgroup V + well-formed proof -> NOT_IN_SUBGROUP at statement",
+           lambda: classify(b"\x80" + bytes(47), proof, n, ctx), {"NOT_IN_SUBGROUP"}, "statement", og)
+    expect("V = O + bad length -> MALFORMED_ENCODING at length", lambda: classify(C.IDENTITY_ENCODING, proof[:-1], n, ctx),
+           {"MALFORMED_ENCODING"}, "length", og)
+    expect("V = O + identity A -> MALFORMED_ENCODING at point",
+           lambda: classify(C.IDENTITY_ENCODING, _replace(proof, poffs[0], C.IDENTITY_ENCODING), n, ctx),
+           {"MALFORMED_ENCODING"}, "point", og)
+    expect("V = O + non-canonical b -> NON_CANONICAL_SCALAR",
+           lambda: classify(C.IDENTITY_ENCODING, _flip(proof, soffs[4], 0x80), n, ctx),
+           {"NON_CANONICAL_SCALAR"}, "scalar", og)
+    expect("V = O + well-formed proof -> false at statement (step 5 last)",
+           lambda: classify(C.IDENTITY_ENCODING, proof, n, ctx), {"false"}, "statement", og)
+    expect("bad t_hat (offset 192) + identity R_4 (later) -> NON_CANONICAL_SCALAR",
+           lambda: classify(Vb, _replace(_flip(proof, soffs[0], 0x80), poffs[-1], C.IDENTITY_ENCODING), n, ctx),
+           {"NON_CANONICAL_SCALAR"}, "scalar", og)
+    expect("identity S + bad mu (later) -> MALFORMED_ENCODING at point",
+           lambda: classify(Vb, _replace(_flip(proof, soffs[2], 0x80), poffs[1], C.IDENTITY_ENCODING), n, ctx),
+           {"MALFORMED_ENCODING"}, "point", og)
+    expect("non-subgroup R_4 + bad a (later) -> NOT_IN_SUBGROUP at point",
+           lambda: classify(Vb, _replace(_flip(proof, soffs[3], 0x80), poffs[-1], b"\x80" + bytes(47)), n, ctx),
+           {"NOT_IN_SUBGROUP"}, "point", og)
+    expect("non-subgroup S before identity T2 -> NOT_IN_SUBGROUP at point",
+           lambda: classify(Vb, _replace(_replace(proof, poffs[1], b"\x80" + bytes(47)), poffs[3],
+                                         C.IDENTITY_ENCODING), n, ctx), {"NOT_IN_SUBGROUP"}, "point", og)
+
     # zero challenges via the seam
     for cname in ["y", "z", "x", "xu"] + [f"x_{j}" for j in range(1, k + 1)]:
-        _CHALLENGE_HOOK = (lambda target: (lambda nm, val: 0 if nm == target else val))(cname)
-        try:
-            r = classify(Vb, proof, n, ctx)
+        def zero(cname=cname):
+            global _CHALLENGE_HOOK
+            _CHALLENGE_HOOK = lambda nm, val: 0 if nm == cname else val  # noqa: E731
             try:
-                _prove_with_test_nonces(v, gamma, n, ctx, bytes(range(32)))
-                pr = "no failure"
-            except TestNonceProverFailure:
-                pr = "TestNonceProverFailure"
+                r = classify(Vb, proof, n, ctx)
+                try:
+                    _prove_with_test_nonces(v, gamma, n, ctx, bytes(range(32)))
+                    pr = "no failure"
+                except TestNonceProverFailure:
+                    pr = "TestNonceProverFailure"
+            finally:
+                _CHALLENGE_HOOK = None
+            return r == ("false", "challenge") and pr == "TestNonceProverFailure", f"{r} / {pr}"
+        res.guard("verifier-neg", f"challenge {cname} forced to 0 -> false at challenge; test prover fails closed",
+                  zero)
+
+    def restart_once():
+        global _CHALLENGE_HOOK
+        state = {"hits": 0}
+
+        def hook(nm, val):
+            if nm == "x" and state["hits"] == 0:
+                state["hits"] += 1
+                return 0
+            return val
+        _CHALLENGE_HOOK = hook
+        try:
+            vb2, pr2 = prove(9, 10, 16, b"restart")
         finally:
             _CHALLENGE_HOOK = None
-        res.check("verifier-neg", f"challenge {cname} forced to 0 -> false at challenge; test prover fails",
-                  r == ("false", "challenge") and pr == "TestNonceProverFailure", f"{r} / {pr}")
-    # CSPRNG prover restarts when a challenge is zero once
-    state = {"hits": 0}
+        return state["hits"] == 1 and verify(vb2, pr2, 16, b"restart"), ""
+    res.guard("verifier-neg", "CSPRNG prover restarts after a zero challenge", restart_once)
 
-    def once_zero(nm, val):
-        if nm == "x" and state["hits"] == 0:
-            state["hits"] += 1
-            return 0
-        return val
-    _CHALLENGE_HOOK = once_zero
-    try:
-        vb2, pr2 = prove(9, 10, 16, b"restart")
-    finally:
-        _CHALLENGE_HOOK = None
-    res.check("verifier-neg", "CSPRNG prover restarts after a zero challenge",
-              state["hits"] == 1 and verify(vb2, pr2, 16, b"restart"))
+    def restart_bound():
+        global _CHALLENGE_HOOK
+        state = {"attempts": 0}
 
-    # cheating provers: isolate check 1 and check 2
-    V_cheat = commit(1 << n, gamma)  # out of range value 2^n; a_L = its n low bits = 0
-    proof_c, _ = _prove_core(1 << n, gamma, n, ctx, V_cheat, _test_nonces(n, bytes(32)))
-    det = verify_detailed(g1_serialize(to_affine(V_cheat)), proof_c, n, ctx)
-    res.check("verifier-neg", "cheating prover v = 2^n: rejected by check 1 only",
-              not det["verdict"] and not det["check1"] and det["check2"], str((det["check1"], det["check2"])))
-    a_bad = [(v >> i) & 1 for i in range(n)]
-    a_bad[0] += 2  # a_L entry not a bit; <a_L, 2^n> = v + 2
-    V_c2 = commit(v + 2, gamma)
-    proof_c2, _ = _prove_core(v + 2, gamma, n, ctx, V_c2, _test_nonces(n, bytes(32)), a_l_override=a_bad)
-    det = verify_detailed(g1_serialize(to_affine(V_c2)), proof_c2, n, ctx)
-    res.check("verifier-neg", "cheating prover with a non-bit a_L entry: rejected by check 1",
-              not det["verdict"] and not det["check1"], str((det["check1"], det["check2"])))
+        def hook(nm, val):
+            if nm == "x":
+                state["attempts"] += 1
+                return 0
+            return val
+        _CHALLENGE_HOOK = hook
+        try:
+            try:
+                prove(9, 10, 16, b"restart")
+                got = "proof emitted"
+            except ProverRestartsExhausted:
+                got = "ProverRestartsExhausted"
+        finally:
+            _CHALLENGE_HOOK = None
+        return got == "ProverRestartsExhausted" and state["attempts"] == 8, f"{got} after {state['attempts']} attempts"
+    res.guard("verifier-neg", "§7.3 restarts bounded at 8 attempts, then raise (no proof)", restart_bound)
+
+    def cheat1():
+        V_cheat = commit(1 << n, gamma)
+        proof_c, _ = _prove_core(1 << n, gamma, n, ctx, V_cheat, _test_nonces(n, bytes(32)))
+        det = verify_detailed(g1_serialize(to_affine(V_cheat)), proof_c, n, ctx)
+        return not det["verdict"] and not det["check1"] and det["check2"], str((det["check1"], det["check2"]))
+    res.guard("verifier-neg", "cheating prover v = 2^n: check 1 fails, check 2 holds (both evaluated)", cheat1)
+
+    def cheat2():
+        a_bad = [(v >> i) & 1 for i in range(n)]
+        a_bad[0] += 2
+        V_c2 = commit(v + 2, gamma)
+        proof_c2, _ = _prove_core(v + 2, gamma, n, ctx, V_c2, _test_nonces(n, bytes(32)), a_l_override=a_bad)
+        det = verify_detailed(g1_serialize(to_affine(V_c2)), proof_c2, n, ctx)
+        return not det["verdict"] and not det["check1"] and det["layer"] == "check1", str((det["check1"], det["check2"]))
+    res.guard("verifier-neg", "cheating prover with a non-bit a_L entry: rejected, layer check1", cheat2)
     a_off = soffs[3]
     tampered = _replace(proof, a_off, scalar_serialize((OS2IP(proof[a_off:a_off + 32]) + 1) % Q))
-    det = verify_detailed(Vb, tampered, n, ctx)
-    res.check("verifier-neg", "a + 1 (no later challenge): rejected by check 2 only",
-              det["check1"] and not det["check2"], str((det["check1"], det["check2"])))
-    res.check("verifier-neg", "recursive IPA verifier also rejects a + 1",
-              not _verify_ipa_recursive(Vb, tampered, n, ctx))
-    res.check("verifier-neg", "recursive IPA verifier accepts the baseline",
-              _verify_ipa_recursive(Vb, proof, n, ctx))
-    # mutant: the LSB-first reading of the paper's "j-th bit of i-1" must break check 2 on an
-    # honest proof (evidence that §8.3's MSB-first rule is the one matching Protocol 2's folding)
-    global _S_BIT_ORDER
-    _S_BIT_ORDER = "lsb"
-    try:
-        det = verify_detailed(Vb, proof, n, ctx)
-    finally:
-        _S_BIT_ORDER = "msb"
-    res.check("verifier-neg", "mutant LSB-first s_i rule rejects the honest proof at check 2",
-              det["check1"] and not det["check2"], str((det["check1"], det["check2"])))
+    res.guard("verifier-neg", "a + 1 (no later challenge): check 1 holds, check 2 fails, layer check2",
+              lambda: (lambda d: (d["check1"] and not d["check2"] and d["layer"] == "check2",
+                                  str((d["check1"], d["check2"]))))(verify_detailed(Vb, tampered, n, ctx)))
+    res.guard("verifier-neg", "both checks evaluated when check 1 fails (substituted A)",
+              lambda: (lambda d: ("check1" in d and "check2" in d and d["layer"] == "check1",
+                                  str((d.get("check1"), d.get("check2")))))(
+                  verify_detailed(Vb, _replace(proof, poffs[0], other_pt), n, ctx)))
+    res.guard("verifier-neg", "recursive IPA verifier rejects a + 1 and accepts the baseline",
+              lambda: (not _verify_ipa_recursive(Vb, tampered, n, ctx) and _verify_ipa_recursive(Vb, proof, n, ctx), ""))
+
+    def lsb_mutant():
+        global _S_BIT_ORDER
+        _S_BIT_ORDER = "lsb"
+        try:
+            det = verify_detailed(Vb, proof, n, ctx)
+        finally:
+            _S_BIT_ORDER = "msb"
+        return det["check1"] and not det["check2"], str((det["check1"], det["check2"]))
+    res.guard("verifier-neg", "mutant LSB-first s_i rule rejects the honest proof at check 2", lsb_mutant)
+
+
+def _challenges_of(V_bytes: bytes, proof: bytes, n: int, ctx: bytes) -> dict:
+    """Recompute the §5.3 challenges from proof bytes without decoding (test helper)."""
+    k = LOG2[n]
+    tr = _Transcript(n, ctx, V_bytes)
+    tr.absorb(proof[0:96])
+    tr.challenge("y")
+    tr.challenge("z")
+    tr.absorb(proof[96:192])
+    tr.challenge("x")
+    tr.absorb(proof[192:288])
+    tr.challenge("xu")
+    for j in range(k):
+        tr.absorb(proof[288 + 96 * j:288 + 96 * (j + 1)])
+        tr.challenge(f"x_{j + 1}")
+    return tr.challenges
 
 
 def selftest_transcript_mutants(res: _Results) -> None:
-    global _TRANSCRIPT_MUTATION
     n, ctx = 16, b"mutants"
     v, gamma = 4242, 777
     proof, trace = _prove_with_test_nonces(v, gamma, n, ctx, bytes(range(32)))
     Vb = trace["commitment"]
     base = verify_detailed(Vb, proof, n, ctx)
-    for mut in ("drop_V", "drop_ctx", "drop_Dgens", "swap_GH"):
-        _TRANSCRIPT_MUTATION = mut
-        try:
-            det = verify_detailed(Vb, proof, n, ctx)
-            mproof, mtrace = _prove_with_test_nonces(v, gamma, n, ctx, bytes(range(32)))
-        finally:
-            _TRANSCRIPT_MUTATION = None
-        changed = all(det["challenges"][c] != base["challenges"][c] for c in base["challenges"])
-        res.check("transcript-mutant", f"{mut}: every challenge changes", changed)
-        res.check("transcript-mutant", f"{mut}: original proof rejected by mutated verifier",
-                  not det["verdict"], det["layer"])
-        res.check("transcript-mutant", f"{mut}: mutated prover's proof rejected by the real verifier",
-                  mproof != proof and not verify(Vb, mproof, n, ctx))
+    for mut in ("drop_V", "drop_ctx", "drop_Dgens", "drop_n", "swap_GH"):
+        def run(mut=mut):
+            global _TRANSCRIPT_MUTATION
+            _TRANSCRIPT_MUTATION = mut
+            try:
+                det = verify_detailed(Vb, proof, n, ctx)
+                mproof, _ = _prove_with_test_nonces(v, gamma, n, ctx, bytes(range(32)))
+            finally:
+                _TRANSCRIPT_MUTATION = None
+            changed = all(det["challenges"][c] != base["challenges"][c] for c in base["challenges"])
+            ok = changed and not det["verdict"] and mproof != proof and not verify(Vb, mproof, n, ctx)
+            return ok, f"all challenges changed={changed}; mutated verifier layer={det['layer']}"
+        res.guard("transcript-mutant", f"{mut}: every challenge changes; original proof rejected by the mutated "
+                                       "verifier; mutated prover's proof rejected by the real verifier", run)
+    # changing one prover message changes every LATER challenge and no earlier one
+    order = ["y", "z", "x", "xu"] + [f"x_{j}" for j in range(1, LOG2[n] + 1)]
+    other_pt = g1_serialize(G1_GEN)
+    t_off = _scalar_offsets(n)[0]
+    cases = [("A", 0, other_pt, 0), ("T1", 96, other_pt, 2),
+             ("t_hat", t_off, scalar_serialize((OS2IP(proof[t_off:t_off + 32]) + 1) % Q), 3),
+             ("L_2", 288 + 96, other_pt, 5), ("R_4", 288 + 96 * 3 + 48, other_pt, 7)]
+    for nm, off, new, first_changed in cases:
+        def msg(off=off, new=new, first_changed=first_changed):
+            ch = _challenges_of(Vb, _replace(proof, off, new), n, ctx)
+            same = all(ch[c] == base["challenges"][c] for c in order[:first_changed])
+            diff = all(ch[c] != base["challenges"][c] for c in order[first_changed:])
+            return same and diff, f"unchanged={order[:first_changed]} changed={order[first_changed:]}"
+        res.guard("transcript-mutant", f"change {nm}: every later challenge changes, earlier ones do not", msg)
+    res.guard("transcript-mutant", "change a or b: no challenge changes (not absorbed, §5.3)",
+              lambda: (_challenges_of(Vb, _flip(proof, len(proof) - 1, 1), n, ctx) == base["challenges"]
+                       and _challenges_of(Vb, _flip(proof, len(proof) - 33, 1), n, ctx) == base["challenges"], ""))
 
 
 def run_self_test() -> int:
     res = _Results()
-    selftest_conformance(res)
-    selftest_generators(res)
-    selftest_transcript_shapes(res)
-    selftest_roundtrips(res)
-    selftest_refusals(res)
-    selftest_verifier_negatives(res)
-    selftest_transcript_mutants(res)
+    for section in (selftest_conformance, selftest_generators, selftest_transcript_shapes,
+                    selftest_known_answer, selftest_roundtrips, selftest_refusals,
+                    selftest_verifier_negatives, selftest_transcript_mutants):
+        try:
+            section(res)
+        except Exception as e:  # noqa: BLE001  -- an unexpected exception is a counted FAIL
+            res.check(section.__name__.replace("selftest_", ""), "section completed without an exception",
+                      False, f"{type(e).__name__}: {e}")
     print()
     print("SUMMARY")
     tp = tf = 0

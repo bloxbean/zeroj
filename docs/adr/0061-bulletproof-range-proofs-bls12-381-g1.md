@@ -468,19 +468,28 @@ A ‖ S ‖ T₁ ‖ T₂ ‖ t̂ ‖ τ_x ‖ μ ‖ L_1 ‖ R_1 ‖ … ‖ L_
    configuration error.
 2. The proof length must equal the length for that `n`, **before anything is decoded or indexed**.
    This rules out the Monero 2026 out-of-bounds class.
-3. Every point decodes strictly. **The identity is rejected for every proof point** (`A`, `S`, `T₁`,
-   `T₂`, `L_j`, `R_j`), as sigma-03 §8.2 requires (dalek does the same). An honest prover produces the identity with
-   negligible probability, and if it does, it restarts.
-4. Every scalar passes check 1 (`t̂`, `τ_x`, `μ`, `a` and `b`).
-5. `V` is decoded with the profile's own decoder (ADR-0060 D3). The decoder accepts the
+3. The proof's fields are decoded **in proof order** (`A`, `S`, `T₁`, `T₂`, `t̂`, `τ_x`, `μ`, `L_1`,
+   `R_1`, …, `a`, `b`), as fiat-shamir-03 §6.2 reads a NARG string, and the first failure is
+   reported. (r1–r4 decoded all points, then all scalars; M0 aligned the order with the draft in
+   r5.)
+   - Every point decodes strictly. **The identity is rejected for every proof point** (`A`, `S`,
+     `T₁`, `T₂`, `L_j`, `R_j`), as sigma-03 §8.2 requires (dalek does the same). An honest prover
+     produces the identity with negligible probability, and if it does, it restarts.
+   - Every scalar passes check 1 (`t̂`, `τ_x`, `μ`, `a` and `b`).
+4. `V` is decoded with the profile's own decoder (ADR-0060 D3). The decoder accepts the
    identity, but this protocol then **rejects an identity `V`**, because the sigma-03 §8.2 codec
    neither produces nor accepts infinity. The profile itself is unchanged: the identity remains a
    valid `pedersen-bls12-381-g1-v1` commitment for openings and relations. It just cannot carry a
    range proof. An honest committer with a uniform `γ` produces it with negligible probability.
+   An API that accepts `V` already decoded MUST accept only a validated subgroup element (the
+   `G1PedersenCommitment` type), never raw coordinates.
 
-The verdict is a single "invalid proof" outcome for steps 2–5, plus a distinct
-"invalid configuration" outcome for step 1. The error carries no secret and no partial
-verification state.
+Outcomes (spec §8.1, §9):
+- step 1 is `INVALID_CONFIGURATION`;
+- steps 2–4 raise the registry format classes (`MALFORMED_ENCODING`, `NOT_IN_SUBGROUP`,
+  `NON_CANONICAL_SCALAR`);
+- an identity `V` makes verification return `false`;
+- the error carries no secret and no partial verification state.
 
 ### D5 — Verification (R2)
 
@@ -509,10 +518,11 @@ reuses the value base as the inner-product element. This design uses the indepen
 
 ### D6 — Proving and secrets (R3)
 
-**Prover input** is a `G1PedersenOpening` `(m, r)` and the width `n`. Before any curve work, the
-prover refuses deterministically:
-- `m ≥ 2^n`;
-- an opening whose commitment is the identity. The prover checks the commitment itself, not just
+**Prover input** is a `G1PedersenOpening` `(m, r)` and the width `n`. The prover refuses
+deterministically, in this order (spec §7.1):
+- **before any curve work**, an invalid configuration (`n` or `ctx`) and `m ≥ 2^n`;
+- then, after computing `V = [m]·G + [r]·H` with the secret entry point and **before any proof
+  work**, an opening whose commitment is the identity. The prover checks the commitment itself, not just
   the pair. The opening `(0, 0)` is the known case. Any other opening of the identity would reveal
   `log_H(G)`, so finding one is as hard as breaking binding.
 
@@ -526,8 +536,25 @@ itself reject.
 - Each is 64 octets from `SecureRandom`, reduced mod `q`, the sampler of
   `G1Pedersen.randomBlinding`.
 - **Reusing nonces across two proofs leaks the witness.** No API accepts caller-chosen nonces.
-- A deterministic nonce source exists only as a package-private test seam, for vector
-  generation.
+- **The prover owns its `SecureRandom`** (spec §7.3):
+  - it is created at run time and never accepted from a caller;
+  - it is never created in a static initialiser that a native-image build could run at build
+    time;
+  - the prover fails closed without an operating-system-backed source.
+
+  Restarts are bounded at 8 attempts. Exhausting them raises `IllegalStateException`, and no
+  proof is emitted.
+- **The deterministic nonce source for vectors is fenced as ADR-0046 fences its seeded prover**
+  (spec §7.5):
+  - the seed → nonce expansion lives only in the unpublished `testFixtures` source set of
+    `zeroj-bls12381`, guarded by its module-metadata check;
+  - production code has at most a package-private hook that accepts a nonce-source object, never
+    a seed;
+  - an API-surface reflection test asserts that no public or protected member accepts a seed, a
+    nonce, a nonce source or a `SecureRandom`.
+
+  The M0 security review showed why this matters: three same-seed proofs of one opening reveal
+  `γ`, and from it `v`.
 - *Alternative:* hedged nonces, which mix the witness and the transcript into the random source
   as Merlin's `TranscriptRng` does. Recorded, not chosen: it adds a construction that needs its own
   review.
@@ -585,17 +612,35 @@ the first protocol, and r1–r4 did not define that type. M0 found the gap.
   - the generator-set identifier.
 - **Built-in only.** The descriptor for `bulletproof-range-bls12-381-g1-v1` is created and
   registered in `zeroj-api`'s own static initialisation, as ADR-0060 D8 does for
-  `CommitmentProfile`. It shares the one registry namespace (§2.2), so `CommitmentProfile.define`
-  cannot take its identifier. There is **no public `define` for proof protocols** in v1.
+  `CommitmentProfile`. There is **no public `define` for proof protocols** in v1.
+- **Where the identifiers are reserved.** The shared registry set is seeded **in
+  `CommitmentProfile`'s own static initialisation**, before any caller can reach `define`. The set
+  holds the built-in profile identifiers, the basis-set identifiers, the proof-protocol identifier,
+  the generator-set identifier `bulletproof-bls12-381-g1-gens-v1`, and the reserved document names
+  of registry §2.2. `CommitmentProfile.define` rejects every one of them with
+  `INVALID_CONFIGURATION`.
+  - Seeding the set from the proof-protocol class instead would leave a hole. A fresh JVM could
+    call `CommitmentProfile.define(protocolId)` first, creating a profile named after the
+    protocol, and the protocol class would then fail to initialise.
+  - Before M1, `define` checked only profile identifiers. Rejecting basis-set identifiers and
+    document names closes that older §2.2 gap.
+- **A constant for a reserved protocol is not admission** (registry §2.3), as for profiles.
 - **Constants.** It is exposed from a constants class beside `CommitmentProfiles` (provisionally
   `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`). `G1RangeProof` re-exports it as
   `PROTOCOL`.
 - **Error class.** `CommitmentError` gains `INVALID_STATEMENT`, which registry r8 §11 adds, for
-  the prover's identity-commitment refusal.
+  the prover's identity-commitment refusal. It is **appended** after `PROVENANCE_MISMATCH`, so no
+  existing ordinal shifts, and is carried by `CommitmentFormatException` like the other prover
+  refusals. `isFormatClass` becomes an explicit set instead of an ordinal comparison, and the test
+  that pins ordinals is updated to that set. `INVALID_STATEMENT` never appears in a
+  `CommitmentCheck`.
 - **Tests (M1):**
   - every field of the descriptor;
-  - `define` of the protocol identifier is rejected;
-  - a forked-JVM pre-emption regression, as ADR-0060 M1 has for profiles;
+  - `define` of the protocol identifier, the generator-set identifier, each basis-set identifier
+    and a reserved document name is rejected;
+  - a forked-JVM pre-emption regression whose **first** action is `CommitmentProfile.define` of
+    the protocol and generator-set identifiers, after which `ProofProtocols` and the range-proof
+    classes still load and work;
   - the API-surface tests.
 
 **Alternative rejected.** Reusing `CommitmentProfile` for protocols. A proof protocol is not a
@@ -732,7 +777,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | Milestone | Entry gate | Deliverables | Exit |
 |---|---|---|---|
 | **M0** spec and second implementation | ADR accepted; Q1 and Q3–Q7 decided | `docs/specs/bulletproof-range-bls12-381-g1-v1.md`: generators, session tag and instance bytes, encoding, verifier equations, error classes, test seams. Registry r8 adds the entries as `reserved`. FIPS 202 pinned. A stand-alone Python implementation (stdlib only, using `hashlib.shake_128` for SHAKE128, on the ADR-0060 M0 BLS12-381 code), written from the paper and the specs without reading Java: XOF duplex sponge and codecs, prover, verifier, generator derivation, and output of intermediate challenges | Python passes the I12 vector scope; Java `hashToG1` and Python agree on `D_gens`; Python round-trips its own proofs; review loop reports SPEC READY; **maintainer sign-off** |
-| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor and `INVALID_STATEMENT` in `zeroj-api`, unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
+| **M1** Java | M0 signed off | SHAKE128 (rate 168 on the existing Keccak-f[1600]) and the XOF duplex sponge and codecs, tested on the I12 scope: the fiat-shamir-03 codec and SHAKE128 vectors; a test-only sigma harness for the A.3.1 `discrete_logarithm` and `pedersen_commitment` proofs and all A.3.2 adversarial vectors; the seven A.3.2 codec-layer rejections also run directly against the D4 decoders; and `hashlib.shake_128` outputs. Package `org.zeroj.bls12381.bulletproofs`, all D4–D7 rules, the D7a descriptor, the shared reserved set and `INVALID_STATEMENT` in `zeroj-api`, the test-only nonce source in `zeroj-bls12381` `testFixtures` (metadata guard re-run), an API-surface reflection test that no public member accepts a seed, nonce, nonce source or `SecureRandom`, unit and negative tests (I2–I8, I10, I12, I13), API surface test, seeded faults (below) | Module suites green; I12 vectors pass; seeded faults killed |
 | **M2** vectors and cross-implementation | M1 | `bulletproof-range-bls12-381-g1-v1.json` with fixed-nonce proofs, every intermediate challenge, and negatives. Generator with `--check` and `--self-test`. Java verifies Python proofs and Python verifies Java proofs. A reviewer recomputes the verifier side with separate code (for example on py_ecc). **External algebra check against dalek:** the Python protocol code is parameterised by group and transcript, run on ristretto255 (RFC 9496, fetched and pinned at M2, with its vectors) with Merlin and dalek's deviations (D2, D5), and must verify dalek's published test proofs (`tests/range_proof.rs`, `n` = 8–64) and produce proofs dalek 5.0.0 verifies. blst parity | Byte-identical regeneration; both directions pass; independent recomputation matches; the dalek check passes in both directions |
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
 | **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
@@ -785,7 +830,7 @@ uses, not every vector in the two appendices.
 | fiat-shamir-03 B.2 (SHAKE128) | B.2.1–B.2.11: sponge behaviour, `DeriveSessionID`, `DecodeUint` | B.2.12 and B.2.13 (sumcheck example) |
 | fiat-shamir-03 B.3 (TurboSHAKE128) | none | this design selects SHAKE128 |
 | sigma-03 A.3.1 (14 valid proofs) | `discrete_logarithm` and `pedersen_commitment`, batchable and compact (4). Checks: the session identifier is reproduced, every challenge is reproduced, and the proof verifies | `dleq`, `pedersen_commitment_dleq`, `bbs_blind_commitment_computation`, `elgamal_decryption` and `dleq_derived_element` (10): they need general linear-relation machinery beyond the transcript layer this ADR uses |
-| sigma-03 A.3.2 (32 adversarial vectors, all `discrete_logarithm`) | All 32, through the harness. 28 must be rejected; the four non-reject controls (`batchable/F1`, `compact/F1`, `batchable/F2`, `compact/F2`) must be accepted. A1, A3–A6 (points) and B1, B2 (scalars) must fail **at deserialization, before any challenge is derived**, and also run directly against the D4 point and scalar decoders. C1 and C2 are length failures; D, E, F and H are verification-layer failures | — |
+| sigma-03 A.3.2 (32 adversarial vectors under the `discrete_logarithm` base identifier; F2 and F2b carry a `dleq` instance, and E1–E3 are synthetic instances rejected by sigma-03 §3.5 instance validation) | All 32, through the harness. 28 must be rejected; the four non-reject controls (`batchable/F1`, `compact/F1`, `batchable/F2`, `compact/F2`) must be accepted. A1, A3–A6 (points) and B1, B2 (scalars) must fail **at deserialization, before any challenge is derived**, and also run directly against the D4 point and scalar decoders. C1 and C2 are length failures; D, E, F and H are verification-layer failures | — |
 
 Valid-proof checks assert reproduced challenges. Rejection checks assert only the rejection and the
 layer it happens at; a vector that fails during decoding has no challenge to compare.
@@ -914,3 +959,15 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
   - **D3/D7 amendment (same sign-off):** the application context must now be non-empty (1 to
     1,024 octets). M0's second implementation found that an empty context lets proofs move
     between applications that both use it.
+  - **Security review (reviewer (b)), same sign-off:**
+    - D6 states the refusal order exactly, the nonce-source rules and restart bound, and fences
+      the test seam as ADR-0046 does;
+    - D7a pins where identifiers are reserved, extends the `define` rejection to every registry
+      type and the reserved names, and fixes how `INVALID_STATEMENT` enters the enum;
+    - the CFRG vector licence must be confirmed before merge.
+  - **D4 amendment (same sign-off; Codex M0 F2):** proof fields are decoded in proof order, as
+    fiat-shamir-03 §6.2 reads a NARG string, instead of all points before all scalars. `V` is
+    decoded after the proof's format checks, so the length is still checked before anything is
+    decoded (I3). The outcomes are the spec's registry classes, and a decoded `V` must be a
+    validated subgroup element (Codex M0 F1). The A.3.2 scope row now describes those vectors
+    accurately.

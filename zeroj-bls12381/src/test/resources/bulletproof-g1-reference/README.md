@@ -12,25 +12,98 @@ variable-time arithmetic throughout. It must never handle real secrets.
 
 ## Spec revision implemented
 
-`docs/specs/bulletproof-range-bls12-381-g1-v1.md`, **draft r1 (2026-10-24) as amended** with the
-M0 second-implementation findings (spec §14). The file read had SHA-256
-`12eb1b923926acd8889694284c22912793adb8aea04cfa904cf10f9738326943`. The amendments that changed
-this script:
+`docs/specs/bulletproof-range-bls12-381-g1-v1.md`, draft r1 (2026-10-24) as revised after M0
+review round 1. The exact file implemented has SHA-256:
 
-- `ctx` must be 1 to 1,024 octets. An empty `ctx` is `INVALID_CONFIGURATION` in both the prover
-  and the verifier (§5.1, §7.1, §8.1, §9).
-- §8.1 order: configuration, then `V`'s decoder, then the proof length, then the proof's fields
-  **in proof order** (`A, S, T₁, T₂` points; `t̂, τ_x, μ` scalars; `L_1, R_1 … L_k, R_k` points;
-  `a, b` scalars), with the first failure reported. `V = O → false` now comes **after** the format
-  checks.
-- §8.3: check 1 is evaluated before check 2, and both are always evaluated. The `layer` is the
-  first failing check.
-- §5.3: `a` and `b` are not absorbed. The `.A64` in the tag only describes the trailing octets.
-  This script already behaved this way.
-- §10: the sigma harness is test-only. The ten extra A.3.1 vectors are reported but not gated.
+```
+a0a5c8447e48997a36723f9158c5597776a62e098cde4ff2cf11de69d6a3fd06
+```
 
-The first version of this script implemented the unamended r1. Its findings are kept below as a
-record, each marked with how the amendment resolved it.
+Afterwards, the integrating author made a wording-only edit to the §8.1 explanation of the
+non-subgroup `V` example, stating the mod-3 condition on the integer representative of `−z²`. It
+changes no normative rule, byte or check. The spec committed with this script then has SHA-256
+`b3cf6982fc8a1bc57418809f92cda060b7267069934388bcb8c0c721a27664f7`.
+
+Earlier states of r1 that this script also implemented, for the record:
+- `12eb1b92…6943`: ctx made non-empty, and the first proof-order decoding.
+- An unhashed first issue: the original draft.
+
+## Changes for review round 1
+
+Spec-driven:
+
+1. **Tag (§5.1).** The round string no longer ends with `.A64`. This changes the session id and
+   every challenge. `--print-trace` was regenerated and the new record is pinned.
+2. **§8.1 order.**
+   1. Configuration (n, and `ctx` of 1 to 1,024 octets).
+   2. The proof **length**, before anything is decoded, `V` included.
+   3. The proof fields in proof order, with the first failure reported.
+   4. `V`: given as octets, it goes through the profile's strict decoder. **Given already decoded,
+      it is not trusted**: an affine tuple must pass the full on-curve check (else
+      `MALFORMED_ENCODING`) and the prime-order subgroup check (else `NOT_IN_SUBGROUP`).
+   5. `V = O → false`.
+
+   There is a regression test for `V' = [7]·G + [11]·H + (0, 2)`, where `(0, 2)` has order 3.
+   Passed decoded, or as octets, `V'` gives `NOT_IN_SUBGROUP` at the `statement` layer. That
+   includes an honest proof for `[7]·G + [11]·H` offered against `V'`. The previous version
+   trusted a decoded tuple, so check 1 could pass or fail depending on `z`. The order tests were
+   updated: "bad `V` + bad length" is now the length class, and a bad `V` with a bad proof field
+   is the field's class.
+3. **§7.1 and §7.3.** The refusal order is configuration, check 1, then `v ≥ 2^n`. A test counts
+   that these refusals make no scalar multiplication. Then `V` is computed and an identity `V` is
+   refused.
+   - Restarts are bounded at **8 attempts**, then `ProverRestartsExhausted` (the analogue of Java's
+     `IllegalStateException`) is raised and no proof is emitted. A test forces every `x` to 0 and
+     counts exactly 8 attempts.
+   - The test-nonce prover fails closed on any restart.
+   - Wrong argument types (`bool`/`str` for `v` or `n`, `str` for `ctx`) raise `TypeError`. They
+     are API-binding errors, not vector cases (§11).
+
+Evidence quality:
+
+4. **Known-answer pins, as fixed literals in the script.**
+   - `DST_BP` hex.
+   - `D_gens = 69abb9e7…ef19`.
+   - `G_0`, `H_63` and `U`.
+   - All 129 encodings, compared against `generators-v1.json`. Its order, names, `DSTHex`,
+     `D_gens`, and the SHA-256 recomputed from its encodings are all checked.
+   - The complete `--print-trace` record: tag, `sessionIdHex`, `commitmentHex`, `instanceHex`,
+     every challenge, and `proofHex`. The pinned proof must also verify against the pinned
+     commitment.
+
+   Each of four mutations was applied to a scratch copy, and the full self-test then fails:
+
+   | Mutation | Failing checks |
+   |---|---|
+   | `DST_BP` changed by one character (`ZeroJ` → `ZeroK`) | 15 |
+   | Challenges decoded big-endian | 10 |
+   | `G`/`H` order swapped in the instance | 11 |
+   | Test-nonce order changed (`τ₁`, `τ₂` before `s_L`) | 9 |
+5. **sigma-03 A.3.2: every class asserts its expected outcome and rejection layer.**
+
+   | Class | Expected outcome |
+   |---|---|
+   | A | point deserialization, with 0 challenges derived |
+   | B | scalar deserialization, with 0 challenges derived |
+   | C | length |
+   | D1 | simulated commitment is `O` |
+   | E | instance validation |
+   | F and H, except the controls | verification, with 1 challenge derived |
+   | F1, F2 controls | accept |
+6. **Unexpected exceptions are FAIL lines.** Checks run through `_Results.guard`, so an
+   unexpected exception becomes a counted FAIL line. Each section is also wrapped, so an
+   exception outside a guarded check is a counted FAIL and the next section still runs.
+7. **Tautological checks replaced.**
+   - For A.3.1, the old "challenge recomputed" checks are gone. In their place, a test-only seam
+     adds 1 to the derived challenge, and the proof must then fail at verification. The proof must
+     also fail with `response[0] + 1`.
+   - The generator digest is compared with the pinned literal, not with a SHA-256 the script
+     computed itself.
+8. **New transcript mutants.**
+   - Dropping `n` from the instance changes every challenge, and the proofs fail both ways.
+   - Changing one prover message changes every **later** challenge and **no earlier** one. The
+     messages tested are `A`, `T₁`, `t̂`, `L_2` and `R_4`.
+   - Changing `a` or `b` changes no challenge, because they are not absorbed (§5.3).
 
 ## Running
 
@@ -44,242 +117,187 @@ python3 -I -B bulletproof_range_reference.py --print-trace       # JSON: the fix
 ```
 
 `generators-v1.json` next to the script is the saved output of `--print-generators`. It is the
-input for spec Appendix A.
+source of spec Appendix A, which py_ecc and the Java implementation reproduce independently.
 
 The CFRG vectors are read from the repository's unchanged copies at
 `../../../../../zeroj-test-vectors/src/main/resources/test-vectors/cfrg-drafts-03/`, resolved
-relative to the script (spec §10). `--vectors-dir DIR` overrides that path. The self-test checks
-each file's SHA-256 against the spec §10 pins. This directory holds no copies of its own.
+relative to the script (spec §10). `--vectors-dir DIR` overrides that path. Each file's SHA-256 is
+checked against the spec §10 pins.
 
-The curve layer is imported by path from the sibling directory
+The curve layer is imported by path from
 `../pedersen-g1-reference/bls12_381_g1_reference.py`. That is ZeroJ's earlier independent
 BLS12-381 G1 reference (field, RFC 9380 `hash_to_curve`, Zcash `compress`, the profile's strict
-decoder `strict_decode`, `derive_basis`). It is used unmodified as a library and is not copied.
-On top of it this script adds its own Jacobian arithmetic for speed. The self-test cross-checks
-that arithmetic against the module's affine arithmetic.
+decoder, `derive_basis`, `in_subgroup`). It is used unmodified as a library. On top of it this
+script adds its own Jacobian arithmetic. The self-test cross-checks that arithmetic against the
+module's affine arithmetic.
 
 ## Independence: what was read
 
 Read:
 
-- `bulletproof-range-bls12-381-g1-v1.md`, in full, twice: draft r1 as first issued, then the
-  amended r1 in `docs/specs/`. The amended copy was re-read in full, with attention to §5.1, §5.3,
-  §7.1, §7.5, §8.1, §8.3, §8.4, §9 and §10.
+- `bulletproof-range-bls12-381-g1-v1.md`, in full, three times: the draft r1 as first issued; the
+  first amended r1; and the round-1 revision (hash above), including the new §1.1 and Appendix A.
 - `pedersen-bls12-381-g1-v1.md` (r2): §1 notation, §2 (basis derivation, pinned `G` and `H`,
-  rules), §3 profiles, §4 point encoding and strict decoder. The pinned `G`/`H` hex was
-  transcribed by hand from §2.2.
+  rules), §3 profiles, §4 point encoding and strict decoder.
 - Bünz et al., *Bulletproofs* (ePrint 2017/1066), from the bundled text extraction: §3 (the
   overview, Protocol 1, Protocol 2, §3.1), §4.1 lines (36)–(68), §4.2, §6.2 lines (95)–(105). The
-  PDF was not opened. Its math glyphs are garbled in the extraction but readable.
-- `draft-irtf-cfrg-fiat-shamir-03`: table of contents, §2 (2.1–2.4), §3 (3.1, 3.2.1–3.2.3),
-  §4 (4.1, 4.2.1–4.2.3), §5 (5.1, 5.2), §6 (6.1.1–6.1.5, 6.2.1–6.2.5), §7, §8.1 (first lines),
-  §9 (9.1, 9.2). Appendix B was used only through the JSON files.
-- `draft-irtf-cfrg-sigma-protocols-03`: table of contents, §2 (2.1–2.3.2), §3 (3.1–3.6),
-  §4 (4.1–4.4), §5 (5.1–5.6), §7.3, §8 (8.1, 8.2), and Appendix A's introduction and A.1. A.3 was
+  PDF was not opened.
+- `draft-irtf-cfrg-fiat-shamir-03`: §2–§6 and §9, plus §7 and the start of §8. Appendix B was
   used only through the JSON files.
-- The four CFRG JSON vector files. The first run used a bundle copy, and this one uses the
-  repository copies (same SHA-256). Also the `README.md` in
-  `zeroj-test-vectors/.../cfrg-drafts-03/`, which gives their provenance.
-- `bls12_381_g1_reference.py` (to learn its API: constants, `strict_decode`, `compress`,
-  `hash_to_curve`, `derive_basis`, `scalar_mul`, `point_add`) and its README.
+- `draft-irtf-cfrg-sigma-protocols-03`: §2–§5, §7.3, §8, and Appendix A's introduction and A.1.
+  A.3 was used only through the JSON files.
+- The four CFRG JSON vector files: a bundle copy first, then the repository copies, with the same
+  SHA-256. Also the `README.md` in `zeroj-test-vectors/.../cfrg-drafts-03/`.
+- `bls12_381_g1_reference.py` (for its API) and its README.
 - RFC 9380 and FIPS 202 were not read directly. They enter only through the curve module and
   CPython's `hashlib.shake_128`.
 
-Not read: any `.java` file, any other repository file, the ZeroJ ADRs (including ADR-0061), the
-web, and the CFRG drafts' proof-of-concept Python code. No third-party package was used, and git
-was not run.
+Not read: any `.java` file, any other repository file, the ZeroJ ADRs (including ADR-0061), review
+reports, the web, and the CFRG drafts' proof-of-concept Python code. No third-party package was
+used, and git was not run. The review findings reached this work only as the coordinator's
+instructions and the revised spec text.
 
 **Incident, recorded for transparency.** After the first version and its self-test were finished,
 a `find` over the working tree (run to check for stray `.pyc` files) printed the names of other
-repository files, including Java test class names. None of them was opened. The second
-implementation's code had been written before that listing and was not changed in response to
-it.
+repository files, including Java test class names. None of them was opened. The code had been
+written before that listing.
+
+The known-answer trace pinned here is this script's own output. Its independent confirmation, by
+external code, is done outside this directory by the coordinator. `D_gens` and the 129 encodings
+are confirmed by py_ecc and Java (spec Appendix A).
 
 ## What it implements
 
-- **fiat-shamir-03.** The SHAKE128 duplex sponge (§3.2, R = 168). `hashlib.shake_128.digest(n)`
-  does not stream, so the reader is emulated: the first squeeze after an absorb freezes the
-  absorbed bytes (the `Copy().Finalize()`), and each later squeeze returns the next slice of
-  `SHAKE128(frozen)`. Also `DeriveSessionID`, `LE`, `LE2IP`, `SerializeVarLenString` and its
-  deserializer, `SerializeUint`/`DeserializeUint`, `DecodeUint`/`DecodeField` (m = 1), and the
-  big-endian `SerializeField` of B.1.6.
-- **sigma-03 §8.2 codecs.** A group element is 48 octets, read by the profile's strict decoder,
-  and the identity is then rejected. A scalar is 32 octets big-endian, and anything `≥ q` is
-  rejected.
-- **A test-only sigma-03 harness** (spec §10): a generic verifier for sparse linear relations. It
-  has a parser for the §3.6 encoding, the §3.5 instance validation (checks 1–10), map/image
-  evaluation, and `VerifyBatchable` and `VerifyCompact`. It does not prove. sigma-03 defines no
-  `LinearRelation` deserializer, so the parser is our own inverse of §3.6: the element count is
-  taken from the bytes left after the equations, in 48-octet chunks.
+- **fiat-shamir-03.** The SHAKE128 duplex sponge (§3.2, R = 168), with an emulated streaming
+  reader over `hashlib.shake_128`. Also `DeriveSessionID`, `LE`, `LE2IP`,
+  `SerializeVarLenString` and its deserializer, `SerializeUint`/`DeserializeUint`,
+  `DecodeUint`/`DecodeField` (m = 1), and the big-endian `SerializeField` of B.1.6.
+- **sigma-03 §8.2 codecs.** A group element is 48 octets, read by the strict decoder, and the
+  identity is then rejected. A scalar is 32 octets big-endian, and anything `≥ q` is rejected.
+- **A test-only sigma-03 harness** (spec §10): a generic sparse-linear-relation verifier. It has
+  our own inverse of the §3.6 encoding (sigma-03 defines no deserializer), the §3.5 validation,
+  map/image evaluation, and `VerifyBatchable` and `VerifyCompact`. It does not prove.
 - **The Bulletproof protocol.**
-  - Generators and their checks (§2.2): the 131 points, none `O`, no two equal or negatives of
-    each other, all in G1.
+  - Generators: the §2.2 checks, plus subgroup membership.
   - `D_gens`.
-  - The tag (§5.1, with a non-empty `ctx`), the instance (§5.2) and the rounds (§5.3).
+  - The tag (§5.1), the instance (§5.2) and the rounds (§5.3); `a` and `b` are not absorbed.
   - The proof encoding (§6).
-  - The prover: the §7.1 refusals in order, CSPRNG nonces and restarts (§7.3), and the §7.5
-    test-nonce seam `_prove_with_test_nonces`, which fails where §7.3 would restart.
-  - The verifier: the amended §8.1 order, challenge recomputation with zero rejection, `δ`, `s_i`
-    by the MSB-first rule, and check 1 then check 2. Both checks are always evaluated, naively
-    term by term, and the layer is the first failing check.
-  - The §9 error classes, as exception classes that carry their class name in `error_class`.
+  - The prover: the §7.1 refusals, CSPRNG nonces, the 8-attempt restart bound (§7.3), and the
+    §7.5 test-nonce seam `_prove_with_test_nonces`, which fails closed.
+  - The verifier: the §8.1 order, zero-challenge rejection, `δ`, MSB-first `s_i`, and check 1 then
+    check 2. Both checks are always evaluated, naively term by term, and the layer is the first
+    failing check.
+  - The §9 error classes.
 - **An independent check-2 cross-check.** `_verify_ipa_recursive` runs Protocol 1 and Protocol 2
-  literally: it folds the generators and `P` round by round (paper (29)–(31)) and makes the final
-  check (16). It does not use the `s_i` bit rule.
+  literally, folding round by round, without using the `s_i` bit rule.
+
+Test-only seams, all module-level and none of them public API:
+- `_TRANSCRIPT_MUTATION`: instance and tag omission mutants.
+- `_CHALLENGE_HOOK`: forces a zero challenge.
+- `_S_BIT_ORDER`: the LSB-first mutant.
+- `_SIGMA_CHALLENGE_OFFSET`: the challenge-binding check for the sigma harness.
+- `_prove_core(..., a_l_override)`: cheating provers.
 
 ## Self-test coverage
 
-`--self-test` prints one PASS/FAIL line per gated check, INFO lines for the reported-only group,
-and a per-group summary. It exits non-zero on any gated failure.
-
 - **CFRG vectors.**
-  - Vector-file SHA-256 pins.
-  - fiat-shamir-03 B.1.1, B.1.2, B.1.4–B.1.8, B.1.10, B.1.11 and B.2.1–B.2.11, each reported by
-    `Id`.
-  - The emulated reader compared with a one-shot `SHAKE128(session_id ‖ zeros(136) ‖ inputs)`.
-  - sigma-03 A.3.1 for the four gated vectors. Each check reproduces `SessionId` from `Tag`,
-    recomputes the challenge (for compact proofs, equal to the NARG challenge), verifies the proof,
-    and confirms that the published witness satisfies the instance.
-  - The other ten A.3.1 vectors in `sigma-valid-extra`, **reported, not gated**.
-  - All 32 A.3.2 vectors, each with its accept/reject outcome, the layer where it was rejected and
-    the number of challenges derived. A1, A3–A6, B1 and B2 must be rejected at deserialization
-    with 0 challenges derived. They are also run directly against the §3 decoders.
+  - SHA-256 pins.
+  - fiat-shamir-03 B.1.1, B.1.2, B.1.4–B.1.8, B.1.10, B.1.11 and B.2.1–B.2.11, each by `Id`.
+  - The streaming emulation compared with a one-shot SHAKE128.
+  - sigma-03 A.3.1, the four gated vectors. Each check reproduces `SessionId`, verifies the proof
+    (the challenge is re-derived from tag, instance and commitment), fails with challenge + 1,
+    fails with `response[0] + 1`, and confirms the published witness satisfies the instance.
+  - The ten other A.3.1 vectors: reported, not gated.
+  - All 32 A.3.2 vectors, with outcome and layer per class (above), plus direct decoder runs for
+    A and B.
 - **Generators.**
-  - `DST_BP` is 70 octets.
-  - Derivation and the §2.2 checks: a fast x-coordinate check, and a brute-force check over all
-    8,515 pairs.
-  - Every point is in G1.
-  - Every encoding round-trips through the strict decoder.
-  - The pinned profile bases `G` and `H` equal their RFC 9380 recomputation.
-  - The message for `G_5` is `47 00 00 00 05`.
-  - The Jacobian arithmetic agrees with the module's affine arithmetic.
-- **Transcript.** The spec §5.1 example tag is reproduced byte for byte, the 1-octet-`ctx` tag
-  ends `/CTX0001:00`, the instance is 244 octets long, and the proof lengths are 736/832/928 for
-  n = 16/32/64.
-- **Round trips** for each n in {16, 32, 64}:
-  - `v = 0` (with nonzero blinding), `1`, `2^n − 1` and a random value, all with test nonces.
-    Each case has its own seed. Proving twice with the same seed gives the same proof, and the
-    verifier reproduces the session id and every challenge.
-  - A CSPRNG proof.
-  - `V` passed as an already-decoded commitment.
-  - The recursive IPA verifier.
-  - Also: `ctx` of exactly 1 and exactly 1,024 octets, and different seeds giving different
-    proofs. No case uses an empty `ctx`.
+  - Pinned `DST_BP`, `D_gens`, `G_0`, `H_63` and `U`.
+  - All 129 encodings against `generators-v1.json`.
+  - The §2.2 checks, with a brute-force check over 8,515 pairs.
+  - Subgroup membership and strict-decode round trips.
+  - The profile bases `G` and `H` against RFC 9380.
+  - The message for `G_5`.
+  - Jacobian against affine arithmetic.
+- **Known answer.** The full trace record pinned field by field.
+- **Transcript shapes.**
+  - The §5.1 example tag (no `.A64`).
+  - The 1-octet-`ctx` tag.
+  - The instance length, 244 octets.
+  - The proof lengths 736, 832 and 928.
+- **Round trips**, for n = 16, 32 and 64:
+  - `v = 0`, `1`, `2^n − 1` and a random value with test nonces, each with its own seed;
+  - determinism;
+  - the recursive IPA verifier;
+  - the CSPRNG prover with `V` as octets and as a validated decoded point;
+  - `ctx` of 1 and of 1,024 octets;
+  - different seeds giving different proofs.
 - **Prover refusals.**
-  - `v = 2^n` and `v = q − 1` (`OUT_OF_RANGE`).
-  - `v` or `γ` equal to `q` or `−1`, or a `bool` (`NON_CANONICAL_SCALAR`).
-  - `(0, 0)` (`INVALID_STATEMENT`).
-  - `n ∈ {0, 8, 17, 128, −16, 63, "16"}`, a 1,025-octet `ctx`, an **empty `ctx`** (both provers)
-    and a non-bytes `ctx` (`INVALID_CONFIGURATION`).
-  - Refusal-order cases, including empty `ctx` with `v = q`, where configuration comes first.
+  - `OUT_OF_RANGE`, `NON_CANONICAL_SCALAR`, `INVALID_STATEMENT` and `INVALID_CONFIGURATION` cases,
+    including an empty `ctx`.
+  - `TypeError` for the API-binding cases.
+  - The refusal order.
+  - No curve work before the refusals.
 - **Verifier negatives** (n = 16):
-  - Substituting each of the 12 points with another valid point, and each of the 5 scalars with
-    `+1`.
-  - Bit flips at each position class of every field: compression, infinity and sort flags, the
-    x-coordinate LSB and a middle bit, and the scalar top bit and LSB.
-  - A proof truncated by one octet, extended by one octet, or empty, and an n = 32 length.
-  - The identity as a proof point, an order-3 point, and `x = P_381`.
+  - Each field substituted, and bit flips per position class.
+  - Wrong lengths.
+  - Identity, order-3 and `x = P_381` points.
   - Each scalar re-encoded as `s + q`.
-  - Verification under a different n, a different `ctx`, a 1-octet prefix of `ctx`, an **empty
-    `ctx` (`INVALID_CONFIGURATION`, also with an identity `V`)**, a different `V`, `−V`, `V = O`
-    (both as octets and decoded), a non-subgroup `V`, a short `V`, a bad n, or an oversized `ctx`.
+  - Wrong n, `ctx` or `V`, and an empty `ctx`.
+  - The `V'` regression, plus a decoded order-3 point and a decoded off-curve point.
   - `L_1` and `R_1` swapped.
-  - Each of `y, z, x, x_u, x_1 … x_4` forced to zero through the `_CHALLENGE_HOOK` seam. The
-    verifier must return false at the challenge layer, and the test-nonce prover must fail. The
-    CSPRNG prover must restart once.
-  - Cheating provers that isolate the checks:
-    - `v = 2^n`: check 1 fails, check 2 holds.
-    - A non-bit `a_L` entry: check 1 fails.
-    - `a + 1`: check 2 fails, check 1 holds.
-  - A mutant verifier using an LSB-first `s_i` rule rejects the honest proof at check 2.
-- **Decoding order** (amended §8.1):
-  - Configuration comes before `V`.
-  - A bad `V` with a bad length gives `V`'s class.
-  - `V = O` with a bad length gives `MALFORMED_ENCODING` at the length layer.
-  - `V = O` with an identity `A` gives `MALFORMED_ENCODING` at the point layer.
-  - `V = O` with a non-canonical `b` gives `NON_CANONICAL_SCALAR`.
-  - `V = O` with a well-formed proof gives `false` at the statement layer.
-  - In proof order, the earlier defect is the one reported:
-
-    | Earlier field | Later field | Reported |
-    |---|---|---|
-    | bad `t̂` | identity `R_4` | `NON_CANONICAL_SCALAR` |
-    | identity `S` | bad `μ` | `MALFORMED_ENCODING` |
-    | non-subgroup `R_4` | bad `a` | `NOT_IN_SUBGROUP` |
-    | non-subgroup `S` | identity `T₂` | `NOT_IN_SUBGROUP` |
-- **Transcript-omission mutants** (`_TRANSCRIPT_MUTATION` seam). Four mutants: drop `V` from the
-  instance, drop `ctx` from the tag, drop `D_gens`, or swap `G` and `H`. Each must change every
-  challenge. The mutated verifier must reject the original proof, and the real verifier must
-  reject the mutated prover's proof.
+  - Each zero challenge.
+  - A single restart, and the 8-attempt bound.
+  - The cheating provers that isolate check 1 and check 2.
+  - Both checks evaluated even when check 1 fails.
+  - The recursive verifier.
+  - The LSB-first mutant.
+- **Verifier order.** Fifteen §8.1 order cases.
+- **Transcript mutants.**
+  - Five omission or reordering mutants: drop `V`, drop `ctx`, drop `D_gens`, drop `n`, swap
+    `G`/`H`.
+  - The "later challenges only" checks for `A`, `T₁`, `t̂`, `L_2` and `R_4`.
+  - `a` and `b` not absorbed.
 
 ## `--print-trace` fixed example
 
 `n = 16`, `v = 12345`, blinding
-`γ = 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef`, `ctx = "hello"`
-(non-empty), nonce seed `00 01 … 1f`. The output has the tag, the session id, the commitment, the
-instance hex, every challenge in decimal and the proof hex. It is deterministic, and is unchanged
-by the amendment.
+`γ = 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef`, `ctx = "hello"`, nonce
+seed `00 01 … 1f`. The record is pinned in `PIN_TRACE`. Its session id is
+`aefa01ae578defec57e942213978543a2e26bdf81ae69ac9e95dd3bda9ec7556`.
 
-## Spec findings and their status
+## Findings history
 
-The spec's algebra was compared line by line with the paper. Checked: (44) and (47) for `A` and
-`S`; `l(X)` and `r(X)`; (53) for `T_i`; (58)–(62); (64) for `h'`; Protocol 2 (21)–(24) for
-`c_L`, `c_R`, `L`, `R` and (29)–(34) for the folding; Protocol 1 (8) for `P·u^{x·c}`; and §6.2
-(97), (98), (101), (102) and (105). **No disagreement in the algebra was found.** Honest proofs
-verify, and the literal recursive verifier agrees with the unrolled check 2.
+The first round's twelve findings (proof-order decoding, the `layer` rule, the A.3.2 scope, the
+`U` deviation from paper (105), the MSB-first rule, `.A64`, the identity-`V` order, bounded work,
+non-empty `ctx`, the seed-only nonce stream, the subgroup check of the generators, and decoded
+`V`) are all resolved in the spec now implemented. The review also found that a decoded `V` was
+trusted without a subgroup check (Codex M0 F1, spec §8.1 step 4). That was a real soundness gap in
+this script's previous version, and it is fixed here with a regression test.
 
-The findings against the unamended r1, and how the amended r1 resolves each:
+The spec's algebra was compared line by line with the paper (see the first-round record: (44),
+(47), (53), (58)–(62), (64), Protocols 1 and 2, and §6.2 (97)–(105)). No disagreement was found.
 
-1. **§8.1 decoding order: points then scalars, against byte order.** *Resolved:* proof order, first
-   failure reported. Implemented and pinned by the order cases above.
-2. **§11 `layer` when both checks fail.** *Resolved* (§8.3): the first failing check in the order
-   check 1, check 2, with both always evaluated. In a direct check, both checks failed in every
-   case tried: substituting `A`, `S`, `T₁` or `T₂`, adding 1 to `t̂` or `τ_x`, and changing `ctx`.
-   So the rule matters for vectors.
-3. **§10 A.3.2 scope ("all discrete_logarithm") was inaccurate.** F2/F2b are `dleq`
-   (two equations), E1–E3 are synthetic instances, and E1–E4 need §3.5. *Resolved:* §10 now
-   describes this and the test-only harness. The ten extra A.3.1 vectors are reported, not gated.
-4. **§8.3 check 2 departs from paper (105) on purpose** (independent `U` instead of `g`).
-   *Resolved:* now stated in §8.3.
-5. **The §8.3 MSB-first `s_i` rule** matches Protocol 2's folding. No change was needed. It is
-   confirmed by the recursive verifier and by the LSB-first mutant.
-6. **`.A64` against "a, b not absorbed".** *Resolved* (§5.3): they are not absorbed, and `.A64`
-   only describes the octets.
-7. **Identity `V` used to return `false` before the length check.** *Resolved:* `V = O → false`
-   is now step 5, after the format checks. Implemented.
-8. **§8.4 "fixed function of n".** *Resolved:* the work is bounded by n and may stop early.
-9. **An empty `ctx` defeated fiat-shamir-03 §5.1 requirement 3.** *Resolved:* `ctx` must be 1 to
-   1,024 octets. Implemented in the prover and the verifier, with negatives.
-10. **§7.5 nonces depend only on the seed.** *Resolved* (§7.5): one seed per positive vector. The
-    self-test uses a distinct seed per positive case.
-11. **§2.2 subgroup check of the generators.** *Resolved:* membership is now stated. It was
-    already checked here.
-12. **No rule for a `V` passed as a decoded commitment.** *Resolved* (§8.1 step 2): it is valid by
-    construction. This script only asserts that the point is on the curve.
-
-**Still open in the amended text (minor; no implementation effect here):**
-
-- **Classifying `V`-decoder failures.** §9 assigns `V`'s decoder failures to the classes
-  `MALFORMED_ENCODING` and `NOT_IN_SUBGROUP`. §11's `layer` list has `statement`, but the spec
-  does not say whether a `V` decoding failure is recorded as `statement` or as `point`. This
-  script records it as `statement`.
-- **Error class for a non-bytes `ctx`.** §7.1 and §8.1 do not say what class a `ctx` of the wrong
-  type gets. This script raises `INVALID_CONFIGURATION`; Java's type system may make the case
-  moot.
+**Open (minor; no effect here).**
+- The new §7.3/§7.5 requirements on `SecureRandom` ownership and test-seam fencing are Java
+  API-surface rules. This script uses `secrets.token_bytes` for production nonces, and keeps the
+  seed expansion in an underscore-named function that is not public API.
+- The `V'` example in spec §8.1 says check 1 passes "when `−z² ≡ 0 (mod 3)`". A residue mod `q`
+  has no mod-3 class as such. The intended reading is that the order-3 component of `[−z²]·V'`
+  vanishes when `z² ≡ 0 (mod 3)` as an integer representative. That is about one challenge in
+  three, as the spec says. Only the explanation is affected; the required behaviour
+  (`NOT_IN_SUBGROUP`) is unambiguous.
 
 ## Not implemented
 
 All spec requirements are implemented. Not attempted:
-
 - the extension-field, sumcheck and TurboSHAKE128 vectors (out of scope in §10);
 - a sigma prover;
-- reproducing the A.3.1 NARG strings from the A.1 seeded PRNG. A.1 does not pin how the PRNG
-  output becomes scalars, and verification does not need it.
+- reproducing the A.3.1 NARG strings from the A.1 PRNG.
 
 ## Limits
 
-Passing this self-test shows that this code agrees with the CFRG vectors and that its prover and
-verifier are consistent with each other. It is not evidence of soundness or zero-knowledge, and
-it is not a production-safety claim. An error shared by the spec text and this implementation
-(for example, in a part of the transcript design that both follow) would not be caught here.
-Cross-checking against the Java implementation, and review, remain necessary.
+Passing this self-test shows that this code agrees with the CFRG vectors and the pinned constants,
+and that its prover and verifier are consistent with each other. It is not evidence of soundness
+or zero-knowledge, and it is not a production-safety claim. An error shared by the spec text and
+this implementation would not be caught here. Cross-checking against the Java implementation and
+external code, and review, remain necessary.
