@@ -282,7 +282,8 @@ class ConfidentialLedgerTest {
                 ConfidentialLedger.context(CHAIN, "alice", "bob", 0, (byte) 0)).toBytes();
         // The attacker reuses the valid amount proof for the change output.
         byte[] message = signTransfer(alice.key, "alice", "bob", 0, cAmount, cChange, pAmount, pAmount);
-        assertEquals(List.of(Result.RANGE_PROOF), ledger.apply(List.of(message)));
+        assertEquals(List.of(Result.RANGE_PROOF, Result.REPLAY), ledger.apply(List.of(message, message)));
+        alice.sequence++;                       // a failed transfer consumes the sequence
         assertBalance(ledger, alice);
     }
 
@@ -298,11 +299,15 @@ class ConfidentialLedgerTest {
         ConfidentialLedger.Transfer d = (ConfidentialLedger.Transfer) ConfidentialLedger.Message.decode(t.message());
         byte[] redirected = signTransfer(alice.key, "alice", "carol", 0, d.amountCommitment(), d.changeCommitment(),
                 d.amountProof(), d.changeProof());
-        byte[] swapped = signTransfer(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(),
+        // Each failed transfer consumes a sequence, so the next attack is signed with the next one.
+        byte[] swapped = signTransfer(alice.key, "alice", "bob", 1, d.amountCommitment(), d.changeCommitment(),
                 d.changeProof(), d.amountProof());
-        assertEquals(List.of(Result.RANGE_PROOF, Result.RANGE_PROOF, Result.ACCEPTED),
+        assertEquals(List.of(Result.RANGE_PROOF, Result.RANGE_PROOF, Result.REPLAY),
                 ledger.apply(List.of(redirected, swapped, t.message())));
-        t.settle(ledger);
+        alice.sequence = 2;
+        Built honest = alice.transfer(bob, BigInteger.valueOf(20));
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(honest.message())));
+        honest.settle(ledger);
         assertBalance(ledger, alice);
         assertNotEquals(Arrays.toString(ConfidentialLedger.context(CHAIN, "ab", "c", 0, (byte) 0)),
                 Arrays.toString(ConfidentialLedger.context(CHAIN, "a", "bc", 0, (byte) 0)), "context is injective");
@@ -328,13 +333,15 @@ class ConfidentialLedgerTest {
         block.add(Arrays.copyOf(t.message(), t.message().length + 1));                 // trailing octet
         block.add(new byte[0]);
         block.add(signTransfer(alice.key, "alice", "bob", 0, new byte[48], d.changeCommitment(), d.amountProof(), d.changeProof()));
+        // Each of the next three reaches verification and fails, consuming a sequence: 0, 1, 2.
         block.add(signTransfer(alice.key, "alice", "bob", 0, identity, ledger.balanceOf("alice").toPointBytes(),
                 d.amountProof(), d.changeProof()));
-        block.add(signTransfer(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(), narrow, d.changeProof()));
-        block.add(signTransfer(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(), flipped, d.changeProof()));
+        block.add(signTransfer(alice.key, "alice", "bob", 1, d.amountCommitment(), d.changeCommitment(), narrow, d.changeProof()));
+        block.add(signTransfer(alice.key, "alice", "bob", 2, d.amountCommitment(), d.changeCommitment(), flipped, d.changeProof()));
         assertEquals(List.of(Result.MALFORMED, Result.MALFORMED, Result.MALFORMED, Result.MALFORMED, Result.RANGE_PROOF,
                 Result.RANGE_PROOF, Result.RANGE_PROOF), ledger.apply(block));
         assertEquals(Result.TOO_LARGE, ledger.validate(new byte[65537]));
+        alice.sequence = 3;
         assertBalance(ledger, alice);
     }
 
@@ -356,6 +363,66 @@ class ConfidentialLedgerTest {
         second.settle(ledger);
         assertBalance(ledger, alice);
         assertBalance(ledger, carol);
+    }
+
+    @Test
+    @DisplayName("A pending pool filled with withheld zero-value entries is cleared by the owner's discard (reviewer M3–M6 F9)")
+    void discardClearsGriefing() {
+        Wallet alice = new Wallet("alice", BigInteger.valueOf(100));
+        Wallet bob = new Wallet("bob", BigInteger.valueOf(100));
+        Wallet mallory = new Wallet("mallory", BigInteger.ZERO);
+        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), new ConfidentialLedger.Config(CHAIN, 65536, 64),
+                alice, bob, mallory);
+        for (int i = 0; i < ConfidentialLedger.MAX_PENDING; i++) {
+            Built grief = mallory.transfer(alice, BigInteger.ZERO);
+            assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(grief.message())));
+            grief.settle(ledger);
+        }
+        Built honest = bob.transfer(alice, BigInteger.TEN);
+        assertEquals(List.of(Result.PENDING_FULL), ledger.apply(List.of(honest.message())));
+        long[] ids = ledger.pendingOf("alice").keySet().stream().mapToLong(Long::longValue).toArray();
+        // A discard needs the owner's tag and names existing entries only.
+        assertEquals(List.of(Result.BAD_AUTH), ledger.apply(List.of(sign(bob.key,
+                ConfidentialLedger.Merge.encodeDiscardBody("alice", 0, ids)))));
+        assertEquals(List.of(Result.UNKNOWN_PENDING), ledger.apply(List.of(sign(alice.key,
+                ConfidentialLedger.Merge.encodeDiscardBody("alice", 0, ids[0] + 1000)))));
+        byte[] discard = sign(alice.key, ConfidentialLedger.Merge.encodeDiscardBody("alice", 0, ids));
+        assertEquals(List.of(Result.ACCEPTED, Result.REPLAY), ledger.apply(List.of(discard, discard)));
+        alice.sequence++;
+        alice.inbox.clear();
+        assertEquals(0, ledger.pendingOf("alice").size());
+        assertBalance(ledger, alice);
+        // The honest transfer is now received.
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(honest.message())));
+        long id = honest.settle(ledger);
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(alice.merge(id))));
+        alice.merged(id);
+        assertBalance(ledger, alice);
+        assertEquals(BigInteger.valueOf(110), alice.value);
+    }
+
+    @Test
+    @DisplayName("A signed transfer whose proofs fail consumes the sequence, so replaying it cannot burn the proof budget (reviewer M3–M6 F10)")
+    void replayedJunkCannotBurnTheBudget() {
+        Wallet alice = new Wallet("alice", BigInteger.valueOf(100));
+        Wallet mallory = new Wallet("mallory", BigInteger.ZERO);
+        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), new ConfidentialLedger.Config(CHAIN, 65536, 4),
+                alice, mallory);
+        // Balanced (amount (0, r), change (0, −r), sum O = mallory's balance) with all-zero proofs.
+        BigInteger r = BigInteger.valueOf(12345);
+        byte[] cAmount = G1Pedersen.pureJava().commitScalar(BigInteger.ZERO, r).toPointBytes();
+        byte[] cChange = G1Pedersen.pureJava().commitScalar(BigInteger.ZERO, Q.subtract(r)).toPointBytes();
+        byte[] junk = signTransfer(mallory.key, "mallory", "alice", 0, cAmount, cChange, new byte[928], new byte[928]);
+        for (int block = 0; block < 3; block++) {
+            Built honest = alice.transfer(mallory, BigInteger.ONE);
+            List<Result> expected = block == 0
+                    ? List.of(Result.RANGE_PROOF, Result.REPLAY, Result.REPLAY, Result.ACCEPTED)
+                    : List.of(Result.REPLAY, Result.REPLAY, Result.REPLAY, Result.ACCEPTED);
+            assertEquals(expected, ledger.apply(List.of(junk, junk, junk, honest.message())), "block " + block);
+            honest.settle(ledger);
+        }
+        assertEquals(1, ledger.nextSequence("mallory"));
+        assertBalance(ledger, alice);
     }
 
     @Test

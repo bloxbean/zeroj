@@ -737,6 +737,8 @@ A host that runs the verifier inside a replicated state machine relies on these 
   - §11 requires a positive vector at every width (M1 review, reviewer (c) F10).
   - §7.1 notes the Java binding's earlier check-1 refusal (M2 review).
   - The status line records admission by `commitment-profiles-v1` r9 (M6).
+  - §12 notes that an in-script Keccak-f[1600] was not measured, and quotes the M4 cost of the
+    algebra (M3–M6 review). No rule changes.
 
 ## 15. References
 

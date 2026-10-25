@@ -42,11 +42,14 @@ import java.util.regex.Pattern;
  *       even of a zero-value transfer, would freeze the recipient's whole balance, and any incoming
  *       transfer would invalidate the recipient's pending spends (reviewer, M3–M6 F1). So each incoming
  *       amount is a separate pending entry; the owner merges into its balance only entries whose
- *       openings it has, with its own authorized message. Delivering openings to the recipient
- *       (for example ADR-0052/0054 encryption) is the host's choice and outside this reference.</li>
- *   <li><b>Balance invariant.</b> Every balance and pending entry opens to a value equal to genesis
- *       plus what it received minus what it sent, and the total S over all of them is constant, with
- *       S below {@code 2^63} at genesis. By induction every value is in {@code [0, S]}:
+ *       openings it has checked against the pending commitment (merging one it cannot open would
+ *       freeze its own balance), and discards entries it cannot open, each with its own authorized
+ *       message, so a full pending pool never blocks it for good (reviewer, M3–M6 F9). Delivering
+ *       openings to the recipient (for example ADR-0052/0054 encryption) is the host's choice and
+ *       outside this reference.</li>
+ *   <li><b>Balance invariant.</b> Every balance and pending entry opens to a non-negative value; the
+ *       total S over all of them never increases (a discard lowers it), and S is below {@code 2^63}
+ *       at genesis. By induction every value is in {@code [0, S]}:
  *       <ul>
  *         <li>a transfer needs {@code C_balance == C_amount + C_change}, with a {@value #BITS}-bit range
  *             proof on each output; so {@code v_amount + v_change ≡ b (mod q)} with the left side at
@@ -59,17 +62,20 @@ import java.util.regex.Pattern;
  *       The cap below {@code 2^63} keeps every balance below {@code 2^64}, so it can move in one
  *       transfer. <b>Every change to a balance must keep this invariant:</b> a plugin that adds, say,
  *       a deposit with a depositor-chosen blinding and no proof would break it.</li>
- *   <li><b>Limits:</b> message size, pending entries per account, and verified proofs per block
- *       (counted only when verification is reached, so unauthenticated junk does not use the
- *       budget).</li>
+ *   <li><b>Limits:</b> message size, pending entries per account, and verified proofs per block. The
+ *       proof budget reserves two units for each transfer that reaches verification (so
+ *       unauthenticated or unbalanced messages use none), and a transfer whose proofs fail still
+ *       consumes the sender's sequence, so one signed message burns the budget at most once
+ *       (reviewer, M3–M6 F10). Without fees, an account holder can still spend the budget with fresh
+ *       messages; a real host prices them.</li>
  *   <li><b>Determinism:</b> no randomness, clock or I/O; ordered maps only; every malformed input is a
  *       deterministic rejection, never an exception escaping {@code apply}. Configuration invariants
  *       (canonical identifiers, usable keys) are checked once, at construction.</li>
  * </ul>
  *
  * <p>Not product code: no persistence, no real signatures, no fees (so the pending pool can be filled
- * by spam, up to its limit; a real host prices or rate-limits incoming entries), no privacy of who
- * pays whom.
+ * by spam, up to its limit, until the owner discards; a real host prices or rate-limits incoming
+ * entries), no privacy of who pays whom.
  */
 final class ConfidentialLedger {
 
@@ -87,6 +93,7 @@ final class ConfidentialLedger {
     private static final byte VERSION = 1;
     private static final byte TYPE_TRANSFER = 1;
     private static final byte TYPE_MERGE = 2;
+    private static final byte TYPE_DISCARD = 3;
     /** Chain and account identifiers: lowercase ASCII, digits and '-', 1 to 64 octets. */
     private static final Pattern IDENTIFIER = Pattern.compile("[a-z0-9-]{1,64}");
 
@@ -185,7 +192,7 @@ final class ConfidentialLedger {
                 continue;
             }
             Message m = Message.decode(message);
-            results.add(m instanceof Transfer t ? applyTransfer(t, proofBudget) : applyMerge((Merge) m));
+            results.add(m instanceof Transfer t ? applyTransfer(t, proofBudget) : applyPendingChange((Merge) m));
         }
         return results;
     }
@@ -228,6 +235,10 @@ final class ConfidentialLedger {
         proofBudget[0] -= 2;
         if (!rangeProofHolds(amount, t.amountProof(), context(t, (byte) 0))
                 || !rangeProofHolds(change, t.changeProof(), context(t, (byte) 1))) {
+            // Authorized and charged: the sequence is consumed (like the nonce of an included but failed
+            // transaction), so these octets cannot be replayed to burn the budget again.
+            accounts.put(t.from(), new Account(from.authKey(), from.balance(), from.nextSequence() + 1, from.pending(),
+                    from.nextPendingId()));
             return Result.RANGE_PROOF;
         }
         accounts.put(t.from(), new Account(from.authKey(), change, from.nextSequence() + 1, from.pending(),
@@ -238,8 +249,11 @@ final class ConfidentialLedger {
         return Result.ACCEPTED;
     }
 
-    /** The owner moves the named pending entries into its balance; it must be able to open them to spend later. */
-    private Result applyMerge(Merge m) {
+    /**
+     * A merge moves the named pending entries into the owner's balance (the owner must have checked their
+     * openings, or it can no longer spend); a discard drops them, lowering the total supply.
+     */
+    private Result applyPendingChange(Merge m) {
         Account owner = accounts.get(m.account());
         if (owner == null) {
             return Result.UNKNOWN_ACCOUNT;
@@ -255,7 +269,9 @@ final class ConfidentialLedger {
             if (entry == null) {
                 return Result.UNKNOWN_PENDING;    // also rejects an id named twice
             }
-            balance = balance.add(entry);
+            if (!m.discard()) {
+                balance = balance.add(entry);
+            }
         }
         accounts.put(m.account(), new Account(owner.authKey(), balance, owner.nextSequence() + 1, pending,
                 owner.nextPendingId()));
@@ -396,7 +412,7 @@ final class ConfidentialLedger {
                     byte[] auth = new byte[32];
                     in.get(auth);
                     m = new Transfer(from, to, sequence, amount, change, amountProof, changeProof, body, auth);
-                } else if (type == TYPE_MERGE) {
+                } else if (type == TYPE_MERGE || type == TYPE_DISCARD) {
                     String account = readIdentifier(in);
                     long sequence = in.getLong();
                     int count = in.getInt();
@@ -406,7 +422,7 @@ final class ConfidentialLedger {
                     byte[] body = Arrays.copyOf(message, in.position());
                     byte[] auth = new byte[32];
                     in.get(auth);
-                    m = new Merge(account, sequence, ids, body, auth);
+                    m = new Merge(account, sequence, ids, type == TYPE_DISCARD, body, auth);
                 } else {
                     return null;
                 }
@@ -440,13 +456,24 @@ final class ConfidentialLedger {
         }
     }
 
-    /** A merge: {@code version ‖ type 2 ‖ len‖account ‖ sequence(8) ‖ count(4) ‖ ids(8 each) ‖ auth(32)}. */
-    record Merge(String account, long sequence, long[] ids, byte[] body, byte[] auth) implements Message {
+    /**
+     * A merge (type 2) or discard (type 3) of the owner's pending entries:
+     * {@code version ‖ type ‖ len‖account ‖ sequence(8) ‖ count(4) ‖ ids(8 each) ‖ auth(32)}.
+     */
+    record Merge(String account, long sequence, long[] ids, boolean discard, byte[] body, byte[] auth) implements Message {
 
         static byte[] encodeBody(String account, long sequence, long... ids) {
+            return encode(TYPE_MERGE, account, sequence, ids);
+        }
+
+        static byte[] encodeDiscardBody(String account, long sequence, long... ids) {
+            return encode(TYPE_DISCARD, account, sequence, ids);
+        }
+
+        private static byte[] encode(byte type, String account, long sequence, long... ids) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             out.write(VERSION);
-            out.write(TYPE_MERGE);
+            out.write(type);
             writeField(out, requireIdentifier(account).getBytes(StandardCharsets.US_ASCII));
             out.writeBytes(ByteBuffer.allocate(8).putLong(sequence).array());
             out.writeBytes(ByteBuffer.allocate(4).putInt(ids.length).array());

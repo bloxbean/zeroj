@@ -65,7 +65,7 @@ M2 review: Codex approves `2aaf5bd`, and its two P3s are fixed in `ce104f5`.
 `docs/usecases/confidential-accounting-yano-x-handoff.md`. The machine covers:
 - authorization (domain-separated) and replay protection;
 - canonical identifiers, and binding each proof's context to its message;
-- incoming amounts held as pending entries, which the owner merges;
+- incoming amounts held as pending entries, which the owner merges or discards;
 - the balance invariant (D3a, with a supply cap);
 - limits, and deterministic rejection;
 - replicas on pure Java and blst agreeing.
@@ -1229,3 +1229,14 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     - the cost study lists what it leaves out (F3);
     - stale text is fixed in `package-info`, the M6 row and the Date line (F7);
     - the vector provenance names registry r9 (Codex F6).
+  - **Round 2 (`acf4a0e`):** Codex reports M3–M6 READY. The Claude reviewer found two more
+    issues in the M5 reference ledger, now fixed:
+    - **F9:** a pending pool filled with withheld zero-value entries blocked receiving for good.
+      The owner can now discard entries, and the invariant becomes "the total never increases".
+    - **F10:** a signed transfer with failing proofs could be replayed to burn the proof budget in
+      every block. A failed transfer now consumes the sender's sequence.
+
+    Also: the budget is described as a two-unit reservation (Codex r2 F8); the handoff tells the
+    wallet to check an opening before merging (F12); the spec r2 history lists the §12 note
+    (F11); the benchmark sample counts and the handoff's provider coverage are corrected
+    (Codex r2 F5, F7).

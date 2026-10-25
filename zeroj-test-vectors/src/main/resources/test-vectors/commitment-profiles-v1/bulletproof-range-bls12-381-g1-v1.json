@@ -527,7 +527,7 @@
       "path": "docs/specs/bulletproof-range-bls12-381-g1-v1.md",
       "revision": "r2",
       "date": "2026-10-25",
-      "sha256": "4cd65a42bb5f72b49e4d40490eaff912ecce81a77fb50c57921668a9675e39f8"
+      "sha256": "48cae53cf0587dc4621d2a43e4f74f10f5a367c3a848d73a58b21fed990e7237"
     },
     {
       "path": "docs/specs/pedersen-bls12-381-g1-v1.md",

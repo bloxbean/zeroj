@@ -35,8 +35,9 @@ volatile sink, so the JIT cannot drop the work. Run it with
 `./gradlew :zeroj-bls12381:bulletproofBenchmark` (pure Java) or
 `./gradlew :zeroj-blst:bulletproofBenchmarkBlst` (blst).
 
-**Samples:** proving runs 12, 8 and 6 measured iterations at `n` = 16, 32, 64, and verification
-24 to 40, after warm-up. With 6 iterations, p95 is the largest sample.
+**Samples:** after warm-up, proving runs 12, 8 and 6 measured iterations at `n` = 16, 32, 64, and
+verification 40, 24 and 16. With up to 19 iterations, p95 is the largest sample, which applies to
+every proving row and to the 64-bit verification rows.
 
 **Load:** other services were running on the machine, with a load average of about 7 to 12 (16
 cores) throughout. In this run p95 is within 2% of p50 for every single-threaded figure. An

@@ -22,16 +22,16 @@ The verifier establishes one statement: a commitment `V ≠ O` opens to a value 
 | Replay | a per-account sequence number that must equal the next expected one | Any rule works if it is part of the transition state |
 | Identifiers | chain and account ids are canonical ASCII, `[a-z0-9-]{1,64}`, enforced at genesis and in decoding | A lossy text encoding would let two ids share a proof context |
 | Proof binding | `ctx` = namespace ‖ chain id, sender, recipient (each length-prefixed) ‖ sequence (8 octets) ‖ output role | `ctx` must be injective over the fields (spec §5.1); a proof under one `ctx` fails under any other |
-| **Incoming amounts** | each incoming amount becomes a separate **pending entry** of the recipient; the owner moves the entries it can open into its balance with its own authorized merge message | A payee can spend only what it can open. Adding incoming amounts straight to the balance lets any payer freeze it by withholding a blinding, even with a zero-value transfer, and lets any incoming transfer invalidate the payee's pending spends (found in M3–M6 review). Delivering openings (for example ADR-0052/0054 encryption) is the host's choice; a note/UTXO model (ADR-0055) avoids the problem differently |
+| **Incoming amounts** | each incoming amount becomes a separate **pending entry** of the recipient; the owner moves the entries it can open into its balance with its own authorized merge message, and drops the ones it cannot open with an authorized discard | A payee can spend only what it can open. Adding incoming amounts straight to the balance lets any payer freeze it by withholding a blinding, even with a zero-value transfer, and lets any incoming transfer invalidate the payee's pending spends (found in M3–M6 review). The wallet must check a delivered opening `(v, r)` against the pending commitment before merging it: merging an entry it cannot open freezes its own balance. Without a discard, a payer could fill the pool with withheld entries and stop the account from receiving for good. Delivering openings (for example ADR-0052/0054 encryption) is the host's choice; a note/UTXO model (ADR-0055) avoids the problem differently |
 | Balance | `C_balance == C_amount + C_change`, each output with its own 64-bit proof | See the invariant below |
 | Supply | total supply below `2^63` at genesis | Keeps every balance below `2^64`, so it can move in one transfer |
 | Width | `n = 64` for every output, from configuration | Never take `n` from the proof or its length (spec §13 item 5) |
-| Limits | message size (65,536 octets, Yano-X's default), at most 16 pending entries per account, and verified proofs per block | Yano-X's `zk.max-proofs-per-block` is advisory; the plugin must enforce its own limit in `apply()`. Count only proofs actually verified, so unauthenticated messages do not use the budget. With no fees, the pending pool can be filled by spam up to its limit, which blocks receiving (not spending); a real host prices or rate-limits incoming entries |
+| Limits | message size (65,536 octets, Yano-X's default), at most 16 pending entries per account, and a per-block proof budget | Yano-X's `zk.max-proofs-per-block` is advisory; the plugin must enforce its own limit in `apply()`. The reference reserves two units for each transfer that reaches verification, so unauthenticated and unbalanced messages use none. A transfer whose proofs fail still consumes the sender's sequence, like the nonce of an included but failed transaction, so one signed message burns the budget at most once. Without fees, an account holder can still spend the budget with fresh messages, and anyone can fill a pending pool until its owner discards. A real host prices or rate-limits both |
 | Determinism | ordered maps, no randomness, clock or I/O; every malformed input is a rejection; configuration (ids, keys) is checked at construction | `apply()` must never throw on message content; catch `CommitmentFormatException` and reject |
 
-**The balance invariant.** Every balance and pending entry opens to genesis plus what it received
-minus what it sent, and the total S is constant, below `2^63`. By induction every value is in
-`[0, S]`:
+**The balance invariant.** Every balance and pending entry opens to a non-negative value, the
+total S never increases (a discard lowers it), and S starts below `2^63`. By induction every value
+is in `[0, S]`:
 - A transfer needs `C_balance == C_amount + C_change`, with a 64-bit range proof on each output. So
   `v_amount + v_change ≡ b (mod q)`, with the left side at most `2^65 − 2 < q` and `b < q`. That makes
   it an integer equality, and the amount is in `[0, b]`. This is ADR-0051 D3a, with the balance's
@@ -53,12 +53,14 @@ The negative tests run on both the pure-Java and the blst provider:
 - inflation, a spend that needs a negative change, is refused: the honest prover refuses the
   value, and a proof borrowed from the other output fails;
 - a proof moved to another recipient or output fails;
-- malformed messages, malformed and identity commitments, proofs of another width, flipped proof
-  bytes and non-canonical identifiers are rejected;
+- malformed messages, malformed and identity commitments, proofs of another width and flipped proof
+  bytes are rejected;
 - the proof budget is charged only when verification is reached.
 
-Separately:
-- the pending limit (pure Java);
+Separately, on pure Java:
+- the pending limit, and a discard that clears a pool filled with withheld entries;
+- a replayed failed transfer cannot burn the proof budget;
+- non-canonical identifiers in messages are rejected;
 - configuration invariants (no provider involved);
 - two replicas on different providers apply the same good and bad blocks with identical results and
   state digests.
