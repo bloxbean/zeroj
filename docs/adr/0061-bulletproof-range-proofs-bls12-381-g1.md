@@ -883,6 +883,12 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
     `INVALID_STATEMENT` propagate (registry §12.1).
 
   Callers that defined such identifiers get `INVALID_CONFIGURATION`.
+- **New public API besides the bulletproofs package.** `org.zeroj.bls12381.Shake128`, a general
+  SHAKE128 XOF (`update`, `copy`, `squeeze`), is a deliberate, supported API of `zeroj-bls12381`
+  (D7), at the module's experimental maturity. It is public only because it shares
+  `Bls12381Hash`'s package-private Keccak-f[1600]. Making it package-private in
+  `org.zeroj.bls12381.bulletproofs` would need that permutation to be public, or a second copy of
+  it, so it stays where it is (reviewer 2, R2-3).
 - **Transcript versioning.** Any change to D2, D3 or D4 after admission needs a new protocol
   identifier, and proofs under the old identifier stay verifiable under it.
 - **Yano-X.** Using the verifier needs a Yano-X dependency upgrade to an `org.zeroj` release (D9).
@@ -1019,7 +1025,7 @@ experimental admission.
 | I5 | completeness at `v` = 0, 1, `2^n − 1` and random values at each width; the refusal tests (`v = 2^n`, `q − 1`, identity statement) |
 | I6 | element and bit tampers, other `ctx`, `V` and width, forced out-of-range values; 600 extra mutations (M2 review) |
 | I7 | `BulletproofDeterminismTest` (repeated runs, both providers, fresh JVMs); `BlstBulletproofParityTest`; M5 replicas |
-| I8 | `BulletproofProverScheduleTest`, `nonceSampling`, the API-surface test |
+| I8 | `BulletproofProverScheduleTest`, `nonceSampling`, the API-surface test, `SystemNonceSourceAllowlistTest` (forked JVM) |
 | I9 | no file of the G1 Pedersen profiles or their vectors changed; their tests pass |
 | I10 | `VerifierWorkTest` (exactly `5 + 2n + 2k + 4` multiplications, none on rejection), `oversizedInputs` |
 | I11 | the measurements document is labelled as records |
@@ -1027,8 +1033,10 @@ experimental admission.
 | I13 | `ReservedIdentifiersTest`, including the forked-JVM regression |
 
 **Seeded faults:** all 14 from the M1 list are killed, plus "skip check 1 on `a`". Reviewer (c)'s
-surviving mutants are killed by the evidence added in r7 and r8, except one recorded gap:
-MU04 (`create()` skipping the allowlist), which spec §7.3 treats as a sanity check only.
+surviving mutants are killed by the evidence added in r7 and r8. The last one, MU04 (`create()`
+skipping the allowlist), is killed since r12 by `SystemNonceSourceAllowlistTest`: in a forked JVM
+whose default `SecureRandom` is not allowlisted, the public `prove` must throw, and under the mutant
+it completes a proof. The allowlist stays a sanity check only (spec §7.3).
 
 ### Follow-ups
 
@@ -1264,3 +1272,14 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     its `CONTRIBUTING.md`.
   - The before-merge gate is closed (Status, Follow-ups). Earlier entries that call it open are
     kept as history.
+- **r12 (2026-10-25, responds to reviewer 2's review of `6d39c74`):**
+  - **R2-2 (P3), accepted:** `SystemNonceSourceAllowlistTest` runs the public `prove` in a forked
+    JVM whose first provider makes a non-allowlisted, predictable `SecureRandom` the default, and
+    requires the allowlist's `IllegalStateException`. Applying MU04 makes the test fail (the probe
+    completes a proof). The gap recorded in r6 and under Seeded faults is closed; the r6 entry is
+    kept as history.
+  - **R2-3 (P3), accepted in its second form:** `Shake128` is listed under Compatibility as
+    deliberate public API. Moving it is not possible without exposing Keccak-f[1600] or copying it.
+  - **R2-1 (P2), maintainer gate:** whether the r9 admission (`reserved` → `active`, effective on
+    merge) may rest on the AI-only implementation reviews is the maintainer's decision. Not changed
+    in this revision.
