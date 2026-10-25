@@ -80,6 +80,8 @@ dependencies {
 
     // Test — ADR-0060 M4: the independent G1 Pedersen vectors, run through PedersenG1Lib in the VM.
     testImplementation project(':zeroj-test-vectors')
+    // ADR-0061 M4: the Bulletproof cost study takes honest proofs and their challenges from the test fixtures.
+    testImplementation testFixtures(project(':zeroj-bls12381'))
 }
 
 test {
