@@ -1,6 +1,7 @@
 package org.zeroj.bls12381.bulletproofs;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,7 @@ class BulletproofVectorsTest {
     }
 
     @Test
-    @DisplayName("An invalid fixture is rejected as a whole (a JSON number, an unknown field, a wrong generator)")
+    @DisplayName("An invalid fixture is rejected as a whole (a JSON number, an unknown field, a wrong generator, a reused seed, a missing width)")
     void fixtureValidation() throws IOException {
         JsonNode good = BulletproofVectorRunner.load();
         ObjectNode number = good.deepCopy();
@@ -47,6 +48,17 @@ class BulletproofVectorsTest {
         ((ObjectNode) gen.get("generators").get(5)).put("compressedHex",
                 BulletproofGenerators.G_VEC_HEX.get(6));
         assertThrowsState(gen);
+        // Spec §7.5: a repeated nonce seed.
+        ObjectNode seed = good.deepCopy();
+        ((ObjectNode) seed.get("positive").get(1)).put("nonceSeedHex", seed.get("positive").get(0).get("nonceSeedHex").asText());
+        assertThrowsState(seed);
+        // Spec §11: no positive case at one width.
+        ObjectNode width = good.deepCopy();
+        ArrayNode positives = (ArrayNode) width.get("positive");
+        for (int i = positives.size() - 1; i >= 0; i--) {
+            if (positives.get(i).get("bits").asText().equals("32")) positives.remove(i);
+        }
+        assertThrowsState(width);
     }
 
     private static void assertThrowsState(JsonNode file) {

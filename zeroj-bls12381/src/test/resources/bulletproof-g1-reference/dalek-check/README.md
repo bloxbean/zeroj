@@ -91,11 +91,13 @@ that dalek verifies and produces.
 | Bulletproofs paper, ePrint 2017/1066 (2022-04-14 text extraction) | §3, §4.1–§4.2, §6.2 |
 | `docs/specs/bulletproof-range-bls12-381-g1-v1.md` r2 | §2–§8, Appendix A |
 
-**Pin mismatch to note.** ADR-0061 reference 10 pins zkcrypto `bulletproofs` at commit
-`04bce4e66013ff857ed462fd4206210544101461` (2025-09-13), for its notes and transcript order. The
-crate 5.0.0 that this check runs was packaged from `86eadbee…` instead. This check pins the
-crate, not the commit. Someone should confirm that the transcript order in `src/transcript.rs`
-and `src/range_proof/mod.rs` is the same at both commits, or the ADR could cite the crate.
+**Crate commit versus the ADR pin (resolved at integration).** ADR-0061 reference 10 pins
+zkcrypto `bulletproofs` at commit `04bce4e66013ff857ed462fd4206210544101461` (2025-09-13), for
+its notes and transcript order. The crate 5.0.0 that this check runs was packaged from
+`86eadbeeb4a96d8da41427137b45ead810d03b41`, 9 commits earlier. Those 9 commits change serde
+deserialization (`visit_seq`), an r1cs scalar parse, tests, CI, the version number and a
+development dependency; none touches the range-proof algebra or transcript
+(`https://github.com/zkcrypto/bulletproofs/compare/86eadbe...04bce4e`). This check pins the crate.
 
 **Merlin conformance: no hardcoded bytes upstream.** merlin-3.0.0's `src/` tests have no hard-coded
 expected bytes:

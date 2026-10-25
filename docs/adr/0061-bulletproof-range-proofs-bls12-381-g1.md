@@ -315,8 +315,9 @@ Any of these lets an observer learn or narrow `v`.
    - *M2 note (r8):* the M2 check runs the published crate `bulletproofs` 5.0.0 (crates.io; its
      `.cargo_vcs_info.json` names commit `86eadbeeb4a96d8da41427137b45ead810d03b41`; the crate's
      SHA-256 is recorded in `dalek-check/README.md`). That commit is 9 commits before the pin
-     above. The 9 commits change only serde deserialization (`visit_seq`), an r1cs scalar parse,
-     tests and CI, not the range-proof algebra or transcript. That was checked with
+     above. The 9 commits change serde deserialization (`visit_seq`), an r1cs scalar parse, tests,
+     CI, the version number and a development dependency, not the range-proof algebra or
+     transcript. That was checked with
      `gh api repos/zkcrypto/bulletproofs/compare/86eadbe…04bce4e`.
 11. **CIP-0381** and **CIP-0133** at `86b89208d3b2aabb5dcc5b778dfbe09096b4e114`, as pinned by ADR-0060.
 12. **ZeroJ:**

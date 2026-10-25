@@ -115,6 +115,33 @@ public final class BulletproofVectorRunner {
         return new Report(executed, failures, outcomes);
     }
 
+    /**
+     * ADR-0061 M3 determinism: the verifier's verdict and layer for every positive and negative case,
+     * keyed by case id, in file order. Verification only (no proving), so a run is cheap enough to
+     * repeat across runs, providers and JVMs.
+     */
+    public static Map<String, String> verdicts(JsonNode file, G1RangeVerifier verifier) {
+        Objects.requireNonNull(verifier, "verifier");
+        validate(file);
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String section : List.of("positive", "negative")) {
+            for (JsonNode c : file.get(section)) {
+                int bits = Integer.parseInt(c.get("bits").asText());
+                byte[] ctx = HEX.parseHex(c.get("ctxHex").asText());
+                byte[] vWire = HEX.parseHex(c.get("commitmentHex").asText());
+                byte[] wire = HEX.parseHex(c.get("proofHex").asText());
+                String verdict;
+                try {
+                    verdict = String.valueOf(verifier.verify(vWire, wire, bits, ctx));
+                } catch (CommitmentFormatException e) {
+                    verdict = e.reason().name();
+                }
+                out.put(c.get("id").asText(), verdict + " @" + layer(verifier, vWire, wire, bits, ctx));
+            }
+        }
+        return out;
+    }
+
     private interface Case {
         String run() throws Exception;
     }
@@ -276,7 +303,8 @@ public final class BulletproofVectorRunner {
         fields(file.get("generator"), Set.of("script", "scriptSha256", "python"), "generator");
 
         Set<String> ids = new HashSet<>();
-        boolean n64 = false;
+        Set<String> seeds = new HashSet<>();
+        Set<String> widths = new HashSet<>();
         for (JsonNode c : array(file, "positive")) {
             fields(c, POSITIVE, "positive case");
             fields(c.get("challenges"), CHALLENGES, "challenges");
@@ -287,9 +315,12 @@ public final class BulletproofVectorRunner {
             hex(c, "proofHex", -1);
             decimal(c, "value");
             decimal(c, "blinding");
-            n64 |= c.get("bits").asText().equals("64");
+            // Spec §7.5: two proofs under one seed reuse every nonce; each positive has its own.
+            require(seeds.add(c.get("nonceSeedHex").asText()), "unique nonce seed " + c.get("id"));
+            widths.add(c.get("bits").asText());
         }
-        require(n64, "at least one n = 64 positive case (registry §2.4 item 4)");
+        // Spec §11: a positive case at every width (which includes n = 64, registry §2.4 item 4).
+        require(widths.equals(Set.of("16", "32", "64")), "positive cases at n = 16, 32 and 64, not " + widths);
         for (JsonNode c : array(file, "negative")) {
             fields(c, NEGATIVE, "negative case");
             caseCommon(c, ids);
