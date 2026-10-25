@@ -1,6 +1,6 @@
 # EIP-197 BN254 Pairing Test Vectors
 
-Low-level BN254 pairing precompile test vectors from the Ethereum test suite.
+Low-level BN254 pairing precompile test vectors in the format of the Ethereum precompile tests (see Source).
 
 These test the `bn256Pairing` precompile (address 0x08) which computes:
 `e(P1,Q1) * e(P2,Q2) * ... * e(Pk,Qk) == 1`
@@ -31,4 +31,9 @@ When converting between formats, swap the two components.
 
 ## Source
 
-go-ethereum: `core/vm/testdata/precompiles/bn256Pairing.json`
+The format follows go-ethereum's precompile tests,
+`core/vm/testdata/precompiles/bn256Pairing.json`. The vectors are **not** copied from that file:
+checked on 2026-10-25 against go-ethereum `master` (`2006f0836b30b8f689cd1df5620a9f64421c9f84`;
+the file last changed in `a3cd8a040a`, 2020), only `empty_input` appears there (as `empty_data`).
+The other three cases are built from the standard BN254 generators, and where they came from is
+not recorded. They contain no third-party material, so this directory has no `NOTICE`.

@@ -19,6 +19,10 @@ Wycheproof is Copyright Google LLC and contributors, under the Apache License, V
 zcash-test-vectors is licensed under either the Apache License, Version 2.0, or the MIT
 licence, at the user's option (its `COPYING.md` at the pinned commit).
 
+[`NOTICE`](NOTICE) in this directory gives the credits, the licence terms (with the MIT text for
+zcash-test-vectors) and the SHA-256 of every file; the Apache License text is in the repository's
+`licenses/Apache-2.0.txt`.
+
 The RFC vectors quoted directly in tests are:
 - RFC 7748 §5.2 and §6.1;
 - RFC 8439 §2.8.2;

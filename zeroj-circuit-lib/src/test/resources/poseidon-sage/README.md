@@ -9,7 +9,8 @@ used to independently verify the pure-Java `PoseidonHash` implementation.
   includes the hadeshash Grain LFSR generator (pinned commit
   `208b5a164c6a252b137997694d90931b2bb851c5`) and a Poseidon permutation
   implementation matching the paper spec (Grassi et al., 2021) §4 for
-  `t=3, α=5, RF=8, RP=57`.
+  `t=3, α=5, RF=8, RP=57`. The Grain LFSR part is ported from hadeshash (MIT
+  licence); see [`NOTICE`](NOTICE) for the credits and licence text.
 - `sage-reference-output.txt` — captured output from running the Sage script
   once, used as a golden reference in `PoseidonCrossVerificationTest`.
 

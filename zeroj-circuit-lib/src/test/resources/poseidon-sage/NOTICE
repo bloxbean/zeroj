@@ -1,0 +1,60 @@
+Third-party notice: Grain LFSR code from hadeshash
+==================================================
+
+poseidon_bls12_381_reference.sage in this directory contains a port of the Grain LFSR constant
+generator from the repository
+
+  https://extgit.isec.tugraz.at/krypto/hadeshash
+  (commit 208b5a164c6a252b137997694d90931b2bb851c5, 2023-05-02, file
+  code/generate_parameters_grain.sage)
+
+The Grain LFSR functions (the section marked "Grain LFSR (verbatim port)") follow that file
+closely. They are adapted to fixed parameters (GF(p), x^alpha, t = 3, RF = 8, RP = 57) instead of
+command-line arguments. The Poseidon permutation and the test-vector driver in the same file are
+ZeroJ's own, written from the Poseidon paper.
+
+The original code is by the authors of the Poseidon hash function: L. Grassi, D. Khovratovich,
+C. Rechberger, A. Roy and M. Schofnegger, "Poseidon: A New Hash Function for Zero-Knowledge Proof
+Systems" (USENIX Security 2021). Credit for it belongs to them and to Graz University of
+Technology.
+
+  File                                  SHA-256
+  poseidon_bls12_381_reference.sage     270f62f23514dd2f8afb6630385ddac9ea1a5e524fa0473011866b28a37e33b0
+
+sage-reference-output.txt is the output of running that script, not copied material.
+
+
+Licence
+-------
+
+hadeshash is under the MIT licence. Its LICENSE file at the pinned commit
+(https://extgit.isec.tugraz.at/krypto/hadeshash/-/blob/208b5a164c6a252b137997694d90931b2bb851c5/LICENSE)
+reads, verbatim:
+
+  Copyright (c) 2019 Graz University of Technology
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the ""Software""), to deal in
+  the Software without restriction, including without limitation the rights to
+  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+  of the Software, and to permit persons to whom the Software is furnished to do
+  so, subject to the following conditions:
+  
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+  
+  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+
+Use in ZeroJ
+------------
+
+Test data only: PoseidonCrossVerificationTest in zeroj-circuit-lib compares ZeroJ's Poseidon with
+the script's captured output (README.md here). This is a test resource, so it is in no published
+ZeroJ artifact.

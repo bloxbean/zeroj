@@ -1,0 +1,100 @@
+Third-party notice: published test vectors (HPKE, Wycheproof, Zcash)
+====================================================================
+
+Every JSON file in this directory is copied from a third-party repository. None of them is ZeroJ's
+work, and none is covered by ZeroJ's own licence. The README.md here describes each file in more
+detail.
+
+
+1. hpke-x25519-sha256-chacha20poly1305-base.json
+------------------------------------------------
+
+Copied from https://github.com/cfrg/draft-irtf-cfrg-hpke
+(commit b1f7cb0cdeab6906c61b3d6574e8bdfdbe1cd3fb, file test-vectors.json).
+
+These are the RFC 9180 Appendix A test vectors (RFC 9180, "Hybrid Public Key Encryption",
+R. Barnes, K. Bhargavan, B. Lipp, C. Wood, February 2022). Credit belongs to the RFC's authors and
+the contributors to that repository.
+
+Changed: the file is filtered to the single vector with mode = 0, kem_id = 32, kdf_id = 1 and
+aead_id = 3 (RFC 9180 Appendix A.2.1) and re-serialised as JSON. Every value is unchanged.
+
+  Upstream test-vectors.json   SHA-256 61fc662f01996cd06d713dacf5e133167bd309a1f329442d53f1e21a47b3ede6
+  This filtered file           SHA-256 9f061528b236f62d8a2309c321eb38c231f67eb745a43410fe98399fb20ed030
+
+Terms: RFC 9180 is subject to BCP 78 and the IETF Trust's Legal Provisions Relating to IETF
+Documents (https://trustee.ietf.org/license-info). The repository's LICENSE.md refers to its
+CONTRIBUTING.md, which places all its material under BCP 78, BCP 79 and those provisions:
+https://github.com/cfrg/draft-irtf-cfrg-hpke/blob/b1f7cb0cdeab6906c61b3d6574e8bdfdbe1cd3fb/CONTRIBUTING.md
+
+
+2. wycheproof-*.json
+--------------------
+
+Copied unchanged, byte for byte, from https://github.com/C2SP/wycheproof
+(commit 12fd3aaf33eb5fa1f52e026912ee00c054f9d984, directory testvectors_v1/).
+
+Project Wycheproof is Copyright Google LLC and contributors. Credit belongs to its authors and
+contributors.
+
+  wycheproof-x25519_test.json              x25519_test.json
+      SHA-256 35c3f5231cf25cc640b524d403461deee9e49441d5d915a3a25b2c8ff5adbe7d
+  wycheproof-chacha20_poly1305_test.json   chacha20_poly1305_test.json
+      SHA-256 fe61d25f90e1bde4461d00eafe61049e5f29bd999f36b766df9cda90906ad53d
+  wycheproof-hkdf_sha256_test.json         hkdf_sha256_test.json
+      SHA-256 bb2b462a38b251cb52a2aede706d6d4b62b26864f4e80c95497507ddb07c5f1e
+
+Only the file names changed (a "wycheproof-" prefix).
+
+Terms: Apache License, Version 2.0
+(https://github.com/C2SP/wycheproof/blob/12fd3aaf33eb5fa1f52e026912ee00c054f9d984/LICENSE). A copy
+is in licenses/Apache-2.0.txt at the root of the ZeroJ repository. The repository has no NOTICE
+file at that commit.
+
+
+3. zcash-sapling-note-encryption.json
+-------------------------------------
+
+Copied unchanged, byte for byte, from https://github.com/zcash/zcash-test-vectors
+(commit 78321beacb0e0477e33cd002b56585a107c2708c, file
+test-vectors/json/sapling_note_encryption.json). Only the file name changed.
+
+  SHA-256 dda3bed301e90915c2bf35209307d6c9e2d0de103a7ca93e5d15a2c00729f294
+
+Credit belongs to The Electric Coin Company and the contributors to zcash-test-vectors.
+
+Terms: zcash-test-vectors is licensed under either the Apache License, Version 2.0, or the MIT
+licence, at the user's option (its COPYING.md at the pinned commit). ZeroJ uses it under the MIT
+licence. Its LICENSE-MIT file at the pinned commit
+(https://github.com/zcash/zcash-test-vectors/blob/78321beacb0e0477e33cd002b56585a107c2708c/LICENSE-MIT)
+reads, verbatim:
+
+  The MIT License (MIT)
+  
+  Copyright (c) 2018-2021 The Electric Coin Company
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+  
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+  
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+
+
+Use in ZeroJ
+------------
+
+Test data only: known-answer and negative tests in zeroj-circuit-lib (for example
+HpkeKnownAnswerTest and ConfidentialNoteKnownAnswerTest) read these files. They are test
+resources, so they are in no published ZeroJ artifact.
