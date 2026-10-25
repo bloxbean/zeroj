@@ -25,8 +25,11 @@ listed the r5 design additions. The sign-off is recorded as accepting them:
 - the D6 nonce, seam and entropy rules;
 - `INVALID_STATEMENT`.
 
-The redistribution terms of the copied CFRG vectors (IETF Trust, BCP 78) remain a **before-merge**
-gate for the maintainer.
+**CFRG vector licence, decided 2026-10-25 (r11).** The maintainer decided to keep the copied CFRG
+vectors as test data, with a third-party `NOTICE` in their directory crediting the source
+repository and the drafts' authors and stating the IETF Trust terms (BCP 78, BCP 79 and the Trust
+Legal Provisions). The files are in the source repository only: `zeroj-test-vectors` is never
+published. This closes the before-merge gate.
 
 **M1 implemented (2026-10-25)** in PR #105 (r6): the Java SHAKE128 and transcript, the range
 prover and verifier, the D7a descriptor, and their tests. Review: Codex and three Claude reviewers
@@ -1034,7 +1037,7 @@ MU04 (`create()` skipping the allowlist), which spec §7.3 treats as a sanity ch
   (#22) and trusted-point handling (#104) are the levers.
 - A Cardano-native range proof would need its own transcript and ADR (D8).
 - Yano-X plugin: a Yano-X ADR, after Yano-X moves to an `org.zeroj` release.
-- The CFRG vector licence (IETF Trust, BCP 78) must be confirmed by the maintainer before merge.
+- The CFRG vector licence was decided on 2026-10-25 (r11): keep the copies, with a `NOTICE`.
 
 ## Consequences
 
@@ -1248,3 +1251,16 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     - a cross-provider fuzz run.
 
     All review rounds are closed: M1 (four reviewers), M2 (two), M3–M6 (two).
+- **r11 (2026-10-25, maintainer decision on the CFRG vector licence):**
+  - The copied CFRG `-03` vectors stay in `zeroj-test-vectors`, as test data.
+  - A third-party `NOTICE` in `cfrg-drafts-03/` states:
+    - that the files are copied, unchanged, from `mmaker/draft-irtf-cfrg-sigma-protocols` at
+      `91cc933`;
+    - credit to the drafts' authors;
+    - the IETF Trust terms, with links to the source repository's `LICENSE.md` and
+      `CONTRIBUTING.md`;
+    - each file's SHA-256.
+  - The directory README no longer says the source repository declares no licence; it refers to
+    its `CONTRIBUTING.md`.
+  - The before-merge gate is closed (Status, Follow-ups). Earlier entries that call it open are
+    kept as history.

@@ -1,7 +1,8 @@
 # CFRG Fiat–Shamir and sigma-protocol test vectors (`-03` drafts)
 
 These are the official test vectors of two IRTF CFRG Internet-Drafts, copied unchanged from
-the drafts' machine-readable copies. ADR-0061 (`bulletproof-range-bls12-381-g1-v1`, invariant
+the drafts' repository, https://github.com/mmaker/draft-irtf-cfrg-sigma-protocols (commit
+`91cc933`, `poc/vectors/`). ADR-0061 (`bulletproof-range-bls12-381-g1-v1`, invariant
 I12) uses them to check ZeroJ's transcript layer: the SHAKE128 duplex sponge, its codecs, and the
 `sigma-proofs_Shake128_BLS12381` encodings.
 
@@ -33,7 +34,11 @@ ADR-0061 does not use. Which vectors are in scope is set in
 
 ## Licence
 
-The vectors come from IETF documents, which are subject to BCP 78 and the IETF Trust's Legal
-Provisions Relating to IETF Documents (https://trustee.ietf.org/license-info). The source
-repository declares no licence of its own. They are included as test data with this attribution.
-Redistribution is to be confirmed by the maintainer before this directory is merged (ADR-0061 M0 sign-off).
+The vectors are not ZeroJ's work. They come from IETF documents, which are subject to BCP 78 and
+the IETF Trust's Legal Provisions Relating to IETF Documents (https://trustee.ietf.org/license-info).
+The source repository's `LICENSE.md` refers to its `CONTRIBUTING.md`, which places all its
+material under BCP 78, BCP 79 and those provisions. See [`NOTICE`](NOTICE) in this directory for
+the full notice, the credits and the links.
+
+They are included as test data only. `zeroj-test-vectors` is never published (root `build.gradle`,
+`nonPublishable`), so the files are in the source repository but in no ZeroJ release artifact.
