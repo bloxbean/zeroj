@@ -331,3 +331,199 @@ external code, and review, remain necessary.
   decoder check on sigma-03 A.3.2 now requires the exact class for each vector: `A5` gives
   `NOT_IN_SUBGROUP`; `A1`, `A3`, `A4` and `A6` give `MALFORMED_ENCODING`; `B1` and `B2` give
   `NON_CANONICAL_SCALAR`. Before, it accepted any rejection. No protocol code changed.
+
+## M2: vector emitter (`emit_bulletproof_vectors_v1.py`)
+
+`emit_bulletproof_vectors_v1.py` writes the protocol's vector file,
+`zeroj-test-vectors/src/main/resources/test-vectors/commitment-profiles-v1/bulletproof-range-bls12-381-g1-v1.json`,
+in the spec §11 format (`zeroj-proof-vectors-v1`) under the `commitment-profiles-v1` §13.2 value
+conventions. Like the script above, this is **ZeroJ's own second implementation, not an official
+or third-party reference**. Agreement between it and the Java implementation shows that two
+implementations read the spec the same way. It does not show that the spec is right.
+
+It imports `bulletproof_range_reference.py` from this directory by path and does not modify it.
+Every proof, challenge and expected outcome in the file comes from that script:
+- positive proofs from the §7.5 test-nonce prover;
+- expected classes and layers from its verifier;
+- prover refusals from its §7.1 preamble.
+
+The emitter adds its own code only for checking:
+- a separate transcript (sponge, tag, instance, challenges) that re-derives `sessionIdHex` and
+  every challenge from the proof octets;
+- check 1 in the curve module's affine arithmetic;
+- a structural "intent" check of each negative case (below).
+
+Check 2 of each positive and check-layer case is re-run with the script's literal Protocol 1/2
+folding verifier.
+
+### Running
+
+Python 3.13, standard library only. Run in isolated mode:
+
+```bash
+python3 -I -B emit_bulletproof_vectors_v1.py                # the JSON on stdout
+python3 -I -B emit_bulletproof_vectors_v1.py --out PATH     # the JSON to PATH
+python3 -I -B emit_bulletproof_vectors_v1.py --check        # regenerate and compare byte for byte (about 2.5 minutes)
+python3 -I -B emit_bulletproof_vectors_v1.py --self-test    # re-verify and run the mutations (about 13 minutes)
+```
+
+- `--check` compares with the committed file. Its path is resolved from the repository root, five
+  directories above the script. `--repo-root DIR` overrides the root.
+- The `spec` provenance records the SHA-256 and date of three specs, read from the repository
+  root at generation time:
+  - `bulletproof-range-bls12-381-g1-v1.md`, r2;
+  - `pedersen-bls12-381-g1-v1.md`, r2;
+  - `commitment-profiles-v1.md`, r8.
+- `generator` records the script's SHA-256 and the Python version.
+- Editing any of those specs, or this script, changes the output. Regenerate with `--out`.
+  `--check` marks such differences `[provenance field]`.
+
+### Contents
+
+| Section | Cases | Coverage |
+|---|---:|---|
+| `generators` | 129 | `G_0 … G_63`, `H_0 … H_63`, `U`, as in Appendix A |
+| `positive` | 14 | 4 at `n = 16`, 5 at 32, 5 at 64 |
+| `negative` | 114 | 9 configuration, 17 statement, 10 length, 35 point, 22 scalar, 13 check1, 8 check2 |
+| `proverNegative` | 25 | 9 `INVALID_CONFIGURATION`, 6 `NON_CANONICAL_SCALAR`, 7 `OUT_OF_RANGE`, 3 `INVALID_STATEMENT` |
+
+**Positive cases.**
+- At each width: the values `0`, `1`, `2^n − 1` and a fixed mid value; `0` always has a non-zero
+  blinding.
+- At each width: contexts of 1 octet (`00`), `"hello"`, `"https://example.com/payroll/v1"`, and
+  1,024 octets. The 1,024-octet context follows the §13.2 pattern `131i+17`.
+- Extras: `2^63` with blinding `q − 1`, and `0` with blinding `1`.
+- Every case has its own 32-octet nonce seed (§7.5). The seed is SHA-256 of a label and the case
+  id, except `n16-vmid-hello-trace`.
+- `n16-vmid-hello-trace` is the `--print-trace` example (seed `00 … 1f`). It is pinned against the
+  externally confirmed `PIN_TRACE`.
+
+**Negative cases** cover each layer the verifier can reach from octets:
+- configuration: bits 0, 8, 24 and 128; an empty `ctx`; a 1,025-octet `ctx`;
+- statement:
+  - malformed `V` encodings;
+  - `(0, 2)`, a commitment plus `(0, 2)`, `[7]·G + [11]·H + (0, 2)`, and another non-subgroup
+    point, all `NOT_IN_SUBGROUP`;
+  - the identity, which gives `false`;
+- length: short, long, empty, and a valid proof of another width;
+- point: identity, non-subgroup and malformed encodings at `A`, at a middle `L_j` and at the last
+  `R_k`, at `n` = 16, 32 and 64;
+- scalar: each of `t̂`, `τ_x`, `μ`, `a` and `b` at exactly `q`, at `2^256 − 1`, and at `s + q`;
+- check1 and check2:
+  - scalars tampered and re-encoded canonically;
+  - substituted, negated and swapped points;
+  - a wrong `ctx`; another commitment;
+  - two cheating-prover proofs (`v = 2^16`, and a non-bit `a_L`), which fail check 1 only;
+- order: two field defects, where the earlier field wins; a bad `V` together with a bad proof
+  field, which gives the field's class; a bad or identity `V` with a well-formed but tampered
+  proof, which gives the statement outcome.
+
+The `challenge` layer is not reachable from octets (a zero challenge has negligible probability),
+so it has no case.
+
+**Prover refusals.** The order is §7.1. The Java opening type rejects a non-canonical value or
+blinding when it is constructed, before the prover's configuration check. So every
+`NON_CANONICAL_SCALAR` case has a valid configuration (bits 16 or 64, `ctx` `"hello"`), and
+every `INVALID_CONFIGURATION` case has a canonical opening. Configuration combined with an
+out-of-range value or an identity opening is included.
+
+### `--self-test`
+
+It exits 0 only if every check passes.
+
+1. **Pins.**
+   - `D_gens`, `G_0`, and all 129 encodings against `generators-v1.json`.
+   - `G` and `H`.
+   - The §5.1 example tag, from both the emitter and the script.
+   - The 244-octet instance and the proof lengths.
+   - The decoder class of each crafted encoding.
+   - The trace case against `PIN_TRACE`, including the emitter's own transcript.
+2. **Determinism.** A second build, with every cached reference result discarded, must be
+   byte-identical.
+3. **Re-verification**, of the generated document and of the file on disk.
+   - Positive cases:
+     - the prover reproduces `proofHex` and `commitmentHex` from `value`, `blinding`, `bits`,
+       `ctxHex` and `nonceSeedHex`;
+     - the script and the emitter's own transcript both reproduce `sessionIdHex` and the
+       challenges;
+     - the verifier, affine check 1 and the folding verifier all accept;
+     - the commitment matches an affine `[v]·G + [γ]·H`.
+   - Negative cases (the intent check):
+     - the defects present in the octets are computed by the §8.1 steps: configuration; length;
+       each field in proof order; `V`; then the checks, by affine check 1 and the folding
+       verifier;
+     - they must equal the defects the case declares;
+     - `expected` and `layer` must be those of the first declared defect, and must match the
+       script's verifier;
+     - tags tie a case to its base positive case: "the base proof with `a + 1`", "the same proof
+       under another `ctx`", "`V` minus `(0, 2)` is a subgroup point".
+   - Prover refusals are re-run through the script's §7.1 preamble and through the emitter's own
+     §7.1 order, and the Java-binding constraint above is checked.
+   - Coverage is computed from the octets.
+4. **Document mutations.** 27 alterations of the emitted document must each be detected, for
+   example:
+   - a wrong class; a wrong layer; check 1 recorded as check 2;
+   - a valid proof in a negative case; a defect moved to another field;
+   - a flipped proof bit; `a + 1` in a positive case; a dropped `x_j`; `y + 1`;
+   - a reused seed; swapped generators;
+   - a JSON number; uppercase hex.
+5. **Emitter mutations.** 12 mutations must each make strict generation refuse, or produce output
+   that fails re-verification. They include:
+   - a reused seed; `q − 1` in place of `q`;
+   - a point defect shifted by one field; identity replaced by order 3;
+   - a dropped challenge; swapped `y` and `z`;
+   - the both-checks layer recorded as check 2;
+   - an over-long positive `ctx`; `2^n` as a positive value;
+   - a wrong refusal order;
+   - two seams of the script: `V` dropped from the instance, and the LSB-first `s_i` rule.
+6. **The `--check` comparator.** It must flag tampered copies.
+
+One finding from the first run: the emitter had declared that the non-bit cheating proof fails
+both checks. The intent check showed that check 2 holds, because the inner-product argument is
+honest for the `l` and `r` that prover built. The declaration was corrected. The emitted file was
+unchanged, because its `layer` already came from the verifier.
+
+### Output
+
+| `generator.python` | Output SHA-256 |
+|---|---|
+| CPython 3.13.5 | `870f01abf6813a62038b78b625e0776b3494ef6a116a33245b6a3ec8908de479` |
+
+This is the committed file, regenerated at integration after the spec's r2 text changed
+(`21e3404d…78a0`). Only the `spec` provenance field differs from the author's first output
+(`353e8f8d…e37c`); every case is identical.
+
+### Independence (M2)
+
+The M2 author read:
+- the spec (r2, SHA-256 `fdae01a9…9d41`), in full;
+- `commitment-profiles-v1.md` §2.4, §11 and §13;
+- ADR-0061: D4, D5, the invariants, the milestones and the verification strategy;
+- this script, its README, the curve module's API, the Pedersen G1 emitter (for style), and the
+  JSON vector files.
+
+No `.java` file was opened. One directory listing of the shared staging area showed the name of
+a Java file belonging to another work item. It was not opened.
+
+The Java-binding constraint on prover refusals came from the integrator's instructions.
+
+## M2: Java → Python (`verify_java_proofs.py`)
+
+`java-proofs-v1.json` holds 12 proofs made by the **Java** prover with the §7.5 test nonces
+(`n` = 16, 32, 64; values 0, 1, a mid value and `2^n − 1`; ASCII, binary and 1,024-octet contexts).
+`JavaProofsFileTest` keeps it equal to what the Java code produces. `verify_java_proofs.py` checks
+it with this directory's reference implementation only: the commitment is recomputed, each proof
+verifies, re-proving with the same seed gives the identical octets, and one-octet tampers in every
+field are rejected.
+
+```
+python3 -I -B verify_java_proofs.py      # 12 cases, 228 tampers, 0 failing (2026-10-25, CPython 3.13.5)
+```
+
+The script is glue written by the Java author; every check it makes calls
+`bulletproof_range_reference.py`, which was written without reading Java.
+
+## M2: external algebra check against dalek (`dalek-check/`)
+
+See `dalek-check/README.md`: a group-generic Python core checked against dalek `bulletproofs`
+5.0.0 in both directions, and the same core reproducing this protocol's known-answer proof.

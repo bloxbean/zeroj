@@ -649,6 +649,8 @@ fields, and decimal integers.
 - **`generators`** lists all 129 encodings in Appendix A order, and the file has at least one
   `n = 64` positive case. Together these cover the generator set's admission vectors (registry
   §2.4 item 4).
+- **Widths:** the file has at least one positive case at each `n ∈ {16, 32, 64}`, so that code
+  which depends on `n` is pinned at every width.
 - **Positive cases:**
   - the prover with the §7.5 test nonces, for `value` and `blinding`, at `bits` and `ctxHex`,
     MUST produce `proofHex`;
@@ -726,6 +728,7 @@ A host that runs the verifier inside a replicated state machine relies on these 
     `Bls12381Hash` already used for SHAKE256.
   - §7.5 lists the three bounded package-private test seams of the Java binding (M1 review,
     reviewer (b) F1).
+  - §11 requires a positive vector at every width (M1 review, reviewer (c) F10).
 
 ## 15. References
 

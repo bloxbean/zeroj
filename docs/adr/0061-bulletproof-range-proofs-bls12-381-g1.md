@@ -29,7 +29,23 @@ The redistribution terms of the copied CFRG vectors (IETF Trust, BCP 78) remain 
 gate for the maintainer.
 
 **M1 implemented (2026-10-25)** in PR #105 (r6): the Java SHAKE128 and transcript, the range
-prover and verifier, the D7a descriptor, and their tests.
+prover and verifier, the D7a descriptor, and their tests. Review: Codex and three Claude reviewers
+report M1 READY at `316d1e5` after one round of changes (r7).
+
+**M2 implemented (2026-10-25)** (r8):
+- **The vector file** `bulletproof-range-bls12-381-g1-v1.json`, emitted by the Python second
+  implementation, with `--check` (byte-identical) and `--self-test`. It has 14 positive cases at
+  every width with every challenge, 114 negative cases over seven layers, and 25 prover refusals.
+- **Python → Java:** the Java test-nonce prover reproduces every positive proof byte for byte,
+  and every negative case gets its exact class and layer, on pure Java and on blst, with
+  identical outcomes.
+- **Java → Python:** `java-proofs-v1.json` holds 12 Java proofs. The Python implementation
+  accepts and re-proves each of them byte for byte, and rejects 228 single-field tampers.
+- **dalek check:** the group-generic Python core verifies dalek 5.0.0's published proofs at
+  `n` = 8–64, and dalek accepts the core's proofs and rejects 182 tampers. The same core,
+  instantiated on BLS12-381, reproduces this protocol's known-answer proof byte for byte.
+- **blst parity:** fixed-nonce proofs are identical, verdicts agree on the vectors and on a fuzz
+  run, and adversarial zero-coefficient proofs never throw.
 
 Addresses [issue #96](https://github.com/bloxbean/zeroj/issues/96), phase 4 of the #93–#96 Pedersen
 roadmap. It defines the first proof protocol of the commitment-profile registry
@@ -53,7 +69,7 @@ and no AI review upgrades a maturity or security claim (AGENTS.md).
 
 2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts); 2026-10-24 (r3: review
 round 1); 2026-10-24 (r4: accepted, Q1–Q7 decided); 2026-10-24 (r5: M0); 2026-10-25 (r6: M0 sign-off,
-M1)
+M1); 2026-10-25 (r7: M1 review); 2026-10-25 (r8: M2)
 
 ## Context
 
@@ -296,6 +312,12 @@ Any of these lets an observer learn or narrow `v`.
      algebra (M2). Its vectors cannot be used for this protocol directly, because it uses
      Ristretto255 and Merlin.
    - This ADR's deviations from dalek are listed in D3 and D5.
+   - *M2 note (r8):* the M2 check runs the published crate `bulletproofs` 5.0.0 (crates.io; its
+     `.cargo_vcs_info.json` names commit `86eadbeeb4a96d8da41427137b45ead810d03b41`; the crate's
+     SHA-256 is recorded in `dalek-check/README.md`). That commit is 9 commits before the pin
+     above. The 9 commits change only serde deserialization (`visit_seq`), an r1cs scalar parse,
+     tests and CI, not the range-proof algebra or transcript. That was checked with
+     `gh api repos/zkcrypto/bulletproofs/compare/86eadbe…04bce4e`.
 11. **CIP-0381** and **CIP-0133** at `86b89208d3b2aabb5dcc5b778dfbe09096b4e114`, as pinned by ADR-0060.
 12. **ZeroJ:**
     - `commitment-profiles-v1` r7 (§5, §6.2, §6.4, §7, §10, §13, §14, §15);
@@ -1069,6 +1091,11 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     READY with no P0–P2 open. The two P3s that remained (Codex r2 F3, reviewer (c) F11: the nonce
     sample was palindromic, so the byte order was untested) are fixed with a non-palindromic
     sample whose residues were computed in Python.
-  - **Recorded gaps:** pinned proofs at `n = 32` and `n = 64` come with the M2 vector file. The
+  - **Recorded gaps:** pinned proofs at `n = 32` and `n = 64` come with the M2 vector file.
+- **r8 (2026-10-25, M2):** the evidence listed under Status, and the dalek crate note (reference
+  10).
+  - **Spec §11:** the vector file must have a positive case at each width (reviewer (c) M1 F10).
+    Positive cases at 32 and 64 bits kill the n-dependent fault that the 16-bit known-answer
+    test missed (reviewer (c) M1 MU15). The
     allowlist is tested through `SystemNonceSource.checked`, not through a JVM whose default
     `SecureRandom` is not allowlisted.
