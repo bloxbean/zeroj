@@ -5,7 +5,8 @@ current). For every case this script, using only bulletproof_range_reference.py 
   1. recomputes the commitment from (value, blinding) and compares it;
   2. verifies the proof (spec §8) and requires acceptance;
   3. re-proves with the same seed and requires the identical octets;
-  4. flips one octet in each proof field and requires rejection.
+  4. flips one bit in each proof field and requires rejection, and replaces each point with its
+     negation (a valid point) and requires a check-layer rejection.
 This glue was written by the Java author; all checks call the reference implementation, which was
 written without reading Java. Run:  python3 -I -B verify_java_proofs.py
 """
@@ -59,6 +60,15 @@ def main() -> int:
             tampers += 1
             if bp.classify(V, bytes(bad), n, ctx)[0] == "true":
                 problems.append("tamper at %d accepted" % off)
+        # Each point replaced by its negation (the sort flag flipped): a valid subgroup point, so the
+        # tamper passes decoding and must be caught by the transcript and the checks.
+        for off in [48 * i for i in range(4)] + [288 + 48 * i for i in range(2 * k)]:
+            bad = bytearray(proof)
+            bad[off] ^= 0x20
+            tampers += 1
+            verdict, layer = bp.classify(V, bytes(bad), n, ctx)
+            if verdict != "false" or layer not in ("check1", "check2"):
+                problems.append("negated point at %d: %s at %s" % (off, verdict, layer))
         print(("ok   " if not problems else "FAIL ") + c["id"] + ("" if not problems else ": " + "; ".join(problems)))
         failures += bool(problems)
     print("%d cases, %d tampers, %d failing" % (len(doc["cases"]), tampers, failures))

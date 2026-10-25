@@ -487,11 +487,12 @@ unchanged, because its `layer` already came from the verifier.
 
 | `generator.python` | Output SHA-256 |
 |---|---|
-| CPython 3.13.5 | `870f01abf6813a62038b78b625e0776b3494ef6a116a33245b6a3ec8908de479` |
+| CPython 3.13.5 | `4040434f300b93b4494e624208a86dcecbb80da5e45e7415bac7adcd9775af58` |
 
-This is the committed file, regenerated at integration after the spec's r2 text changed
-(`21e3404d…78a0`). Only the `spec` provenance field differs from the author's first output
-(`353e8f8d…e37c`); every case is identical.
+This is the committed file, regenerated after later edits to the specs' text. Only the `spec`
+provenance field differs from the author's first output (`353e8f8d…e37c`); every case is
+identical. `BulletproofVectorsTest` fails if a spec file's SHA-256 no longer matches the `spec`
+field, so a spec edit means running `--out` again and then `--check`.
 
 ### Independence (M2)
 
@@ -513,11 +514,12 @@ The Java-binding constraint on prover refusals came from the integrator's instru
 (`n` = 16, 32, 64; values 0, 1, a mid value and `2^n − 1`; ASCII, binary and 1,024-octet contexts).
 `JavaProofsFileTest` keeps it equal to what the Java code produces. `verify_java_proofs.py` checks
 it with this directory's reference implementation only: the commitment is recomputed, each proof
-verifies, re-proving with the same seed gives the identical octets, and one-octet tampers in every
-field are rejected.
+verifies, re-proving with the same seed gives the identical octets, one-bit tampers in every
+field are rejected, and every point replaced by its negation (a valid point) is rejected by the
+checks.
 
 ```
-python3 -I -B verify_java_proofs.py      # 12 cases, 228 tampers, 0 failing (2026-10-25, CPython 3.13.5)
+python3 -I -B verify_java_proofs.py      # 12 cases, 396 tampers (168 negated points), 0 failing (2026-10-25)
 ```
 
 The script is glue written by the Java author; every check it makes calls

@@ -8,9 +8,15 @@ import org.junit.jupiter.api.Test;
 import org.zeroj.bls12381.pedersen.G1Pedersen;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -59,6 +65,20 @@ class BulletproofVectorsTest {
             if (positives.get(i).get("bits").asText().equals("32")) positives.remove(i);
         }
         assertThrowsState(width);
+    }
+
+    @Test
+    @DisplayName("The file's spec provenance hashes equal the spec files as they are now (regenerate with --out after a spec edit)")
+    void specProvenanceIsCurrent() throws IOException, NoSuchAlgorithmException {
+        String root = System.getProperty("zeroj.repo.root");
+        assertNotNull(root, "zeroj.repo.root is not set");
+        JsonNode spec = BulletproofVectorRunner.load().get("spec");
+        assertEquals(3, spec.size());
+        for (JsonNode entry : spec) {
+            byte[] file = Files.readAllBytes(Path.of(root, entry.get("path").asText()));
+            assertEquals(entry.get("sha256").asText(),
+                    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(file)), entry.get("path").asText());
+        }
     }
 
     private static void assertThrowsState(JsonNode file) {

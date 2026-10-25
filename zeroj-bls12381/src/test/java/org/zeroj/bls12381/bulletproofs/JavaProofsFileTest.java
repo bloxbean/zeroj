@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 /**
  * ADR-0061 M2, Java → Python: {@code bulletproof-g1-reference/java-proofs-v1.json} holds proofs made
  * by the Java prover with the spec §7.5 test nonces. The independent Python implementation checks
- * them ({@code verify_java_proofs.py}): it must accept every proof, reproduce every challenge, and
- * re-prove it byte for byte. This test keeps the committed file equal to what the Java code produces
+ * them ({@code verify_java_proofs.py}): it must accept every proof and re-prove it byte for byte
+ * (which implies the same challenges), and reject single-field tampers and negated points. This test keeps the committed file equal to what the Java code produces
  * now; on a mismatch it writes the current output to {@code build/java-proofs-v1.json} for review.
  */
 class JavaProofsFileTest {

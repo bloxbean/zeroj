@@ -295,6 +295,10 @@ Before any curve work, the prover refuses with a fixed error, in this order:
 2. `v` or `γ` outside `[0, q)` → `NON_CANONICAL_SCALAR` (check 1).
 3. `v ≥ 2^n` → `OUT_OF_RANGE`.
 
+In the Java binding, refusal 2 happens earlier: `G1PedersenOpening` cannot hold a scalar outside
+`[0, q)`, so a non-canonical opening is refused, with the same class, when it is constructed,
+before the prover's configuration check.
+
 It then computes `V = [v]·G + [γ]·H`, and refuses with `INVALID_STATEMENT` if `V = O`. It checks
 the commitment, not the pair: `(0, 0)` is the known case, and any other opening of `O` would
 reveal `log_H(G)`. It never re-blinds the commitment and never retries nonces for this case.
@@ -729,6 +733,7 @@ A host that runs the verifier inside a replicated state machine relies on these 
   - §7.5 lists the three bounded package-private test seams of the Java binding (M1 review,
     reviewer (b) F1).
   - §11 requires a positive vector at every width (M1 review, reviewer (c) F10).
+  - §7.1 notes the Java binding's earlier check-1 refusal (M2 review).
 
 ## 15. References
 

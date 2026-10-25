@@ -94,7 +94,7 @@ that dalek verifies and produces.
 **Crate commit versus the ADR pin (resolved at integration).** ADR-0061 reference 10 pins
 zkcrypto `bulletproofs` at commit `04bce4e66013ff857ed462fd4206210544101461` (2025-09-13), for
 its notes and transcript order. The crate 5.0.0 that this check runs was packaged from
-`86eadbeeb4a96d8da41427137b45ead810d03b41`, 9 commits earlier. Those 9 commits change serde
+`86eadbeeb4a96d8da41427137b45ead810d03b41`, 9 commits earlier (the pin is the 5.0.1 release commit). Those 9 commits change serde
 deserialization (`visit_seq`), an r1cs scalar parse, tests, CI, the version number and a
 development dependency; none touches the range-proof algebra or transcript
 (`https://github.com/zkcrypto/bulletproofs/compare/86eadbe...04bce4e`). This check pins the crate.

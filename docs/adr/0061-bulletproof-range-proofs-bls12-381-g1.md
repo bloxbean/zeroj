@@ -40,12 +40,32 @@ report M1 READY at `316d1e5` after one round of changes (r7).
   and every negative case gets its exact class and layer, on pure Java and on blst, with
   identical outcomes.
 - **Java → Python:** `java-proofs-v1.json` holds 12 Java proofs. The Python implementation
-  accepts and re-proves each of them byte for byte, and rejects 228 single-field tampers.
+  accepts and re-proves each of them byte for byte. It rejects 228 single-bit tampers, and 168
+  negated points at the check layer, where the point decodes but the checks fail.
 - **dalek check:** the group-generic Python core verifies dalek 5.0.0's published proofs at
   `n` = 8–64, and dalek accepts the core's proofs and rejects 182 tampers. The same core,
   instantiated on BLS12-381, reproduces this protocol's known-answer proof byte for byte.
 - **blst parity:** fixed-nonce proofs are identical, verdicts agree on the vectors and on a fuzz
   run, and adversarial zero-coefficient proofs never throw.
+
+M2 review: Codex approves `2aaf5bd`, and its two P3s are fixed in `ce104f5`.
+
+**M4 implemented (2026-10-25)** (r9): the Julc VM cost study, labelled "not a verifier".
+- **Results** are in `docs/benchmarks/bulletproof-range-g1-2026-10-25.md`. With the challenges
+  supplied, the algebra takes 5.44e9, 8.87e9 and 15.5e9 PV11 CPU steps at `n` = 16, 32 and 64:
+  54%, 89% and 155% of the transaction limit. The script is 3,797 octets.
+- **Generators:** the VM's `hashToGroup` reproduces all 129 of them.
+- **Verdict:** no on-chain verifier at any width, because the transcript is SHAKE128. The algebra
+  alone fits at 16 bits, barely at 32, and not at 64.
+
+**M5 implemented (2026-10-25)** (r9): a reference confidential-accounting state machine in
+`zeroj-integration-tests` test sources (`org.zeroj.it.confidential`), and the handoff note
+`docs/usecases/confidential-accounting-yano-x-handoff.md`. The machine covers:
+- authorization and replay protection;
+- binding each proof's context to its message;
+- the D3a balance rule with a supply cap;
+- limits, and deterministic rejection;
+- replicas on pure Java and blst agreeing.
 
 Addresses [issue #96](https://github.com/bloxbean/zeroj/issues/96), phase 4 of the #93–#96 Pedersen
 roadmap. It defines the first proof protocol of the commitment-profile registry
@@ -69,7 +89,8 @@ and no AI review upgrades a maturity or security claim (AGENTS.md).
 
 2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts); 2026-10-24 (r3: review
 round 1); 2026-10-24 (r4: accepted, Q1–Q7 decided); 2026-10-24 (r5: M0); 2026-10-25 (r6: M0 sign-off,
-M1); 2026-10-25 (r7: M1 review); 2026-10-25 (r8: M2)
+M1); 2026-10-25 (r7: M1 review); 2026-10-25 (r8: M2);
+2026-10-25 (r9: M3–M5)
 
 ## Context
 
@@ -315,7 +336,7 @@ Any of these lets an observer learn or narrow `v`.
    - *M2 note (r8):* the M2 check runs the published crate `bulletproofs` 5.0.0 (crates.io; its
      `.cargo_vcs_info.json` names commit `86eadbeeb4a96d8da41427137b45ead810d03b41`; the crate's
      SHA-256 is recorded in `dalek-check/README.md`). That commit is 9 commits before the pin
-     above. The 9 commits change serde deserialization (`visit_seq`), an r1cs scalar parse, tests,
+     above, which is the release commit of 5.0.1. The 9 commits change serde deserialization (`visit_seq`), an r1cs scalar parse, tests,
      CI, the version number and a development dependency, not the range-proof algebra or
      transcript. That was checked with
      `gh api repos/zkcrypto/bulletproofs/compare/86eadbe…04bce4e`.
@@ -1092,11 +1113,22 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     READY with no P0–P2 open. The two P3s that remained (Codex r2 F3, reviewer (c) F11: the nonce
     sample was palindromic, so the byte order was untested) are fixed with a non-palindromic
     sample whose residues were computed in Python.
-  - **Recorded gaps:** pinned proofs at `n = 32` and `n = 64` come with the M2 vector file.
+  - **Recorded gaps:** pinned proofs at `n = 32` and `n = 64` come with the M2 vector file. The
+    allowlist is tested through `SystemNonceSource.checked`, not through a JVM whose default
+    `SecureRandom` is not allowlisted.
 - **r8 (2026-10-25, M2):** the evidence listed under Status, and the dalek crate note (reference
   10).
   - **Spec §11:** the vector file must have a positive case at each width (reviewer (c) M1 F10).
     Positive cases at 32 and 64 bits kill the n-dependent fault that the 16-bit known-answer
-    test missed (reviewer (c) M1 MU15). The
-    allowlist is tested through `SystemNonceSource.checked`, not through a JVM whose default
-    `SecureRandom` is not allowlisted.
+    test missed (reviewer (c) M1 MU15).
+  - **M2 review:** Codex and the py_ecc reviewer approve `2aaf5bd`. The py_ecc reviewer's own
+    verifier agrees on all 140 file cases and on 600 extra mutations, three ways (its verifier,
+    the Python implementation, and Java on both providers). Their P3s are addressed in `ce104f5`
+    and the following commit:
+    - the runner enforces every width and unique seeds;
+    - the vector file's spec hashes are checked against the spec files in a test;
+    - the Java → Python check also substitutes valid points, so its tampers reach the checks;
+    - the reference-10 note says the pinned commit is release 5.0.1;
+    - spec §7.1 states the Java binding's refusal order.
+- **r9 (2026-10-25, M3–M5):** M4 and M5 as listed under Status; the M3 harness, determinism test
+  and measurements.

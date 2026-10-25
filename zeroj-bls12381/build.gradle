@@ -45,6 +45,25 @@ tasks.register('g1PedersenBenchmark', JavaExec) {
     mainClass = 'org.zeroj.bls12381.pedersen.G1PedersenBenchmark'
 }
 
+// ADR-0061 M2: BulletproofVectorsTest checks the vector file's spec provenance hashes against the
+// spec files, so a spec edit without a regenerated vector file fails the build.
+tasks.named('test') {
+    systemProperty 'zeroj.repo.root', rootProject.projectDir.absolutePath
+    inputs.files(rootProject.files('docs/specs/bulletproof-range-bls12-381-g1-v1.md',
+            'docs/specs/pedersen-bls12-381-g1-v1.md', 'docs/specs/commitment-profiles-v1.md')).withPropertyName('specs')
+}
+
+// ADR-0061 M3 / commitment-profiles-v1 §15: standalone Bulletproof range-proof benchmark (records only;
+// launches its own JVM forks). The harness is a test fixture so that zeroj-blst can run it against
+// the blst provider. Run: ./gradlew :zeroj-bls12381:bulletproofBenchmark
+tasks.register('bulletproofBenchmark', JavaExec) {
+    group = 'verification'
+    description = 'ADR-0061: Bulletproof range-proof host benchmark, pure-Java provider (records only).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bls12381.bulletproofs.BulletproofBenchmark'
+    args '--provider', 'pure'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
