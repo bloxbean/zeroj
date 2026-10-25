@@ -1065,6 +1065,10 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     Reviewer (c) ran 18 more mutants; 8 survived, and the evidence added in this revision targets
     each of them. The rerun on the revised code also includes "skip check 1 on `a`" (Codex F2)
     and those survivors.
+  - **Round 2 (`316d1e5`):** Codex, reviewer (a), reviewer (b) and reviewer (c) all report M1
+    READY with no P0–P2 open. The two P3s that remained (Codex r2 F3, reviewer (c) F11: the nonce
+    sample was palindromic, so the byte order was untested) are fixed with a non-palindromic
+    sample whose residues were computed in Python.
   - **Recorded gaps:** pinned proofs at `n = 32` and `n = 64` come with the M2 vector file. The
     allowlist is tested through `SystemNonceSource.checked`, not through a JVM whose default
     `SecureRandom` is not allowlisted.

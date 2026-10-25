@@ -46,6 +46,7 @@ class BulletproofBasesTest {
     @DisplayName("Each nonce is exactly 64 octets from the source, read big-endian and reduced mod q, and the buffer is wiped (reviewer (c), M1 F2)")
     void nonceSampling() {
         List<byte[]> requests = new ArrayList<>();
+        int[] counter = {0};
         SecureRandom spy = new SecureRandom() {
             @Override
             public String getAlgorithm() {
@@ -55,14 +56,16 @@ class BulletproofBasesTest {
             @Override
             public void nextBytes(byte[] bytes) {
                 requests.add(bytes);
-                Arrays.fill(bytes, (byte) 0xFF);   // 2^512 − 1 ≥ q
+                // Octets 0, 1, …, 63, then 64, …, 127: not palindromic, so the byte order is pinned.
+                for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) counter[0]++;
             }
         };
         SystemNonceSource source = SystemNonceSource.checked(spy);
-        BigInteger nonce = source.next();
-        BigInteger expected = BigInteger.ONE.shiftLeft(512).subtract(BigInteger.ONE).mod(PointCodec.Q);
-        assertEquals(expected, nonce);
-        source.next();
+        // OS2IP(octets) mod q, computed with Python's int.from_bytes(…, "big") % q (Codex M1 r2 F3).
+        assertEquals(new BigInteger("49390169590659034352182350487395535045561095549834662993610314140065425466348"),
+                source.next());
+        assertEquals(new BigInteger("248821931173421418027472439674655785776878240158471827891885852000486751455"),
+                source.next());
         assertEquals(2, requests.size());
         for (byte[] r : requests) {
             assertEquals(64, r.length);
