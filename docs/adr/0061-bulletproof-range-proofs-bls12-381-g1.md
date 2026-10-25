@@ -31,6 +31,13 @@ repository and the drafts' authors and stating the IETF Trust terms (BCP 78, BCP
 Legal Provisions). The files are in the source repository only: `zeroj-test-vectors` is never
 published. This closes the before-merge gate.
 
+**Maintainer review of the Java, 2026-10-25 (r13).** Reviewer 2 (R2-1, on `6d39c74`) noted that
+every M1–M6 implementation review was by AI, which AGENTS.md does not accept as the sole basis
+for a status change such as the r9 admission. The maintainer then reviewed the Java
+implementation and accepted it ("I review the java and it is ok"). The r9 admission stands as
+written and takes effect on merge. This is the maintainer's review, not the external
+cryptographic review, which is still required before any value-bearing use (Q7).
+
 **M1 implemented (2026-10-25)** in PR #105 (r6): the Java SHAKE128 and transcript, the range
 prover and verifier, the D7a descriptor, and their tests. Review: Codex and three Claude reviewers
 report M1 READY at `316d1e5` after one round of changes (r7).
@@ -1283,3 +1290,6 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
   - **R2-1 (P2), maintainer gate:** whether the r9 admission (`reserved` → `active`, effective on
     merge) may rest on the AI-only implementation reviews is the maintainer's decision. Not changed
     in this revision.
+- **r13 (2026-10-25, maintainer decision on reviewer 2's R2-1):** the maintainer reviewed the
+  Java implementation and accepted it (Status). R2-1 is closed, and the r9 admission stands as
+  written. The external-review gate is unchanged.

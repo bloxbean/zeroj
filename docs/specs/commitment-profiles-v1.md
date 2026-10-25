@@ -120,7 +120,9 @@ admitted by r9 after ADR-0061 milestone M6 checked every §2.4 prerequisite:
   py_ecc, and the Julc VM's `bls12_381_G1_hashToGroup`;
 - the `zeroj-proof-vectors-v1` file, which lists every generator with `D_gens` and has positive
   cases at every width, recomputed independently on py_ecc;
-- the descriptor `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`.
+- the descriptor `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`;
+- the maintainer's review of the Java implementation (2026-10-25, ADR-0061 r13), in addition to
+  the AI reviews.
 
 Admission does not change maturity: the protocol is experimental. External cryptographic review
 is required before any value-bearing use (ADR-0061).
