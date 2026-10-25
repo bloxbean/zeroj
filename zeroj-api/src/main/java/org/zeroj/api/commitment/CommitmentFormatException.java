@@ -7,9 +7,10 @@ import java.util.Objects;
  * A rejected commitment input on a strict path ({@code commitment-profiles-v1} §11).
  *
  * <p>Extends {@link IllegalArgumentException}, so callers that already catch it keep working. It
- * carries only the seven format classes, {@link CommitmentError#MALFORMED_ENCODING} through
- * {@link CommitmentError#INVALID_CONFIGURATION}; an opening mismatch is a {@code false} result and
- * provenance outcomes exist only in {@link CommitmentCheck}. It retains no secret value, and
+ * carries only the eight format classes, {@link CommitmentError#MALFORMED_ENCODING} through
+ * {@link CommitmentError#INVALID_CONFIGURATION} and {@link CommitmentError#INVALID_STATEMENT}; an
+ * opening mismatch is a {@code false} result and provenance outcomes exist only in
+ * {@link CommitmentCheck}. It retains no secret value, and
  * callers must never put one in the message.
  */
 public final class CommitmentFormatException extends IllegalArgumentException {
@@ -20,7 +21,7 @@ public final class CommitmentFormatException extends IllegalArgumentException {
     private final CommitmentError reason;
 
     /**
-     * @param reason  one of the seven format classes
+     * @param reason  one of the eight format classes
      * @param message a description that contains no secret value
      * @throws NullPointerException     if {@code reason} is null
      * @throws IllegalArgumentException if {@code reason} is {@code OPENING_MISMATCH} or a

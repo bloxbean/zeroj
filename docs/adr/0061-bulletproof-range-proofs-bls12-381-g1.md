@@ -8,19 +8,28 @@ Q1 and Q3–Q7 as leaned (a) (see "Design questions for the maintainer"). Codex 
 finding; its three P3 findings are addressed in r3. Implementation proceeds in PR #105 under the
 milestones below, **with a maintainer sign-off after M0** before any Java (M1).
 
-**M0 implemented and reviewed (2026-10-24); awaiting the maintainer's sign-off.** M0 delivered:
+**M0 implemented, reviewed and signed off.** M0 delivered:
 - the normative spec `bulletproof-range-bls12-381-g1-v1` r1;
 - registry r8, with the new entries `reserved`;
 - an independent Python second implementation, with CFRG conformance (I12);
 - the three-way generator reproduction (I1).
 
 Review loop: three Claude reviewers report SPEC READY. Codex approved in round 4, after
-CHANGES REQUESTED in rounds 1–3, all resolved. The sign-off also covers the r5 design additions,
-which await acceptance:
+CHANGES REQUESTED in rounds 1–3, all resolved, and the PR reviewer approved `d906c57` (M0 SPEC
+READY, one P3 fixed in `daab133`). **The maintainer signed off M0 on 2026-10-25** ("Looks like M0
+is approved. So continue and implement all other milestones"), in reply to a sign-off request that
+listed the r5 design additions. The sign-off is recorded as accepting them:
 - D7a, the proof-protocol descriptor;
 - the non-empty context;
 - the D4 decoding order;
-- the D6 nonce, seam and entropy rules.
+- the D6 nonce, seam and entropy rules;
+- `INVALID_STATEMENT`.
+
+The redistribution terms of the copied CFRG vectors (IETF Trust, BCP 78) remain a **before-merge**
+gate for the maintainer.
+
+**M1 implemented (2026-10-25)** in PR #105 (r6): the Java SHAKE128 and transcript, the range
+prover and verifier, the D7a descriptor, and their tests.
 
 Addresses [issue #96](https://github.com/bloxbean/zeroj/issues/96), phase 4 of the #93–#96 Pedersen
 roadmap. It defines the first proof protocol of the commitment-profile registry
@@ -43,7 +52,8 @@ and no AI review upgrades a maturity or security claim (AGENTS.md).
 ## Date
 
 2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts); 2026-10-24 (r3: review
-round 1); 2026-10-24 (r4: accepted, Q1–Q7 decided)
+round 1); 2026-10-24 (r4: accepted, Q1–Q7 decided); 2026-10-24 (r5: M0); 2026-10-25 (r6: M0 sign-off,
+M1)
 
 ## Context
 
@@ -599,9 +609,23 @@ itself reject.
 ### D7 — Java API and placement (R2)
 
 **Placement.** A new package, `org.zeroj.bls12381.bulletproofs`, in `zeroj-bls12381`, next to
-`org.zeroj.bls12381.pedersen`. It needs the strict decoder and the bases, which are package-private
-there. A new module would add a default project for one package (ADR-0044); a separate package
-keeps the surface reviewable.
+`org.zeroj.bls12381.pedersen`. It needs the strict decoder and the bases. A new module would add a
+default project for one package (ADR-0044); a separate package keeps the surface reviewable.
+
+*Implementation note (r6, M1).* The pedersen package keeps its strict decoder and bases
+package-private, and a Java package cannot see another's package-private members. So the new
+package does not reach into them, and the pedersen package's API is unchanged (I9):
+- `G` and `H` are pinned again in `BulletproofGenerators`, and `BulletproofBasesTest` checks
+  that they equal the profile's commitments to `(1, 0)` and `(0, 1)`;
+- proof points use the package's own strict decoder, on the public `Bls12381Codecs`, in the
+  order of `pedersen-bls12-381-g1-v1.md` §4, then reject the identity (spec §3);
+- a commitment given as octets is decoded with the public `G1PedersenCommitment.decode`, the
+  profile's own strict decoder;
+- a `G1PedersenCommitment` is a validated subgroup element by construction (spec §8.1 step 4),
+  so its encoding is decompressed without repeating the subgroup check.
+
+SHAKE128 is a new public class, `org.zeroj.bls12381.Shake128`, because `Bls12381Hash`'s
+Keccak-f[1600] is package-private to `org.zeroj.bls12381`.
 
 **Public types:**
 - `G1RangeProof`: an opaque, immutable proof, with `toBytes()` and `decode(byte[], int bits)`.
@@ -618,7 +642,7 @@ keeps the surface reviewable.
 - No API accepts nonces, generators or a transcript from the caller.
 - Native-image `reflect-config.json` entries are added for the public types.
 
-### D7a — Proof-protocol descriptor in `zeroj-api` (R2; added in r5, pending the maintainer's acceptance at the M0 sign-off)
+### D7a — Proof-protocol descriptor in `zeroj-api` (R2; added in r5, accepted at the M0 sign-off on 2026-10-25)
 
 **The gap.** `commitment-profiles-v1` §2.4 item 5 admits a proof protocol only with "a descriptor
 type fixed when the first protocol is admitted, holding an identifier validated by §2.1". This is
@@ -626,7 +650,7 @@ the first protocol, and r1–r4 did not define that type. M0 found the gap.
 
 **Decision:**
 - **The type.** `zeroj-api` gains a final descriptor type for proof protocols in
-  `org.zeroj.api.commitment`, provisionally `ProofProtocol`; M1 fixes the name in the spec. It
+  `org.zeroj.api.commitment`, `ProofProtocol` (the name M1 fixed in registry §12.1). It
   holds:
   - the identifier, validated by the registry §2.1 grammar;
   - the consumed `CommitmentProfile` descriptor;
@@ -646,8 +670,8 @@ the first protocol, and r1–r4 did not define that type. M0 found the gap.
   - Before M1, `define` checked only profile identifiers. Rejecting basis-set identifiers and
     document names closes that older §2.2 gap.
 - **A constant for a reserved protocol is not admission** (registry §2.3), as for profiles.
-- **Constants.** It is exposed from a constants class beside `CommitmentProfiles` (provisionally
-  `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`). `G1RangeProof` re-exports it as
+- **Constants.** It is exposed from a constants class beside `CommitmentProfiles`,
+  `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`. `G1RangeProof` re-exports it as
   `PROTOCOL`.
 - **Acceptance mapping.** `CommitmentAcceptance` lets a `CommitmentFormatException` with
   `INVALID_STATEMENT` propagate unchanged from any step, and never turns it into a
@@ -1011,3 +1035,9 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     decoded (I3). The outcomes are the spec's registry classes, and a decoded `V` must be a
     validated subgroup element (Codex M0 F1). The A.3.2 scope row now describes those vectors
     accurately.
+- **r6 (2026-10-25, M0 sign-off and M1):**
+  - **Sign-off:** the maintainer signed off M0 and, with it, the r5 additions (Status). D7a is no
+    longer pending; its type names are fixed as `ProofProtocol` and `ProofProtocols`.
+  - **D7 implementation note:** how the new package gets the bases and the strict decoders
+    without opening the pedersen package, and the new public `Shake128` class.
+  - **M1 implemented:** see Status. The CFRG vector licence stays a before-merge gate.

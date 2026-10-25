@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CommitmentApiSurfaceTest {
 
     private static final List<Class<?>> VALUE_TYPES = List.of(CommitmentProfileId.class, CommitmentProfile.class,
-            CommitmentProfiles.class,
+            CommitmentProfiles.class, ProofProtocol.class, ProofProtocols.class,
             CommitmentEnvelope.class, CommitmentKey.class, CommitmentCheck.class, CommitmentAcceptance.class);
 
     @Test
@@ -69,6 +69,9 @@ class CommitmentApiSurfaceTest {
         assertEquals(new TreeSet<>(Set.of("encode", "decode")), publicStatics(CommitmentEnvelope.class));
         assertEquals(Set.of("of"), publicStatics(CommitmentKey.class));
         assertEquals(Set.of("accept"), publicStatics(CommitmentAcceptance.class));
+        // ADR-0061 D7a: proof protocols are built in only; there is no factory and no define.
+        assertEquals(Set.of(), publicStatics(ProofProtocol.class));
+        assertEquals(Set.of(), publicStatics(ProofProtocols.class));
     }
 
     private static Set<String> publicStatics(Class<?> type) {

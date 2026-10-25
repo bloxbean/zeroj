@@ -3,8 +3,8 @@
 **Identifier:** `bulletproof-range-bls12-381-g1-v1` (proof protocol, `commitment-profiles-v1` §5)
 **Generator set:** `bulletproof-bls12-381-g1-gens-v1`
 **Consumes:** `pedersen-bls12-381-g1-v1` (`pedersen-bls12-381-g1-v1.md`)
-**Status:** draft r1, M0 of ADR-0061; registry status `reserved`
-**Date:** 2026-10-24 (r1)
+**Status:** draft r2 (ADR-0061 M1); registry status `reserved`
+**Date:** 2026-10-24 (r1); 2026-10-25 (r2)
 **Governing ADR:** [ADR-0061](../adr/0061-bulletproof-range-proofs-bls12-381-g1.md)
 
 This document fixes every byte of the protocol: the generators, the transcript, the codecs, the
@@ -400,8 +400,8 @@ After round `k`, `a⃗` and `b⃗` have length 1. Their entries are the scalars 
 Vectors need reproducible proofs, so implementations provide a test seam. It is fenced the way
 ADR-0046 fences its deterministic prover:
 - The seed → nonce expansion below lives **only in test or test-fixture code**, never in a
-  published artifact. In Java that is the unpublished `testFixtures` source set of
-  `zeroj-bls12381`, guarded by its module-metadata check.
+  published artifact. In Java that is `TestNonceProver` in the unpublished `testFixtures` source
+  set of `zeroj-bls12381`, guarded by its module-metadata check.
 - Production code exposes at most a package-private nonce-source hook. Package-private is not a
   security boundary in the classpath world, so the hook accepts only a source object, never a
   seed. The only implementation of that source in published code is the §7.3 `SecureRandom`
@@ -709,6 +709,14 @@ A host that runs the verifier inside a replicated state machine relies on these 
     the nonce source and a restart bound (§7.3); the test seam fenced as ADR-0046 does (§7.5);
     decoded-proof width (§8); the verdict definition, provider no-throw rule and `layer` as
     diagnostic only (§8.4, §13).
+- **r2 (2026-10-25, ADR-0061 M1):** the Java binding. No byte, check or order changes; the M0
+  Python known-answer proof is reproduced byte for byte by the Java prover.
+  - The proof-protocol descriptor type is `ProofProtocol`, with the constant
+    `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1` (`commitment-profiles-v1` §12.1).
+  - The Java types are `G1RangeProof`, `G1RangeProver` and `G1RangeVerifier` in
+    `org.zeroj.bls12381.bulletproofs`; the §7.5 seam is `TestNonceProver` in the test fixtures.
+  - SHAKE128 is `org.zeroj.bls12381.Shake128`, on the Keccak-f[1600] permutation that
+    `Bls12381Hash` already used for SHAKE256.
 
 ## 15. References
 

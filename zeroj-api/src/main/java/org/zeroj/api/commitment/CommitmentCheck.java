@@ -26,6 +26,10 @@ public final class CommitmentCheck {
         if (reason == null) {
             throw new NullPointerException("reason");
         }
+        // A prover refusal is never a verdict on received data (spec §11).
+        if (reason == CommitmentError.INVALID_STATEMENT) {
+            throw new IllegalArgumentException("INVALID_STATEMENT never appears in a CommitmentCheck");
+        }
         return new CommitmentCheck(reason);
     }
 

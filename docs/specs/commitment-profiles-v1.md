@@ -78,7 +78,9 @@ caller can reach `define`. The set covers:
 - the proof-protocol and generator-set identifiers;
 - the reserved document names.
 
-Before ADR-0061 M1, `define` checked only profile identifiers; M1 closes that gap.
+Before ADR-0061 M1, `define` checked only profile identifiers; M1 closed that gap. The seeded set is
+`CommitmentProfile.RESERVED` together with the built-in profiles, and `ReservedIdentifiersTest`
+checks it against the §2.2 names and the §2.3 table, so a later reservation cannot drift.
 
 To prevent collisions, the document names of ZeroJ's other specifications and formats are
 reserved and never admissible as registry entries: `commitment-profiles-v1`,
@@ -138,7 +140,7 @@ A commitment profile, basis set or proof protocol is admitted only with:
 5. for a commitment profile or proof protocol, one public Java constant carrying its
    identifier: a `CommitmentProfile` descriptor (§12.1) for a profile; for a proof protocol, a
    descriptor type fixed when the first protocol is admitted, holding an identifier validated by
-   §2.1.
+   §2.1. That type is `ProofProtocol` (§12.1, ADR-0061 D7a).
 
 Lifecycle metadata (§4.5) changes only by a reviewed revision of this document, recorded in the
 revision history (§16) with its evidence. A revision MUST NOT change a cryptographic core field
@@ -628,6 +630,8 @@ they hold no secret.
 | `CommitmentGroup` (enum) | `JUBJUB`, `BLS12_381_G1` |
 | `CommitmentProfile` | `static define(CommitmentProfileId id, CommitmentKind kind, CommitmentGroup group, int pointEncodingLength)` with `1 ≤ pointEncodingLength ≤ 255` (else `INVALID_CONFIGURATION`); accessors `id()`, `kind()`, `group()`, `pointEncodingLength()`. The registry is a static set in `CommitmentProfile`, so its scope is that class's defining class loader. The descriptors of the built-in profiles are created and registered while `CommitmentProfile` is initialised (ADR-0060 D8), so they exist before any caller can reach `define`. `define` rejects an identifier already defined through the same loaded class, built-in or not (`INVALID_CONFIGURATION`): the duplicate rule protects the built-ins rather than threatening them, and each profile has exactly one descriptor per loaded `zeroj-api`. These guarantees hold against callers of the public API; in-process reflection can bypass any Java access rule and is outside the threat model. No ZeroJ module calls `define` outside `zeroj-api` (the build's `verifyNoBuiltinProfileDefine` scans compiled non-test classes for a method or method-handle reference to `define`; string-based reflection is not detected). `define` is for profiles that are not built in, and tests use test-only identifiers that are unique per JVM. A profile that is not built in and defines its descriptor in a static initialiser can still be disabled, fail-closed, by an earlier `define` of its identifier; such a profile defines its descriptor before untrusted code runs, or is added to the built-ins. A profile module from a release before ADR-0060 M1 still calls `define` for its own built-in identifier and fails class initialization (`ExceptionInInitializerError`) against this `zeroj-api`; mixed versions are unsupported, and `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` are upgraded together. **Identity equality**: checks compare descriptors with `==` |
 | `CommitmentProfiles` | final constant holder, no public constructor or method: `PEDERSEN_JUBJUB_V1`, `PEDERSEN_JUBJUB_BYTES_V1`, `PEDERSEN_JUBJUB_VECTOR_V1`, `PEDERSEN_BLS12_381_G1_V1`, `PEDERSEN_BLS12_381_G1_BYTES_V1`, the built-in descriptors (point-encoding lengths 32, 32, 32, 48, 48). The profile modules' `PROFILE` constants are these instances. A constant for a `reserved` profile is not admission (§2.3) |
+| `ProofProtocol` | final; no public constructor, factory or `define`: every proof protocol is built in (ADR-0061 D7a). Accessors `id()` (the §2.1 identifier), `consumes()` (the one `CommitmentProfile` descriptor whose commitments it proves statements about) and `generatorSetId()`. The descriptors are created while `ProofProtocol` is initialised; their identifiers are already in the shared set that `CommitmentProfile`'s own initialisation seeds, so `define` of a protocol or generator-set identifier is rejected even as the first call in a fresh JVM. **Identity equality** |
+| `ProofProtocols` | final constant holder, no public constructor or method: `BULLETPROOF_RANGE_BLS12_381_G1_V1` (consumes `PEDERSEN_BLS12_381_G1_V1`; generator set `bulletproof-bls12-381-g1-gens-v1`). A constant for a `reserved` protocol is not admission (§2.3) |
 | `Commitment` (interface) | `CommitmentProfile profile()`; `byte[] toPointBytes()` (fresh copy of the raw encoding). No arithmetic and no equality contract |
 | `CommitmentCodec<C extends Commitment>` (interface) | `profile()`; `Class<C> commitmentType()` (the exact concrete class); `C decodePoint(byte[])` (strict, §10; never returns null); `default byte[] keyContext()` (empty; the vector codec returns `I2OSP(σ, 32)`); `default void requireContext(C)` (no-op; the vector codec rejects a different schema with `PROFILE_MISMATCH`) |
 | `CommitmentEnvelope` | `public static byte[] encode(Commitment)`; `public static <C extends Commitment> C decode(byte[] envelope, CommitmentCodec<C> expected)` (§9) |
@@ -1076,6 +1080,9 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
     (basis-set and proof-protocol identifiers, and the reserved document names), and §12.1 lets
     `INVALID_STATEMENT` propagate from `CommitmentAcceptance`. A caller that relied on defining
     such an identifier gets `INVALID_CONFIGURATION` after ADR-0061 M1.
+  - **Java binding (ADR-0061 M1, 2026-10-25):** §12.1 gains `ProofProtocol` and `ProofProtocols`,
+    the descriptor type that §2.4 item 5 fixes with the first protocol; §2.2 names the test that
+    keeps the seeded set equal to the registry text. Still `reserved`: no entry becomes active.
 
 ---
 
