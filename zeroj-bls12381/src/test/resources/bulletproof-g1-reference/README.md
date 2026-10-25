@@ -24,6 +24,23 @@ non-subgroup `V` example, stating the mod-3 condition on the integer representat
 changes no normative rule, byte or check. The spec committed with this script then has SHA-256
 `b3cf6982fc8a1bc57418809f92cda060b7267069934388bcb8c0c721a27664f7`.
 
+**Current reviewed spec.** M0 review rounds 2 and 3 (commits `1d48bd2` and `a42a669`) amended the
+spec again. The file reviewed and approved at `d906c57` has SHA-256:
+
+```
+5cf961d579948c6cf1a1b8c3f0fa13176b7ba070d55448c10152d0002da555f1
+```
+
+None of those amendments changes a byte this script computes or checks:
+- §1.1: wording of the derived-commitment remark (`(v₁ − v₂) mod q ∈ [0, 2^n)`).
+- §7.3: the Java prover's entropy trust assumption and its `SecureRandom` algorithm allowlist.
+  These are Java API rules, outside this script.
+- §7.5: the scope of the no-nonce-API rule, the `org.zeroj.bls12381.bulletproofs` package.
+- §11: the vector file lists the generator encodings (`generators-v1.json`).
+
+The only script change in those rounds pins the expected decoder class of each A.3.2 invalid
+encoding (see the integration notes below).
+
 Earlier states of r1 that this script also implemented, for the record:
 - `12eb1b92…6943`: ctx made non-empty, and the first proof-order decoding.
 - An unhashed first issue: the original draft.
