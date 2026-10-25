@@ -1240,3 +1240,11 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     wallet to check an opening before merging (F12); the spec r2 history lists the §12 note
     (F11); the benchmark sample counts and the handoff's provider coverage are corrected
     (Codex r2 F5, F7).
+  - **Round 3 (`fea139b`):** the Claude reviewer reports M3–M6 READY, with no new findings. Its
+    probes covered:
+    - forged and replayed discards;
+    - front-running an honest sender;
+    - conservation;
+    - a cross-provider fuzz run.
+
+    All review rounds are closed: M1 (four reviewers), M2 (two), M3–M6 (two).
