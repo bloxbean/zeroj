@@ -527,7 +527,7 @@
       "path": "docs/specs/bulletproof-range-bls12-381-g1-v1.md",
       "revision": "r2",
       "date": "2026-10-25",
-      "sha256": "f30e1df2ee61bb21fe0355b932e32ca5c013b095d0b9f803512001f2d2171a5a"
+      "sha256": "ffbda9fbc202330c59ce8007c7e286205642c0fe32f2253eeec4d5fa8bfd2243"
     },
     {
       "path": "docs/specs/pedersen-bls12-381-g1-v1.md",
@@ -539,7 +539,7 @@
       "path": "docs/specs/commitment-profiles-v1.md",
       "revision": "r8",
       "date": "2026-10-24",
-      "sha256": "f65be8107c9c562083d25372bffcaff56c5726dc95ef9063359edc91b2ccc07b"
+      "sha256": "078b248a7df6196e5c1bde08faaf491998305e178982e69c1a005390664e569e"
     }
   ],
   "generator": {

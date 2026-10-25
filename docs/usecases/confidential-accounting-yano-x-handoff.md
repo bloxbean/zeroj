@@ -43,10 +43,11 @@ The tests show, deterministically on both the pure-Java and the blst provider:
 1. **Dependency.** Yano-X pins ZeroJ `0.1.0-pre10`, from before the `org.zeroj` namespace, and its
    ZK modules are outside its build. A plugin needs an `org.zeroj` release that contains ADR-0061.
 2. **Verification time.** Verification is measured in
-   `docs/benchmarks/bulletproof-range-g1-2026-10-25.md`, about 1.2 s per 64-bit proof on pure Java
-   on an M4 Max. Two proofs per transfer bound the block rate. Set `zk.max-proofs-per-block` from
-   that measurement, on the slowest member's hardware. The blst provider is faster, and the two
-   give identical verdicts (ADR-0061 I7).
+   `docs/benchmarks/bulletproof-range-g1-2026-10-25.md`: about 1.3 s per 64-bit proof on one core
+   of an M4 Max, on either provider (blst is not faster today, because every provider call
+   re-validates its point). Two proofs per transfer bound the block rate. Set
+   `zk.max-proofs-per-block` from that measurement, on the slowest member's hardware; verification
+   parallelises across cores. The two providers give identical verdicts (ADR-0061 I7).
 3. **Proving is offline or isolated** (ADR-0038). The Java prover is not constant-time and must
    not run where an adversary can observe its timing. Its randomness depends on the runtime's
    entropy configuration, which is trusted (spec §7.3).

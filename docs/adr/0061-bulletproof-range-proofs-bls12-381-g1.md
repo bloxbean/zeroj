@@ -2,7 +2,7 @@
 
 ## Status
 
-**Accepted (design), 2026-10-24, by maintainer Satya.** Q1–Q7 are decided: Q2 as (b) in r2, and
+**Accepted (design), 2026-10-24, by maintainer Satya. Implemented (M0–M6), 2026-10-25, experimental; registry r9 admission takes effect on merge.** Q1–Q7 are decided: Q2 as (b) in r2, and
 Q1 and Q3–Q7 as leaned (a) (see "Design questions for the maintainer"). Codex approved r2
 (`ca3014261031f8144cc70b2a31be82a1d4b4eda4`) as design review on 2026-10-24, with no P0–P2
 finding; its three P3 findings are addressed in r3. Implementation proceeds in PR #105 under the
@@ -57,6 +57,8 @@ M2 review: Codex approves `2aaf5bd`, and its two P3s are fixed in `ce104f5`.
 - **Generators:** the VM's `hashToGroup` reproduces all 129 of them.
 - **Verdict:** no on-chain verifier at any width, because the transcript is SHAKE128. The algebra
   alone fits at 16 bits, barely at 32, and not at 64.
+
+**M3 and M6 implemented (2026-10-25)** (r9): the benchmark harness, the determinism test and the measurements (M3); registry r9 admits the protocol and its generator set as `active` (experimental), effective on merge, with the evidence in "Implementation evidence" below (M6).
 
 **M5 implemented (2026-10-25)** (r9): a reference confidential-accounting state machine in
 `zeroj-integration-tests` test sources (`org.zeroj.it.confidential`), and the handoff note
@@ -959,6 +961,73 @@ layer it happens at; a vector that fails during decoding has no challenge to com
 - **Property tests:** random values and widths verify; random single-bit flips fail.
 - **Provider parity:** pure Java and blst give identical proofs (with fixed nonces) and identical
   verdicts on every vector.
+
+## Implementation evidence (M0–M6)
+
+Everything below is evidence, not a security claim (AGENTS.md). Measurements are in
+[`docs/benchmarks/bulletproof-range-g1-2026-10-25.md`](../benchmarks/bulletproof-range-g1-2026-10-25.md).
+
+### Deliverables
+
+| Milestone | Commits | Deliverables |
+|---|---|---|
+| M0 | `6c76019`…`daab133` | Spec r1 with Appendix A; registry r8 (`reserved`); the Python second implementation (334 gated checks); `BulletproofGeneratorReproductionTest`; CFRG `-03` vector copies |
+| M1 | `fb5d2ac`, `316d1e5`, `444a6d1` | `Shake128`; `org.zeroj.bls12381.bulletproofs` (`G1RangeProof`, `G1RangeProver`, `G1RangeVerifier`; package-private sponge, codecs, transcript, generators, nonce sources); `TestNonceProver` (test fixtures); D7a `ProofProtocol`/`ProofProtocols`, the seeded reserved set and `INVALID_STATEMENT` in `zeroj-api`; native-image entries; 60 tests including the CFRG conformance harness and the Python known-answer proof |
+| M2 | `2aaf5bd`, `ce104f5`, `23db873` | The vector file and its emitter; `BulletproofVectorRunner` over both providers; `java-proofs-v1.json` and `verify_java_proofs.py`; `dalek-check/`; `BlstBulletproofParityTest` |
+| M3 | this commit | `BulletproofBenchmark` (test fixture; `./gradlew :zeroj-bls12381:bulletproofBenchmark`, `:zeroj-blst:bulletproofBenchmarkBlst`); `BulletproofDeterminismTest` |
+| M4 | `180621f` | `BulletproofAlgebraCostProbe` (not a verifier) and `BulletproofGeneratorsProbe` with `BulletproofAlgebraCostTest`; `BulletproofTestSupport` (test fixture) |
+| M5 | `ad27dec` | `ConfidentialLedger` and `ConfidentialLedgerTest` (`zeroj-integration-tests`); `docs/usecases/confidential-accounting-yano-x-handoff.md` |
+| M6 | this commit | Registry r9 (admission); spec status; this section; the measurements document; module READMEs; the support matrix; the docsite Pedersen guide (section 9) and API cheat sheet |
+
+### Admission check (M6)
+
+| Prerequisite (registry §2.4, M6 row) | Evidence |
+|---|---|
+| Accepted ADR, named maintainer | Accepted (design) 2026-10-24 by maintainer Satya; M0 and the r5 additions signed off 2026-10-25 |
+| Normative specification | `bulletproof-range-bls12-381-g1-v1` r2 |
+| I1: independent reproductions of the constants | Java (`BulletproofGeneratorReproductionTest`), the Python implementation, py_ecc (design reviewer and M2 reviewer), and the Julc VM's `hashToGroup` (M4) |
+| I12: CFRG conformance | `FiatShamirConformanceTest`, `SigmaConformanceTest`, `Shake128Test`; also in Python (M0) |
+| M2 vectors with independent recomputation | 14 positive, 114 negative and 25 prover-refusal cases from the Python emitter; the Java prover reproduces every positive proof on both providers; the M2 reviewer's py_ecc verifier and Codex's agree with every case, and the reviewer's 600 extra mutations agree three ways |
+| The dalek check | Both directions against dalek `bulletproofs` 5.0.0, plus the BLS12-381 tie-in (85 checks) |
+| M3 measurements | Recorded; see the measurements document |
+| Descriptor | `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`, `G1RangeProof.PROTOCOL` |
+
+Every prerequisite has its evidence, so registry r9 records `bulletproof-range-bls12-381-g1-v1` and
+`bulletproof-bls12-381-g1-gens-v1` as `active` (experimental). r9 takes effect only when PR #105
+is merged; until then the registry on `main` lists both as `reserved`. Admission is not a maturity
+or security claim. Q7 is decided: external review comes before value-bearing use, not before
+experimental admission.
+
+### Invariants
+
+| # | Evidence |
+|---|---|
+| I1 | four reproductions (above) |
+| I2 | Python known-answer proof; tags pinned with the CFRG PoC (`TranscriptTagTest`); `FrozenHeartTest`; the binding tests; vector challenges at every width; seeded faults (drop `V`, `n`, `ctx` or `D_gens`; `y` for `z`) killed |
+| I3 | `decodingOrder`, `everyPointPosition`, `finalScalarMalleability`, `wrongRoundCount`, `oversizedInputs`; vector negatives on seven layers |
+| I4 | `verifierZeroChallenge`, `restartBound`, `restartOnce` |
+| I5 | completeness at `v` = 0, 1, `2^n − 1` and random values at each width; the refusal tests (`v = 2^n`, `q − 1`, identity statement) |
+| I6 | element and bit tampers, other `ctx`, `V` and width, forced out-of-range values; 600 extra mutations (M2 review) |
+| I7 | `BulletproofDeterminismTest` (repeated runs, both providers, fresh JVMs); `BlstBulletproofParityTest`; M5 replicas |
+| I8 | `BulletproofProverScheduleTest`, `nonceSampling`, the API-surface test |
+| I9 | no file of the G1 Pedersen profiles or their vectors changed; their tests pass |
+| I10 | `VerifierWorkTest` (exactly `5 + 2n + 2k + 4` multiplications, none on rejection), `oversizedInputs` |
+| I11 | the measurements document is labelled as records |
+| I12 | the conformance tests (above) |
+| I13 | `ReservedIdentifiersTest`, including the forked-JVM regression |
+
+**Seeded faults:** all 14 from the M1 list are killed, plus "skip check 1 on `a`". Reviewer (c)'s
+surviving mutants are killed by the evidence added in r7 and r8, except one recorded gap:
+MU04 (`create()` skipping the allowlist), which spec §7.3 treats as a sanity check only.
+
+### Follow-ups
+
+- Verification speed. Pure Java verifies a 64-bit proof in about 1.3 s, and about half of that is
+  the provider re-checking subgroup membership on every multiplication. An MSM in the provider SPI
+  (#22) and trusted-point handling (#104) are the levers.
+- A Cardano-native range proof would need its own transcript and ADR (D8).
+- Yano-X plugin: a Yano-X ADR, after Yano-X moves to an `org.zeroj` release.
+- The CFRG vector licence (IETF Trust, BCP 78) must be confirmed by the maintainer before merge.
 
 ## Consequences
 

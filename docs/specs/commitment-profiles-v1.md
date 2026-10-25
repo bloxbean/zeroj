@@ -2,11 +2,11 @@
 
 **Document identifier:** `commitment-profiles-v1`
 **Status:** Normative (ADR-0059 milestone M0; G1 entries ADR-0060, admitted at milestone M5; the
-first proof protocol and its generator set reserved by ADR-0061 milestone M0). Experimental: not approved for value-bearing or
+first proof protocol and its generator set, ADR-0061, admitted at milestone M6). Experimental: not approved for value-bearing or
 mainnet use. "Normative" fixes identifiers, bytes, checks, check order and error behaviour; it
 is not a maturity or security claim. This document governs if it and an implementation
 disagree.
-**Date:** 2026-10-24 (r8)
+**Date:** 2026-10-24 (r8); 2026-10-25 (r9)
 
 This document is the registry of ZeroJ commitment profiles, basis sets and proof protocols, and
 the contract every implementation of them follows: the expected-profile rule, scalar checks,
@@ -101,8 +101,8 @@ document).
 | `pedersen-bls12-381-g1-basis-v1` | basis set | active | §3.3; admitted under ADR-0060 (issue #95) |
 | `pedersen-bls12-381-g1-v1` | commitment profile | active | §4.6; admitted under ADR-0060 (issue #95) |
 | `pedersen-bls12-381-g1-bytes-v1` | commitment profile | active | §4.7; admitted under ADR-0060 (issue #95) |
-| `bulletproof-bls12-381-g1-gens-v1` | basis set (generator set) | reserved | §3.4; may be admitted only under ADR-0061 (issue #96) |
-| `bulletproof-range-bls12-381-g1-v1` | proof protocol | reserved | §5.1; may be admitted only under ADR-0061 (issue #96) |
+| `bulletproof-bls12-381-g1-gens-v1` | basis set (generator set) | active | §3.4; admitted under ADR-0061 (issue #96) |
+| `bulletproof-range-bls12-381-g1-v1` | proof protocol | active | §5.1; admitted under ADR-0061 (issue #96) |
 
 The three G1 entries have their parameters fixed by
 [`pedersen-bls12-381-g1-v1.md`](pedersen-bls12-381-g1-v1.md). r7 admits them after ADR-0060
@@ -112,8 +112,18 @@ reference, and on-chain `bls12_381_G1_hashToGroup` in the Julc VM and on Yaci De
 vectors with their independent recomputation, the descriptors, and the M4 on-chain parity results.
 Admission does not change their maturity: like every profile, they are experimental.
 
-No proof protocol is active. `bulletproof-range-bls12-381-g1-v1` and its generator set are
-reserved by ADR-0061 M0 (r8); ADR-0061 M6 admits them only after every §2.4 prerequisite holds.
+`bulletproof-range-bls12-381-g1-v1` and its generator set, reserved by ADR-0061 M0 (r8), are
+admitted by r9 after ADR-0061 milestone M6 checked every §2.4 prerequisite:
+- the accepted ADR;
+- the normative specification;
+- four reproductions of the generator set: Java, the independent Python implementation,
+  py_ecc, and the Julc VM's `bls12_381_G1_hashToGroup`;
+- the `zeroj-proof-vectors-v1` file, which lists every generator with `D_gens` and has positive
+  cases at every width, recomputed independently on py_ecc;
+- the descriptor `ProofProtocols.BULLETPROOF_RANGE_BLS12_381_G1_V1`.
+
+Admission does not change maturity: the protocol is experimental. External cryptographic review
+is required before any value-bearing use (ADR-0061).
 
 **Protocols using a profile** (not commitment profiles; their identifiers are reserved, §2.2):
 
@@ -198,7 +208,7 @@ written from RFC 9380 without reading the Java); on-chain `bls12_381_G1_hashToGr
 reproduction ADR-0060 requires before admission. Used by `pedersen-bls12-381-g1-v1` and
 `pedersen-bls12-381-g1-bytes-v1`.
 
-### 3.4 `bulletproof-bls12-381-g1-gens-v1` (reserved)
+### 3.4 `bulletproof-bls12-381-g1-gens-v1`
 
 `(G_0, …, G_63, H_0, …, H_63, U)` exactly as
 [`bulletproof-range-bls12-381-g1-v1.md`](bulletproof-range-bls12-381-g1-v1.md) §2 defines them:
@@ -214,7 +224,8 @@ Reproductions:
 - Java `Bls12381Hash.hashToG1` (`BulletproofGeneratorReproductionTest`);
 - the stand-alone Python implementation in
   `zeroj-bls12381/src/test/resources/bulletproof-g1-reference/`, written without reading the Java;
-- a py_ecc reproduction by the ADR-0061 design reviewer.
+- a py_ecc reproduction by the ADR-0061 design reviewer;
+- the Julc VM's `bls12_381_G1_hashToGroup` (`BulletproofAlgebraCostTest`, ADR-0061 M4).
 
 Used only by `bulletproof-range-bls12-381-g1-v1`.
 
@@ -340,10 +351,10 @@ Changing any transcript element requires a new protocol identifier; a transcript
 replaced under an existing identifier. Adding a protocol does not change or rename the
 commitment profile it consumes.
 
-No proof protocol is active. G1 sigma protocols (ADR-0051 D7, escalated) will be admitted under
-§2.4.
+One proof protocol is active: `bulletproof-range-bls12-381-g1-v1` (§5.1). G1 sigma protocols
+(ADR-0051 D7, escalated) will be admitted under §2.4.
 
-### 5.1 `bulletproof-range-bls12-381-g1-v1` (reserved)
+### 5.1 `bulletproof-range-bls12-381-g1-v1`
 
 The record, fixed by [`bulletproof-range-bls12-381-g1-v1.md`](bulletproof-range-bls12-381-g1-v1.md):
 
@@ -631,7 +642,7 @@ they hold no secret.
 | `CommitmentProfile` | `static define(CommitmentProfileId id, CommitmentKind kind, CommitmentGroup group, int pointEncodingLength)` with `1 ≤ pointEncodingLength ≤ 255` (else `INVALID_CONFIGURATION`); accessors `id()`, `kind()`, `group()`, `pointEncodingLength()`. The registry is a static set in `CommitmentProfile`, so its scope is that class's defining class loader. The descriptors of the built-in profiles are created and registered while `CommitmentProfile` is initialised (ADR-0060 D8), so they exist before any caller can reach `define`. `define` rejects an identifier already defined through the same loaded class, built-in or not (`INVALID_CONFIGURATION`): the duplicate rule protects the built-ins rather than threatening them, and each profile has exactly one descriptor per loaded `zeroj-api`. These guarantees hold against callers of the public API; in-process reflection can bypass any Java access rule and is outside the threat model. No ZeroJ module calls `define` outside `zeroj-api` (the build's `verifyNoBuiltinProfileDefine` scans compiled non-test classes for a method or method-handle reference to `define`; string-based reflection is not detected). `define` is for profiles that are not built in, and tests use test-only identifiers that are unique per JVM. A profile that is not built in and defines its descriptor in a static initialiser can still be disabled, fail-closed, by an earlier `define` of its identifier; such a profile defines its descriptor before untrusted code runs, or is added to the built-ins. A profile module from a release before ADR-0060 M1 still calls `define` for its own built-in identifier and fails class initialization (`ExceptionInInitializerError`) against this `zeroj-api`; mixed versions are unsupported, and `zeroj-api`, `zeroj-circuit-lib` and `zeroj-bls12381` are upgraded together. **Identity equality**: checks compare descriptors with `==` |
 | `CommitmentProfiles` | final constant holder, no public constructor or method: `PEDERSEN_JUBJUB_V1`, `PEDERSEN_JUBJUB_BYTES_V1`, `PEDERSEN_JUBJUB_VECTOR_V1`, `PEDERSEN_BLS12_381_G1_V1`, `PEDERSEN_BLS12_381_G1_BYTES_V1`, the built-in descriptors (point-encoding lengths 32, 32, 32, 48, 48). The profile modules' `PROFILE` constants are these instances. A constant for a `reserved` profile is not admission (§2.3) |
 | `ProofProtocol` | final; no public constructor, factory or `define`: every proof protocol is built in (ADR-0061 D7a). Accessors `id()` (the §2.1 identifier), `consumes()` (the one `CommitmentProfile` descriptor whose commitments it proves statements about) and `generatorSetId()`. The descriptors are created while `ProofProtocol` is initialised; their identifiers are already in the shared set that `CommitmentProfile`'s own initialisation seeds, so `define` of a protocol or generator-set identifier is rejected even as the first call in a fresh JVM. **Identity equality** |
-| `ProofProtocols` | final constant holder, no public constructor or method: `BULLETPROOF_RANGE_BLS12_381_G1_V1` (consumes `PEDERSEN_BLS12_381_G1_V1`; generator set `bulletproof-bls12-381-g1-gens-v1`). A constant for a `reserved` protocol is not admission (§2.3) |
+| `ProofProtocols` | final constant holder, no public constructor or method: `BULLETPROOF_RANGE_BLS12_381_G1_V1` (consumes `PEDERSEN_BLS12_381_G1_V1`; generator set `bulletproof-bls12-381-g1-gens-v1`). A constant is not admission (§2.3); this protocol is active since r9 |
 | `Commitment` (interface) | `CommitmentProfile profile()`; `byte[] toPointBytes()` (fresh copy of the raw encoding). No arithmetic and no equality contract |
 | `CommitmentCodec<C extends Commitment>` (interface) | `profile()`; `Class<C> commitmentType()` (the exact concrete class); `C decodePoint(byte[])` (strict, §10; never returns null); `default byte[] keyContext()` (empty; the vector codec returns `I2OSP(σ, 32)`); `default void requireContext(C)` (no-op; the vector codec rejects a different schema with `PROFILE_MISMATCH`) |
 | `CommitmentEnvelope` | `public static byte[] encode(Commitment)`; `public static <C extends Commitment> C decode(byte[] envelope, CommitmentCodec<C> expected)` (§9) |
@@ -962,7 +973,7 @@ authorization, replay protection and context binding to the application.
 | | V3, V4 | not offered | not offered | — |
 | `pedersen-bls12-381-g1-v1` | V1 | implemented (experimental): `G1Pedersen.verifyScalar` (ADR-0060 M2) | implemented (experimental): `PedersenG1Lib.verifyScalarOpening`/`verifyScalarOpeningBounded`: length check, `uncompress`, canonical round trip, check 1 on `m` and `r` and check 2 if requested, then two `scalarMul` (cheaper than a two-term MSM, measured), `add`, `equal` | message and `r` |
 | | V3 | implemented (experimental): `withPublicDelta`, `add`/`subtract`/`negate` | implemented (experimental): `applyPublicDelta` with the signed-delta rule, `add`/`subtract`/`negate`; sums with verifier-fixed coefficients | deltas |
-| | V4 | planned (ADR-0061; `bulletproof-range-bls12-381-g1-v1`, reserved) | not native: the transcript uses SHAKE128, which Plutus V3 lacks; ADR-0061 M4 is a cost study labelled "not a verifier" | `V`, `n` and the application context |
+| | V4 | `G1RangeProver` / `G1RangeVerifier` (`bulletproof-range-bls12-381-g1-v1`, experimental, ADR-0061); `n ∈ {16, 32, 64}` | not native: the transcript uses SHAKE128, which Plutus V3 lacks. The ADR-0061 M4 cost study ("not a verifier") puts the algebra alone at 54%, 89% and 155% of a transaction's CPU limit | `V`, `n` and the application context |
 | `pedersen-bls12-381-g1-bytes-v1` | V1 | implemented (experimental): `G1Pedersen.verifyBytes*`, streaming to `2^61 − 256` octets | implemented (experimental): `PedersenG1Lib.verifyBytesOpening` recomputes the mapping with `sha2_256`; the payload is bounded by the transaction size, not the budget: about 14 KB in a redeemer with the script inline, 15 KB with a reference script, in a minimal transaction ([measurements](../benchmarks/pedersen-g1-2026-10-22.md)). No scalar-only mode: checking a supplied `(s, r)` is a `pedersen-bls12-381-g1-v1` opening and authenticates only `s` (§4.4) | payload and `r` |
 
 Disclosed openings on-chain are public forever. Relations prove residues, not balances: integer
@@ -1083,6 +1094,11 @@ Benchmarks are records, not assertions, and never remove a check to improve a nu
   - **Java binding (ADR-0061 M1, 2026-10-25):** §12.1 gains `ProofProtocol` and `ProofProtocols`,
     the descriptor type that §2.4 item 5 fixes with the first protocol; §2.2 names the test that
     keeps the seeded set equal to the registry text. Still `reserved`: no entry becomes active.
+- **r9 (2026-10-25, ADR-0061 M6):** admits `bulletproof-range-bls12-381-g1-v1` and
+  `bulletproof-bls12-381-g1-gens-v1` as active (experimental), with the evidence listed in §2.3.
+  §3.4 adds the Julc VM reproduction; §5 and §5.1 drop "reserved"; the §14 V4 cell names the
+  implementation and the M4 cost study. No identifier, byte, check or vector of an existing
+  entry changes.
 
 ---
 

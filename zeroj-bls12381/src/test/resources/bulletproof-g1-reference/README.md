@@ -487,7 +487,7 @@ unchanged, because its `layer` already came from the verifier.
 
 | `generator.python` | Output SHA-256 |
 |---|---|
-| CPython 3.13.5 | `4040434f300b93b4494e624208a86dcecbb80da5e45e7415bac7adcd9775af58` |
+| CPython 3.13.5 | `b8c26d44306a23fa4b4c8fa2234f9e4c0786a6ea7f8e06a5de32cfbefa9e5f77` |
 
 This is the committed file, regenerated after later edits to the specs' text. Only the `spec`
 provenance field differs from the author's first output (`353e8f8d…e37c`); every case is

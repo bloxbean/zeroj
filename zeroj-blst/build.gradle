@@ -16,6 +16,17 @@ dependencies {
     testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 }
 
+// ADR-0061 M3: the Bulletproof range-proof benchmark (zeroj-bls12381 test fixture) on the blst provider.
+// Records only. Run: ./gradlew :zeroj-blst:bulletproofBenchmarkBlst
+tasks.register('bulletproofBenchmarkBlst', JavaExec) {
+    group = 'verification'
+    description = 'ADR-0061: Bulletproof range-proof host benchmark, blst provider (records only).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bls12381.bulletproofs.BulletproofBenchmark'
+    args '--provider', 'blst'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {

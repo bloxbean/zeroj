@@ -3,7 +3,7 @@
 **Identifier:** `bulletproof-range-bls12-381-g1-v1` (proof protocol, `commitment-profiles-v1` §5)
 **Generator set:** `bulletproof-bls12-381-g1-gens-v1`
 **Consumes:** `pedersen-bls12-381-g1-v1` (`pedersen-bls12-381-g1-v1.md`)
-**Status:** draft r2 (ADR-0061 M1); registry status `reserved`
+**Status:** r2 (ADR-0061 M1); registry status `active` (experimental) since `commitment-profiles-v1` r9 (ADR-0061 M6)
 **Date:** 2026-10-24 (r1); 2026-10-25 (r2)
 **Governing ADR:** [ADR-0061](../adr/0061-bulletproof-range-proofs-bls12-381-g1.md)
 
@@ -734,6 +734,7 @@ A host that runs the verifier inside a replicated state machine relies on these 
     reviewer (b) F1).
   - §11 requires a positive vector at every width (M1 review, reviewer (c) F10).
   - §7.1 notes the Java binding's earlier check-1 refusal (M2 review).
+  - The status line records admission by `commitment-profiles-v1` r9 (M6).
 
 ## 15. References
 
