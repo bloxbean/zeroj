@@ -12,8 +12,11 @@ native image).
 **Not measured:**
 - GraalVM native image;
 - x86-64;
-- a Plutus V3 verifier, because none can exist: the challenges are SHAKE128 outputs, and Plutus V3
-  has no SHAKE128 (spec §12). The Cardano figures below are for the algebra only.
+- a Plutus V3 verifier: the challenges are SHAKE128 outputs, and Plutus V3 has no SHAKE128 builtin
+  (spec §12). An in-script Keccak-f[1600] with the PV11 bitwise builtins was not measured. The
+  Cardano figures below are for the algebra only;
+- the §15 Yaci DevKit confirmation and fees, which matter only for a verifier that could be
+  deployed.
 
 ## Proof sizes
 
@@ -32,47 +35,66 @@ volatile sink, so the JIT cannot drop the work. Run it with
 `./gradlew :zeroj-bls12381:bulletproofBenchmark` (pure Java) or
 `./gradlew :zeroj-blst:bulletproofBenchmarkBlst` (blst).
 
-**Load:** other services were running on the machine. The load average was 5–9 during the
-pure-Java run and rose to 20 near the end of the blst run. p95 stays within 2% of p50 throughout.
+**Samples:** proving runs 12, 8 and 6 measured iterations at `n` = 16, 32, 64, and verification
+24 to 40, after warm-up. With 6 iterations, p95 is the largest sample.
 
-| Operation | Pure Java p50 | Pure Java p95 | blst p50 | blst p95 | Allocated/op (pure) |
-|---|---:|---:|---:|---:|---:|
-| prove, n = 16 (secret path) | 1,555 ms | 1,579 ms | 1,785 ms | 1,803 ms | 918 MB |
-| prove, n = 32 | 3,115 ms | 3,134 ms | 3,538 ms | 3,553 ms | 1.82 GB |
-| prove, n = 64 | 6,219 ms | 6,227 ms | 6,965 ms | 6,977 ms | 3.62 GB |
-| decode, n = 16 (every point subgroup-checked) | 51.3 ms | 52.7 ms | 51.3 ms | 52.4 ms | 28.7 MB |
-| decode, n = 32 | 59.8 ms | 60.3 ms | 59.8 ms | 60.9 ms | 33.5 MB |
-| decode, n = 64 | 68.8 ms | 69.5 ms | 67.5 ms | 72.1 ms | 38.3 MB |
-| verify, decoded proof and commitment, n = 16 | 414 ms | 420 ms | 428 ms | 436 ms | 233 MB |
-| verify, decoded, n = 32 | 700 ms | 703 ms | 715 ms | 723 ms | 394 MB |
-| verify, decoded, n = 64 | 1,260 ms | 1,274 ms | 1,273 ms | 1,283 ms | 708 MB |
-| verify from octets (decode `V` and proof), n = 16 | 466 ms | 472 ms | 480 ms | 488 ms | 264 MB |
-| verify from octets, n = 32 | 767 ms | 771 ms | 780 ms | 790 ms | 430 MB |
-| verify from octets, n = 64 | 1,335 ms | 1,363 ms | 1,345 ms | 1,358 ms | 749 MB |
+**Load:** other services were running on the machine, with a load average of about 7 to 12 (16
+cores) throughout. In this run p95 is within 2% of p50 for every single-threaded figure. An
+earlier run under similar load was 1–3% slower and had one figure (blst decode at `n = 64`) 7%
+apart.
 
-**Wall time per verification from octets** across threads:
+### One thread
 
-| `n` | Pure Java, 1 thread | Pure Java, 8 threads | blst, 1 thread | blst, 8 threads |
-|---:|---:|---:|---:|---:|
-| 16 | 468 ms | 59.5 ms | 483 ms | 60.5 ms |
-| 32 | 767 ms | 97.1 ms | 775 ms | 98.5 ms |
-| 64 | 1,335 ms | 170 ms | 1,342 ms | 172 ms |
+| Operation | Pure Java p50 | Pure Java p95 | Pure Java allocated/op | blst p50 | blst p95 | blst allocated/op |
+|---|---:|---:|---:|---:|---:|---:|
+| prove, n = 16 (secret path) | 1,526 ms | 1,538 ms | 916 MB | 1,748 ms | 1,770 ms | 994 MB |
+| prove, n = 32 | 3,037 ms | 3,048 ms | 1.82 GB | 3,467 ms | 3,490 ms | 1.96 GB |
+| prove, n = 64 | 6,049 ms | 6,070 ms | 3.62 GB | 6,883 ms | 6,910 ms | 3.89 GB |
+| decode, n = 16 (every point subgroup-checked) | 49.9 ms | 50.4 ms | 28.7 MB | 50.2 ms | 50.8 ms | 28.7 MB |
+| decode, n = 32 | 58.5 ms | 59.5 ms | 33.5 MB | 58.5 ms | 59.5 ms | 33.5 MB |
+| decode, n = 64 | 66.7 ms | 67.2 ms | 38.3 MB | 67.7 ms | 68.7 ms | 38.3 MB |
+| verify, decoded proof and commitment, n = 16 | 405 ms | 411 ms | 233 MB | 412 ms | 417 ms | 235 MB |
+| verify, decoded, n = 32 | 681 ms | 690 ms | 395 MB | 699 ms | 707 ms | 398 MB |
+| verify, decoded, n = 64 | 1,231 ms | 1,243 ms | 708 MB | 1,264 ms | 1,280 ms | 714 MB |
+| verify from octets (decode `V` and proof), n = 16 | 459 ms | 464 ms | 264 MB | 466 ms | 471 ms | 266 MB |
+| verify from octets, n = 32 | 747 ms | 756 ms | 430 MB | 765 ms | 775 ms | 434 MB |
+| verify from octets, n = 64 | 1,304 ms | 1,321 ms | 749 MB | 1,340 ms | 1,351 ms | 755 MB |
+
+### Wall time per operation, 1 and 8 threads
+
+| Operation | Pure Java, 1 thread | Pure Java, 8 threads | blst, 1 thread | blst, 8 threads |
+|---|---:|---:|---:|---:|
+| prove, n = 16 | 1,523 ms | 196 ms | 1,747 ms | 225 ms |
+| prove, n = 32 | 3,034 ms | 390 ms | 3,449 ms | 443 ms |
+| prove, n = 64 | 6,037 ms | 788 ms | 6,900 ms | 884 ms |
+| verify from octets, n = 16 | 458 ms | 58.8 ms | 469 ms | 60.0 ms |
+| verify from octets, n = 32 | 748 ms | 96.1 ms | 765 ms | 97.8 ms |
+| verify from octets, n = 64 | 1,304 ms | 167 ms | 1,338 ms | 171 ms |
+
+Each operation is independent, so 8 threads give about 7.7× the throughput.
 
 **Where the time goes.**
-- **The provider re-checks every point.** Verification makes `5 + 2n + 2k + 4` provider
-  multiplications (`VerifierWorkTest`): 49, 83 and 149. Both providers call
-  `Bls12381Codecs.requireValid` on every input point, a pure-Java subgroup check of about 4.3 ms
-  (measured in ADR-0060). That alone is about 0.2, 0.36 and 0.64 s, roughly half the total.
-- **blst gives no speed-up here.** The re-check, plus the conversion between ZeroJ's affine points
-  and blst's, costs more than blst saves on the multiplication. Proving on blst is 12–15% slower.
-- **The levers** are an MSM in the provider SPI (#22) and trusted-point handling (#104). Neither is
-  in this ADR. No check was removed for speed (ADR-0061 M3 exit criterion).
+- **Re-validation of points dominates verification.** Verification makes `5 + 2n + 2k + 4`
+  provider multiplications (`VerifierWorkTest`): 49, 83 and 149. The pure-Java provider calls
+  `Bls12381Codecs.requireValid` on each input point. That is a pure-Java subgroup check of about
+  4.3 ms (measured in ADR-0060), about the cost of one scalar multiplication, which accounts for
+  about half the total: 0.21, 0.36 and 0.64 s.
+- **blst checks twice.** The blst provider re-validates the input point and validates its output
+  again when decoding it back (`Bls12381Codecs.g1FromUncompressed`). That is two pure-Java
+  subgroup checks per call: 2 × 149 × 4.3 ms ≈ 1.28 s at `n = 64`, essentially all of its 1.26 s
+  verification. blst's faster multiplication therefore gains nothing, and proving on blst is
+  about 14% slower.
+- **The levers** are an MSM in the provider SPI (#22) and trusted-point handling (#104), which
+  would remove the input and output re-validation. Neither is in this ADR. No check was removed for
+  speed (ADR-0061 M3 exit criterion).
 - **Allocation** is large, because the pure-Java affine arithmetic allocates a `BigInteger` per
   field operation: about 0.7 GB per 64-bit verification.
 
 **Determinism** (`BulletproofDeterminismTest`, in `zeroj-blst`): the verdict and layer of all 128
-positive and negative vector cases hash to the same digest across two in-process runs on each
-provider, across the providers, and in a fresh JVM per provider.
+positive and negative vector cases hash to the same digest:
+- across two in-process runs on each provider;
+- across the two providers;
+- in a fresh JVM process per provider (the same binary and flags).
 
 ## Cardano cost study (M4): the verifier algebra in the Julc VM, PV11
 
@@ -83,8 +105,8 @@ provider, across the providers, and in a fresh JVM per provider.
 10,000,000,000 CPU steps and 16,500,000 memory units per transaction.
 
 **The probe is not a verifier.** It takes the transcript challenges `y`, `z`, `x`, `x_u` and
-`x_1 … x_k` as redeemer inputs. A real verifier must derive them with SHAKE128, which Plutus V3
-cannot do. The probe does everything else a verifier would do:
+`x_1 … x_k` as redeemer inputs. A real verifier must derive them with SHAKE128, for which Plutus V3
+has no builtin. The probe does most of what a verifier would do after that:
 - checks the five proof scalars are below `q`;
 - checks the supplied inverses of `y` and every `x_j`;
 - refuses the identity encoding for `V` and every proof point;
@@ -94,6 +116,11 @@ cannot do. The probe does everything else a verifier would do:
   coefficient on-chain;
 - decompresses every point (with its subgroup check) and evaluates check 1 (5 terms) and check 2
   (`2n + 2k + 4` terms) with `bls12_381_G1_multiScalarMul`, each compared with the identity.
+
+It leaves out, so the figures slightly understate a full verifier's algebra:
+- the zero checks on `z`, `x` and `x_u` (`y` and every `x_j` are covered by the inverse check);
+- parsing the proof octets: the length check, slicing, and converting the five scalars;
+- computing the inverses, which are supplied and only checked.
 
 An honest proof made by the Java prover passes, and the same proof with `a + 1` fails, at every
 width.
@@ -110,8 +137,9 @@ width.
   steps), the measured figures are 24%, 25% and 27% higher. The difference is the on-chain
   coefficient arithmetic, the generator hashing and the scalar and inverse checks.
 
-**Verdict.** There is no verifier at any width: the transcript cannot be computed on-chain. The
-algebra alone fits a transaction at `n = 16`, barely at `n = 32`, and not at `n = 64`. A
+**Verdict.** There is no verifier at any width: Plutus V3 has no SHAKE128 builtin, and an in-script
+Keccak-f[1600] (not measured) would come on top of the algebra. The algebra alone fits a
+transaction at `n = 16`, barely at `n = 32`, and not at `n = 64`. A
 Cardano-native range proof would need a different transcript (for example SHA-256 based), a new
 protocol identifier and its own ADR (ADR-0061 D3 note, D8). This study publishes nothing.
 

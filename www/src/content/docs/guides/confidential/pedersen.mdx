@@ -667,17 +667,18 @@ boolean inRange = G1RangeVerifier.pureJava().verify(c.toPointBytes(), proof.toBy
 
 Things to know:
 
-- **Off-chain only.** A Cardano validator can't verify it: Plutus V3 has no SHAKE128. Use it in a
+- **Off-chain only.** There is no Cardano verifier: Plutus V3 has no SHAKE128 builtin. Use it in a
   service, an app chain or between parties.
 - **The context is the binding.** A proof made under one `ctx` fails under any other. Make `ctx`
   unique to your application, and add a message, sender or epoch if a proof must not be reused.
 - **A range proof is not a balance.** To read "inputs equal outputs" as whole numbers, give every
-  term its own range proof and fix the coefficients yourself (ADR-0051 D3a). Authorization and replay
-  protection stay your job; a reference ledger in
+  term its own range proof and fix the coefficients yourself (ADR-0051 D3a). Authorization, replay
+  protection and getting each payee the opening of what it received stay your job. A reference
+  ledger in
   [`zeroj-integration-tests`](https://github.com/bloxbean/zeroj/tree/main/zeroj-integration-tests/src/test/java/org/zeroj/it/confidential)
-  shows all of it.
-- **Cost:** on pure Java, about 1.6 / 3.1 / 6.2 s to prove and 0.5 / 0.8 / 1.3 s to verify at
-  16 / 32 / 64 bits. See the
+  shows one way to do these; it is a test, not a product.
+- **Cost:** on pure Java, about 1.5 / 3.0 / 6.0 s to prove and 0.46 / 0.75 / 1.3 s to verify at
+  16 / 32 / 64 bits, on one core. See the
   [measurements](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/bulletproof-range-g1-2026-10-25.md).
 - **Proving is offline/isolated only**, like committing.
 

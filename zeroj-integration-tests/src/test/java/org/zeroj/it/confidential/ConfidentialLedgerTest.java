@@ -2,6 +2,8 @@ package org.zeroj.it.confidential;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.zeroj.api.commitment.CommitmentError;
 import org.zeroj.api.commitment.CommitmentFormatException;
 import org.zeroj.bls12381.bulletproofs.G1RangeProver;
@@ -23,15 +25,15 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * ADR-0061 M5: the reference confidential-accounting state machine over
- * {@code bulletproof-range-bls12-381-g1-v1}. Honest transfers apply; every attack listed in the
- * ADR is rejected deterministically, and two replicas on different providers stay identical.
+ * {@code bulletproof-range-bls12-381-g1-v1}. Honest transfers and merges apply; every attack listed
+ * in the ADR and found in review is rejected deterministically on both the pure-Java and the blst
+ * provider; and two replicas on different providers stay identical.
  */
 class ConfidentialLedgerTest {
 
@@ -40,22 +42,23 @@ class ConfidentialLedgerTest {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final ConfidentialLedger.Config CONFIG = new ConfidentialLedger.Config(CHAIN, 65536, 8);
 
-    /** A client: the opening of its own balance, which the ledger never sees. */
+    /** A client: the openings of its balance and of the incoming amounts it was told, never seen by the ledger. */
     private static final class Wallet {
         final String name;
         final byte[] key;
         BigInteger value;
-        BigInteger blinding;
+        BigInteger blinding = BigInteger.ZERO;
         long sequence;
+        /** Pending id → (value, blinding), as delivered by payers off-chain. */
+        final TreeMap<Long, BigInteger[]> inbox = new TreeMap<>();
 
         Wallet(String name, BigInteger value) {
             this.name = name;
-            this.key = ("key-of-" + name).getBytes(StandardCharsets.US_ASCII);
+            this.key = ("authorization-key-of-" + name).getBytes(StandardCharsets.US_ASCII);
             this.value = value;
-            this.blinding = BigInteger.ZERO;
         }
 
-        /** Builds a transfer of {@code amount} to {@code to}; updates this wallet only once applied. */
+        /** Builds a transfer of {@code amount} to {@code to}. */
         Built transfer(Wallet to, BigInteger amount) {
             BigInteger rAmount = G1Pedersen.randomBlinding(RANDOM);
             BigInteger rChange = blinding.subtract(rAmount).mod(Q);
@@ -67,75 +70,169 @@ class ConfidentialLedgerTest {
                     ConfidentialLedger.context(CHAIN, name, to.name, sequence, (byte) 0)).toBytes();
             byte[] pChange = G1RangeProver.pureJava().prove(G1PedersenOpening.of(change, rChange), 64,
                     ConfidentialLedger.context(CHAIN, name, to.name, sequence, (byte) 1)).toBytes();
-            return new Built(this, to, amount, rAmount, change, rChange, sign(key, name, to.name, sequence, cAmount, cChange, pAmount, pChange));
+            return new Built(this, to, amount, rAmount, change, rChange,
+                    signTransfer(key, name, to.name, sequence, cAmount, cChange, pAmount, pChange));
+        }
+
+        /** A merge of the named pending ids. */
+        byte[] merge(long... ids) {
+            return sign(key, ConfidentialLedger.Merge.encodeBody(name, sequence, ids));
+        }
+
+        /** The off-chain side of an accepted merge. */
+        void merged(long... ids) {
+            for (long id : ids) {
+                BigInteger[] o = inbox.remove(id);
+                value = value.add(o[0]);
+                blinding = blinding.add(o[1]).mod(Q);
+            }
+            sequence++;
         }
     }
 
     private record Built(Wallet from, Wallet to, BigInteger amount, BigInteger rAmount, BigInteger change, BigInteger rChange,
                          byte[] message) {
-        /** The off-chain side of an accepted transfer: both wallets learn their new openings. */
-        void settle() {
+        /**
+         * The off-chain side of an accepted transfer: the payer's change, and the opening delivered to the
+         * payee under the pending id the ledger gave the amount.
+         */
+        long settle(ConfidentialLedger ledger) {
             from.value = change;
             from.blinding = rChange;
             from.sequence++;
-            to.value = to.value.add(amount);
-            to.blinding = to.blinding.add(rAmount).mod(Q);
+            G1PedersenCommitment c = G1Pedersen.pureJava().commitScalar(amount, rAmount);
+            long id = -1;
+            for (Map.Entry<Long, G1PedersenCommitment> e : ledger.pendingOf(to.name).entrySet()) {
+                if (e.getValue().equals(c)) id = e.getKey();
+            }
+            assertTrue(id >= 0, "the amount is pending for the payee");
+            to.inbox.put(id, new BigInteger[] {amount, rAmount});
+            return id;
         }
     }
 
-    static byte[] sign(byte[] key, String from, String to, long sequence, byte[] cAmount, byte[] cChange, byte[] pAmount,
-                       byte[] pChange) {
-        byte[] body = ConfidentialLedger.Transfer.encodeBody(from, to, sequence, cAmount, cChange, pAmount, pChange);
-        byte[] auth = ConfidentialLedger.hmac(key, body);
+    static byte[] sign(byte[] key, byte[] body) {
+        byte[] auth = ConfidentialLedger.hmac(key, ConfidentialLedger.authInput(CHAIN, body));
         byte[] message = Arrays.copyOf(body, body.length + auth.length);
         System.arraycopy(auth, 0, message, body.length, auth.length);
         return message;
     }
 
-    private static ConfidentialLedger ledger(G1RangeVerifier verifier, Wallet... wallets) {
+    static byte[] signTransfer(byte[] key, String from, String to, long sequence, byte[] cAmount, byte[] cChange,
+                               byte[] pAmount, byte[] pChange) {
+        return sign(key, ConfidentialLedger.Transfer.encodeBody(from, to, sequence, cAmount, cChange, pAmount, pChange));
+    }
+
+    private static G1RangeVerifier verifier(String provider) {
+        return provider.equals("blst") ? G1RangeVerifier.withProvider(BlstBls12381Provider.createDefault())
+                : G1RangeVerifier.pureJava();
+    }
+
+    private static ConfidentialLedger ledger(G1RangeVerifier verifier, ConfidentialLedger.Config config, Wallet... wallets) {
         Map<String, byte[]> keys = new TreeMap<>();
         Map<String, BigInteger> balances = new TreeMap<>();
         for (Wallet w : wallets) {
             keys.put(w.name, w.key);
             balances.put(w.name, w.value);
         }
-        return new ConfidentialLedger(CONFIG, verifier, keys, balances);
+        return new ConfidentialLedger(config, verifier, keys, balances);
+    }
+
+    private static ConfidentialLedger ledger(G1RangeVerifier verifier, Wallet... wallets) {
+        return ledger(verifier, CONFIG, wallets);
     }
 
     private static void assertBalance(ConfidentialLedger ledger, Wallet w) {
-        G1PedersenCommitment expected = G1Pedersen.pureJava().commitScalar(w.value, w.blinding);
-        assertEquals(expected, ledger.balanceOf(w.name), w.name);
+        assertEquals(G1Pedersen.pureJava().commitScalar(w.value, w.blinding), ledger.balanceOf(w.name), w.name);
         assertEquals(w.sequence, ledger.nextSequence(w.name), w.name);
     }
 
-    @Test
-    @DisplayName("Honest transfers apply and keep every balance commitment equal to its owner's opening")
-    void honestFlow() {
+    private static byte[] emptyTransfer(byte[] key, String from, String to, long sequence) {
+        return signTransfer(key, from, to, sequence, new byte[48], new byte[48], new byte[0], new byte[0]);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
+    @DisplayName("Honest transfers and merges keep every balance commitment equal to its owner's opening")
+    void honestFlow(String provider) {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(1_000));
         Wallet bob = new Wallet("bob", BigInteger.valueOf(50));
         Wallet carol = new Wallet("carol", BigInteger.ZERO);
-        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), alice, bob, carol);
+        ConfidentialLedger ledger = ledger(verifier(provider), alice, bob, carol);
 
         Built t1 = alice.transfer(bob, BigInteger.valueOf(100));
         assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(t1.message())));
-        t1.settle();
+        long p1 = t1.settle(ledger);
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(bob.merge(p1))));
+        bob.merged(p1);
         Built t2 = bob.transfer(carol, BigInteger.valueOf(150));   // bob's whole balance: change 0
         Built t3 = alice.transfer(carol, BigInteger.ONE);
         assertEquals(List.of(Result.ACCEPTED, Result.ACCEPTED), ledger.apply(List.of(t2.message(), t3.message())));
-        t2.settle();
-        t3.settle();
+        long p2 = t2.settle(ledger);
+        long p3 = t3.settle(ledger);
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(carol.merge(p2, p3))));
+        carol.merged(p2, p3);
         for (Wallet w : List.of(alice, bob, carol)) assertBalance(ledger, w);
         assertEquals(BigInteger.valueOf(899), alice.value);
         assertEquals(BigInteger.ZERO, bob.value);
         assertEquals(BigInteger.valueOf(151), carol.value);
+        assertEquals(0, ledger.pendingOf("carol").size());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
+    @DisplayName("Withheld openings cannot freeze an account, and incoming transfers do not invalidate spends (reviewer M3–M6 F1)")
+    void griefingAndFrontRunning(String provider) {
+        Wallet alice = new Wallet("alice", BigInteger.valueOf(500));
+        Wallet bob = new Wallet("bob", BigInteger.valueOf(500));
+        Wallet mallory = new Wallet("mallory", BigInteger.ZERO);
+        ConfidentialLedger ledger = ledger(verifier(provider), alice, bob, mallory);
+        // Mallory (balance 0, commitment O) sends alice a zero-value amount and keeps its blinding.
+        Built grief = mallory.transfer(alice, BigInteger.ZERO);
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(grief.message())));
+        assertEquals(1, ledger.pendingOf("alice").size());
+        assertBalance(ledger, alice);
+        // An incoming transfer placed before alice's spend in the same block does not invalidate it.
+        Built incoming = bob.transfer(alice, BigInteger.TEN);
+        Built spend = alice.transfer(bob, BigInteger.valueOf(20));
+        assertEquals(List.of(Result.ACCEPTED, Result.ACCEPTED), ledger.apply(List.of(incoming.message(), spend.message())));
+        long known = incoming.settle(ledger);
+        spend.settle(ledger);
+        assertBalance(ledger, alice);
+        // Alice merges only what she can open; the griefing entry stays pending, harmlessly.
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(alice.merge(known))));
+        alice.merged(known);
+        assertBalance(ledger, alice);
+        assertEquals(1, ledger.pendingOf("alice").size());
+        assertEquals(BigInteger.valueOf(490), alice.value);
     }
 
     @Test
-    @DisplayName("Replay, a bad authorization tag, an unknown account and a self-transfer are rejected and change nothing")
-    void authorizationAndReplay() {
+    @DisplayName("The pending pool is bounded: past the limit, transfers to that account are rejected; its own spends still work")
+    void pendingLimit() {
+        Wallet alice = new Wallet("alice", BigInteger.valueOf(100));
+        Wallet bob = new Wallet("bob", BigInteger.valueOf(10_000));
+        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), new ConfidentialLedger.Config(CHAIN, 65536, 64), alice, bob);
+        for (int i = 0; i < ConfidentialLedger.MAX_PENDING; i++) {
+            Built t = bob.transfer(alice, BigInteger.ONE);
+            assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(t.message())), "entry " + i);
+            t.settle(ledger);
+        }
+        Built over = bob.transfer(alice, BigInteger.ONE);
+        assertEquals(List.of(Result.PENDING_FULL), ledger.apply(List.of(over.message())));
+        Built spend = alice.transfer(bob, BigInteger.valueOf(5));
+        assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(spend.message())));
+        spend.settle(ledger);
+        assertBalance(ledger, alice);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
+    @DisplayName("Replay, bad tags (including another chain's), unknown accounts, self-transfers and bad merges are rejected")
+    void authorizationAndReplay(String provider) {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(500));
         Wallet bob = new Wallet("bob", BigInteger.ZERO);
-        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), alice, bob);
+        ConfidentialLedger ledger = ledger(verifier(provider), alice, bob);
         Built t = alice.transfer(bob, BigInteger.TEN);
         byte[] forged = t.message().clone();
         forged[forged.length - 1] ^= 1;
@@ -143,28 +240,39 @@ class ConfidentialLedgerTest {
         assertEquals(List.of(Result.BAD_AUTH), ledger.apply(List.of(forged)));
         assertArrayEquals(before, ledger.stateDigest());
         assertEquals(List.of(Result.ACCEPTED, Result.REPLAY), ledger.apply(List.of(t.message(), t.message())));
-        t.settle();
+        long id = t.settle(ledger);
         assertBalance(ledger, alice);
-        // Signed by bob's key for alice's account.
-        byte[] wrongKey = sign(bob.key, "alice", "bob", 1, new byte[48], new byte[48], new byte[0], new byte[0]);
-        assertEquals(List.of(Result.BAD_AUTH), ledger.apply(List.of(wrongKey)));
-        byte[] unknown = sign(alice.key, "alice", "mallory", 1, new byte[48], new byte[48], new byte[0], new byte[0]);
-        assertEquals(List.of(Result.UNKNOWN_ACCOUNT), ledger.apply(List.of(unknown)));
-        byte[] self = sign(alice.key, "alice", "alice", 1, new byte[48], new byte[48], new byte[0], new byte[0]);
-        assertEquals(List.of(Result.UNKNOWN_ACCOUNT), ledger.apply(List.of(self)));
+        // A tag made for another chain id does not verify here.
+        byte[] body = ConfidentialLedger.Transfer.encodeBody("alice", "bob", 1, new byte[48], new byte[48], new byte[0], new byte[0]);
+        byte[] auth = ConfidentialLedger.hmac(alice.key, ConfidentialLedger.authInput("other-chain", body));
+        byte[] otherChain = Arrays.copyOf(body, body.length + 32);
+        System.arraycopy(auth, 0, otherChain, body.length, 32);
+        assertEquals(List.of(Result.BAD_AUTH), ledger.apply(List.of(otherChain)));
+        assertEquals(List.of(Result.BAD_AUTH), ledger.apply(List.of(emptyTransfer(bob.key, "alice", "bob", 1))));
+        assertEquals(List.of(Result.UNKNOWN_ACCOUNT), ledger.apply(List.of(emptyTransfer(alice.key, "alice", "mallory", 1))));
+        assertEquals(List.of(Result.UNKNOWN_ACCOUNT), ledger.apply(List.of(emptyTransfer(alice.key, "alice", "alice", 1))));
+        // Merges: another account's key, an unknown id, an id named twice, then a replay.
+        assertEquals(List.of(Result.BAD_AUTH), ledger.apply(List.of(sign(alice.key,
+                ConfidentialLedger.Merge.encodeBody("bob", 0, id)))));
+        assertEquals(List.of(Result.UNKNOWN_PENDING), ledger.apply(List.of(bob.merge(id + 7))));
+        assertEquals(List.of(Result.UNKNOWN_PENDING), ledger.apply(List.of(bob.merge(id, id))));
+        byte[] merge = bob.merge(id);
+        assertEquals(List.of(Result.ACCEPTED, Result.REPLAY), ledger.apply(List.of(merge, merge)));
+        bob.merged(id);
+        assertBalance(ledger, bob);
     }
 
-    @Test
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
     @DisplayName("Inflation: spending more than the balance needs a negative change, which no range proof covers")
-    void inflation() {
+    void inflation(String provider) {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(100));
         Wallet bob = new Wallet("bob", BigInteger.ZERO);
-        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), alice, bob);
+        ConfidentialLedger ledger = ledger(verifier(provider), alice, bob);
         BigInteger amount = BigInteger.valueOf(105);
         BigInteger rAmount = BigInteger.valueOf(7);
         BigInteger change = alice.value.subtract(amount).mod(Q);       // q − 5
         BigInteger rChange = alice.blinding.subtract(rAmount).mod(Q);
-        // The honest prover refuses the change value.
         CommitmentFormatException refusal = assertThrows(CommitmentFormatException.class,
                 () -> G1RangeProver.pureJava().prove(G1PedersenOpening.of(change, rChange), 64, new byte[] {1}));
         assertEquals(CommitmentError.OUT_OF_RANGE, refusal.reason());
@@ -173,79 +281,121 @@ class ConfidentialLedgerTest {
         byte[] pAmount = G1RangeProver.pureJava().prove(G1PedersenOpening.of(amount, rAmount), 64,
                 ConfidentialLedger.context(CHAIN, "alice", "bob", 0, (byte) 0)).toBytes();
         // The attacker reuses the valid amount proof for the change output.
-        byte[] message = sign(alice.key, "alice", "bob", 0, cAmount, cChange, pAmount, pAmount);
+        byte[] message = signTransfer(alice.key, "alice", "bob", 0, cAmount, cChange, pAmount, pAmount);
         assertEquals(List.of(Result.RANGE_PROOF), ledger.apply(List.of(message)));
         assertBalance(ledger, alice);
     }
 
-    @Test
-    @DisplayName("A proof moved to another message (recipient, sequence or output role) fails: the context binds it")
-    void proofsAreBoundToTheirMessage() {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
+    @DisplayName("A proof moved to another message (recipient or output role) fails: the context binds it")
+    void proofsAreBoundToTheirMessage(String provider) {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(300));
         Wallet bob = new Wallet("bob", BigInteger.ZERO);
         Wallet carol = new Wallet("carol", BigInteger.ZERO);
-        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), alice, bob, carol);
+        ConfidentialLedger ledger = ledger(verifier(provider), alice, bob, carol);
         Built t = alice.transfer(bob, BigInteger.valueOf(20));
-        ConfidentialLedger.Transfer decoded = ConfidentialLedger.Transfer.decode(t.message());
-        // Same commitments and proofs, re-addressed to carol and correctly signed by alice.
-        byte[] redirected = sign(alice.key, "alice", "carol", 0, decoded.amountCommitment(), decoded.changeCommitment(),
-                decoded.amountProof(), decoded.changeProof());
-        // Same everything, outputs' proofs swapped.
-        byte[] swapped = sign(alice.key, "alice", "bob", 0, decoded.amountCommitment(), decoded.changeCommitment(),
-                decoded.changeProof(), decoded.amountProof());
+        ConfidentialLedger.Transfer d = (ConfidentialLedger.Transfer) ConfidentialLedger.Message.decode(t.message());
+        byte[] redirected = signTransfer(alice.key, "alice", "carol", 0, d.amountCommitment(), d.changeCommitment(),
+                d.amountProof(), d.changeProof());
+        byte[] swapped = signTransfer(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(),
+                d.changeProof(), d.amountProof());
         assertEquals(List.of(Result.RANGE_PROOF, Result.RANGE_PROOF, Result.ACCEPTED),
                 ledger.apply(List.of(redirected, swapped, t.message())));
-        t.settle();
+        t.settle(ledger);
         assertBalance(ledger, alice);
         assertNotEquals(Arrays.toString(ConfidentialLedger.context(CHAIN, "ab", "c", 0, (byte) 0)),
                 Arrays.toString(ConfidentialLedger.context(CHAIN, "a", "bc", 0, (byte) 0)), "context is injective");
     }
 
-    @Test
-    @DisplayName("Malformed inputs are deterministic rejections: bad lengths, other widths, identity and malformed commitments, garbage")
-    void malformedInputs() {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
+    @DisplayName("Malformed inputs are deterministic rejections: bad lengths, other widths, identity and malformed commitments")
+    void malformedInputs(String provider) {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(300));
         Wallet bob = new Wallet("bob", BigInteger.ZERO);
-        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), alice, bob);
+        ConfidentialLedger ledger = ledger(verifier(provider), alice, bob);
         Built t = alice.transfer(bob, BigInteger.valueOf(20));
-        ConfidentialLedger.Transfer d = ConfidentialLedger.Transfer.decode(t.message());
+        ConfidentialLedger.Transfer d = (ConfidentialLedger.Transfer) ConfidentialLedger.Message.decode(t.message());
         byte[] identity = new byte[48];
         identity[0] = (byte) 0xC0;
-        BigInteger rAmount = BigInteger.valueOf(3);
-        byte[] narrow = G1RangeProver.pureJava().prove(G1PedersenOpening.of(BigInteger.valueOf(20), rAmount), 32,
+        byte[] narrow = G1RangeProver.pureJava().prove(G1PedersenOpening.of(BigInteger.valueOf(20), BigInteger.valueOf(3)), 32,
                 ConfidentialLedger.context(CHAIN, "alice", "bob", 0, (byte) 0)).toBytes();
+        byte[] flipped = d.amountProof().clone();
+        flipped[100] ^= 0x10;
         List<byte[]> block = new ArrayList<>();
         block.add(Arrays.copyOf(t.message(), t.message().length - 1));                 // truncated
         block.add(Arrays.copyOf(t.message(), t.message().length + 1));                 // trailing octet
         block.add(new byte[0]);
-        block.add(sign(alice.key, "alice", "bob", 0, new byte[48], d.changeCommitment(), d.amountProof(), d.changeProof()));
-        block.add(sign(alice.key, "alice", "bob", 0, identity, ledger.balanceOf("alice").toPointBytes(), d.amountProof(), d.changeProof()));
-        block.add(sign(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(), narrow, d.changeProof()));
-        byte[] flipped = d.amountProof().clone();
-        flipped[100] ^= 0x10;
-        block.add(sign(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(), flipped, d.changeProof()));
+        block.add(signTransfer(alice.key, "alice", "bob", 0, new byte[48], d.changeCommitment(), d.amountProof(), d.changeProof()));
+        block.add(signTransfer(alice.key, "alice", "bob", 0, identity, ledger.balanceOf("alice").toPointBytes(),
+                d.amountProof(), d.changeProof()));
+        block.add(signTransfer(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(), narrow, d.changeProof()));
+        block.add(signTransfer(alice.key, "alice", "bob", 0, d.amountCommitment(), d.changeCommitment(), flipped, d.changeProof()));
         assertEquals(List.of(Result.MALFORMED, Result.MALFORMED, Result.MALFORMED, Result.MALFORMED, Result.RANGE_PROOF,
                 Result.RANGE_PROOF, Result.RANGE_PROOF), ledger.apply(block));
         assertEquals(Result.TOO_LARGE, ledger.validate(new byte[65537]));
         assertBalance(ledger, alice);
     }
 
-    @Test
-    @DisplayName("Per-block proof limit: transfers beyond it are rejected in order, and a later block accepts them")
-    void blockLimit() {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"pure", "blst"})
+    @DisplayName("Per-block proof budget: counted only when verification is reached; excess transfers wait for a later block")
+    void blockLimit(String provider) {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(10_000));
+        Wallet carol = new Wallet("carol", BigInteger.valueOf(10_000));
         Wallet bob = new Wallet("bob", BigInteger.ZERO);
-        ConfidentialLedger ledger = new ConfidentialLedger(new ConfidentialLedger.Config(CHAIN, 65536, 2), G1RangeVerifier.pureJava(),
-                Map.of("alice", alice.key, "bob", bob.key), Map.of("alice", alice.value));
+        ConfidentialLedger ledger = ledger(verifier(provider), new ConfidentialLedger.Config(CHAIN, 65536, 2), alice, carol, bob);
+        byte[] junk = emptyTransfer(bob.key, "alice", "bob", 0);                       // bad tag: no proof is checked
         Built first = alice.transfer(bob, BigInteger.ONE);
-        first.settle();
-        Built second = alice.transfer(bob, BigInteger.TWO);
-        assertEquals(List.of(Result.ACCEPTED, Result.OVER_BLOCK_LIMIT), ledger.apply(List.of(first.message(), second.message())));
+        Built second = carol.transfer(bob, BigInteger.TWO);
+        assertEquals(List.of(Result.BAD_AUTH, Result.ACCEPTED, Result.OVER_BLOCK_LIMIT),
+                ledger.apply(List.of(junk, first.message(), second.message())));
+        first.settle(ledger);
         assertEquals(List.of(Result.ACCEPTED), ledger.apply(List.of(second.message())));
-        second.settle();
+        second.settle(ledger);
         assertBalance(ledger, alice);
+        assertBalance(ledger, carol);
+    }
+
+    @Test
+    @DisplayName("Configuration invariants: canonical identifiers and usable keys, checked once at construction (Codex M3–M6 F1, F2)")
+    void configuration() {
+        for (String bad : List.of("?", "\uD800", "Alice", "a b", "", "x".repeat(65), "café")) {
+            assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger.Config(bad, 65536, 8), bad);
+            assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger(CONFIG, G1RangeVerifier.pureJava(),
+                    Map.of(bad, new byte[16]), Map.of()), bad);
+        }
         assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger(CONFIG, G1RangeVerifier.pureJava(),
-                Map.of("a", new byte[1]), Map.of("a", ConfidentialLedger.SUPPLY_CAP)));
+                Map.of("alice", new byte[0]), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger(CONFIG, G1RangeVerifier.pureJava(),
+                Map.of("alice", new byte[15]), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger(CONFIG, G1RangeVerifier.pureJava(),
+                Map.of("alice", new byte[16]), Map.of("bob", BigInteger.ONE)));
+        assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger(CONFIG, G1RangeVerifier.pureJava(),
+                Map.of("a", new byte[16]), Map.of("a", ConfidentialLedger.SUPPLY_CAP)));
+        assertThrows(IllegalArgumentException.class, () -> new ConfidentialLedger.Config(CHAIN, 65536, 1));
+        assertThrows(IllegalArgumentException.class, () -> ConfidentialLedger.context(CHAIN, "\uD800", "bob", 0, (byte) 0));
+        // The longest identifiers keep the context far below the protocol's 1,024-octet limit.
+        String longest = "x".repeat(64);
+        assertTrue(ConfidentialLedger.context(longest, longest, longest, Long.MAX_VALUE, (byte) 1).length < 300);
+    }
+
+    @Test
+    @DisplayName("A message whose sender octets are not a canonical identifier is MALFORMED")
+    void nonCanonicalIdentifiersInMessages() {
+        Wallet alice = new Wallet("alice", BigInteger.valueOf(10));
+        Wallet bob = new Wallet("bob", BigInteger.ZERO);
+        ConfidentialLedger ledger = ledger(G1RangeVerifier.pureJava(), alice, bob);
+        byte[] good = emptyTransfer(alice.key, "alice", "bob", 0);
+        assertEquals(Result.ACCEPTED, ledger.validate(good));
+        // Version, type, a 4-octet length, then "alice": replace its first octet.
+        for (int replacement : new int[] {0x80, 0x81, 'A', '?', 0}) {
+            byte[] bad = good.clone();
+            bad[6] = (byte) replacement;
+            assertEquals(Result.MALFORMED, ledger.validate(bad), "octet " + replacement);
+            assertEquals(List.of(Result.MALFORMED), ledger.apply(List.of(bad)), "octet " + replacement);
+        }
     }
 
     @Test
@@ -254,20 +404,22 @@ class ConfidentialLedgerTest {
         Wallet alice = new Wallet("alice", BigInteger.valueOf(777));
         Wallet bob = new Wallet("bob", BigInteger.valueOf(1));
         ConfidentialLedger pure = ledger(G1RangeVerifier.pureJava(), alice, bob);
-        ConfidentialLedger blst = ledger(G1RangeVerifier.withProvider(BlstBls12381Provider.createDefault()), alice, bob);
+        ConfidentialLedger blst = ledger(verifier("blst"), alice, bob);
         assertArrayEquals(pure.stateDigest(), blst.stateDigest());
-        List<List<byte[]>> blocks = new ArrayList<>();
         for (int round = 0; round < 3; round++) {
             Built good = alice.transfer(bob, BigInteger.valueOf(round + 5));
             byte[] bad = good.message().clone();
             bad[200] ^= 1;
-            blocks.add(List.of(bad, good.message(), good.message()));
-            assertEquals(pure.apply(blocks.get(round)), blst.apply(blocks.get(round)), "round " + round);
-            good.settle();
+            List<byte[]> block = List.of(bad, good.message(), good.message());
+            assertEquals(pure.apply(block), blst.apply(block), "round " + round);
+            long id = good.settle(pure);
+            List<byte[]> merges = List.of(bob.merge(id), bob.merge(id));
+            assertEquals(pure.apply(merges), blst.apply(merges), "merge round " + round);
+            bob.merged(id);
             assertArrayEquals(pure.stateDigest(), blst.stateDigest(), "round " + round);
         }
         assertBalance(pure, alice);
-        assertFalse(Arrays.equals(new byte[32], pure.stateDigest()));
-        assertTrue(alice.sequence == 3);
+        assertBalance(blst, bob);
+        assertEquals(3, alice.sequence);
     }
 }

@@ -673,7 +673,9 @@ fields, and decimal integers.
 
 There is **no on-chain verifier** for this protocol. Its challenges are SHAKE128 outputs, and
 Plutus V3 has no SHAKE128 builtin. A script that took the challenges as inputs would not be a
-verifier.
+verifier. An in-script Keccak-f[1600] (with the PV11 bitwise builtins) was not measured; the
+algebra alone already needs 54%, 89% and 155% of a transaction's CPU limit at 16, 32 and 64 bits
+(ADR-0061 M4).
 
 ADR-0061 M4 measures the cost of the algebra in the JuLC VM as a study labelled
 "not a verifier". It publishes nothing.

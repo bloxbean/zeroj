@@ -13,9 +13,10 @@
  * <p>No public or protected member of this package accepts nonces, a seed, a nonce source, a random
  * source, generators or a transcript. A verified proof is not authorization, replay protection or a
  * balance rule (spec §1.1, §13). Proving is offline/isolated only and makes no constant-time claim.
- * There is no on-chain verifier: Plutus V3 has no SHAKE128 (spec §12).
+ * There is no on-chain verifier: Plutus V3 has no SHAKE128 builtin (spec §12).
  *
- * <p>Experimental: the registry lists the protocol as {@code reserved}. Nothing here is approved for
+ * <p>Experimental: the registry lists the protocol as {@code active} (experimental) from
+ * {@code commitment-profiles-v1} r9. Nothing here is approved for
  * value-bearing or mainnet use; external cryptographic review is required first (ADR-0061).
  */
 package org.zeroj.bls12381.bulletproofs;

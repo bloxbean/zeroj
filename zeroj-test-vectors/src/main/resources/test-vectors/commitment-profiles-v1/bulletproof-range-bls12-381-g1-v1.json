@@ -527,7 +527,7 @@
       "path": "docs/specs/bulletproof-range-bls12-381-g1-v1.md",
       "revision": "r2",
       "date": "2026-10-25",
-      "sha256": "ffbda9fbc202330c59ce8007c7e286205642c0fe32f2253eeec4d5fa8bfd2243"
+      "sha256": "4cd65a42bb5f72b49e4d40490eaff912ecce81a77fb50c57921668a9675e39f8"
     },
     {
       "path": "docs/specs/pedersen-bls12-381-g1-v1.md",
@@ -537,14 +537,14 @@
     },
     {
       "path": "docs/specs/commitment-profiles-v1.md",
-      "revision": "r8",
-      "date": "2026-10-24",
-      "sha256": "078b248a7df6196e5c1bde08faaf491998305e178982e69c1a005390664e569e"
+      "revision": "r9",
+      "date": "2026-10-25",
+      "sha256": "a03b479868782a42894f9b88c8d704e0c81dd112dce9083bd3fd37eec7c7841b"
     }
   ],
   "generator": {
     "script": "zeroj-bls12381/src/test/resources/bulletproof-g1-reference/emit_bulletproof_vectors_v1.py",
-    "scriptSha256": "9d059167b00208679c1c1a2328c12e7e827fca4d70557c274b2450ff3d057b5f",
+    "scriptSha256": "a8b07f7aa5a8939ebf81f56ef787d63898c27eb2a966b600896af05685c9a24a",
     "python": "CPython 3.13.5"
   },
   "positive": [

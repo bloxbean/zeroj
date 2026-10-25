@@ -933,12 +933,13 @@ def sha256_file(path):
         return hashlib.sha256(fh.read()).hexdigest()
 
 
-# (path, implemented revision).  The revision is pinned here, not read from the documents; a
-# later metadata-only revision changes a document's date and SHA-256 but not this label.
+# (path, revision).  The revision is pinned here, not read from the documents. It names the
+# revision whose octets are hashed, so it is updated whenever a spec revision lands, even a
+# metadata-only one (the registry's r9 admission changed no rule this script implements).
 SPECS = [
     ("docs/specs/bulletproof-range-bls12-381-g1-v1.md", "r2"),
     ("docs/specs/pedersen-bls12-381-g1-v1.md", "r2"),
-    ("docs/specs/commitment-profiles-v1.md", "r8"),
+    ("docs/specs/commitment-profiles-v1.md", "r9"),
 ]
 _DATE_LINE = re.compile(r"^\*\*Date:\*\*(.*)$", re.M)
 _DATE_REV = re.compile(r"(\d{4}-\d{2}-\d{2})\s+\((r\d+)\)")

@@ -113,10 +113,10 @@ boolean inRange = G1RangeVerifier.pureJava()                           // or wit
   pure-Java and blst providers, and its work is bounded by `n`.
 - **Proving is offline/isolated only.** The prover is not constant-time on either provider; it draws
   fresh nonces from its own `SecureRandom`, and the runtime's entropy configuration is trusted.
-- **No on-chain verifier:** Plutus V3 has no SHAKE128. The verifier algebra's cost on Cardano is in
+- **No on-chain verifier:** Plutus V3 has no SHAKE128 builtin. The verifier algebra's cost on Cardano is in
   the [measurements](../docs/benchmarks/bulletproof-range-g1-2026-10-25.md).
-- **Cost** (pure Java, M4 Max): proving takes about 1.6 / 3.1 / 6.2 s and verifying about
-  0.47 / 0.77 / 1.33 s at `n` = 16 / 32 / 64.
+- **Cost** (pure Java, one core of an M4 Max): proving takes about 1.5 / 3.0 / 6.0 s and verifying
+  about 0.46 / 0.75 / 1.30 s at `n` = 16 / 32 / 64. The blst provider is not faster today.
 - Registry status: `active` (experimental) in
   [`commitment-profiles-v1`](../docs/specs/commitment-profiles-v1.md) §2.3. Not approved for
   value-bearing or mainnet use without external review.

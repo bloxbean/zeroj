@@ -369,7 +369,7 @@ The record, fixed by [`bulletproof-range-bls12-381-g1-v1.md`](bulletproof-range-
 4. **Binding rule (§6.4):** protocol, profile, every base (through `G`, `H` and `D_gens`), the
    commitment `V`, the width and the application context.
 
-There is no on-chain verifier: Plutus V3 has no SHAKE128 (spec §12).
+There is no on-chain verifier: Plutus V3 has no SHAKE128 builtin (spec §12).
 
 ---
 

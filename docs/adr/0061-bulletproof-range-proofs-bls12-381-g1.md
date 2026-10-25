@@ -63,11 +63,16 @@ M2 review: Codex approves `2aaf5bd`, and its two P3s are fixed in `ce104f5`.
 **M5 implemented (2026-10-25)** (r9): a reference confidential-accounting state machine in
 `zeroj-integration-tests` test sources (`org.zeroj.it.confidential`), and the handoff note
 `docs/usecases/confidential-accounting-yano-x-handoff.md`. The machine covers:
-- authorization and replay protection;
-- binding each proof's context to its message;
-- the D3a balance rule with a supply cap;
+- authorization (domain-separated) and replay protection;
+- canonical identifiers, and binding each proof's context to its message;
+- incoming amounts held as pending entries, which the owner merges;
+- the balance invariant (D3a, with a supply cap);
 - limits, and deterministic rejection;
 - replicas on pure Java and blst agreeing.
+
+Its negative suite runs on both providers. The pending entries close a hazard the review found
+(r10): when incoming amounts went straight into the balance, a payer who withheld a blinding could
+freeze the payee.
 
 Addresses [issue #96](https://github.com/bloxbean/zeroj/issues/96), phase 4 of the #93–#96 Pedersen
 roadmap. It defines the first proof protocol of the commitment-profile registry
@@ -92,7 +97,7 @@ and no AI review upgrades a maturity or security claim (AGENTS.md).
 2026-10-24 (r1); 2026-10-24 (r2: Q2 decided, transcript on the CFRG drafts); 2026-10-24 (r3: review
 round 1); 2026-10-24 (r4: accepted, Q1–Q7 decided); 2026-10-24 (r5: M0); 2026-10-25 (r6: M0 sign-off,
 M1); 2026-10-25 (r7: M1 review); 2026-10-25 (r8: M2);
-2026-10-25 (r9: M3–M5)
+2026-10-25 (r9: M3–M6); 2026-10-25 (r10: M3–M6 review)
 
 ## Context
 
@@ -749,7 +754,9 @@ commitment profile: it has no kind, group encoding or opening.
 **Why no verifier.** A Plutus V3 validator cannot verify `bulletproof-range-bls12-381-g1-v1`. Its
 challenges are SHAKE128 outputs (D3), and Plutus V3 has no SHAKE128 builtin. A validator that took
 the challenges from its redeemer would not be a verifier, because the challenges must be computed,
-not supplied. So this ADR publishes **no on-chain library**, and registry §14 records the L1 cell
+not supplied. Keccak-f[1600] could in principle be written in a script with the PV11 bitwise
+builtins; that was not measured, and on top of the algebra's measured cost (M4) it is very unlikely
+to fit a transaction. So this ADR publishes **no on-chain library**, and registry §14 records the L1 cell
 for this protocol as "not native (SHAKE128 transcript)".
 
 **What the cost study measures.** Issue #96 asks for a measured Cardano feasibility report. The
@@ -887,7 +894,7 @@ Q4 asks whether the maintainer wants the plugin in this ADR instead.
 | **M3** performance and determinism | M2 | Benchmark harness (`commitment-profiles-v1` §15 method): prove and verify p50/p95 per `n`, allocation, 1 and 8 threads, pure Java and blst. Uses the #22 MSM if merged, otherwise records the term-by-term cost. Determinism test (repeated runs, both providers) | Measurements recorded; no check removed for speed |
 | **M4** Cardano cost study | M2 | JuLC VM probes in test sources for `n` = 16, 32, 64: generator decompression, both checks, challenges supplied as inputs, labelled "not a verifier" (D8). PV11 CPU, memory and script size. On-chain `hashToGroup` reproduction of the generators | Measurements and a feasible/infeasible verdict per `n` recorded in a benchmark doc; no library published |
 | **M5** Yano-X contract | M3 | Verifier contract in the spec (D9). Reference confidential-accounting state machine in `zeroj-integration-tests` test sources with authorization, replay, the D3a rule and limits, plus a negative suite. Handoff note for a Yano-X ADR | Tests green |
-| **M6** docs and admission | M1–M5 | Registry r8 makes the entries `active` (experimental) if every prerequisite holds: accepted ADR, spec, I1, I12, M2 vectors with independent recomputation and the dalek check, M3 measurements. The §14 V4 cell is updated. Module README, support matrix, docsite page, ADR implementation-evidence section | Admission recorded; otherwise entries stay `reserved` with the gap stated |
+| **M6** docs and admission | M1–M5 | Registry r9 makes the entries `active` (experimental) if every prerequisite holds: accepted ADR, spec, I1, I12, M2 vectors with independent recomputation and the dalek check, M3 measurements. The §14 V4 cell is updated. Module README, support matrix, docsite page, ADR implementation-evidence section | Admission recorded; otherwise entries stay `reserved` with the gap stated |
 
 **Seeded faults M1 must kill:**
 - drop `V`, `n`, `ctx` or `D_gens` from the transcript;
@@ -974,10 +981,10 @@ Everything below is evidence, not a security claim (AGENTS.md). Measurements are
 | M0 | `6c76019`…`daab133` | Spec r1 with Appendix A; registry r8 (`reserved`); the Python second implementation (334 gated checks); `BulletproofGeneratorReproductionTest`; CFRG `-03` vector copies |
 | M1 | `fb5d2ac`, `316d1e5`, `444a6d1` | `Shake128`; `org.zeroj.bls12381.bulletproofs` (`G1RangeProof`, `G1RangeProver`, `G1RangeVerifier`; package-private sponge, codecs, transcript, generators, nonce sources); `TestNonceProver` (test fixtures); D7a `ProofProtocol`/`ProofProtocols`, the seeded reserved set and `INVALID_STATEMENT` in `zeroj-api`; native-image entries; 60 tests including the CFRG conformance harness and the Python known-answer proof |
 | M2 | `2aaf5bd`, `ce104f5`, `23db873` | The vector file and its emitter; `BulletproofVectorRunner` over both providers; `java-proofs-v1.json` and `verify_java_proofs.py`; `dalek-check/`; `BlstBulletproofParityTest` |
-| M3 | this commit | `BulletproofBenchmark` (test fixture; `./gradlew :zeroj-bls12381:bulletproofBenchmark`, `:zeroj-blst:bulletproofBenchmarkBlst`); `BulletproofDeterminismTest` |
+| M3 | `de6d185` | `BulletproofBenchmark` (test fixture; `./gradlew :zeroj-bls12381:bulletproofBenchmark`, `:zeroj-blst:bulletproofBenchmarkBlst`); `BulletproofDeterminismTest` |
 | M4 | `180621f` | `BulletproofAlgebraCostProbe` (not a verifier) and `BulletproofGeneratorsProbe` with `BulletproofAlgebraCostTest`; `BulletproofTestSupport` (test fixture) |
 | M5 | `ad27dec` | `ConfidentialLedger` and `ConfidentialLedgerTest` (`zeroj-integration-tests`); `docs/usecases/confidential-accounting-yano-x-handoff.md` |
-| M6 | this commit | Registry r9 (admission); spec status; this section; the measurements document; module READMEs; the support matrix; the docsite Pedersen guide (section 9) and API cheat sheet |
+| M6 | `de6d185` | Registry r9 (admission); spec status; this section; the measurements document; module READMEs; the support matrix; the docsite Pedersen guide (section 9) and API cheat sheet |
 
 ### Admission check (M6)
 
@@ -1199,5 +1206,26 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
     - the Java → Python check also substitutes valid points, so its tampers reach the checks;
     - the reference-10 note says the pinned commit is release 5.0.1;
     - spec §7.1 states the Java binding's refusal order.
-- **r9 (2026-10-25, M3–M5):** M4 and M5 as listed under Status; the M3 harness, determinism test
-  and measurements.
+- **r9 (2026-10-25, M3–M6):** M4 and M5 as listed under Status; the M3 harness, determinism test
+  and measurements; the M6 admission and docs.
+- **r10 (2026-10-25, M3–M6 review of `de6d185`):** Codex F1–F6 and the Claude reviewer's F1–F8 are
+  accepted. All were in the M5 reference, the measurements or the docs; nothing in the protocol, its
+  Java code or its vectors changed.
+  - **M5 ledger (reviewer F1, P1):** adding incoming amounts straight to the payee's balance let a
+    payer freeze it by withholding a blinding, and let any incoming transfer invalidate a pending
+    spend. Incoming amounts are now pending entries that the owner merges. Also:
+    - the balance argument is stated as an inductive invariant (F2);
+    - identifiers are canonical ASCII and keys are checked at construction (Codex F1, F2);
+    - the authorization tag is domain-separated with the chain id, and the proof budget is
+      charged only when verification is reached (F8);
+    - the negative suite runs on both providers (Codex F5).
+  - **M3 (Codex F3, F4):**
+    - proving is measured with 1 and 8 threads;
+    - blst allocation is reported;
+    - the p95 statement is corrected;
+    - the cost of blst is attributed to input and output re-validation (reviewer F5).
+  - **Wording:**
+    - "no SHAKE128 builtin", with an unmeasured in-script Keccak noted (reviewer F4);
+    - the cost study lists what it leaves out (F3);
+    - stale text is fixed in `package-info`, the M6 row and the Date line (F7);
+    - the vector provenance names registry r9 (Codex F6).

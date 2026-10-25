@@ -134,6 +134,7 @@ public final class BulletproofBenchmark {
                     () -> verifier.verify(vWire, wire, bits, CTX));
             throughput("verify n=" + bits + " received octets", 8, bits == 64 ? 3 : 6,
                     () -> verifier.verify(vWire, wire, bits, CTX));
+            throughput("prove n=" + bits, 8, bits == 64 ? 1 : 2, () -> prover.prove(opening, bits, CTX));
         }
         if (sink == null) {
             throw new IllegalStateException("benchmark sanity");
