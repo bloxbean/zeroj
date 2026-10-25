@@ -4,7 +4,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -26,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * ADR-0061 D7a / I13: the shared registry set seeded by {@link CommitmentProfile}, and the built-in
@@ -121,14 +121,23 @@ class ReservedIdentifiersTest {
     void forkedJvmCannotPreempt() throws IOException, InterruptedException {
         String java = ProcessHandle.current().info().command().orElseThrow();
         String classpath = System.getProperty("java.class.path");
-        Process process = new ProcessBuilder(java, "-cp", classpath, PreemptionProbe.class.getName())
-                .redirectErrorStream(true).start();
         String output;
-        try (InputStream in = process.getInputStream()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        int exitValue;
+        // Output goes to a file, so the timeout applies even if the probe hangs.
+        Path log = Files.createTempFile("zeroj-probe", ".log");
+        try {
+            Process process = new ProcessBuilder(java, "-cp", classpath, PreemptionProbe.class.getName())
+                    .redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                fail("probe timed out: " + Files.readString(log, StandardCharsets.UTF_8));
+            }
+            output = Files.readString(log, StandardCharsets.UTF_8);
+            exitValue = process.exitValue();
+        } finally {
+            Files.deleteIfExists(log);
         }
-        assertTrue(process.waitFor(60, TimeUnit.SECONDS), "probe timed out");
-        assertEquals(0, process.exitValue(), output);
+        assertEquals(0, exitValue, output);
         assertTrue(output.contains("protocol: INVALID_CONFIGURATION"), output);
         assertTrue(output.contains("generators: INVALID_CONFIGURATION"), output);
         assertTrue(output.contains("descriptor: " + PROTOCOL_ID + " " + GENERATORS_ID + " pedersen-bls12-381-g1-v1"),

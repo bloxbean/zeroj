@@ -5,9 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.zeroj.bls12381.pedersen.G1PedersenOpening;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.SecureRandomSpi;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Spec §7.3: the public prover refuses a default {@link SecureRandom} whose algorithm is not
@@ -33,14 +35,23 @@ class SystemNonceSourceAllowlistTest {
     void forkedJvmRefusesDefault() throws IOException, InterruptedException {
         String java = ProcessHandle.current().info().command().orElseThrow();
         String classpath = System.getProperty("java.class.path");
-        Process process = new ProcessBuilder(java, "-cp", classpath, Probe.class.getName())
-                .redirectErrorStream(true).start();
         String output;
-        try (InputStream in = process.getInputStream()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        int exitValue;
+        // Output goes to a file, so the timeout applies even if the probe hangs.
+        Path log = Files.createTempFile("zeroj-probe", ".log");
+        try {
+            Process process = new ProcessBuilder(java, "-cp", classpath, Probe.class.getName())
+                    .redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                fail("probe timed out: " + Files.readString(log, StandardCharsets.UTF_8));
+            }
+            output = Files.readString(log, StandardCharsets.UTF_8);
+            exitValue = process.exitValue();
+        } finally {
+            Files.deleteIfExists(log);
         }
-        assertTrue(process.waitFor(60, TimeUnit.SECONDS), "probe timed out");
-        assertEquals(0, process.exitValue(), output);
+        assertEquals(0, exitValue, output);
         // The probe is not vacuous: the substituted algorithm really is the JVM's default.
         assertTrue(output.contains("default: " + ALGORITHM), output);
         assertTrue(output.contains("prove: IllegalStateException SecureRandom algorithm " + ALGORITHM
