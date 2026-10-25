@@ -16,7 +16,7 @@ import java.util.Set;
  *
  * <p>The 129 encodings are the pinned values of Appendix A; nothing is hashed at run time (spec
  * §2.4). {@code BulletproofGeneratorReproductionTest} recomputes them with RFC 9380
- * {@code hash_to_curve}. On first use the holder checks the pinned octets against {@link #D_GENS},
+ * {@code hash_to_curve}. On first use the holder checks the pinned octets against {@link #D_GENS_HEX},
  * decodes every point with the strict decoder (curve and prime-order subgroup, not the identity),
  * and checks the §2.2 rule that no two of the 131 points are equal or negatives. A failure is an
  * {@link IllegalStateException}: the constants are corrupt and nothing can be proved or verified.

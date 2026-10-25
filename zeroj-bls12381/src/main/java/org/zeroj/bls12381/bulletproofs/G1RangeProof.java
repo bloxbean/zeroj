@@ -69,7 +69,7 @@ public final class G1RangeProof {
      * Strictly decodes a proof for width {@code bits}, which must come from the verifier's
      * configuration, never from the proof (spec §8). Checks, in order (spec §8.1 steps 1–3):
      * {@code bits ∈ {16, 32, 64}} ({@code INVALID_CONFIGURATION}); the exact length, before any octet
-     * is read ({@code MALFORMED_ENCODING}); then each field in proof order, reporting the first
+     * is read or copied ({@code MALFORMED_ENCODING}); then each field in proof order, reporting the first
      * failure: a point that is malformed or the identity ({@code MALFORMED_ENCODING}) or outside the
      * subgroup ({@code NOT_IN_SUBGROUP}), a scalar not below {@code q} ({@code NON_CANONICAL_SCALAR}).
      * The input is copied.
@@ -80,11 +80,13 @@ public final class G1RangeProof {
     public static G1RangeProof decode(byte[] proof, int bits) {
         Objects.requireNonNull(proof, "proof");
         requireBits(bits);
-        byte[] bytes = proof.clone();
-        if (bytes.length != length(bits)) {
+        // The length is checked on the caller's array, before anything is copied: an oversized input
+        // costs no allocation proportional to its size (spec §8.4, ADR-0061 I10).
+        if (proof.length != length(bits)) {
             throw new CommitmentFormatException(CommitmentError.MALFORMED_ENCODING,
                     "a " + bits + "-bit range proof is " + length(bits) + " octets");
         }
+        byte[] bytes = proof.clone();
         Reader in = new Reader(bytes);
         G1Point a = in.point();
         G1Point s = in.point();

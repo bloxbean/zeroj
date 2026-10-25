@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import com.sun.management.ThreadMXBean;
 import org.zeroj.api.commitment.CommitmentError;
 import org.zeroj.api.commitment.CommitmentFormatException;
 import org.zeroj.api.commitment.ProofProtocols;
@@ -17,9 +18,11 @@ import org.zeroj.bls12381.pedersen.G1PedersenCommitment;
 import org.zeroj.bls12381.pedersen.G1PedersenOpening;
 import org.zeroj.bls12381.spi.Bls12381Provider;
 
+import java.lang.management.ManagementFactory;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
@@ -35,8 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * ADR-0061 M1: completeness (I5), strict decoding (I3), rejection of tampering and of a proof under
- * another width, context, commitment or protocol (I6), zero challenges (I4) and the prover's refusals
- * and restarts (D6).
+ * another width, context or commitment (I6), zero challenges (I4) and the prover's refusals and
+ * restarts (D6). Protocol binding comes from the tag prefix, pinned in {@code TranscriptTagTest} and
+ * {@code G1RangeProofKnownAnswerTest}.
  */
 class G1RangeProofTest {
 
@@ -176,7 +180,7 @@ class G1RangeProofTest {
         for (G1RangeProver.Challenge which : G1RangeProver.Challenge.values()) {
             CountingNonces nonces = new CountingNonces();
             IllegalStateException e = assertThrows(IllegalStateException.class, () -> PROVER.proveChecked(
-                    BigInteger.ONE, BigInteger.ONE, 16, CTX, nonces, (w, value) -> w == which ? BigInteger.ZERO : value));
+                    BigInteger.ONE, BigInteger.ONE, 16, CTX, nonces, w -> w == which));
             assertTrue(e.getMessage().contains("8 attempts"), e.getMessage());
             assertEquals(7, nonces.restarts, which.name());
             assertEquals(8 * (2 + 2 * 16 + 2), nonces.drawn, which.name());
@@ -189,7 +193,7 @@ class G1RangeProofTest {
         CountingNonces nonces = new CountingNonces();
         int[] seen = {0};
         G1RangeProof proof = PROVER.proveChecked(BigInteger.TEN, BigInteger.TWO, 16, CTX, nonces,
-                (w, value) -> w == G1RangeProver.Challenge.X && seen[0]++ == 0 ? BigInteger.ZERO : value);
+                w -> w == G1RangeProver.Challenge.X && seen[0]++ == 0);
         assertEquals(1, nonces.restarts);
         assertTrue(VERIFIER.verify(PEDERSEN.commitScalar(BigInteger.TEN, BigInteger.TWO), proof, 16, CTX));
     }
@@ -199,7 +203,7 @@ class G1RangeProofTest {
     void testNoncesFailClosed() {
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> PROVER.proveChecked(BigInteger.ONE,
                 BigInteger.ONE, 16, CTX, TestNonceProver.source(seed(1)),
-                (w, value) -> w == G1RangeProver.Challenge.Y ? BigInteger.ZERO : value));
+                w -> w == G1RangeProver.Challenge.Y));
         assertTrue(e.getMessage().contains("pick another seed"), e.getMessage());
     }
 
@@ -270,12 +274,48 @@ class G1RangeProofTest {
     }
 
     @Test
-    @DisplayName("The context is snapshotted: mutating the caller's array afterwards changes nothing")
+    @DisplayName("The context is snapshotted on entry: changing the caller's array while the proof is made changes nothing")
     void contextSnapshot() {
         byte[] ctx = CTX.clone();
-        G1RangeProof proof = PROVER.prove(opening(BigInteger.ONE, BigInteger.ONE), 16, ctx);
-        ctx[0] ^= 1;
+        NonceSource system = SystemNonceSource.create();
+        NonceSource mutating = new NonceSource() {
+            @Override
+            public BigInteger next() {
+                ctx[0] = (byte) 'X';    // runs during proving, before the transcript is started
+                return system.next();
+            }
+
+            @Override
+            public void beforeRestart() {
+            }
+        };
+        G1RangeProof proof = PROVER.prove(opening(BigInteger.ONE, BigInteger.ONE), 16, ctx, mutating);
+        assertFalse(Arrays.equals(CTX, ctx), "the source did change the caller's array");
         assertTrue(VERIFIER.verify(PEDERSEN.commitScalar(BigInteger.ONE, BigInteger.ONE), proof, 16, CTX));
+    }
+
+    @Test
+    @DisplayName("Every point position rejects the identity, x ≥ P, an off-curve x and an order-3 point, with the spec §3 class")
+    void everyPointPosition() {
+        G1PedersenCommitment c = PEDERSEN.commitScalar(BigInteger.TWO, BigInteger.TEN);
+        byte[] good = PROVER.prove(opening(BigInteger.TWO, BigInteger.TEN), 16, CTX).toBytes();
+        byte[] identity = new byte[48];
+        identity[0] = (byte) 0xC0;
+        byte[] xIsP = toBytes48(Fp.P);
+        xIsP[0] |= (byte) 0x80;
+        byte[] xIsOne = new byte[48];                       // x = 1: x³ + 4 = 5 is not a square
+        xIsOne[0] = (byte) 0x80;
+        xIsOne[47] = 1;
+        byte[] torsion = Bls12381Codecs.g1ToCompressed(new G1Point(Fp.ZERO, Fp.of(2)));
+        List<Integer> offsets = new ArrayList<>(List.of(0, 48, 96, 144));
+        for (int j = 0; j < 8; j++) offsets.add(4 * 48 + 3 * 32 + 48 * j);
+        for (int offset : offsets) {
+            assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(c, withPoint(good, offset, identity), 16, CTX));
+            assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(c, withPoint(good, offset, xIsP), 16, CTX));
+            assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(c, withPoint(good, offset, xIsOne), 16, CTX));
+            assertClass(CommitmentError.NOT_IN_SUBGROUP, () -> VERIFIER.verify(c, withPoint(good, offset, torsion), 16, CTX));
+        }
+        assertEquals(12, offsets.size());
     }
 
     // ---- tampering (I6) and decoding (I3) ----
@@ -357,6 +397,59 @@ class G1RangeProofTest {
         // Then V's own classes.
         assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(new byte[48], good, 16, CTX));
         assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(new byte[47], good, 16, CTX));
+    }
+
+    @Test
+    @DisplayName("Final scalars a and b: a + q and b + q (same residue) and 2^256 − 1 are NON_CANONICAL_SCALAR, never accepted (Codex M1 F2)")
+    void finalScalarMalleability() {
+        BigInteger v = BigInteger.valueOf(11), gamma = BigInteger.valueOf(12);
+        G1PedersenCommitment c = PEDERSEN.commitScalar(v, gamma);
+        byte[] good = PROVER.prove(opening(v, gamma), 16, CTX).toBytes();
+        byte[] max = new byte[32];
+        Arrays.fill(max, (byte) 0xFF);
+        for (int offset : new int[] {good.length - 64, good.length - 32}) {
+            BigInteger s = new BigInteger(1, good, offset, 32);
+            BigInteger lifted = s.add(Q);
+            byte[] liftedBytes = toBytes32(lifted);
+            if (lifted.bitLength() <= 256) {
+                assertClass(CommitmentError.NON_CANONICAL_SCALAR, () -> G1RangeProof.decode(withBytes(good, offset, liftedBytes), 16));
+                assertClass(CommitmentError.NON_CANONICAL_SCALAR, () -> VERIFIER.verify(c, withBytes(good, offset, liftedBytes), 16, CTX));
+                assertClass(CommitmentError.NON_CANONICAL_SCALAR,
+                        () -> VERIFIER.verify(c.toPointBytes(), withBytes(good, offset, liftedBytes), 16, CTX));
+            }
+            assertClass(CommitmentError.NON_CANONICAL_SCALAR, () -> VERIFIER.verify(c, withBytes(good, offset, toBytes32(Q)), 16, CTX));
+            assertClass(CommitmentError.NON_CANONICAL_SCALAR, () -> VERIFIER.verify(c, withBytes(good, offset, max), 16, CTX));
+        }
+        // The same for the three middle scalars t̂, τ_x, μ.
+        for (int i = 0; i < 3; i++) {
+            int offset = 4 * 48 + 32 * i;
+            BigInteger lifted = new BigInteger(1, good, offset, 32).add(Q);
+            if (lifted.bitLength() <= 256) {
+                assertClass(CommitmentError.NON_CANONICAL_SCALAR,
+                        () -> VERIFIER.verify(c, withBytes(good, offset, toBytes32(lifted)), 16, CTX));
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Oversized proof or context is rejected before any input-sized allocation (spec §8.4, Codex M1 F1)")
+    void oversizedInputs() {
+        ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
+        threads.setThreadAllocatedMemoryEnabled(true);
+        byte[] huge = new byte[16 << 20];
+        G1PedersenCommitment c = PEDERSEN.commitScalar(BigInteger.ONE, BigInteger.ONE);
+        byte[] good = PROVER.prove(opening(BigInteger.ONE, BigInteger.ONE), 16, CTX).toBytes();
+        // Warm the rejection paths once, then measure.
+        assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(c, huge, 16, CTX));
+        assertClass(CommitmentError.INVALID_CONFIGURATION, () -> VERIFIER.verify(c, good, 16, huge));
+        long before = threads.getCurrentThreadAllocatedBytes();
+        assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(c, huge, 16, CTX));
+        assertClass(CommitmentError.MALFORMED_ENCODING, () -> VERIFIER.verify(new byte[48], huge, 16, CTX));
+        assertClass(CommitmentError.MALFORMED_ENCODING, () -> G1RangeProof.decode(huge, 64));
+        assertClass(CommitmentError.INVALID_CONFIGURATION, () -> VERIFIER.verify(c, good, 16, huge));
+        assertClass(CommitmentError.INVALID_CONFIGURATION, () -> PROVER.prove(opening(BigInteger.ONE, BigInteger.ONE), 16, huge));
+        long allocated = threads.getCurrentThreadAllocatedBytes() - before;
+        assertTrue(allocated < (1 << 20), "allocated " + allocated + " bytes for a 16 MiB input");
     }
 
     @Test
@@ -486,6 +579,14 @@ class G1RangeProofTest {
         BigInteger s = new BigInteger(1, in, offset, 32).add(BigInteger.ONE).mod(Q);
         byte[] out = in.clone();
         PointCodec.writeScalar(s, out, offset);
+        return out;
+    }
+
+    static byte[] toBytes48(BigInteger x) {
+        byte[] raw = x.toByteArray();
+        byte[] out = new byte[48];
+        int skip = raw.length > 48 ? raw.length - 48 : 0;
+        System.arraycopy(raw, skip, out, 48 - (raw.length - skip), raw.length - skip);
         return out;
     }
 

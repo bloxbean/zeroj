@@ -65,6 +65,16 @@ final class RangeTranscript {
         }
     }
 
+    /**
+     * {@link #requireConfiguration} on the caller's array, then a private copy: the length is checked
+     * before anything is copied, so an over-long context costs no allocation proportional to its size,
+     * and later changes to the caller's array cannot reach the transcript.
+     */
+    static byte[] configuredContext(int bits, byte[] context) {
+        requireConfiguration(bits, context);
+        return context.clone();
+    }
+
     /** {@code k = log₂ n} for a configured width. */
     static int rounds(int bits) {
         return Integer.numberOfTrailingZeros(bits);

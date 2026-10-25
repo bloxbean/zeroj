@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.zeroj.api.commitment.CommitmentError;
 import org.zeroj.api.commitment.CommitmentFormatException;
+import org.zeroj.bls12381.Bls12381Generators;
 import org.zeroj.bls12381.ec.G1Point;
 
 import java.math.BigInteger;
@@ -153,6 +154,24 @@ class SigmaConformanceTest {
         byte[] a4 = changedChunk(validBatchable, HEX.parseHex(byKey.get("batchable/A4").get("NargString").asText()), 0, 48);
         assertTrue(Arrays.equals(identity, a4));
         assertTrue(G1Point.INFINITY.isInfinity());
+    }
+
+    @Test
+    @DisplayName("Harness self-check: instance-validation check 10 (a column that sums to the identity) rejects, which no A.3.2 vector exercises")
+    void harnessCheckTen() {
+        // One equation X = x·G + x·(−G) with X = G: every element is used, the image is not the
+        // identity, but the column of scalar 0 sums to the identity (sigma-03 §3.5 check 10).
+        BigInteger one = BigInteger.ONE;
+        BigInteger minusOne = PointCodec.Q.subtract(one);
+        G1Point g = Bls12381Generators.G1;
+        SigmaHarness.Instance inst = new SigmaHarness.Instance(List.of(g, g),
+                List.of(new SigmaHarness.Equation(List.of(new SigmaHarness.ImageTerm(1, one)),
+                        List.of(new SigmaHarness.Term(0, 0, one), new SigmaHarness.Term(0, 1, minusOne)))), new byte[0]);
+        assertEquals(false, SigmaHarness.validate(inst));
+        SigmaHarness.Instance fine = new SigmaHarness.Instance(List.of(g, g),
+                List.of(new SigmaHarness.Equation(List.of(new SigmaHarness.ImageTerm(1, one)),
+                        List.of(new SigmaHarness.Term(0, 0, one), new SigmaHarness.Term(0, 1, one)))), new byte[0]);
+        assertEquals(true, SigmaHarness.validate(fine));
     }
 
     /** The {@code size}-octet chunk at {@code offset} of {@code mutated}, which must differ from {@code valid} only there. */

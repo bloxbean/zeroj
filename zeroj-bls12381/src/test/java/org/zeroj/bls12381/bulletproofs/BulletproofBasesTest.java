@@ -6,7 +6,10 @@ import org.zeroj.bls12381.pedersen.G1Pedersen;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,6 +40,34 @@ class BulletproofBasesTest {
         assertEquals("69abb9e71b740d9be84f63bb146a63467ee452654340f1b09e8be6101e00ef19",
                 HexFormat.of().formatHex(BulletproofGenerators.digest()));
         assertEquals(70, BulletproofGenerators.DST_BP.length());
+    }
+
+    @Test
+    @DisplayName("Each nonce is exactly 64 octets from the source, read big-endian and reduced mod q, and the buffer is wiped (reviewer (c), M1 F2)")
+    void nonceSampling() {
+        List<byte[]> requests = new ArrayList<>();
+        SecureRandom spy = new SecureRandom() {
+            @Override
+            public String getAlgorithm() {
+                return "DRBG";
+            }
+
+            @Override
+            public void nextBytes(byte[] bytes) {
+                requests.add(bytes);
+                Arrays.fill(bytes, (byte) 0xFF);   // 2^512 − 1 ≥ q
+            }
+        };
+        SystemNonceSource source = SystemNonceSource.checked(spy);
+        BigInteger nonce = source.next();
+        BigInteger expected = BigInteger.ONE.shiftLeft(512).subtract(BigInteger.ONE).mod(PointCodec.Q);
+        assertEquals(expected, nonce);
+        source.next();
+        assertEquals(2, requests.size());
+        for (byte[] r : requests) {
+            assertEquals(64, r.length);
+            assertArrayEquals(new byte[64], r, "the sample buffer is wiped after use");
+        }
     }
 
     @Test

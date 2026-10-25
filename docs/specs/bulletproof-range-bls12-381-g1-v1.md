@@ -402,10 +402,17 @@ ADR-0046 fences its deterministic prover:
 - The seed → nonce expansion below lives **only in test or test-fixture code**, never in a
   published artifact. In Java that is `TestNonceProver` in the unpublished `testFixtures` source
   set of `zeroj-bls12381`, guarded by its module-metadata check.
-- Production code exposes at most a package-private nonce-source hook. Package-private is not a
-  security boundary in the classpath world, so the hook accepts only a source object, never a
-  seed. The only implementation of that source in published code is the §7.3 `SecureRandom`
-  source.
+- Production code exposes at most package-private test seams. Package-private is not a security
+  boundary in the classpath world, so each seam is bounded: a caller must already hold the opening,
+  and the worst it can do is reuse nonces it chose itself or emit a proof that does not verify. The
+  Java binding has three:
+  - a nonce-source hook, which accepts only a source object, never a seed. The only
+    implementation of that source in published code is the §7.3 `SecureRandom` source;
+  - a path that skips the §7.1 range and canonical refusals (but still checks the configuration),
+    so a test can force an out-of-range value through the prover and show that the proof fails
+    (ADR-0061 I6);
+  - a challenge tap that can only replace a challenge by zero, so a test can exercise the restart
+    rule (ADR-0061 I4).
 - An API-surface reflection test asserts that no public or protected member of the
   `org.zeroj.bls12381.bulletproofs` package, including nested types, accepts a seed, a nonce, a
   nonce source or a `SecureRandom`. The existing `G1Pedersen.randomBlinding(SecureRandom)` is
@@ -717,6 +724,8 @@ A host that runs the verifier inside a replicated state machine relies on these 
     `org.zeroj.bls12381.bulletproofs`; the §7.5 seam is `TestNonceProver` in the test fixtures.
   - SHAKE128 is `org.zeroj.bls12381.Shake128`, on the Keccak-f[1600] permutation that
     `Bls12381Hash` already used for SHAKE256.
+  - §7.5 lists the three bounded package-private test seams of the Java binding (M1 review,
+    reviewer (b) F1).
 
 ## 15. References
 

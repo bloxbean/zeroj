@@ -578,8 +578,10 @@ itself reject.
   (spec §7.5):
   - the seed → nonce expansion lives only in the unpublished `testFixtures` source set of
     `zeroj-bls12381`, guarded by its module-metadata check;
-  - production code has at most a package-private hook that accepts a nonce-source object, never
-    a seed;
+  - production code has at most package-private test seams, each bounded (spec §7.5): a hook that
+    accepts a nonce-source object, never a seed; a path that skips the range refusal so a test can
+    force an out-of-range value through the prover (I6); and a challenge tap that can only force
+    zero (I4);
   - an API-surface reflection test asserts that no public or protected member of
     `org.zeroj.bls12381.bulletproofs` accepts a seed, a nonce, a nonce source or a
     `SecureRandom`.
@@ -1041,3 +1043,28 @@ All seven were decided by maintainer Satya on 2026-10-24. D7a (r5) is a later de
   - **D7 implementation note:** how the new package gets the bases and the strict decoders
     without opening the pedersen package, and the new public `Shake128` class.
   - **M1 implemented:** see Status. The CFRG vector licence stays a before-merge gate.
+- **r7 (2026-10-25, M1 review round 1 of `fb5d2ac`):** Codex F1–F2, reviewer (b) F1–F5 and
+  reviewer (c) F1–F9, all accepted.
+  - **Resource bounds (I10):** the proof length and the context length are checked on the caller's
+    array before anything is copied.
+  - **D6:** the three package-private test seams are listed (spec §7.5); the challenge tap can force
+    only zero, and the range-skipping path still checks the configuration. The native-image
+    entries register public members only.
+  - **Evidence added at M1:**
+    - context tags with every octet class, pinned by the CFRG PoC code;
+    - nonce sampling (64 octets, big-endian, mod `q`, buffer wiped);
+    - a fixed multiplication count for every proof that reaches the checks, and none for a
+      rejected input;
+    - every point position against four malformed encodings;
+    - final-scalar `+ q` malleability;
+    - the context snapshot during proving;
+    - sigma-03 check 10 in the harness.
+  - **Seeded faults (M1 exit criterion):** all 14 of the M1 list were applied one at a time to a
+    copy of `fb5d2ac`, each confirmed to compile, and each made the bulletproofs tests fail
+    (14/14 killed). Reviewer (a) independently killed the same list plus three faults of its own.
+    Reviewer (c) ran 18 more mutants; 8 survived, and the evidence added in this revision targets
+    each of them. The rerun on the revised code also includes "skip check 1 on `a`" (Codex F2)
+    and those survivors.
+  - **Recorded gaps:** pinned proofs at `n = 32` and `n = 64` come with the M2 vector file. The
+    allowlist is tested through `SystemNonceSource.checked`, not through a JVM whose default
+    `SecureRandom` is not allowlisted.

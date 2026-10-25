@@ -127,26 +127,26 @@
   },
   {
     "name": "org.zeroj.bls12381.Shake128",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
+    "allPublicConstructors": true,
+    "allPublicMethods": true,
+    "allPublicFields": true
   },
   {
     "name": "org.zeroj.bls12381.bulletproofs.G1RangeProof",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
+    "allPublicConstructors": true,
+    "allPublicMethods": true,
+    "allPublicFields": true
   },
   {
     "name": "org.zeroj.bls12381.bulletproofs.G1RangeProver",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
+    "allPublicConstructors": true,
+    "allPublicMethods": true,
+    "allPublicFields": true
   },
   {
     "name": "org.zeroj.bls12381.bulletproofs.G1RangeVerifier",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
+    "allPublicConstructors": true,
+    "allPublicMethods": true,
+    "allPublicFields": true
   }
 ]

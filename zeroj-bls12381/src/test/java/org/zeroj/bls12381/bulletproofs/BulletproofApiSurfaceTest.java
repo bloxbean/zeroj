@@ -116,8 +116,12 @@ class BulletproofApiSurfaceTest {
             members.addAll(Arrays.asList(type.getDeclaredConstructors()));
             for (Executable m : members) {
                 if (!isExposed(m) || m.isSynthetic()) continue;
+                if (m.getName().equals("equals") && m.getParameterCount() == 1) continue;   // Object.equals contract
                 for (Class<?> p : m.getParameterTypes()) {
-                    assertFalse(FORBIDDEN.contains(p), m.toString());
+                    for (Class<?> forbidden : FORBIDDEN) {
+                        // A subtype or a supertype (Object, Random's parents) would carry one too.
+                        assertFalse(forbidden.isAssignableFrom(p) || p.isAssignableFrom(forbidden), m + " takes " + p);
+                    }
                 }
             }
         }

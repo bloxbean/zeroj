@@ -25,7 +25,8 @@ import java.util.Objects;
  * {@code true} (accept), {@code false} (reject: an identity commitment, a zero challenge or a failed
  * check), or a {@link CommitmentFormatException} carrying the class of a format failure. The verdict
  * is a pure function of {@code (V, proof, n, ctx)} and the pinned constants: there is no randomness,
- * clock, I/O or unordered iteration, and the work is fixed by {@code n} (spec §8.4, §13). Both
+ * clock, I/O or unordered iteration, and the work is bounded by a function of {@code n}: every proof
+ * that reaches the checks costs the same, and format failures stop earlier (spec §8.4, §13). Both
  * checks are evaluated separately and deterministically; they are never merged with a random weight
  * (ADR-0061 D5).
  *
@@ -120,12 +121,10 @@ public final class G1RangeVerifier {
         return evaluate(PointCodec.point(v), decoded, ctx).accepted();
     }
 
-    /** Null check, snapshot, then spec §8.1 step 1. The snapshot is the only copy used afterwards. */
+    /** Null check, spec §8.1 step 1 on the caller's array, then a snapshot: the only copy used afterwards. */
     private static byte[] configuration(int bits, byte[] context) {
         Objects.requireNonNull(context, "context");
-        byte[] ctx = context.clone();
-        RangeTranscript.requireConfiguration(bits, ctx);
-        return ctx;
+        return RangeTranscript.configuredContext(bits, context);
     }
 
     /**

@@ -111,7 +111,7 @@ public final class G1RangeProver {
         Objects.requireNonNull(opening, "opening");
         Objects.requireNonNull(context, "context");
         requireProving();
-        byte[] ctx = context.clone();
+        byte[] ctx = RangeTranscript.configuredContext(bits, context);
         refusals(opening, bits, ctx);
         return proveChecked(opening.value(), opening.blinding(), bits, ctx, SystemNonceSource.create(), ChallengeTap.NONE);
     }
@@ -125,7 +125,7 @@ public final class G1RangeProver {
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(nonces, "nonces");
         requireProving();
-        byte[] ctx = context.clone();
+        byte[] ctx = RangeTranscript.configuredContext(bits, context);
         refusals(opening, bits, ctx);
         return proveChecked(opening.value(), opening.blinding(), bits, ctx, nonces, ChallengeTap.NONE);
     }
@@ -155,10 +155,15 @@ public final class G1RangeProver {
      * The proving algorithm of spec §7.1 (after the refusals) to §7.3, for canonical {@code v},
      * {@code γ} and a valid configuration. Package-private so that a test can force an out-of-range
      * value through it (ADR-0061 I6) and force zero challenges ({@code tap}); the public paths always
-     * run the refusals first.
+     * run the refusals first. It still checks the configuration, and needs canonical {@code v},
+     * {@code γ} (the multiplications refuse others). Like the nonce hook, it is a bounded test seam
+     * (spec §7.5): a caller must already hold the opening, and can at worst emit a proof that does not
+     * verify.
      */
     G1RangeProof proveChecked(BigInteger v, BigInteger gamma, int bits, byte[] ctx, NonceSource nonces,
                               ChallengeTap tap) {
+        // Kept even here: no path, public or not, runs with an invalid width or context.
+        RangeTranscript.requireConfiguration(bits, ctx);
         G1Point commitment = secretSum(BulletproofGenerators.g(), v, BulletproofGenerators.h(), gamma);
         if (commitment.isInfinity()) {
             throw new CommitmentFormatException(CommitmentError.INVALID_STATEMENT,
@@ -209,8 +214,8 @@ public final class G1RangeProver {
             }
 
             RangeTranscript t = RangeTranscript.start(n, ctx, commitment);
-            BigInteger y = tap.apply(Challenge.Y, t.absorbPointsSqueeze(a, s));
-            BigInteger z = tap.apply(Challenge.Z, t.challenge());
+            BigInteger y = tapped(tap, Challenge.Y, t.absorbPointsSqueeze(a, s));
+            BigInteger z = tapped(tap, Challenge.Z, t.challenge());
             if (y.signum() == 0 || z.signum() == 0) {
                 return null;
             }
@@ -231,7 +236,7 @@ public final class G1RangeProver {
             if (bigT1.isInfinity() || bigT2.isInfinity()) {
                 return null;
             }
-            BigInteger x = tap.apply(Challenge.X, t.absorbPointsSqueeze(bigT1, bigT2));
+            BigInteger x = tapped(tap, Challenge.X, t.absorbPointsSqueeze(bigT1, bigT2));
             if (x.signum() == 0) {
                 return null;
             }
@@ -245,7 +250,7 @@ public final class G1RangeProver {
                     RangeMath.mul(z2, gamma));
             BigInteger mu = RangeMath.add(alpha, RangeMath.mul(rho, x));
             t.absorbScalars(tHat, tauX, mu);
-            BigInteger xu = tap.apply(Challenge.XU, t.challenge());
+            BigInteger xu = tapped(tap, Challenge.XU, t.challenge());
             if (xu.signum() == 0) {
                 return null;
             }
@@ -344,7 +349,7 @@ public final class G1RangeProver {
                 if (lj.isInfinity() || rj.isInfinity()) {
                     return null;
                 }
-                BigInteger x = tap.apply(Challenge.XJ, t.absorbPointsSqueeze(lj, rj));
+                BigInteger x = tapped(tap, Challenge.XJ, t.absorbPointsSqueeze(lj, rj));
                 if (x.signum() == 0) {
                     return null;
                 }
@@ -380,13 +385,18 @@ public final class G1RangeProver {
 
     /**
      * A test seam over the prover's challenges (ADR-0061 I4): tests force a zero challenge to exercise
-     * the restart rule. It can only make the prover restart or emit a proof that does not verify;
-     * the public paths always use {@link #NONE}.
+     * the restart rule. It can only force zero, so it can only make the prover restart; the public
+     * paths always use {@link #NONE} (spec §7.5).
      */
     interface ChallengeTap {
-        ChallengeTap NONE = (which, value) -> value;
+        ChallengeTap NONE = which -> false;
 
-        BigInteger apply(Challenge which, BigInteger value);
+        /** {@code true} to replace this challenge by zero. It can force zero only, never another value. */
+        boolean forceZero(Challenge which);
+    }
+
+    private static BigInteger tapped(ChallengeTap tap, Challenge which, BigInteger value) {
+        return tap.forceZero(which) ? BigInteger.ZERO : value;
     }
 
     private static final class PureJava {
