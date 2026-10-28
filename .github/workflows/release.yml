@@ -459,6 +459,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Check out first: on a fresh runner, checkout deletes everything already in the workspace,
+      # including anything downloaded before it.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: zeroj-blst/scripts
+
       - name: Download ceremony CLI distributables
         uses: actions/download-artifact@v4
         with:
@@ -467,16 +474,24 @@ jobs:
           merge-multiple: true
 
       # ADR-0062 D6: the SHA-256 of every bundled libblst is attached and recorded in the notes.
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          sparse-checkout: zeroj-blst/scripts
-
       - name: Download blst checksums
         uses: actions/download-artifact@v4
         with:
           name: blst-native-checksums
           path: dist
+
+      # Fail closed if any ceremony-cli.yml asset is missing: fail_on_unmatched_files only checks that
+      # dist/* matches something, which the checksum file alone satisfies.
+      - name: Require the ceremony CLI distributables
+        run: |
+          set -euo pipefail
+          missing=0
+          for asset in linux-x86_64.zip linux-arm64.zip macos-arm64.zip windows-x86_64.zip all.jar; do
+            if ! compgen -G "dist/zeroj-ceremony-*-$asset" > /dev/null; then
+              echo "::error::missing ceremony CLI asset dist/zeroj-ceremony-*-$asset"; missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then ls -la dist; exit 1; fi
 
       - name: Release notes for the bundled native libraries
         run: |

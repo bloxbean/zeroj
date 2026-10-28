@@ -52,7 +52,10 @@ splitting replaces the blinding, F12 fixed); 2026-10-28 (r5: PR #108 review foll
   skips the blst verifier where no `libblst` is bundled (Compatibility). The extracted library is
   deleted right after `dlopen`, and the residual tmpdir risk is documented. Zeroization claims are
   narrowed to what is zeroed. The release builds aarch64 on `ubuntu-22.04-arm`, matching
-  `build-blst.yml`. More negative tests and an independent XOF oversize-DST known answer.
+  `build-blst.yml`. More negative tests and an independent XOF oversize-DST known answer. The
+  GitHub-release job checks out before its artifact downloads (the checkout added in the M6 review ran
+  after the CLI download and would have deleted it), and fails closed unless every ceremony CLI
+  asset is present.
 
 ## Risk classification
 - **R3:** D1 (secret-scalar ladder schedule). It changes how a secret-dependent primitive
