@@ -14,8 +14,9 @@ import java.util.Objects;
  *
  * <p>This provider is correctness-first and portable. Its secret-scalar methods use the
  * module's fixed-schedule Java ladders, but they do not provide a full JVM constant-time
- * guarantee. Production secret-bearing workloads should prefer a native provider with an
- * audited side-channel contract, such as {@code zeroj-blst}.</p>
+ * guarantee. No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
+ * contract (ADR-0062 D2), so secret-bearing generation is offline/isolated only on every
+ * provider.</p>
  */
 public final class PureJavaBls12381Provider implements Bls12381Provider {
     public static final PureJavaBls12381Provider INSTANCE = new PureJavaBls12381Provider();

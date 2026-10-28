@@ -142,10 +142,12 @@ proof vectors against the pure Java, WASM, and blst BLS providers.
 - The default pure Java BLS provider backs that boundary with fixed-schedule
   Jacobian scalar multiplication and fixed-exponent Montgomery-form scalar
   inversion, but it is not a full JVM constant-time guarantee.
-- Production workloads that carry high-value BBS signing keys, proof
-  randomness, or hidden-message scalars should select a native BLS provider with
-  a stronger side-channel contract, such as `zeroj-blst`, via
-  `BbsService.withBlsProvider(...)`.
+- No ZeroJ BLS provider has an evidenced side-channel contract. The
+  `zeroj-blst` provider is native, but ZeroJ has not evaluated blst's scalar
+  multiplication for side channels (ADR-0062 D2). Selecting it via
+  `BbsService.withBlsProvider(...)` does not lift the restriction: signing,
+  key generation and proof generation with high-value keys, proof randomness or
+  hidden-message scalars are offline/isolated only on every provider.
 
 References:
 

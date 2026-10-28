@@ -6,6 +6,9 @@ These `libblst.{so,dylib}` are **built from source** from supranational/blst at 
 (currently **v0.3.15** — the latest release). supranational publishes **no precompiled binaries**
 (source-only), so `zeroj-blst` builds its own — no third-party wrapper, controlled supply chain.
 
+These binaries back the **FFM** binding. The JNI provider/pairing path currently loads a different,
+prebuilt `libblst` from `foundation.icon:blst-java` (ADR-0062 F3/D3).
+
 ## Rebuild locally (for the current OS/arch)
 
 ```bash
@@ -19,15 +22,16 @@ drops it here as `native/<os>/<arch>/libblst.<ext>`.
 
 ## All-platform binaries
 
-> **Releases always rebuild these from source**: the `build-blst-native` stage in
+> **Releases rebuild these from source**: the `build-blst-native` stage in
 > `.github/workflows/release.yml` builds the pinned tag on every platform at tag-release time and
-> injects the results before publishing — released jars never ship the committed dev binaries below.
+> injects the results before publishing. *(ADR-0062 F6: until D6 lands, a missing artifact is
+> silently masked and the committed dev binary would ship.)*
 
 `.github/workflows/build-blst.yml` runs the same script per runner (Linux amd64/aarch64 on
-`ubuntu-22.04`, macOS arm64, + Windows) and assembles the all-platform set that ships in the jar.
+`ubuntu-22.04`, macOS arm64) and assembles the all-platform set that ships in the jar.
 Bump `BLST_TAG` there and in `build-blst.sh` to update the pinned blst version.
 
-Layout: `native/<os>/<arch>/libblst.<ext>` — `<os>` ∈ {linux, mac, windows},
+Layout: `native/<os>/<arch>/libblst.<ext>` — `<os>` ∈ {linux, mac},
 `<arch>` ∈ {amd64, aarch64}. The FFM loader (`BlstFfm`) picks the matching one at runtime. macOS is
 **arm64-only** (GitHub retired the free Intel runner in Dec 2025). blst MSM is opt-in acceleration
 (`zeroj-crypto-blst`); the default prover backend is pure-Java (`G1MsmBackend.PURE_JAVA`), so Intel
