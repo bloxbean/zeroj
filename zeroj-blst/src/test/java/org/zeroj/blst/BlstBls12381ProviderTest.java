@@ -123,4 +123,13 @@ class BlstBls12381ProviderTest {
         assertThrows(IllegalArgumentException.class,
                 () -> BLST.pairingProductIsIdentity(new G1Point[]{BLST.g1Generator()}, new G2Point[0]));
     }
+
+    /** ADR-0062 D7 / I7: an empty product is rejected on every provider. */
+    @Test
+    void pairingProductRejectsEmptyInput() {
+        assertThrows(IllegalArgumentException.class,
+                () -> BLST.pairingProductIsIdentity(new G1Point[0], new G2Point[0]));
+        assertThrows(IllegalArgumentException.class,
+                () -> PURE.pairingProductIsIdentity(new G1Point[0], new G2Point[0]));
+    }
 }

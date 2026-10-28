@@ -129,11 +129,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
 
     @Override
     public boolean pairingProductIsIdentity(G1Point[] g1Points, G2Point[] g2Points) {
-        Objects.requireNonNull(g1Points, "g1Points required");
-        Objects.requireNonNull(g2Points, "g2Points required");
-        if (g1Points.length != g2Points.length) {
-            throw new IllegalArgumentException("Pairing point arrays must have the same length");
-        }
+        Bls12381Provider.requirePairingProductInput(g1Points, g2Points);
 
         PT accumulated = null;
         for (int i = 0; i < g1Points.length; i++) {

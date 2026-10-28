@@ -142,6 +142,43 @@ class BLS12381PairingAdversarialTest {
         }
     }
 
+    /**
+     * ADR-0062 D7: the former vertical-line branch of {@code lineFuncAdd} silently computed a wrong
+     * line for {@code T = Q}. With an order-13 twist point the loop reaches {@code T = 12Q = −Q} at
+     * the third addition step; that must now fail instead of returning a value.
+     */
+    @Test
+    void millerLoop_rejectsAPointThatReachesTEqualsMinusQ() {
+        G2Point q = twistPointOfOrder13();
+        assertTrue(q.isOnCurve());
+        assertFalse(q.isInSubgroup());
+        assertThrows(IllegalArgumentException.class, () -> BLS12381Pairing.millerLoop(G1, q));
+        assertThrows(IllegalArgumentException.class,
+                () -> BLS12381Pairing.pairingCheck(new G1Point[]{G1}, new G2Point[]{q}));
+    }
+
+    /** A point of order 13 on the G2 twist (13² divides the twist cofactor h2). */
+    private static G2Point twistPointOfOrder13() {
+        BigInteger h2 = new BigInteger("5d543a95414e7f1091d50792876a202cd91de4547085abaa68a205b2e5a7ddfa628f1cb4d9e82ef2"
+                + "1537e293a6691ae1616ec6e786f0c70cf1c38e31c7238e5", 16);
+        BigInteger groupOrder = h2.multiply(R);
+        BigInteger thirteen = BigInteger.valueOf(13);
+        Fp2 b = Fp2.of(Fp.of(4), Fp.of(4));
+        for (int x0 = 1; x0 < 1000; x0++) {
+            Fp2 x = Fp2.of(Fp.of(x0), Fp.ZERO);
+            var y = x.square().mul(x).add(b).sqrt();
+            if (y.isEmpty()) {
+                continue;
+            }
+            G2Point t = new G2Point(x, y.get()).scalarMul(groupOrder.divide(thirteen.pow(2)));
+            G2Point q = t.scalarMul(thirteen).isInfinity() ? t : t.scalarMul(thirteen);
+            if (!q.isInfinity() && q.scalarMul(thirteen).isInfinity()) {
+                return q;
+            }
+        }
+        throw new AssertionError("no order-13 twist point found");
+    }
+
     // ---- py_ecc 8.0.0 vectors, ZeroJ layout (see pyecc_gt_kat.py) ----
 
     private static Fp12 pyEccGeneratorPairing() {

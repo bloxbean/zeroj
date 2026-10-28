@@ -64,8 +64,7 @@ public final class PureJavaBls12381Provider implements Bls12381Provider {
 
     @Override
     public boolean pairingProductIsIdentity(G1Point[] g1Points, G2Point[] g2Points) {
-        Objects.requireNonNull(g1Points, "g1Points required");
-        Objects.requireNonNull(g2Points, "g2Points required");
+        Bls12381Provider.requirePairingProductInput(g1Points, g2Points);
         for (G1Point point : g1Points) {
             Bls12381Codecs.requireValid(point);
         }

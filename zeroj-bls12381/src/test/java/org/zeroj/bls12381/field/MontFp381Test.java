@@ -157,4 +157,14 @@ class MontFp381Test {
         RNG.nextBytes(bytes);
         return new BigInteger(1, bytes).mod(P);
     }
+
+    /** ADR-0062 D8: a negative BigInteger exponent used to return a wrong value (pow(-1) = 1). */
+    @Test
+    void powBigInteger_rejectsNegativeExponent() {
+        var a = MontFp381.fromBigInteger(BigInteger.valueOf(42));
+        assertThrows(IllegalArgumentException.class, () -> a.pow(BigInteger.valueOf(-1)));
+        assertThrows(IllegalArgumentException.class, () -> a.pow(BigInteger.valueOf(-3)));
+        assertEquals(BigInteger.valueOf(42).pow(3),
+                a.pow(BigInteger.valueOf(3)).toBigInteger());
+    }
 }
