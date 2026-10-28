@@ -1,8 +1,0 @@
-{
-  "resources": {
-    "includes": [
-      { "pattern": "org/zeroj/blst/native/.*/libblst\\..*" },
-      { "pattern": "org/zeroj/blst/native/libblst\\.sha256" }
-    ]
-  }
-}

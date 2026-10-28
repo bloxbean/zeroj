@@ -1,0 +1,19 @@
+{
+  "resources": [
+    { "glob": "org/zeroj/blst/native/libblst.sha256" },
+    { "glob": "org/zeroj/blst/native/*/*/libblst.*" }
+  ],
+  "foreign": {
+    "downcalls": [
+      { "returnType": "jint",     "parameterTypes": ["void*", "void*"] },
+      { "returnType": "jboolean", "parameterTypes": ["void*"] },
+      { "returnType": "void*",    "parameterTypes": [] },
+      { "returnType": "jlong",    "parameterTypes": ["jlong"] },
+      { "returnType": "void",     "parameterTypes": ["void*", "void*"] },
+      { "returnType": "void",     "parameterTypes": ["void*", "void*", "void*"] },
+      { "returnType": "void",     "parameterTypes": ["void*", "jboolean"] },
+      { "returnType": "void",     "parameterTypes": ["void*", "void*", "void*", "jlong"] },
+      { "returnType": "void",     "parameterTypes": ["void*", "void*", "jlong", "void*", "jlong", "void*"] }
+    ]
+  }
+}

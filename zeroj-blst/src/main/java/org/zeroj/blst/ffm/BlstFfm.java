@@ -17,6 +17,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Java-25 FFM (Panama) foundation for the ZeroJ blst binding (ADR-0029 M6 / Rung B, ADR-0062 D3).
@@ -43,10 +45,14 @@ public final class BlstFfm {
     private static final Arena LIB_ARENA = Arena.ofShared(); // lives for the JVM
     private static final SymbolLookup BLST = loadBlst();
 
+    /** Every descriptor bound so far; tests check it against the native-image foreign metadata. */
+    static final Set<FunctionDescriptor> BOUND_DESCRIPTORS = ConcurrentHashMap.newKeySet();
+
     /** Bind a {@code blst_*} function to a {@link MethodHandle}. */
     public static MethodHandle downcall(String name, FunctionDescriptor descriptor) {
         MemorySegment sym = BLST.find(name)
                 .orElseThrow(() -> new IllegalStateException("libblst symbol not found: " + name));
+        BOUND_DESCRIPTORS.add(descriptor);
         return LINKER.downcallHandle(sym, descriptor);
     }
 
