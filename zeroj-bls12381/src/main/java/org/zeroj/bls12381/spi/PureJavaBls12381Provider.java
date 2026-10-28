@@ -13,10 +13,12 @@ import java.util.Objects;
  * Default provider backed by ZeroJ's pure Java BLS12-381 implementation.
  *
  * <p>This provider is correctness-first and portable. Its secret-scalar methods use the
- * module's blinded fixed-schedule Java ladders (ADR-0062 D1): the operation count does not depend
- * on the scalar, and a fresh blinding factor changes the per-bit pattern on every call. They do not
- * provide a JVM constant-time guarantee (per-bit Java branch, {@code BigInteger}, field reductions,
- * JIT and GC remain variable-time). No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
+ * module's blinded fixed-schedule Java ladders (ADR-0062 D1): for a uniformly distributed secret
+ * the operation count does not depend on the scalar, and a fresh blinding factor changes the
+ * per-bit pattern on every call. Small scalars and scalars close to {@code r} keep a residual
+ * identity-handling channel (ADR-0062 F12). They do not provide a JVM constant-time guarantee
+ * (per-bit Java branch, point special cases, {@code BigInteger}, field reductions, JIT and GC
+ * remain variable-time). No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
  * contract (ADR-0062 D2), so secret-bearing generation is offline/isolated only on every
  * provider.</p>
  */

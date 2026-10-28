@@ -69,19 +69,31 @@ final class SecretLadder {
     /** Uniform {@code m ∈ [M_MIN, M_MAX]} by rejection sampling of {@code SAMPLE_BITS}-bit values. */
     static BigInteger sample(SecureRandom random) {
         byte[] bytes = new byte[SAMPLE_BYTES];
-        int topMask = (1 << (SAMPLE_BITS - 8 * (SAMPLE_BYTES - 1))) - 1;
         try {
             while (true) {
                 random.nextBytes(bytes);
-                bytes[0] &= (byte) topMask;
-                BigInteger u = new BigInteger(1, bytes);
-                if (u.compareTo(M_RANGE) < 0) {
-                    return M_MIN.add(u);
+                BigInteger m = candidate(bytes);
+                if (m != null) {
+                    return m;
                 }
             }
         } finally {
             Arrays.fill(bytes, (byte) 0);
         }
+    }
+
+    /** Number of random bytes per rejection-sampling candidate. */
+    static final int CANDIDATE_BYTES = SAMPLE_BYTES;
+
+    /**
+     * Masks {@code bytes} (big-endian, {@value #CANDIDATE_BYTES} bytes) to {@code SAMPLE_BITS}
+     * bits and returns {@code M_MIN + u}, or {@code null} if {@code u} is outside the range and must
+     * be rejected. Package-private so the mask and acceptance boundary can be tested directly.
+     */
+    static BigInteger candidate(byte[] bytes) {
+        bytes[0] &= (byte) ((1 << (SAMPLE_BITS - 8 * (SAMPLE_BYTES - 1))) - 1);
+        BigInteger u = new BigInteger(1, bytes);
+        return u.compareTo(M_RANGE) < 0 ? M_MIN.add(u) : null;
     }
 
     /**
@@ -95,6 +107,8 @@ final class SecretLadder {
         if (m.compareTo(M_MIN) < 0 || m.compareTo(M_MAX) > 0) {
             throw new IllegalStateException("Blinding factor outside [M_MIN, M_MAX]");
         }
+        ScheduleObserver observer = OBSERVER.get();
+        if (observer != null) observer.blindingFactor(m);
         BigInteger kHat = k.add(m.multiply(R));
         if (kHat.bitLength() != WIDTH) { // unreachable for 0 <= k < r; fail closed regardless
             throw new IllegalStateException("Blinded scalar is not " + WIDTH + " bits");
@@ -117,6 +131,9 @@ final class SecretLadder {
         void doubling();
 
         void specialCase(int bitIndex);
+
+        /** The blinding factor drawn for this call (lets tests check production randomness). */
+        default void blindingFactor(BigInteger m) {}
     }
 
     private static final ThreadLocal<ScheduleObserver> OBSERVER = new ThreadLocal<>();

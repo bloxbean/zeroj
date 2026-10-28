@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.zeroj.bls12381.Bls12381Generators;
 import org.zeroj.bls12381.field.Fp;
 import org.zeroj.bls12381.field.Fp2;
+import org.zeroj.bls12381.field.MontFp2_381;
 import org.zeroj.bls12381.pedersen.G1Pedersen;
 import org.zeroj.bls12381.spi.Bls12381Provider;
 import org.zeroj.bls12381.spi.Bls12381Providers;
@@ -34,10 +35,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>Writing {@code m = q·2^(i+1) + s}, {@code a ≡ ⌊(k + s·r) / 2^(i+1)⌋ (mod r)}, which lies in
  * {@code [0, r)}; it is {@code 0}, {@code r − 1} or {@code (r − 1)/2} only when {@code k} or
- * {@code r − k} is below {@code 2^(i+1)}. So the predicted set is empty whenever
- * {@code min(k, r − k) >= 2^65} ("far" scalars, all but a {@code 2^-189} fraction of {@code [0, r)}),
- * and for the remaining "near" scalars it lies in the last 65 iterations and depends on the low bits
- * of the random {@code m}.</p>
+ * {@code r − k} is at most {@code 2^(i+1)}. Since {@code m < 2^66}, the predicted set is empty
+ * whenever {@code k > 2^66} and {@code r − k > 2^66} ("far" scalars, all but a {@code 2^-188}
+ * fraction of {@code [0, r)}); for the remaining "near" scalars it lies in iterations
+ * {@code i <= 65} and depends on the low bits of the random {@code m}.</p>
  */
 class SecretLadderScheduleTest {
     private static final BigInteger R = G1Point.R;
@@ -61,7 +62,7 @@ class SecretLadderScheduleTest {
             if (isFar(k)) {
                 assertEquals(Set.of(), predicted, "far scalar k=" + k.toString(16));
             } else {
-                assertTrue(predicted.stream().allMatch(i -> i < 65), "near scalar k=" + k.toString(16) + " " + predicted);
+                assertTrue(predicted.stream().allMatch(i -> i <= 65), "near scalar k=" + k.toString(16) + " " + predicted);
             }
             Counter g1 = observe(() -> G1.ctScalarMul(k, () -> m));
             g1.assertFixed("G1 k=" + k.toString(16));
@@ -91,8 +92,8 @@ class SecretLadderScheduleTest {
             for (BigInteger k : List.of(BigInteger.ZERO, R.subtract(BigInteger.ONE))) {
                 Set<Integer> predicted = predictedSpecialIterations(k.add(m.multiply(R)));
                 assertFalse(predicted.isEmpty());
-                // Prefixes a = ⌊k̂/2^(i+1)⌋ below r cannot be ≡ 0 or −1, so only i < 65 can be special.
-                assertTrue(predicted.stream().allMatch(i -> i < 65), "k=" + k + " m=" + m + " " + predicted);
+                // Only the last iterations (i <= 65) can be special for a near scalar.
+                assertTrue(predicted.stream().allMatch(i -> i <= 65), "k=" + k + " m=" + m + " " + predicted);
                 Counter c = observe(() -> G1.ctScalarMul(k, () -> m));
                 c.assertFixed("k=" + k);
                 assertEquals(predicted, c.special);
@@ -122,8 +123,91 @@ class SecretLadderScheduleTest {
     }
 
     private static boolean isFar(BigInteger k) {
-        BigInteger bound = BigInteger.ONE.shiftLeft(65);
-        return k.compareTo(bound) >= 0 && R.subtract(k).compareTo(bound) >= 0;
+        BigInteger bound = BigInteger.ONE.shiftLeft(66);
+        return k.compareTo(bound) > 0 && R.subtract(k).compareTo(bound) > 0;
+    }
+
+    /** Boundary cases from the M5 review: special iterations can reach i = 65. */
+    @Test
+    void boundaryNearScalarsReachIteration65() {
+        BigInteger k = R.subtract(BigInteger.ONE.shiftLeft(65));
+        BigInteger m = new BigInteger("1ffffffffffffffff", 16);
+        assertTrue(m.compareTo(SecretLadder.M_MIN) >= 0 && m.compareTo(SecretLadder.M_MAX) <= 0);
+        Set<Integer> predicted = predictedSpecialIterations(k.add(m.multiply(R)));
+        assertEquals(Set.of(64, 65), predicted);
+        Counter c = observe(() -> G1.ctScalarMul(k, () -> m));
+        c.assertFixed("r - 2^65");
+        assertEquals(predicted, c.special);
+        assertEquals(G1.scalarMul(k), G1.ctScalarMul(k, () -> m));
+
+        BigInteger m65 = BigInteger.ONE.shiftLeft(65);
+        Set<Integer> zero = predictedSpecialIterations(m65.multiply(R));
+        assertTrue(zero.contains(65), zero.toString());
+        assertEquals(zero, observe(() -> G1.ctScalarMul(BigInteger.ZERO, () -> m65)).special);
+        assertFalse(isFar(k));
+    }
+
+    /** Production calls draw a fresh blinding factor each time (a constant m would pass the rest). */
+    @Test
+    void productionCallsUseFreshBlindingFactors() {
+        BigInteger k = BigInteger.valueOf(123456789);
+        Counter first = observe(() -> G1.ctScalarMul(k));
+        Counter second = observe(() -> G1.ctScalarMul(k));
+        Counter viaProvider = observe(() -> Bls12381Providers.pureJava().g2SecretScalarMul(G2, k));
+        assertEquals(1, first.factors.size());
+        assertEquals(1, second.factors.size());
+        assertEquals(1, viaProvider.factors.size());
+        assertNotEquals(first.factors.get(0), second.factors.get(0));
+        assertNotEquals(first.factors.get(0), viaProvider.factors.get(0));
+    }
+
+    @Test
+    void candidateMaskAndAcceptanceBoundary() {
+        BigInteger range = SecretLadder.M_MAX.subtract(SecretLadder.M_MIN).add(BigInteger.ONE);
+        assertEquals(SecretLadder.M_MAX, SecretLadder.candidate(bytes(range.subtract(BigInteger.ONE))));
+        assertNull(SecretLadder.candidate(bytes(range)));
+        assertEquals(SecretLadder.M_MIN, SecretLadder.candidate(bytes(BigInteger.ZERO)));
+        // Bits above the 65-bit candidate width are masked off, not rejected.
+        byte[] high = bytes(BigInteger.ONE);
+        high[0] |= (byte) 0xfe;
+        assertEquals(SecretLadder.M_MIN.add(BigInteger.ONE), SecretLadder.candidate(high));
+    }
+
+    @Test
+    void aThrowingSecureRandomPropagates() {
+        SecureRandom broken = new SecureRandom() {
+            @Override
+            public void nextBytes(byte[] bytes) {
+                throw new IllegalStateException("entropy source failed");
+            }
+        };
+        assertThrows(IllegalStateException.class, () -> SecretLadder.sample(broken));
+    }
+
+    @Test
+    void jacobianLaddersRejectBadInputs() {
+        G2Point torsion = g2PointOutsideSubgroup();
+        var g2Jac = JacobianG2BLS381.fromAffine(
+                MontFp2_381.of(torsion.x().c0().value(), torsion.x().c1().value()),
+                MontFp2_381.of(torsion.y().c0().value(), torsion.y().c1().value()));
+        assertThrows(IllegalArgumentException.class, () -> g2Jac.ctScalarMul(BigInteger.TWO));
+        // (4x, 8y) lies on the isomorphic curve y^2 = x^3 + 256, which has r-torsion: the subgroup
+        // check alone would accept it, the on-curve check rejects it.
+        var g = JacobianG1BLS381.GENERATOR.toAffine();
+        var iso = JacobianG1BLS381.fromAffine(g.xBigInt().multiply(BigInteger.valueOf(4)).mod(Fp.P),
+                g.yBigInt().multiply(BigInteger.valueOf(8)).mod(Fp.P));
+        assertTrue(iso.scalarMul(R).isInfinity(), "the isomorphic point has order r");
+        assertThrows(IllegalArgumentException.class, () -> iso.ctScalarMul(BigInteger.TWO));
+        assertThrows(NullPointerException.class, () -> JacobianG1BLS381.GENERATOR.ctScalarMul(null));
+        assertThrows(NullPointerException.class, () -> G1.ctScalarMul(null));
+    }
+
+    private static byte[] bytes(BigInteger u) {
+        byte[] out = new byte[SecretLadder.CANDIDATE_BYTES];
+        byte[] be = u.toByteArray();
+        int n = Math.min(be.length, out.length);
+        System.arraycopy(be, be.length - n, out, out.length - n, n);
+        return out;
     }
 
     // ---- I1: output identity ----
@@ -292,6 +376,7 @@ class SecretLadderScheduleTest {
     private static final class Counter implements SecretLadder.ScheduleObserver {
         final List<Integer> schedules = new ArrayList<>();
         final Set<Integer> special = new TreeSet<>();
+        final List<BigInteger> factors = new ArrayList<>();
         int additions;
         int doublings;
 
@@ -299,6 +384,7 @@ class SecretLadderScheduleTest {
         @Override public void addition() { additions++; }
         @Override public void doubling() { doublings++; }
         @Override public void specialCase(int bitIndex) { special.add(bitIndex); }
+        @Override public void blindingFactor(BigInteger m) { factors.add(m); }
 
         void assertFixed(String label) {
             assertEquals(List.of(SecretLadder.ITERATIONS), schedules, label);

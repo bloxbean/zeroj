@@ -132,21 +132,29 @@ public final class JacobianG2BLS381 {
      * <p>The scalar is reduced mod {@code r} and blinded to {@code k̂ = k + m·r} with a fresh
      * 64-bit-entropy {@code m}, chosen so that {@code k̂} always has exactly
      * {@value SecretLadder#WIDTH} bits. A Montgomery ladder then runs from {@code (P, 2P)} for
-     * exactly {@value SecretLadder#ITERATIONS} iterations of one addition and one doubling. There
-     * is no zero-scalar early return. This removes the scalar's bit length from the operation
-     * count, and the blinding changes the per-bit pattern on every call.</p>
+     * exactly {@value SecretLadder#ITERATIONS} iterations of one addition and one doubling, with no
+     * zero-scalar early return. For a uniformly distributed secret this removes the scalar's bit
+     * length from the operation count, and the blinding changes the per-bit pattern on every
+     * call.</p>
+     *
+     * <p><b>Residual (ADR-0062 F12).</b> When {@code k} or {@code r − k} is small, an intermediate
+     * ladder value can be the identity and {@code add}/{@code doublePoint} take an early return:
+     * probability about {@code 2^-(bitLength(min(k, r−k)) − 1)} per call, always for
+     * {@code k ≡ 0} and {@code k ≡ −1}. A zero result also skips the inversion in {@code toAffine}.
+     * Low-entropy secrets (for example a Pedersen value in {@code {0, 1}}) are therefore not
+     * protected by this schedule.</p>
      *
      * <p>It is <b>not</b> a JVM constant-time guarantee: the per-bit selection is a Java branch, and
      * {@link BigInteger} arithmetic, field reductions, JIT and GC remain variable-time. Secret-bearing
      * generation stays offline/isolated only.</p>
      *
      * <p>The blinding is correct only for points in the prime-order subgroup, so this method checks
-     * subgroup membership first and rejects any other point. A failure of the randomness source
-     * propagates; there is no unblinded fallback.</p>
+     * that the point is on the curve and in the subgroup, and rejects any other point. A failure
+     * of the randomness source propagates; there is no unblinded fallback.</p>
      *
      * @param scalar any scalar with {@code bitLength() <= 256}; it is reduced mod {@code r}
-     * @throws IllegalArgumentException if the scalar is wider than 256 bits or the point is not in
-     *         the subgroup
+     * @throws IllegalArgumentException if the scalar is wider than 256 bits or the point is not on
+     *         the curve and in the subgroup
      */
     public JacobianG2BLS381 ctScalarMul(BigInteger scalar) {
         Objects.requireNonNull(scalar, "scalar required");
@@ -154,8 +162,10 @@ public final class JacobianG2BLS381 {
             throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
         }
         if (this.isInfinity()) return INFINITY; // the base is public
-        if (!scalarMul(G1Point.R).isInfinity()) {
-            throw new IllegalArgumentException("ctScalarMul base must be in the prime-order subgroup");
+        // On the curve first: the group-law formulas never use b, so without this a point on
+        // another curve with r-torsion would be accepted (ADR-0062 M5 review).
+        if (!toAffine().isOnCurve() || !scalarMul(G1Point.R).isInfinity()) {
+            throw new IllegalArgumentException("ctScalarMul base must be on the curve and in the prime-order subgroup");
         }
         return ctScalarMulInSubgroup(scalar, SecretLadder.SECURE);
     }

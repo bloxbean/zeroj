@@ -92,9 +92,10 @@ public record G2Point(Fp2 x, Fp2 y) {
      * Secret-scalar multiplication {@code [scalar mod r]·this} (ADR-0062 D1).
      *
      * <p>Validates the point (on the curve and in the prime-order subgroup), then runs the
-     * blinded fixed-schedule Jacobian ladder ({@link JacobianG2BLS381#ctScalarMul}): the operation count does
-     * not depend on the scalar, and there is no zero-scalar early return. It is not a JVM
-     * constant-time guarantee; secret-bearing generation stays offline/isolated only.</p>
+     * blinded fixed-schedule Jacobian ladder ({@link JacobianG2BLS381#ctScalarMul}): for a uniformly
+     * distributed secret the operation count does not depend on the scalar. Small scalars and
+     * scalars close to {@code r} keep a residual identity-handling channel (see that method). It is
+     * not a JVM constant-time guarantee; secret-bearing generation stays offline/isolated only.</p>
      *
      * @param scalar any scalar with {@code bitLength() <= 256}; it is reduced mod {@code r}
      * @throws IllegalArgumentException if the point is not valid or the scalar is wider than 256 bits
