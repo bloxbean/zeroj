@@ -7,8 +7,8 @@ These `libblst.{so,dylib}` are **built from source** from supranational/blst, pi
 the tag resolves to any other commit. supranational publishes **no precompiled binaries**
 (source-only), so `zeroj-blst` builds its own — no third-party wrapper, controlled supply chain.
 
-These binaries back the **FFM** binding. The JNI provider/pairing path currently loads a different,
-prebuilt `libblst` from `foundation.icon:blst-java` (ADR-0062 F3/D3).
+These binaries back every native path in `zeroj-blst`: the MSM, the curve/pairing binding and the
+provider (ADR-0062 D3 removed the former prebuilt JNI binary).
 
 ## Rebuild locally (for the current OS/arch)
 

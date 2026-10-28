@@ -27,6 +27,10 @@ and a negative exponent that returned a wrong power.
 | FFM MSM `ScalarEncoder` overloads | a scalar `≥ r` was used as is (bit 255 dropped) | `IllegalArgumentException` (the documented precondition is now enforced) | D4 |
 | FFM MSM with fewer than 32 bases, at least one of them the identity | **wrong result**: blst 0.3.15's small-batch path treats an identity base as a real point and corrupts the whole sum | identity bases are dropped before the native call; the result is correct for every size | F11 |
 | `G1Point.ctScalarMul`, `G2Point.ctScalarMul`, `JacobianG1BLS381.ctScalarMul`, `JacobianG2BLS381.ctScalarMul` (secret ladders) | any curve point was accepted; the ladder leaked the scalar's bit length | the base must be in the prime-order subgroup (otherwise `IllegalArgumentException`); the scalar is reduced mod `r` and blinded, and the ladder runs a fixed 319-iteration schedule. Outputs for valid points are unchanged | D1 |
+| `zeroj-blst` dependencies | `api 'foundation.icon:blst-java:0.3.2'` (a prebuilt third-party JNI `libblst` of unknown version) | removed; the provider, pairing and `Groth16BLS12381Verifier` use the source-built `libblst` through FFM (`org.zeroj.blst.ffm.BlstCurve`) | D3 |
+| `org.zeroj.blst.BlstPairing` | public raw JNI helpers (returned `supranational.blst.PT`; no subgroup check, no scalar reduction) | **removed**; use `BlstBls12381Provider` or the validating `ffm.BlstCurve` | D3, D7 |
+| `zeroj-blst` platforms | the JNI half also covered macOS x86_64 | linux amd64/aarch64 and macOS aarch64 only; use the pure-Java provider elsewhere | D3 |
+| `zeroj-onchain-julc` | depended on `zeroj-blst` for point compression | depends only on pure-Java codecs; `SnarkjsToCardano` also rejects coordinates `≥ p` instead of truncating them | D3 |
 | — | no subgroup check on MSM bases | new `BlstG1Msm.msmValidated` / `BlstG2Msm.msmValidated` check every base; the hot path stays caller-validated | D4 |
 
 No proof format, verification key format, transcript, encoding, circuit or on-chain script
@@ -42,7 +46,10 @@ changes. Julc script hashes are unchanged.
 3. Use a non-empty domain separation tag for every hash-to-curve or hash-to-scalar call.
 4. If you call the raw `BLS12381Pairing` class with untrusted points, validate them first with
    `Bls12381Codecs.requireValid` or the checked decoders, or use a `Bls12381Provider`.
-5. If you call `BlstG1Msm` / `BlstG2Msm` directly, pass exactly one scalar per point and only
+5. If you used `supranational.blst.*` classes through `zeroj-blst`'s transitive dependency, add
+   `foundation.icon:blst-java` to your own build, or move to `BlstBls12381Provider` /
+   `org.zeroj.blst.ffm.BlstCurve`. Replace `BlstPairing` calls with the provider.
+6. If you call `BlstG1Msm` / `BlstG2Msm` directly, pass exactly one scalar per point and only
    uncompressed encodings, and use `msmValidated` for bases you did not validate yourself. If you
    proved small circuits with the blst prover backend (`zeroj-crypto-blst`) before this release,
    a proof whose MSMs had fewer than 32 bases, at least one of them the identity, was computed

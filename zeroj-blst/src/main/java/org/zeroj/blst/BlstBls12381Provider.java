@@ -1,21 +1,26 @@
 package org.zeroj.blst;
 
 import org.zeroj.bls12381.Bls12381Codecs;
-import org.zeroj.bls12381.Bls12381Generators;
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
 import org.zeroj.bls12381.spi.Bls12381Provider;
-import supranational.blst.P1;
-import supranational.blst.P1_Affine;
-import supranational.blst.P2;
-import supranational.blst.P2_Affine;
-import supranational.blst.PT;
+import org.zeroj.blst.ffm.BlstCurve;
 
 import java.math.BigInteger;
-import java.util.Objects;
 
 /**
- * BLS12-381 provider backed by the blst native library.
+ * BLS12-381 provider backed by the source-built {@code libblst}, through the FFM binding
+ * {@link BlstCurve} (ADR-0062 D3). It shares one pinned native library with the FFM MSM.
+ *
+ * <p>Inputs are validated with the pure-Java {@link Bls12381Codecs#requireValid} and results are
+ * decoded with the checked decoders, so this provider accepts and rejects exactly what the
+ * pure-Java provider does (ADR-0062 I8); {@link BlstCurve} validates every encoding again
+ * natively.</p>
+ *
+ * <p><b>Side channels.</b> The secret-scalar methods use a dedicated path (fixed-width scalar,
+ * {@code nbits = 255}, no zero-scalar early return, zeroed temporaries), but any side-channel
+ * property comes from blst's internal scalar multiplication, which ZeroJ has not evaluated
+ * (ADR-0062 D2, Q2). Secret-bearing generation is offline/isolated only on this provider too.</p>
  */
 public final class BlstBls12381Provider implements Bls12381Provider {
     private static final BlstBls12381Provider INSTANCE = new BlstBls12381Provider();
@@ -33,12 +38,12 @@ public final class BlstBls12381Provider implements Bls12381Provider {
 
     @Override
     public G1Point g1Generator() {
-        return decodeG1(P1.generator().serialize());
+        return decodeG1(BlstCurve.g1Generator());
     }
 
     @Override
     public G2Point g2Generator() {
-        return decodeG2(P2.generator().serialize());
+        return decodeG2(BlstCurve.g2Generator());
     }
 
     @Override
@@ -51,9 +56,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
         if (right.isInfinity()) {
             return left;
         }
-        P1 result = new P1(encodeG1(left));
-        result.add(new P1_Affine(encodeG1(right)));
-        return decodeG1(result.serialize());
+        return decodeG1(BlstCurve.g1Add(encodeG1(left), encodeG1(right)));
     }
 
     @Override
@@ -66,9 +69,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
         if (right.isInfinity()) {
             return left;
         }
-        P2 result = new P2(encodeG2(left));
-        result.add(new P2_Affine(encodeG2(right)));
-        return decodeG2(result.serialize());
+        return decodeG2(BlstCurve.g2Add(encodeG2(left), encodeG2(right)));
     }
 
     @Override
@@ -77,9 +78,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
         if (point.isInfinity()) {
             return point;
         }
-        P1 result = new P1(encodeG1(point));
-        result.neg();
-        return decodeG1(result.serialize());
+        return decodeG1(BlstCurve.g1Negate(encodeG1(point)));
     }
 
     @Override
@@ -88,60 +87,57 @@ public final class BlstBls12381Provider implements Bls12381Provider {
         if (point.isInfinity()) {
             return point;
         }
-        P2 result = new P2(encodeG2(point));
-        result.neg();
-        return decodeG2(result.serialize());
+        return decodeG2(BlstCurve.g2Negate(encodeG2(point)));
     }
 
     @Override
     public G1Point g1ScalarMul(G1Point point, BigInteger scalar) {
         point = Bls12381Codecs.requireValid(point);
-        BigInteger reduced = reduceScalar(scalar);
-        if (point.isInfinity() || reduced.signum() == 0) {
+        if (point.isInfinity()) {
             return G1Point.INFINITY;
         }
-        P1 result = new P1(encodeG1(point));
-        result.mult(reduced);
-        return decodeG1(result.serialize());
+        return decodeG1(BlstCurve.g1Mul(encodeG1(point), scalar));
     }
 
     @Override
     public G2Point g2ScalarMul(G2Point point, BigInteger scalar) {
         point = Bls12381Codecs.requireValid(point);
-        BigInteger reduced = reduceScalar(scalar);
-        if (point.isInfinity() || reduced.signum() == 0) {
+        if (point.isInfinity()) {
             return G2Point.INFINITY;
         }
-        P2 result = new P2(encodeG2(point));
-        result.mult(reduced);
-        return decodeG2(result.serialize());
+        return decodeG2(BlstCurve.g2Mul(encodeG2(point), scalar));
     }
 
+    /** Dedicated secret path; see the class Javadoc for what it does and does not claim. */
     @Override
     public G1Point g1SecretScalarMul(G1Point point, BigInteger scalar) {
-        return g1ScalarMul(point, scalar);
+        point = Bls12381Codecs.requireValid(point);
+        if (point.isInfinity()) {
+            return G1Point.INFINITY; // the base is public
+        }
+        return decodeG1(BlstCurve.g1MulSecret(encodeG1(point), scalar));
     }
 
+    /** Dedicated secret path; see the class Javadoc for what it does and does not claim. */
     @Override
     public G2Point g2SecretScalarMul(G2Point point, BigInteger scalar) {
-        return g2ScalarMul(point, scalar);
+        point = Bls12381Codecs.requireValid(point);
+        if (point.isInfinity()) {
+            return G2Point.INFINITY; // the base is public
+        }
+        return decodeG2(BlstCurve.g2MulSecret(encodeG2(point), scalar));
     }
 
     @Override
     public boolean pairingProductIsIdentity(G1Point[] g1Points, G2Point[] g2Points) {
         Bls12381Provider.requirePairingProductInput(g1Points, g2Points);
-
-        PT accumulated = null;
+        byte[][] g1 = new byte[g1Points.length][];
+        byte[][] g2 = new byte[g2Points.length][];
         for (int i = 0; i < g1Points.length; i++) {
-            G1Point g1 = Bls12381Codecs.requireValid(g1Points[i]);
-            G2Point g2 = Bls12381Codecs.requireValid(g2Points[i]);
-            if (g1.isInfinity() || g2.isInfinity()) {
-                continue;
-            }
-            PT term = new PT(new P1_Affine(encodeG1(g1)), new P2_Affine(encodeG2(g2)));
-            accumulated = accumulated == null ? term : BlstPairing.mulMlResult(accumulated, term);
+            g1[i] = encodeG1(Bls12381Codecs.requireValid(g1Points[i]));
+            g2[i] = encodeG2(Bls12381Codecs.requireValid(g2Points[i]));
         }
-        return accumulated == null || BlstPairing.finalVerify(accumulated);
+        return BlstCurve.pairingProductIsOne(g1, g2);
     }
 
     private static byte[] encodeG1(G1Point point) {
@@ -158,10 +154,5 @@ public final class BlstBls12381Provider implements Bls12381Provider {
 
     private static G2Point decodeG2(byte[] bytes) {
         return Bls12381Codecs.g2FromUncompressed(bytes);
-    }
-
-    private static BigInteger reduceScalar(BigInteger scalar) {
-        return Objects.requireNonNull(scalar, "scalar required")
-                .mod(Bls12381Generators.SCALAR_FIELD_ORDER);
     }
 }

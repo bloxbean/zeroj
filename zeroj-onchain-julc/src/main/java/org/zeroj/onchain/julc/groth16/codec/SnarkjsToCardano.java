@@ -2,8 +2,10 @@ package org.zeroj.onchain.julc.groth16.codec;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import supranational.blst.P1_Affine;
-import supranational.blst.P2_Affine;
+import org.zeroj.bls12381.Bls12381Codecs;
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.G2Point;
+import org.zeroj.bls12381.field.Fp;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -11,7 +13,9 @@ import java.util.List;
 
 /**
  * Converts snarkjs JSON decimal coordinate format to BLS12-381 compressed bytes
- * suitable for Cardano on-chain use (UPLC BLS12-381 builtins).
+ * suitable for Cardano on-chain use (UPLC BLS12-381 builtins). Points are validated with the
+ * pure-Java checked decoders (ADR-0062 D3); only affine {@code z = 1} encodings and the
+ * {@code z = 0} identity are accepted (D5).
  * <p>
  * snarkjs format: {@code [x_decimal, y_decimal, "1"]} (projective affine)
  * Cardano format: compressed BLS point bytes (48 for G1, 96 for G2)
@@ -30,9 +34,14 @@ public final class SnarkjsToCardano {
      * @return 48-byte compressed G1 point
      */
     public static byte[] g1Compress(List<BigInteger> coords) {
-        byte[] uncompressed = g1ToUncompressed(coords);
-        var affine = new P1_Affine(uncompressed);
-        return affine.compress();
+        if (coords.size() != 3) {
+            throw new IllegalArgumentException("G1 point must have 3 coordinates");
+        }
+        if (coords.get(2).signum() == 0) {
+            return Bls12381Codecs.g1ToCompressed(G1Point.INFINITY);
+        }
+        // Checked decode (coordinates < p, on curve, in subgroup), then the canonical compression.
+        return Bls12381Codecs.g1ToCompressed(Bls12381Codecs.g1FromUncompressed(g1ToUncompressed(coords)));
     }
 
     /**
@@ -42,9 +51,13 @@ public final class SnarkjsToCardano {
      * @return 96-byte compressed G2 point
      */
     public static byte[] g2Compress(List<List<BigInteger>> coords) {
-        byte[] uncompressed = g2ToUncompressed(coords);
-        var affine = new P2_Affine(uncompressed);
-        return affine.compress();
+        if (coords.size() != 3 || coords.stream().anyMatch(c -> c.size() != 2)) {
+            throw new IllegalArgumentException("G2 point must have 3 coordinates of 2 elements");
+        }
+        if (coords.get(2).get(0).signum() == 0 && coords.get(2).get(1).signum() == 0) {
+            return Bls12381Codecs.g2ToCompressed(G2Point.INFINITY);
+        }
+        return Bls12381Codecs.g2ToCompressed(Bls12381Codecs.g2FromUncompressed(g2ToUncompressed(coords)));
     }
 
     /**
@@ -152,6 +165,10 @@ public final class SnarkjsToCardano {
      * Write a field element as 48-byte big-endian into buffer at offset.
      */
     static void writeFp(byte[] buf, int offset, BigInteger value) {
+        // Reject rather than truncate: a value >= p (or wider than 48 bytes) is not a coordinate.
+        if (value.signum() < 0 || value.compareTo(Fp.P) >= 0) {
+            throw new IllegalArgumentException("Coordinate must be in [0, p)");
+        }
         byte[] bytes = value.toByteArray();
         int srcStart = Math.max(0, bytes.length - FP_SIZE);
         int count = Math.min(bytes.length, FP_SIZE);

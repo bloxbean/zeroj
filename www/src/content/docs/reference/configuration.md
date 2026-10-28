@@ -94,7 +94,7 @@ uses it:
 | Where blst is used | Binding | Pulled in by |
 |---|---|---|
 | Groth16 prover MSM (`BlstProverBackend`) | Java 25 FFM, with a `libblst` built from source (pinned v0.3.15) and bundled in the `zeroj-blst` jar | `zeroj-crypto-blst` |
-| Pairing for `Groth16BLS12381Verifier` (off-chain) and `BlstBls12381Provider` (BBS) | JNI via `foundation.icon:blst-java` | `zeroj-verifier-groth16`, `zeroj-blst` |
+| Pairing for `Groth16BLS12381Verifier` (off-chain) and `BlstBls12381Provider` (BBS) | Java 25 FFM (`ffm.BlstCurve`), the same bundled `libblst` (ADR-0062 D3) | `zeroj-verifier-groth16`, `zeroj-blst` |
 
 How the FFM library is found:
 
