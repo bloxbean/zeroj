@@ -144,12 +144,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Build libblst from source
+        # Pinned by commit hash inside the script (ADR-0062 D6).
         run: zeroj-blst/scripts/build-blst.sh
       - name: Upload native library
         uses: actions/upload-artifact@v4
         with:
           name: blst-native-${{ matrix.os }}-${{ matrix.arch }}
           path: zeroj-blst/src/main/resources/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          if-no-files-found: error
           retention-days: 1
 
   # ================================================================
@@ -211,15 +213,41 @@ jobs:
 
       - name: Place native libraries in resource directories
         run: |
-          # blst (source-built, replaces the committed dev binaries in the released jars)
+          # blst (source-built, replaces the committed dev binaries in the released jars).
+          # ADR-0062 D6: fail closed. A missing or empty artifact must stop the release, never
+          # leave the committed development binary in the published jar.
+          set -euo pipefail
+          : > blst-native-sha256.txt
           for target in linux/amd64 linux/aarch64 mac/aarch64; do
             os=${target%/*}; arch=${target#*/}
-            mkdir -p "zeroj-blst/src/main/resources/native/$target"
-            cp "blst-native-$os-$arch"/* "zeroj-blst/src/main/resources/native/$target/" || true
+            ext=$([ "$os" = mac ] && echo dylib || echo so)
+            src="blst-native-$os-$arch/libblst.$ext"
+            if [ ! -s "$src" ]; then
+              echo "::error::missing or empty source-built blst artifact: $src"
+              exit 1
+            fi
+            dest="zeroj-blst/src/main/resources/native/$target/libblst.$ext"
+            mkdir -p "$(dirname "$dest")"
+            cp "$src" "$dest"
+            cmp -s "$src" "$dest"
+            (cd zeroj-blst/src/main/resources && sha256sum "native/$target/libblst.$ext") >> blst-native-sha256.txt
           done
 
-          echo "=== blst native libraries ==="
-          find zeroj-blst/src/main/resources/native -type f
+          echo "=== blst native libraries (SHA-256) ==="
+          cat blst-native-sha256.txt
+          {
+            echo "### Bundled source-built libblst (SHA-256)"
+            echo '```'
+            cat blst-native-sha256.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload blst checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: blst-native-checksums
+          path: blst-native-sha256.txt
+          if-no-files-found: error
 
       # No Gradle cache here: a cache restored from another run could change what runs next to the
       # signing key and the Central token.
@@ -424,6 +452,23 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # ADR-0062 D6: the SHA-256 of every bundled libblst is attached and recorded in the notes.
+      - name: Download blst checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: blst-native-checksums
+          path: dist
+
+      - name: Release notes for the bundled native libraries
+        run: |
+          set -euo pipefail
+          {
+            echo "### Bundled source-built libblst (supranational/blst v0.3.15, commit 6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c)"
+            echo '```'
+            cat dist/blst-native-sha256.txt
+            echo '```'
+          } > blst-notes.md
+
       # Creates the release for the tag, or adds the assets if it already exists. Do not pre-create a
       # draft release for the tag: the action publishes an existing draft.
       - name: Create GitHub release
@@ -431,6 +476,8 @@ jobs:
         with:
           name: ${{ needs.validate.outputs.version }}
           files: dist/*
+          body_path: blst-notes.md
+          append_body: true
           fail_on_unmatched_files: true
           prerelease: ${{ needs.validate.outputs.is_final != 'true' }}
           # Latest is decided by semantic version and date, so a maintenance release does not take

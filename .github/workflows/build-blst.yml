@@ -9,9 +9,14 @@ on:
         description: "supranational/blst tag to build"
         default: "v0.3.15"
         required: true
+      blst_commit:
+        description: "commit hash the tag must resolve to (ADR-0062 D6)"
+        default: "6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c"
+        required: true
 
 env:
   BLST_TAG: ${{ github.event.inputs.blst_tag || 'v0.3.15' }}
+  BLST_COMMIT: ${{ github.event.inputs.blst_commit || '6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c' }}
 
 jobs:
   build:
@@ -32,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build libblst ${{ env.BLST_TAG }} for ${{ matrix.os }}/${{ matrix.arch }}
-        run: BLST_TAG="${BLST_TAG}" zeroj-blst/scripts/build-blst.sh
+        run: BLST_TAG="${BLST_TAG}" BLST_COMMIT="${BLST_COMMIT}" zeroj-blst/scripts/build-blst.sh
       - uses: actions/upload-artifact@v4
         with:
           name: libblst-${{ matrix.os }}-${{ matrix.arch }}
