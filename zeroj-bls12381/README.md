@@ -42,9 +42,15 @@ hash-to-curve, and public scalar multiplication.
 
 The `g1SecretScalarMul` and `g2SecretScalarMul` provider methods are the
 secret-scalar boundary for protocols that need one. In this module they use
-fixed-schedule Java ladders, but they are not a full JVM constant-time guarantee:
-bit access, branching, point special cases, field reductions, JIT behavior, and
-GC remain outside that guarantee. Production workloads that carry high-value
+blinded fixed-schedule Java ladders (ADR-0062 D1): the scalar is reduced mod `r`
+and blinded to `k + m·r` with a fresh 64-bit-entropy `m` chosen so that the
+blinded scalar always has 320 bits, and a Montgomery ladder runs exactly 319
+iterations from `(P, 2P)`. The operation count therefore does not depend on the
+scalar (the earlier ladder leaked its bit length), and the per-bit pattern
+changes on every call. The base must be in the prime-order subgroup and is
+checked. This is not a JVM constant-time guarantee: the per-bit selection is a
+Java branch, and `BigInteger` arithmetic, field reductions, JIT behavior, and
+GC remain variable-time. Production workloads that carry high-value
 secrets need a provider with an audited side-channel contract. The `zeroj-blst`
 provider is native, but ZeroJ has no evidence of a side-channel contract for its
 binding (its secret-scalar method is its public one), so it does not lift the

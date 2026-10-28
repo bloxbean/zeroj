@@ -26,6 +26,7 @@ and a negative exponent that returned a wrong power.
 | FFM MSM point encodings | a compressed or sort-flagged encoding was passed to blst (a compressed G1 point padded to 96 bytes was accepted, its tail ignored); wrong-length arrays were not checked | `IllegalArgumentException` | D4 |
 | FFM MSM `ScalarEncoder` overloads | a scalar `≥ r` was used as is (bit 255 dropped) | `IllegalArgumentException` (the documented precondition is now enforced) | D4 |
 | FFM MSM with fewer than 32 bases, at least one of them the identity | **wrong result**: blst 0.3.15's small-batch path treats an identity base as a real point and corrupts the whole sum | identity bases are dropped before the native call; the result is correct for every size | F11 |
+| `G1Point.ctScalarMul`, `G2Point.ctScalarMul`, `JacobianG1BLS381.ctScalarMul`, `JacobianG2BLS381.ctScalarMul` (secret ladders) | any curve point was accepted; the ladder leaked the scalar's bit length | the base must be in the prime-order subgroup (otherwise `IllegalArgumentException`); the scalar is reduced mod `r` and blinded, and the ladder runs a fixed 319-iteration schedule. Outputs for valid points are unchanged | D1 |
 | — | no subgroup check on MSM bases | new `BlstG1Msm.msmValidated` / `BlstG2Msm.msmValidated` check every base; the hot path stays caller-validated | D4 |
 
 No proof format, verification key format, transcript, encoding, circuit or on-chain script

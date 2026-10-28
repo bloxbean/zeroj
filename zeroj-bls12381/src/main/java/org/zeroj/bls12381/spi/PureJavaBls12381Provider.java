@@ -13,8 +13,10 @@ import java.util.Objects;
  * Default provider backed by ZeroJ's pure Java BLS12-381 implementation.
  *
  * <p>This provider is correctness-first and portable. Its secret-scalar methods use the
- * module's fixed-schedule Java ladders, but they do not provide a full JVM constant-time
- * guarantee. No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
+ * module's blinded fixed-schedule Java ladders (ADR-0062 D1): the operation count does not depend
+ * on the scalar, and a fresh blinding factor changes the per-bit pattern on every call. They do not
+ * provide a JVM constant-time guarantee (per-bit Java branch, {@code BigInteger}, field reductions,
+ * JIT and GC remain variable-time). No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
  * contract (ADR-0062 D2), so secret-bearing generation is offline/isolated only on every
  * provider.</p>
  */
@@ -50,15 +52,20 @@ public final class PureJavaBls12381Provider implements Bls12381Provider {
                 .scalarMul(reduceScalar(scalar));
     }
 
+    /**
+     * Blinded fixed-schedule ladder (ADR-0062 D1). {@link G1Point#ctScalarMul} validates the point
+     * (on the curve, in the subgroup) and rejects anything else, so it is checked exactly once.
+     */
     @Override
     public G1Point g1SecretScalarMul(G1Point point, BigInteger scalar) {
-        return Bls12381Codecs.requireValid(point)
+        return Objects.requireNonNull(point, "point required")
                 .ctScalarMul(reduceScalar(scalar));
     }
 
+    /** As {@link #g1SecretScalarMul}, over G2. */
     @Override
     public G2Point g2SecretScalarMul(G2Point point, BigInteger scalar) {
-        return Bls12381Codecs.requireValid(point)
+        return Objects.requireNonNull(point, "point required")
                 .ctScalarMul(reduceScalar(scalar));
     }
 

@@ -30,9 +30,9 @@ import java.util.Objects;
  * as the provider is trusted code. Instances are immutable and thread-safe.
  *
  * <h2>Generation is offline/isolated only</h2>
- * Neither provider is constant-time: the pure-Java ladder has a uniform operation schedule but
- * data-dependent branches and {@link BigInteger} arithmetic, and the blst binding documents no
- * side-channel contract. The byte mapping, the blinding sampler and the curve arithmetic run on
+ * Neither provider is constant-time: the pure-Java ladder has a blinded fixed operation schedule
+ * (ADR-0062 D1) but data-dependent branches and {@link BigInteger} arithmetic, and the blst binding
+ * documents no side-channel contract. The byte mapping, the blinding sampler and the curve arithmetic run on
  * secrets with variable-time code. Generate commitments offline or inside an isolated process that
  * performs the complete operation (spec §7, {@code commitment-profiles-v1} §6.2).
  *

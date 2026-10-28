@@ -4,6 +4,7 @@ import org.zeroj.bls12381.field.MontFp381;
 import org.zeroj.bls12381.field.MontFp2_381;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
  * BLS12-381 G2 point in Jacobian coordinates over Fp2.
@@ -125,33 +126,75 @@ public final class JacobianG2BLS381 {
     }
 
     /**
-     * Fixed-schedule scalar multiplication using a Montgomery ladder.
+     * Secret-scalar multiplication {@code [scalar mod r]·this} with a fixed, blinded operation
+     * schedule (ADR-0062 D1).
      *
-     * <p>This keeps a uniform operation schedule, but it is not a JVM constant-time
-     * guarantee: bit access, branching, point special cases, and field reductions remain
-     * variable-time.</p>
+     * <p>The scalar is reduced mod {@code r} and blinded to {@code k̂ = k + m·r} with a fresh
+     * 64-bit-entropy {@code m}, chosen so that {@code k̂} always has exactly
+     * {@value SecretLadder#WIDTH} bits. A Montgomery ladder then runs from {@code (P, 2P)} for
+     * exactly {@value SecretLadder#ITERATIONS} iterations of one addition and one doubling. There
+     * is no zero-scalar early return. This removes the scalar's bit length from the operation
+     * count, and the blinding changes the per-bit pattern on every call.</p>
+     *
+     * <p>It is <b>not</b> a JVM constant-time guarantee: the per-bit selection is a Java branch, and
+     * {@link BigInteger} arithmetic, field reductions, JIT and GC remain variable-time. Secret-bearing
+     * generation stays offline/isolated only.</p>
+     *
+     * <p>The blinding is correct only for points in the prime-order subgroup, so this method checks
+     * subgroup membership first and rejects any other point. A failure of the randomness source
+     * propagates; there is no unblinded fallback.</p>
+     *
+     * @param scalar any scalar with {@code bitLength() <= 256}; it is reduced mod {@code r}
+     * @throws IllegalArgumentException if the scalar is wider than 256 bits or the point is not in
+     *         the subgroup
      */
     public JacobianG2BLS381 ctScalarMul(BigInteger scalar) {
-        if (scalar.signum() == 0) return INFINITY;
-        if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        Objects.requireNonNull(scalar, "scalar required");
         if (scalar.bitLength() > 256) {
             throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
         }
+        if (this.isInfinity()) return INFINITY; // the base is public
+        if (!scalarMul(G1Point.R).isInfinity()) {
+            throw new IllegalArgumentException("ctScalarMul base must be in the prime-order subgroup");
+        }
+        return ctScalarMulInSubgroup(scalar, SecretLadder.SECURE);
+    }
+
+    /**
+     * {@link #ctScalarMul} for a base the caller has already checked to be in the prime-order
+     * subgroup (the {@code G2Point} wrapper validates it). Package-private; the blinding source is a test
+     * seam.
+     */
+    JacobianG2BLS381 ctScalarMulInSubgroup(BigInteger scalar, SecretLadder.BlindingSource source) {
         if (this.isInfinity()) return INFINITY;
+        BigInteger kHat = SecretLadder.blind(scalar.mod(G1Point.R), source);
+        return fixedLadder(kHat);
+    }
 
-        JacobianG2BLS381 r0 = INFINITY;
-        JacobianG2BLS381 r1 = this;
-
-        for (int i = 255; i >= 0; i--) {
+    /**
+     * Montgomery ladder over a {@value SecretLadder#WIDTH}-bit scalar whose top bit is set, from
+     * {@code (P, 2P)}: invariant {@code r1 − r0 = P}, {@code r0 = [prefix]P}. Each iteration does
+     * one addition and one doubling; the bit selects which accumulator receives which result.
+     */
+    private JacobianG2BLS381 fixedLadder(BigInteger kHat) {
+        SecretLadder.ScheduleObserver observer = SecretLadder.observer();
+        if (observer != null) observer.scheduleStarted(SecretLadder.ITERATIONS);
+        JacobianG2BLS381 r0 = this;
+        JacobianG2BLS381 r1 = this.doublePoint();
+        for (int i = SecretLadder.WIDTH - 2; i >= 0; i--) {
             JacobianG2BLS381 sum = r0.add(r1);
-            JacobianG2BLS381 double0 = r0.doublePoint();
-            JacobianG2BLS381 double1 = r1.doublePoint();
-            if (scalar.testBit(i)) {
+            boolean special = observer != null && (r0.isInfinity() || r1.isInfinity() || sum.isInfinity());
+            if (kHat.testBit(i)) {
                 r0 = sum;
-                r1 = double1;
+                r1 = r1.doublePoint();
             } else {
-                r0 = double0;
                 r1 = sum;
+                r0 = r0.doublePoint();
+            }
+            if (observer != null) {
+                observer.addition();
+                observer.doubling();
+                if (special) observer.specialCase(i);
             }
         }
         return r0;
