@@ -7,6 +7,7 @@ import org.zeroj.bls12381.spi.Bls12381Provider;
 import org.zeroj.blst.ffm.BlstCurve;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
  * BLS12-381 provider backed by the source-built {@code libblst}, through the FFM binding
@@ -92,6 +93,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
 
     @Override
     public G1Point g1ScalarMul(G1Point point, BigInteger scalar) {
+        Objects.requireNonNull(scalar, "scalar required");
         point = Bls12381Codecs.requireValid(point);
         if (point.isInfinity()) {
             return G1Point.INFINITY;
@@ -101,6 +103,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
 
     @Override
     public G2Point g2ScalarMul(G2Point point, BigInteger scalar) {
+        Objects.requireNonNull(scalar, "scalar required");
         point = Bls12381Codecs.requireValid(point);
         if (point.isInfinity()) {
             return G2Point.INFINITY;
@@ -111,6 +114,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
     /** Dedicated secret path; see the class Javadoc for what it does and does not claim. */
     @Override
     public G1Point g1SecretScalarMul(G1Point point, BigInteger scalar) {
+        Objects.requireNonNull(scalar, "scalar required");
         point = Bls12381Codecs.requireValid(point);
         if (point.isInfinity()) {
             return G1Point.INFINITY; // the base is public
@@ -121,6 +125,7 @@ public final class BlstBls12381Provider implements Bls12381Provider {
     /** Dedicated secret path; see the class Javadoc for what it does and does not claim. */
     @Override
     public G2Point g2SecretScalarMul(G2Point point, BigInteger scalar) {
+        Objects.requireNonNull(scalar, "scalar required");
         point = Bls12381Codecs.requireValid(point);
         if (point.isInfinity()) {
             return G2Point.INFINITY; // the base is public

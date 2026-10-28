@@ -93,6 +93,12 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
             return VerificationResult.error(
                     VerificationResult.ReasonCode.INTERNAL_ERROR,
                     "Verification error: " + e.getMessage());
+        } catch (LinkageError e) {
+            // No bundled libblst for this platform (or it failed its integrity check): report it
+            // instead of throwing an Error out of the ZkVerifier contract (ADR-0062 M6 review).
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.INTERNAL_ERROR,
+                    "blst native library unavailable: " + e);
         }
     }
 

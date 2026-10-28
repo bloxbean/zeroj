@@ -22,11 +22,12 @@ binary covered it; Intel macOS runners are retired); use the pure-Java provider 
 
 supranational publishes **no precompiled binaries**, so `zeroj-blst` **builds `libblst` from
 source**, pinned to **v0.3.15** by commit hash, and bundles the shared libraries as jar resources.
-The FFM loader (`BlstFfm`) extracts the matching one per platform at runtime. It loads only that
-bundled resource; no system property or `java.library.path` lookup can redirect it.
+The FFM loader (`BlstFfm`) loads only the bundled library for the host, and only if its SHA-256
+matches the bundled manifest `libblst.sha256`; no system property or `java.library.path` lookup is
+used, and an unsupported OS/arch is rejected.
 
 - **Local build / testing + CI + release:** see **[`BUILDING.md`](BUILDING.md)**.
-- Provenance note: [`src/main/resources/native/README.md`](src/main/resources/native/README.md).
+- Provenance note: [`src/main/resources/org/zeroj/blst/native/README.md`](src/main/resources/org/zeroj/blst/native/README.md).
 
 ## Validation and side channels
 

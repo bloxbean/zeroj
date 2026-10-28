@@ -1,63 +1,63 @@
 # Building the native `libblst` for `zeroj-blst`
 
 `zeroj-blst` binds [supranational/blst](https://github.com/supranational/blst) via the Java 25 FFM
-(Panama) API — no JNI, no third-party wrapper. supranational publishes **no precompiled binaries**
-(source-only), so this module **builds `libblst` from source** and bundles the shared libraries as
-jar resources under `src/main/resources/native/<os>/<arch>/libblst.<ext>`. The FFM loader
-(`ffm/BlstFfm`) extracts the one matching the host at runtime and calls the raw `blst_*` C API
-(`blst_p1s_mult_pippenger`, `blst_p2s_mult_pippenger`, …).
+(Panama) API — no JNI, no third-party wrapper or binary (ADR-0062 D3). supranational publishes **no
+precompiled binaries** (source-only), so this module **builds `libblst` from source** and bundles
+the shared libraries as jar resources under
+`src/main/resources/org/zeroj/blst/native/<os>/<arch>/libblst.<ext>`, next to a SHA-256 manifest,
+`libblst.sha256`. The FFM loader (`ffm/BlstFfm`) loads only the bundled library for the host, and
+only if its SHA-256 matches the manifest; it then calls the raw `blst_*` C API.
 
-**Pinned version:** `v0.3.15` — the release GitHub's `releases/latest` points to (v0.3.16 exists but
-is not marked latest). Bump it in **both** `scripts/build-blst.sh` (the `BLST_TAG` default) and
-`.github/workflows/build-blst.yml` (the `blst_tag` input default + `env.BLST_TAG`).
+**Pinned version:** `v0.3.15`, commit `6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c`. The build fails if
+the tag resolves to any other commit (ADR-0062 D6). To bump it, change **both** `DEFAULT_BLST_TAG`
+and `DEFAULT_BLST_COMMIT` in `scripts/build-blst.sh` and the `blst_tag` / `blst_commit` defaults in
+`.github/workflows/build-blst.yml`.
 
 ---
 
-## 1. Local build (host architecture)
-
-For local development you only need your own OS/arch.
+## 1. Local build
 
 ```bash
 # from the repo root
-zeroj-blst/scripts/build-blst.sh                 # builds the pinned tag for this host
-BLST_TAG=v0.3.15 zeroj-blst/scripts/build-blst.sh # or an explicit tag
+zeroj-blst/scripts/build-blst.sh                              # pinned commit, host arch
+BLST_TAG=<tag> BLST_COMMIT=<40-hex> zeroj-blst/scripts/build-blst.sh  # a different pin
+CC=x86_64-linux-gnu-gcc BLST_TARGET_ARCH=amd64 zeroj-blst/scripts/build-blst.sh  # Linux cross build
 ```
 
 **Requirements:** `git` and a C toolchain (`clang` on macOS, `gcc`/`cc` on Linux).
 
-**What it does:** shallow-clones the pinned blst tag, runs blst's own `build.sh` (→ `libblst.a`),
-links the static archive into a shared library that exports all `blst_*` symbols (macOS:
-`-Wl,-all_load`; Linux: `-Wl,--whole-archive`), and writes it to
-`zeroj-blst/src/main/resources/native/<os>/<arch>/libblst.<ext>`.
+**What it does:** shallow-clones the pinned blst tag, checks `git rev-parse HEAD` against the pinned
+commit, runs blst's own `build.sh` (→ `libblst.a`), links the static archive into a shared library
+exporting all `blst_*` symbols (macOS: `-Wl,-all_load`; Linux: `-Wl,--whole-archive`), writes it to
+`src/main/resources/org/zeroj/blst/native/<os>/<arch>/libblst.<ext>`, and regenerates
+`libblst.sha256` with `scripts/update-blst-manifest.sh`.
 
-> The local script builds **only the host arch**. The other platforms' binaries come from CI
-> (section 2). So after a local build, only your platform's bundled binary is fresh.
+The Linux libraries can be built on a Mac with Docker (`ubuntu:22.04`, glibc 2.35 baseline): run the
+script natively in a `linux/arm64` container for aarch64, and cross-compile amd64 in the same
+container with `gcc-x86-64-linux-gnu` as shown above.
 
 ### Verify the build
 
 ```bash
-# symbols present (macOS example; use `nm -D` on Linux)
-nm -gU zeroj-blst/src/main/resources/native/mac/aarch64/libblst.dylib | grep pippenger
+nm -gU zeroj-blst/src/main/resources/org/zeroj/blst/native/mac/aarch64/libblst.dylib | grep pippenger
+# (use `nm -D` on Linux)
 
-# run the FFM binding tests against the freshly-built binary (correctness, differential vs pure-Java)
-./gradlew :zeroj-crypto:test --tests '*BlstFfmMsmTest' --tests '*BlstG2MsmTest' \
-                             --tests '*BlstProverBenchTest.blstBackedProof_equalsPureJava'
+# provenance gate (manifest, no JNI symbols), binding and MSM tests
+./gradlew :zeroj-blst:test :zeroj-crypto-blst:test
 
 # opt-in timing (blst MSM / full-prove speedup)
-./gradlew :zeroj-crypto:blstSpike
+./gradlew :zeroj-crypto-blst:blstBench
 ```
 
-(The blst FFM tests live in `zeroj-crypto` with a **test-only** dependency on `zeroj-blst`, so the
-main module stays JNI/native-free by default.)
+`BundledLibblstProvenanceTest` fails if a bundled library is missing from the manifest, does not
+match it, or carries the JNI symbols of the former `foundation.icon:blst-java` binary.
 
 ---
 
 ## 2. CI build (all platforms)
 
-`.github/workflows/build-blst.yml` builds `libblst` for every target using the **same**
-`build-blst.sh`, so local and CI builds are identical.
-
-**Matrix:**
+`.github/workflows/build-blst.yml` builds `libblst` for every target with the **same**
+`build-blst.sh`.
 
 | runner | os / arch |
 |---|---|
@@ -65,51 +65,34 @@ main module stays JNI/native-free by default.)
 | `ubuntu-22.04-arm` | linux / aarch64 |
 | `macos-14` | mac / aarch64 |
 
-> Linux runners are pinned to **22.04** (glibc 2.35) so the shared libraries load on older
-> distros. macOS is **arm64-only** — GitHub retired the free Intel runner (`macos-13`) in Dec 2025.
+Linux runners are pinned to **22.04** (glibc 2.35) so the shared libraries load on older distros.
+macOS is **arm64-only**: GitHub retired the free Intel runner. There is no Windows or macOS x86_64
+library; `BlstFfm` rejects those platforms and the pure-Java provider applies.
 
-Each `build` job runs `build-blst.sh` and uploads its `libblst.*` as an artifact
-(`libblst-<os>-<arch>`). The `assemble` job downloads all of them into the
-`resources/native/<os>/<arch>/` tree and uploads a single **`libblst-all-platforms`** artifact — the
-complete native set that ships in the jar.
+Each `build` job removes the committed library, runs `build-blst.sh` and uploads `libblst.*` as
+`libblst-<os>-<arch>`. The `assemble` job stages all of them, regenerates the manifest, and uploads
+**`libblst-all-platforms`** (libraries plus `libblst.sha256`).
 
-> Windows (`.dll`) is a documented follow-up: blst's `build.sh` runs under MSYS2/git-bash but needs
-> different link flags. Add a `windows-latest` matrix entry + a Windows branch in `build-blst.sh`.
+The tag release (`release.yml`) rebuilds every library from source and fails if any artifact is
+missing or empty; it regenerates the manifest and records each SHA-256 in the GitHub release.
 
 ---
 
-## 3. Triggering for a release
+## 3. Refreshing the committed binaries
 
-The workflow is **manual** (`workflow_dispatch`):
-
-1. GitHub → **Actions** → **build-blst** → **Run workflow**.
-2. Set **`blst_tag`** (default `v0.3.15`) to the blst version you want.
-3. Run. When it finishes, download the **`libblst-all-platforms`** artifact.
-4. Unzip it into `zeroj-blst/src/main/resources/native/` (preserving the `<os>/<arch>/` layout),
-   **commit** the refreshed binaries, and cut the `zeroj-blst` release. (Alternatively, wire the
-   `assemble` job to attach the set to a GitHub release or open a PR — see the comment in the
-   workflow.)
-
-To **bump the pinned blst version** for good: change `BLST_TAG` in `scripts/build-blst.sh` and the
-defaults in `build-blst.yml`, run the workflow, and commit the new binaries. Note it in
-`src/main/resources/native/README.md`.
+1. GitHub → **Actions** → **build-blst** → **Run workflow** (defaults are the pinned tag and commit).
+2. Download **`libblst-all-platforms`** and unzip it into
+   `zeroj-blst/src/main/resources/org/zeroj/blst/native/`, preserving `<os>/<arch>/`.
+3. Run `zeroj-blst/scripts/update-blst-manifest.sh` and `./gradlew :zeroj-blst:test`, then commit
+   the binaries and the manifest together.
 
 ---
 
 ## 4. GraalVM native image
 
-FFM downcalls use constant `FunctionDescriptor`s, so GraalVM registers the downcall stubs at build
-time. The bundled config in
-`src/main/resources/META-INF/native-image/com.bloxbean.cardano/zeroj-blst/`:
-
-- `native-image.properties` — `--enable-native-access=ALL-UNNAMED` + `-H:IncludeResources` so the
-  `libblst` binaries are embedded (and extracted at runtime).
-- `resource-config.json` — the resource include patterns.
-
-If a native-image build reports missing Foreign API support, add (experimental):
-`-H:+UnlockExperimentalVMOptions -H:+ForeignAPISupport`. On a **plain JVM**, only
-`--enable-native-access=ALL-UNNAMED` is needed at run time. A full native-image build is a heavy
-CI/manual validation step — not part of the unit-test loop.
+The bundled config is in `src/main/resources/META-INF/native-image/org.zeroj/zeroj-blst/`. See
+`native-image.properties` there for the flags and the status of native-image verification
+(ADR-0062 M8).
 
 ---
 
@@ -117,12 +100,15 @@ CI/manual validation step — not part of the unit-test loop.
 
 ```
 zeroj-blst/
-  scripts/build-blst.sh                      # local + CI build script (pinned BLST_TAG)
-  src/main/java/.../blst/ffm/
-    BlstFfm.java                              # FFM loader (extract + SymbolLookup)
-    BlstG1Msm.java, BlstG2Msm.java            # blst_p1s/p2s_mult_pippenger bindings
-  src/main/resources/native/<os>/<arch>/libblst.<ext>   # bundled binaries (from source)
-  src/main/resources/native/README.md        # provenance
-  src/main/resources/META-INF/native-image/... # GraalVM config
-.github/workflows/build-blst.yml             # CI matrix + assemble
+  scripts/build-blst.sh                    # local + CI build (pinned tag + commit)
+  scripts/update-blst-manifest.sh          # regenerates libblst.sha256
+  src/main/java/org/zeroj/blst/ffm/
+    BlstFfm.java                           # loader (manifest check, owner-only temp dir, SymbolLookup)
+    BlstCurve.java                         # validated point arithmetic + pairing
+    BlstG1Msm.java, BlstG2Msm.java         # blst_p1s/p2s_mult_pippenger bindings
+  src/main/resources/org/zeroj/blst/native/<os>/<arch>/libblst.<ext>   # bundled binaries
+  src/main/resources/org/zeroj/blst/native/libblst.sha256              # manifest
+  src/main/resources/org/zeroj/blst/native/README.md                   # provenance
+  src/main/resources/META-INF/native-image/org.zeroj/zeroj-blst/       # GraalVM config
+.github/workflows/build-blst.yml           # CI matrix + assemble
 ```

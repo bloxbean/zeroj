@@ -98,15 +98,15 @@ uses it:
 
 How the FFM library is found:
 
-- There is **no path setting**. `BlstFfm` picks `/native/<os>/<arch>/libblst.<ext>` from the jar
-  (`os` is `linux`, `mac` or `windows`; `arch` is `amd64` or `aarch64`, with `x86_64` on macOS),
-  copies it to a temp file named `libblst-zeroj-*`, and loads it. The JVM needs a writable temp
-  directory.
+- There is **no path setting**. `BlstFfm` picks `/org/zeroj/blst/native/<os>/<arch>/libblst.<ext>`
+  from the jar (linux amd64/aarch64, macOS aarch64), checks its SHA-256 against the bundled
+  manifest `libblst.sha256`, writes it into a new owner-only temp directory `zeroj-blst-*`, and
+  loads it. The JVM needs a writable temp directory.
 - Release builds rebuild the bundled binaries from source for each supported platform. macOS is
-  **arm64-only**: Intel Macs can't use the blst prover backend but work normally on the pure-Java
-  default.
-- If your platform has no bundled binary, the first blst MSM call fails with an error containing
-  `Bundled libblst not found for this platform`. Stay on the pure-Java path.
+  **arm64-only**: Intel Macs can't use blst but work normally on the pure-Java default.
+- On any other platform the first blst call fails with an error saying zeroj-blst has no libblst
+  for that OS or architecture; the blst Groth16 verifier reports this as `INTERNAL_ERROR`. Use the
+  pure-Java path there.
 - FFM downcalls need native access enabled:
 
 ```bash

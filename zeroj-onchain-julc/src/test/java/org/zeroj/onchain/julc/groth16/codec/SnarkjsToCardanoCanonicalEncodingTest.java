@@ -3,6 +3,8 @@ package org.zeroj.onchain.julc.groth16.codec;
 import org.junit.jupiter.api.Test;
 import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.Bls12381Generators;
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.G2Point;
 import org.zeroj.bls12381.field.Fp;
 
 import java.math.BigInteger;
@@ -37,5 +39,26 @@ class SnarkjsToCardanoCanonicalEncodingTest {
                 SnarkjsToCardano.g2Compress(List.of(x, y, List.of(BigInteger.ONE, BigInteger.ZERO))));
         assertThrows(IllegalArgumentException.class, () -> SnarkjsToCardano.g2Compress(
                 List.of(x, y, List.of(BigInteger.TWO, BigInteger.ZERO))));
+    }
+
+    /** ADR-0062 M6 review: only the canonical identity encoding is accepted for z = 0. */
+    @Test
+    void onlyTheCanonicalIdentityIsAccepted() {
+        assertArrayEquals(Bls12381Codecs.g1ToCompressed(G1Point.INFINITY),
+                SnarkjsToCardano.g1Compress(List.of(BigInteger.ZERO, BigInteger.ONE, BigInteger.ZERO)));
+        assertThrows(IllegalArgumentException.class,
+                () -> SnarkjsToCardano.g1Compress(List.of(G1X, G1Y, BigInteger.ZERO)));
+        var zero = List.of(BigInteger.ZERO, BigInteger.ZERO);
+        var one = List.of(BigInteger.ONE, BigInteger.ZERO);
+        assertArrayEquals(Bls12381Codecs.g2ToCompressed(G2Point.INFINITY),
+                SnarkjsToCardano.g2Compress(List.of(zero, one, zero)));
+        assertThrows(IllegalArgumentException.class,
+                () -> SnarkjsToCardano.g2Compress(List.of(one, one, zero)));
+    }
+
+    @Test
+    void coordinatesAtOrAboveTheModulusAreRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SnarkjsToCardano.g1Compress(List.of(G1X.add(Fp.P), G1Y, BigInteger.ONE)));
     }
 }

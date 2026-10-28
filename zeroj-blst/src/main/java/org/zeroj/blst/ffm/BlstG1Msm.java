@@ -110,7 +110,9 @@ public final class BlstG1Msm {
      * <p>Each scalar is reduced mod {@code r}. Each point must be a 96-byte uncompressed encoding
      * without the compression or sort flag; blst checks that it is on the curve. Bases are
      * <b>not</b> subgroup-checked on this hot path, so the caller must supply validated points or
-     * use {@link #msmValidated} (ADR-0062 D4).</p>
+     * use {@link #msmValidated} (ADR-0062 D4). With a base outside the subgroup the result is
+     * undefined: for fewer than 32 points a small-order base can corrupt the whole sum, not just add
+     * a torsion component.</p>
      *
      * @param uncompressedPoints {@code n} points, each 96 bytes (big-endian x‖y, {@code 0x40} = infinity)
      * @param scalars            exactly {@code n} scalars

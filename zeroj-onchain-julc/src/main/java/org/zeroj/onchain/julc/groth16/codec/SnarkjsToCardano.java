@@ -38,6 +38,10 @@ public final class SnarkjsToCardano {
             throw new IllegalArgumentException("G1 point must have 3 coordinates");
         }
         if (coords.get(2).signum() == 0) {
+            // Only the canonical identity [0, 1, 0]; any other z = 0 triple is malformed.
+            if (coords.get(0).signum() != 0 || !coords.get(1).equals(BigInteger.ONE)) {
+                throw new IllegalArgumentException("G1 identity must be encoded as [0, 1, 0]");
+            }
             return Bls12381Codecs.g1ToCompressed(G1Point.INFINITY);
         }
         // Checked decode (coordinates < p, on curve, in subgroup), then the canonical compression.
@@ -55,6 +59,11 @@ public final class SnarkjsToCardano {
             throw new IllegalArgumentException("G2 point must have 3 coordinates of 2 elements");
         }
         if (coords.get(2).get(0).signum() == 0 && coords.get(2).get(1).signum() == 0) {
+            // Only the canonical identity [[0, 0], [1, 0], [0, 0]].
+            if (!coords.get(0).equals(List.of(BigInteger.ZERO, BigInteger.ZERO))
+                    || !coords.get(1).equals(List.of(BigInteger.ONE, BigInteger.ZERO))) {
+                throw new IllegalArgumentException("G2 identity must be encoded as [[0, 0], [1, 0], [0, 0]]");
+            }
             return Bls12381Codecs.g2ToCompressed(G2Point.INFINITY);
         }
         return Bls12381Codecs.g2ToCompressed(Bls12381Codecs.g2FromUncompressed(g2ToUncompressed(coords)));
