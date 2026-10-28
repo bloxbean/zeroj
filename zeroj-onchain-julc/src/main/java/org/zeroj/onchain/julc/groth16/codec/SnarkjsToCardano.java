@@ -18,8 +18,6 @@ import java.util.List;
  */
 public final class SnarkjsToCardano {
 
-    private static final BigInteger BLS12_381_P = new BigInteger(
-            "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787");
     private static final int FP_SIZE = 48;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -110,18 +108,14 @@ public final class SnarkjsToCardano {
         byte[] result = new byte[FP_SIZE * 2]; // 96 bytes
         if (z.signum() == 0) return result;
 
-        BigInteger xAff, yAff;
-        if (z.equals(BigInteger.ONE)) {
-            xAff = x;
-            yAff = y;
-        } else {
-            BigInteger zInv = z.modInverse(BLS12_381_P);
-            xAff = x.multiply(zInv).mod(BLS12_381_P);
-            yAff = y.multiply(zInv).mod(BLS12_381_P);
+        // ADR-0062 D5: snarkjs emits affine points (z = 1); a rescaled projective encoding is
+        // rejected rather than normalised, as in the off-chain verifiers.
+        if (!z.equals(BigInteger.ONE)) {
+            throw new IllegalArgumentException("G1 point must be affine (z = 1)");
         }
 
-        writeFp(result, 0, xAff);
-        writeFp(result, FP_SIZE, yAff);
+        writeFp(result, 0, x);
+        writeFp(result, FP_SIZE, y);
         return result;
     }
 
@@ -143,8 +137,7 @@ public final class SnarkjsToCardano {
         if (zc0.signum() == 0 && zc1.signum() == 0) return result;
 
         if (!zc0.equals(BigInteger.ONE) || zc1.signum() != 0) {
-            throw new UnsupportedOperationException(
-                    "G2 point with non-trivial z requires Fp2 inversion (snarkjs always outputs z=[1,0])");
+            throw new IllegalArgumentException("G2 point must be affine (z = (1, 0))");
         }
 
         // blst ordering: imaginary (c1) first, then real (c0)

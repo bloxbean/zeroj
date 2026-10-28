@@ -155,25 +155,19 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
         requireFp(label + ".y", y);
         requireFp(label + ".z", z);
 
-        // Convert from projective to affine
-        if (z.equals(BigInteger.ZERO)) {
+        // ADR-0062 D5: one accepted encoding per point. z = 0 keeps its infinity message; any
+        // other z != 1 is a rescaled projective encoding of the same point and is rejected.
+        if (z.signum() == 0) {
             throw new IllegalArgumentException(label + " must not be point at infinity");
         }
-
-        BigInteger xAffine, yAffine;
-        if (z.equals(BigInteger.ONE)) {
-            xAffine = x;
-            yAffine = y;
-        } else {
-            var zInv = z.modInverse(BLS12_381_P);
-            xAffine = x.multiply(zInv).mod(BLS12_381_P);
-            yAffine = y.multiply(zInv).mod(BLS12_381_P);
+        if (!z.equals(BigInteger.ONE)) {
+            throw new IllegalArgumentException(label + " must be affine (z = 1)");
         }
 
         // Serialize as uncompressed: 96 bytes = x (48 bytes) + y (48 bytes), big-endian
         var result = new byte[FP_SIZE * 2];
-        writeFp(result, 0, xAffine);
-        writeFp(result, FP_SIZE, yAffine);
+        writeFp(result, 0, x);
+        writeFp(result, FP_SIZE, y);
         return result;
     }
 
@@ -216,24 +210,17 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
             throw new IllegalArgumentException(label + " must not be point at infinity");
         }
 
-        BigInteger xc0Affine, xc1Affine, yc0Affine, yc1Affine;
-        if (zIsOne) {
-            xc0Affine = xc0;
-            xc1Affine = xc1;
-            yc0Affine = yc0;
-            yc1Affine = yc1;
-        } else {
-            // Fp2 inversion needed — complex, but snarkjs always outputs z=[1,0]
-            throw new UnsupportedOperationException("Non-trivial z coordinate in G2 not supported");
+        if (!zIsOne) {
+            throw new IllegalArgumentException(label + " must be affine (z = (1, 0))");
         }
 
         // blst G2 serialization: 192 bytes = x_c1 (48) + x_c0 (48) + y_c1 (48) + y_c0 (48)
         // Note: blst uses c1 first (imaginary), then c0 (real) for Fp2
         var result = new byte[FP_SIZE * 4];
-        writeFp(result, 0, xc1Affine);
-        writeFp(result, FP_SIZE, xc0Affine);
-        writeFp(result, FP_SIZE * 2, yc1Affine);
-        writeFp(result, FP_SIZE * 3, yc0Affine);
+        writeFp(result, 0, xc1);
+        writeFp(result, FP_SIZE, xc0);
+        writeFp(result, FP_SIZE * 2, yc1);
+        writeFp(result, FP_SIZE * 3, yc0);
         return result;
     }
 
