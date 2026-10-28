@@ -30,9 +30,10 @@ import java.util.Objects;
  * as the provider is trusted code. Instances are immutable and thread-safe.
  *
  * <h2>Generation is offline/isolated only</h2>
- * Neither provider is constant-time: the pure-Java ladder has a uniform operation schedule but
- * data-dependent branches and {@link BigInteger} arithmetic, and the blst binding documents no
- * side-channel contract. The byte mapping, the blinding sampler and the curve arithmetic run on
+ * Neither provider is constant-time: the pure-Java ladders split each scalar and run a fixed
+ * operation schedule (ADR-0062 D1), and generation splits the committed value so small values run
+ * the same operations as random ones, but data-dependent branches and {@link BigInteger} arithmetic
+ * remain, and the blst binding documents no side-channel contract. The byte mapping, the blinding sampler and the curve arithmetic run on
  * secrets with variable-time code. Generate commitments offline or inside an isolated process that
  * performs the complete operation (spec §7, {@code commitment-profiles-v1} §6.2).
  *
@@ -334,19 +335,35 @@ public final class G1Pedersen {
         }
     }
 
+    /** Randomness for the split of the committed value in {@link #generate}. */
+    private static final ThreadLocal<SecureRandom> SPLIT_RANDOM = ThreadLocal.withInitial(SecureRandom::new);
+
     /**
      * {@code [x]·G + [r]·H} through the provider's secret-scalar method only, for canonical
-     * {@code x, r}. Each provider result must be a finite-or-identity point on the curve (field
-     * arithmetic only), and the public sum must be a valid subgroup point. So a misbehaving provider
-     * can never produce a commitment that strict decoding would reject, nor two off-curve points that
-     * cancel; the full subgroup check runs once, on the public sum rather than on the secret-derived
-     * components. A valid but wrong point is not detectable here; provider parity rests on the
-     * vectors and the parity tests.
+     * {@code x, r}.
+     *
+     * <p>The committed value is split (ADR-0062 D1 r4, F12): with a fresh uniform {@code t},
+     * {@code C = ([x − t]·G + [r]·H) + [t]·G}. Each multiplication then sees a uniform scalar, and no
+     * intermediate point depends on {@code x} being small: computing {@code [x]·G} directly would make
+     * it the identity for {@code x = 0}, and the following affine addition would return early. The
+     * result is the same point; generation costs three secret multiplications instead of two. A
+     * caller-chosen blinding {@code r = 0} still yields an identity {@code [r]·H} (such a commitment
+     * hides nothing anyway).</p>
+     *
+     * <p>Each provider result must be a finite-or-identity point on the curve (field arithmetic
+     * only), and the public sum must be a valid subgroup point. So a misbehaving provider can never
+     * produce a commitment that strict decoding would reject, nor off-curve points that cancel; the
+     * full subgroup check runs once, on the public sum rather than on the secret-derived components.
+     * A valid but wrong point is not detectable here; provider parity rests on the vectors and the
+     * parity tests.</p>
      */
     private G1Point generate(BigInteger x, BigInteger r) {
-        G1Point xg = onCurve(provider.g1SecretScalarMul(G1PedersenBases.G, G1PedersenStrict.requireMultipliable(x)));
+        BigInteger t = randomBlinding(SPLIT_RANDOM.get());
+        BigInteger xMinusT = x.subtract(t).mod(G1PedersenStrict.Q);
+        G1Point a = onCurve(provider.g1SecretScalarMul(G1PedersenBases.G, G1PedersenStrict.requireMultipliable(xMinusT)));
         G1Point rh = onCurve(provider.g1SecretScalarMul(G1PedersenBases.H, G1PedersenStrict.requireMultipliable(r)));
-        G1Point sum = xg.add(rh);
+        G1Point tg = onCurve(provider.g1SecretScalarMul(G1PedersenBases.G, G1PedersenStrict.requireMultipliable(t)));
+        G1Point sum = a.add(rh).add(tg);
         if (!sum.isValid()) {
             throw new IllegalStateException("provider " + provider.id() + " returned an invalid G1 point");
         }

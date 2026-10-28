@@ -12,6 +12,11 @@ package org.zeroj.bls12381.field;
  * <p>Purpose: let the MSM / point hot loop and the packed proving key operate on flat arrays with
  * reused scratch buffers, eliminating the per-op {@link MontFp381} object allocation that is the
  * prover's memory ceiling (ADR-0029 M0 finding).</p>
+ *
+ * <p><b>Precondition:</b> every input must be a canonical Montgomery element (limbs encode a value
+ * {@code < p}). The operations do not check this; a non-canonical input can produce a
+ * non-canonical or wrong result. Build elements only through {@link MontFp381} or from outputs of
+ * this class (ADR-0062 D8).</p>
  */
 public final class FpArith381 {
 

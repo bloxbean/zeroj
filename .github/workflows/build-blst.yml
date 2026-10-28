@@ -1,7 +1,8 @@
 name: build-blst
 
 # ADR-0029 M9 — build libblst from source for every platform (supranational ships no binaries).
-# Manual/dispatch: produces the all-platform native set for zeroj-blst. Bump BLST_TAG to update.
+# Manual/dispatch: produces the all-platform native set for zeroj-blst. Bump BLST_TAG and BLST_COMMIT
+# together to update (ADR-0062 D6).
 on:
   workflow_dispatch:
     inputs:
@@ -9,9 +10,14 @@ on:
         description: "supranational/blst tag to build"
         default: "v0.3.15"
         required: true
+      blst_commit:
+        description: "commit hash the tag must resolve to (ADR-0062 D6)"
+        default: "6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c"
+        required: true
 
 env:
   BLST_TAG: ${{ github.event.inputs.blst_tag || 'v0.3.15' }}
+  BLST_COMMIT: ${{ github.event.inputs.blst_commit || '6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c' }}
 
 jobs:
   build:
@@ -32,11 +38,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build libblst ${{ env.BLST_TAG }} for ${{ matrix.os }}/${{ matrix.arch }}
-        run: BLST_TAG="${BLST_TAG}" zeroj-blst/scripts/build-blst.sh
+        run: |
+          rm -f zeroj-blst/src/main/resources/org/zeroj/blst/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          BLST_TAG="${BLST_TAG}" BLST_COMMIT="${BLST_COMMIT}" zeroj-blst/scripts/build-blst.sh
       - uses: actions/upload-artifact@v4
         with:
           name: libblst-${{ matrix.os }}-${{ matrix.arch }}
-          path: zeroj-blst/src/main/resources/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          path: zeroj-blst/src/main/resources/org/zeroj/blst/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
           if-no-files-found: error
 
   # Assemble the all-platform set (download each artifact into the resource tree). Commit or attach
@@ -54,14 +62,17 @@ jobs:
           set -euo pipefail
           for d in /tmp/blst-libs/libblst-*; do
             name="$(basename "$d")"; os="${name#libblst-}"; os="${os%-*}"; arch="${name##*-}"
-            mkdir -p "zeroj-blst/src/main/resources/native/$os/$arch"
-            cp "$d"/libblst.* "zeroj-blst/src/main/resources/native/$os/$arch/"
+            mkdir -p "zeroj-blst/src/main/resources/org/zeroj/blst/native/$os/$arch"
+            cp "$d"/libblst.* "zeroj-blst/src/main/resources/org/zeroj/blst/native/$os/$arch/"
           done
-          find zeroj-blst/src/main/resources/native -name 'libblst.*' -printf '%p (%s bytes)\n'
+          zeroj-blst/scripts/update-blst-manifest.sh
+          find zeroj-blst/src/main/resources/org/zeroj/blst/native -name 'libblst.*' -printf '%p (%s bytes)\n'
       - uses: actions/upload-artifact@v4
         with:
           name: libblst-all-platforms
-          path: zeroj-blst/src/main/resources/native/**/libblst.*
+          path: |
+            zeroj-blst/src/main/resources/org/zeroj/blst/native/**/libblst.*
+            zeroj-blst/src/main/resources/org/zeroj/blst/native/libblst.sha256
 
 # Windows (.dll) is a follow-up: blst's build.sh runs under MSYS2/git-bash but needs different link
 # flags; add a windows-latest matrix entry + a Windows branch in build-blst.sh when required.

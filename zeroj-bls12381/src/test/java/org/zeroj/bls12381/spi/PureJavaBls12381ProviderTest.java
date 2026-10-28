@@ -1,6 +1,7 @@
 package org.zeroj.bls12381.spi;
 
 import org.zeroj.bls12381.Bls12381Generators;
+import org.zeroj.bls12381.Bls12381Hash;
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
 import org.zeroj.bls12381.field.Fp;
@@ -103,5 +104,39 @@ class PureJavaBls12381ProviderTest {
         assertTrue(provider.pairingProductIsIdentity(
                 new G1Point[]{Bls12381Generators.G1, Bls12381Generators.G1.negate()},
                 new G2Point[]{Bls12381Generators.G2, Bls12381Generators.G2}));
+    }
+
+    /** ADR-0062 D7 / I7: an empty product is rejected, not reported as a successful check. */
+    @Test
+    void pairingProductRejectsEmptyAndMismatchedInput() {
+        assertThrows(IllegalArgumentException.class,
+                () -> provider.pairingProductIsIdentity(new G1Point[0], new G2Point[0]));
+        assertThrows(IllegalArgumentException.class,
+                () -> provider.pairingProductIsIdentity(new G1Point[]{Bls12381Generators.G1}, new G2Point[0]));
+        assertThrows(NullPointerException.class,
+                () -> provider.pairingProductIsIdentity(null, new G2Point[0]));
+        // Documented: identity pairs contribute 1.
+        assertTrue(provider.pairingProductIsIdentity(
+                new G1Point[]{G1Point.INFINITY}, new G2Point[]{Bls12381Generators.G2}));
+        assertFalse(provider.pairingProductIsIdentity(
+                new G1Point[]{Bls12381Generators.G1}, new G2Point[]{Bls12381Generators.G2}));
+    }
+
+    /** ADR-0062 D10: RFC 9380 §3.1 says domain separation tags MUST be non-empty. */
+    @Test
+    void hashingRejectsAnEmptyDst() {
+        byte[] msg = {1, 2, 3};
+        byte[] empty = new byte[0];
+        assertThrows(IllegalArgumentException.class, () -> provider.g1HashToCurve(msg, empty));
+        assertThrows(IllegalArgumentException.class, () -> provider.g2HashToCurve(msg, empty));
+        assertThrows(IllegalArgumentException.class, () -> provider.hashToScalar(msg, empty));
+        assertThrows(IllegalArgumentException.class,
+                () -> Bls12381Hash.expandMessageXmdSha256(msg, empty, 32));
+        assertThrows(IllegalArgumentException.class,
+                () -> Bls12381Hash.expandMessageXofShake256(msg, empty, 32));
+        assertThrows(IllegalArgumentException.class,
+                () -> Bls12381Hash.encodeToG1XofShake256(msg, empty));
+        assertThrows(IllegalArgumentException.class,
+                () -> Bls12381Hash.hashToG2XofShake256(msg, empty));
     }
 }

@@ -4,11 +4,5 @@
     "allDeclaredConstructors": true,
     "allDeclaredMethods": true,
     "allDeclaredFields": true
-  },
-  {
-    "name": "org.zeroj.blst.BlstPairing",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
   }
 ]

@@ -33,6 +33,34 @@ class VerifierCoreTest {
         assertTrue(registry.find(ProofSystemId.GROTH16, CurveId.BLS12_381).isEmpty());
     }
 
+    /** ADR-0062 PR review item 2: a backend unavailable on this platform is skipped, not chosen. */
+    @Test
+    void registry_findSkipsUnavailableBackends() {
+        var registry = VerifierRegistry.empty();
+        var unavailable = new ZkVerifier() {
+            @Override
+            public VerificationResult verify(ZkProofEnvelope e, VerificationMaterial m) {
+                throw new AssertionError("an unavailable backend must not be selected");
+            }
+
+            @Override
+            public BackendDescriptor descriptor() {
+                return new BackendDescriptor(ProofSystemId.GROTH16, CurveId.BLS12_381, "fake-native");
+            }
+
+            @Override
+            public boolean isAvailable() {
+                return false;
+            }
+        };
+        var fallback = fakeVerifier(ProofSystemId.GROTH16, CurveId.BLS12_381, true);
+        registry.register(unavailable);
+        assertTrue(registry.find(ProofSystemId.GROTH16, CurveId.BLS12_381).isEmpty());
+        registry.register(fallback);
+        assertSame(fallback, registry.find(ProofSystemId.GROTH16, CurveId.BLS12_381).orElseThrow());
+        assertEquals(2, registry.all().size(), "all() still lists every registered backend");
+    }
+
     @Test
     void registry_allReturnsRegisteredBackends() {
         var registry = VerifierRegistry.empty();

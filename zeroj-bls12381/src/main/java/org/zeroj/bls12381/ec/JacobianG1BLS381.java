@@ -3,6 +3,7 @@ package org.zeroj.bls12381.ec;
 import org.zeroj.bls12381.field.MontFp381;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
  * BLS12-381 G1 point in Jacobian coordinates.
@@ -157,40 +158,92 @@ public final class JacobianG1BLS381 {
     }
 
     /**
-     * Fixed-schedule scalar multiplication using the Montgomery ladder.
+     * Secret-scalar multiplication {@code [scalar mod r]·this} with additive scalar splitting and a
+     * fixed operation schedule (ADR-0062 D1, r4).
      *
-     * <p>Always performs both a doubling and an addition per bit, regardless of bit value.
-     * The bit determines which accumulator receives which result. This is a uniform
-     * operation schedule, but it is not a JVM constant-time guarantee: bit access,
-     * branching, point special cases, and field reductions remain variable-time.</p>
+     * <p>The scalar {@code k} is reduced mod {@code r} and split into a fresh uniform share
+     * {@code k₁ ∈ [0, r)} and {@code k₂ = (k − k₁) mod r} (Clavier–Joye, CHES 2001). Each share is
+     * uniform on its own, whatever {@code k} is, and is recoded to exactly
+     * {@value SecretLadder#WIDTH} bits; a Montgomery ladder then runs from {@code (P, 2P)} for
+     * exactly {@value SecretLadder#ITERATIONS} iterations of one addition and one doubling per share,
+     * and the two results are added. There is no zero-scalar early return. The operation count does
+     * not depend on the scalar, and because each ladder sees a uniform scalar, a small or
+     * near-{@code r} secret no longer drives it through identity intermediates (ADR-0062 F12).</p>
      *
-     * <p>Use this only as the pure-Java fixed-schedule path. High-value secret-bearing
-     * workloads should use a native provider with a stronger side-channel contract.</p>
+     * <p><b>Allowed exceptions.</b> The final addition {@code [k₁]P + [k₂]P} takes a special branch
+     * for {@code k ≡ 0} (the result is the identity, and {@code toAffine} then skips its inversion)
+     * and, with probability {@code 1/r} each, when {@code k₁ = k₂}, {@code k₁ = 0} or
+     * {@code k₂ = 0}.</p>
      *
-     * @param scalar non-negative scalar with {@code bitLength() <= 256}
+     * <p>It is <b>not</b> a JVM constant-time guarantee: the per-bit selection is a Java branch, and
+     * {@link BigInteger} arithmetic, field reductions, JIT and GC remain variable-time. Secret-bearing
+     * generation stays offline/isolated only.</p>
+     *
+     * <p>The recoding is correct only for points in the prime-order subgroup, so this method checks
+     * that the point is on the curve and in the subgroup, and rejects any other point. A failure
+     * of the randomness source propagates; there is no unsplit fallback.</p>
+     *
+     * @param scalar any scalar with {@code bitLength() <= 256}; it is reduced mod {@code r}
+     * @throws IllegalArgumentException if the scalar is wider than 256 bits or the point is not on
+     *         the curve and in the subgroup
      */
     public JacobianG1BLS381 ctScalarMul(BigInteger scalar) {
-        if (scalar.signum() == 0) return INFINITY;
-        if (scalar.signum() < 0) return negate().ctScalarMul(scalar.negate());
+        Objects.requireNonNull(scalar, "scalar required");
         if (scalar.bitLength() > 256) {
             throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");
         }
+        if (this.isInfinity()) return INFINITY; // the base is public
+        // On the curve first: the group-law formulas never use b, so without this a point on
+        // another curve with r-torsion would be accepted (ADR-0062 M5 review).
+        if (!toAffine().isOnCurve() || !scalarMul(G1Point.R).isInfinity()) {
+            throw new IllegalArgumentException("ctScalarMul base must be on the curve and in the prime-order subgroup");
+        }
+        return ctScalarMulInSubgroup(scalar, SecretLadder.SECURE);
+    }
+
+    /**
+     * {@link #ctScalarMul} for a base the caller has already checked to be in the prime-order
+     * subgroup (the {@code G1Point} wrapper validates it). Package-private; the share source is a test
+     * seam.
+     */
+    JacobianG1BLS381 ctScalarMulInSubgroup(BigInteger scalar, SecretLadder.ShareSource source) {
         if (this.isInfinity()) return INFINITY;
+        BigInteger[] shares = SecretLadder.split(scalar.mod(G1Point.R), source);
+        JacobianG1BLS381 a = fixedLadder(SecretLadder.recode(shares[0]));
+        JacobianG1BLS381 b = fixedLadder(SecretLadder.recode(shares[1]));
+        JacobianG1BLS381 sum = a.add(b);
+        SecretLadder.ScheduleObserver observer = SecretLadder.observer();
+        if (observer != null && (a.isInfinity() || b.isInfinity() || sum.isInfinity()
+                || shares[0].equals(shares[1]))) {
+            observer.combinationSpecial();
+        }
+        return sum;
+    }
 
-        // Montgomery ladder with a fixed operation schedule per bit.
-        JacobianG1BLS381 r0 = INFINITY;
-        JacobianG1BLS381 r1 = this;
-
-        for (int i = 255; i >= 0; i--) {
+    /**
+     * Montgomery ladder over a {@value SecretLadder#WIDTH}-bit recoded share whose top bit is set, from
+     * {@code (P, 2P)}: invariant {@code r1 − r0 = P}, {@code r0 = [prefix]P}. Each iteration does
+     * one addition and one doubling; the bit selects which accumulator receives which result.
+     */
+    private JacobianG1BLS381 fixedLadder(BigInteger kHat) {
+        SecretLadder.ScheduleObserver observer = SecretLadder.observer();
+        if (observer != null) observer.scheduleStarted(SecretLadder.ITERATIONS);
+        JacobianG1BLS381 r0 = this;
+        JacobianG1BLS381 r1 = this.doublePoint();
+        for (int i = SecretLadder.WIDTH - 2; i >= 0; i--) {
             JacobianG1BLS381 sum = r0.add(r1);
-            JacobianG1BLS381 double0 = r0.doublePoint();
-            JacobianG1BLS381 double1 = r1.doublePoint();
-            if (scalar.testBit(i)) {
+            boolean special = observer != null && (r0.isInfinity() || r1.isInfinity() || sum.isInfinity());
+            if (kHat.testBit(i)) {
                 r0 = sum;
-                r1 = double1;
+                r1 = r1.doublePoint();
             } else {
-                r0 = double0;
                 r1 = sum;
+                r0 = r0.doublePoint();
+            }
+            if (observer != null) {
+                observer.addition();
+                observer.doubling();
+                if (special) observer.specialCase(i);
             }
         }
         return r0;

@@ -94,8 +94,8 @@ class BlstBls12381ProviderTest {
     }
 
     @Test
-    void seededPairingProductsMatchIndependentNativeOracle() {
-        // blst-java 0.3.2 is pinned in this module's build; public test scalars only.
+    void seededPairingProductsMatchPureJavaAndBlstFfm() {
+        // The source-built libblst via FFM against the pure-Java provider; public test scalars only.
         Random random = new Random(0x47B1A5L);
         BigInteger r = Bls12381Generators.SCALAR_FIELD_ORDER;
         for (int trial = 0; trial < 12; trial++) {
@@ -122,5 +122,14 @@ class BlstBls12381ProviderTest {
     void pairingProductRejectsMismatchedArrayLengths() {
         assertThrows(IllegalArgumentException.class,
                 () -> BLST.pairingProductIsIdentity(new G1Point[]{BLST.g1Generator()}, new G2Point[0]));
+    }
+
+    /** ADR-0062 D7 / I7: an empty product is rejected on every provider. */
+    @Test
+    void pairingProductRejectsEmptyInput() {
+        assertThrows(IllegalArgumentException.class,
+                () -> BLST.pairingProductIsIdentity(new G1Point[0], new G2Point[0]));
+        assertThrows(IllegalArgumentException.class,
+                () -> PURE.pairingProductIsIdentity(new G1Point[0], new G2Point[0]));
     }
 }

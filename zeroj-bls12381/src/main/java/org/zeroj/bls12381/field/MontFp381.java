@@ -183,11 +183,18 @@ public final class MontFp381 {
      */
     public MontFp381 inverse() {
         if (isZero()) throw new ArithmeticException("Cannot invert zero");
-        // a^{p-2} mod p via binary exponentiation with fixed bit-length
+        // a^{p-2} mod p; the exponent is the fixed public value p - 2
         return pow(modulus().subtract(BigInteger.TWO));
     }
 
+    /**
+     * Square-and-multiply exponentiation, MSB first. The loop length is the exponent's bit length,
+     * so the schedule depends on {@code exp}; use it with public exponents only.
+     *
+     * @throws IllegalArgumentException if {@code exp} is negative (ADR-0062 D8)
+     */
     public MontFp381 pow(BigInteger exp) {
+        if (exp.signum() < 0) throw new IllegalArgumentException("Exponent must be non-negative");
         if (exp.signum() == 0) return ONE;
         MontFp381 result = ONE;
         MontFp381 base = this;
