@@ -92,10 +92,10 @@ public record G2Point(Fp2 x, Fp2 y) {
      * Secret-scalar multiplication {@code [scalar mod r]·this} (ADR-0062 D1).
      *
      * <p>Validates the point (on the curve and in the prime-order subgroup), then runs the
-     * blinded fixed-schedule Jacobian ladder ({@link JacobianG2BLS381#ctScalarMul}): for a uniformly
-     * distributed secret the operation count does not depend on the scalar. Small scalars and
-     * scalars close to {@code r} keep a residual identity-handling channel (see that method). It is
-     * not a JVM constant-time guarantee; secret-bearing generation stays offline/isolated only.</p>
+     * split, fixed-schedule Jacobian ladders ({@link JacobianG2BLS381#ctScalarMul}): the scalar is split into
+     * two fresh uniform shares, so neither the operation count nor the ladders' identity handling
+     * depends on the scalar. It is not a JVM constant-time guarantee; secret-bearing generation stays
+     * offline/isolated only.</p>
      *
      * @param scalar any scalar with {@code bitLength() <= 256}; it is reduced mod {@code r}
      * @throws IllegalArgumentException if the point is not valid or the scalar is wider than 256 bits
@@ -104,8 +104,8 @@ public record G2Point(Fp2 x, Fp2 y) {
         return ctScalarMul(scalar, SecretLadder.SECURE);
     }
 
-    /** {@link #ctScalarMul(BigInteger)} with an injected blinding source (package-private test seam). */
-    G2Point ctScalarMul(BigInteger scalar, SecretLadder.BlindingSource source) {
+    /** {@link #ctScalarMul(BigInteger)} with an injected share source (package-private test seam). */
+    G2Point ctScalarMul(BigInteger scalar, SecretLadder.ShareSource source) {
         Objects.requireNonNull(scalar, "scalar required");
         if (scalar.bitLength() > 256) {
             throw new IllegalArgumentException("ctScalarMul scalar must fit in 256 bits");

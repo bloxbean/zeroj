@@ -42,20 +42,21 @@ hash-to-curve, and public scalar multiplication.
 
 The `g1SecretScalarMul` and `g2SecretScalarMul` provider methods are the
 secret-scalar boundary for protocols that need one. In this module they use
-blinded fixed-schedule Java ladders (ADR-0062 D1): the scalar is reduced mod `r`
-and blinded to `k + m·r` with a fresh 64-bit-entropy `m` chosen so that the
-blinded scalar always has 320 bits, and a Montgomery ladder runs exactly 319
-iterations from `(P, 2P)`. For a uniformly distributed secret the operation
-count therefore does not depend on the scalar (the earlier ladder leaked its bit
-length), and the per-bit pattern changes on every call. The base must be on the
-curve and in the prime-order subgroup and is checked. Residual (ADR-0062 F12):
-when the scalar or `r − scalar` is small, intermediate identity points still
-take early returns in point addition and doubling (probability about
-`2^-(bitlen − 1)` per call, always for 0 and `r − 1`), and a zero result skips
-the final inversion, so low-entropy secrets such as small Pedersen values are
-not protected. This is not a JVM constant-time guarantee: the per-bit selection
-is a Java branch, and point special cases, `BigInteger` arithmetic, field
-reductions, JIT behavior, and GC remain variable-time. Production workloads that carry high-value
+split, fixed-schedule Java ladders (ADR-0062 D1, r4): the scalar `k` is reduced
+mod `r` and split into a fresh uniform share `k₁` and `k₂ = k − k₁ mod r`
+(additive scalar splitting, Clavier–Joye, CHES 2001); each share is recoded to
+exactly 256 bits and a Montgomery ladder runs 255 iterations on it from
+`(P, 2P)`; the two results are added. Each ladder therefore sees a fresh uniform
+scalar, so neither the operation count nor its identity handling depends on the
+secret, including small values and values close to `r` (the earlier blinded
+ladder leaked those, F12). The only special cases left are in the final
+addition: `k ≡ 0` (the result is the identity) and, with probability `1/r`,
+`k₁ = k₂` or a zero share. G1 Pedersen generation also splits the committed
+value, so committing to 0 or 1 runs the same operations as a random value. The
+base must be on the curve and in the prime-order subgroup and is checked. This
+is not a JVM constant-time guarantee: the per-bit selection is a Java branch,
+and `BigInteger` arithmetic, field reductions, JIT behavior, and GC remain
+variable-time. Production workloads that carry high-value
 secrets need a provider with an audited side-channel contract. The `zeroj-blst`
 provider is native, but ZeroJ has no evidence of a side-channel contract for its
 binding (its secret-scalar method is its public one), so it does not lift the

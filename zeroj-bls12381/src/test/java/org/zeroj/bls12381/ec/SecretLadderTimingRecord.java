@@ -1,8 +1,10 @@
 package org.zeroj.bls12381.ec;
 
 import org.zeroj.bls12381.Bls12381Generators;
+import org.zeroj.bls12381.pedersen.G1Pedersen;
 
 import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -13,10 +15,11 @@ import java.util.function.Function;
 
 /**
  * ADR-0062 D1 evidence (in the style of ADR-0038 P7.4): wall-clock timing of the pure-Java secret
- * ladder ({@link G1Point#ctScalarMul}) across scalar bit lengths and Hamming weights. It records
- * numbers and asserts nothing. Before D1 the cost grew linearly with the bit length (about
- * 0.22 ms at 1 bit to 0.93 ms at 255 bits, ADR-0062 F1); after D1 the classes should be
- * indistinguishable within noise. A timing record is evidence, not proof of constant time.
+ * ladders ({@link G1Point#ctScalarMul}) across scalar bit lengths and Hamming weights, and of G1
+ * Pedersen generation for the values 0, 1 and random. It records numbers and asserts nothing.
+ * Before D1 the cost grew linearly with the bit length (about 0.22 ms at 1 bit to 0.93 ms at
+ * 255 bits, ADR-0062 F1); the r1–r3 blinded ladder still separated {@code k = 0} (F12). A timing
+ * record is evidence, not proof of constant time.
  *
  * <p>Samples are interleaved round-robin across classes so drift affects every class equally. For
  * each class it prints the median and an exact (order-statistic, binomial) 95% confidence interval
@@ -48,10 +51,25 @@ final class SecretLadderTimingRecord {
         System.out.printf("ADR-0062 D1 secret-ladder timing record (G1, pure Java), %d samples per class%n", SAMPLES);
         System.out.printf("java %s, %s %s, %d cores%n", System.getProperty("java.version"),
                 System.getProperty("os.name"), System.getProperty("os.arch"), Runtime.getRuntime().availableProcessors());
-        record("ladder only (JacobianG1BLS381, blinded, base pre-validated)", classes, scalars,
+        record("ladders only (JacobianG1BLS381, split, base pre-validated)", classes, scalars,
                 k -> jac.ctScalarMulInSubgroup(k, SecretLadder.SECURE));
-        record("G1Point.ctScalarMul (subgroup check + ladder, as the provider calls it)", classes, scalars,
+        record("G1Point.ctScalarMul (subgroup check + split ladders, as the provider calls it)", classes, scalars,
                 base::ctScalarMul);
+
+        // ADR-0062 r4 requirement 5: G1 Pedersen commit(0) vs commit(1) vs commit(random), with a
+        // fresh uniform blinding per sample shared by the three classes.
+        G1Pedersen pedersen = G1Pedersen.pureJava();
+        Map<String, BigInteger> values = new LinkedHashMap<>();
+        values.put("commit(0)", BigInteger.ZERO);
+        values.put("commit(1)", BigInteger.ONE);
+        values.put("commit(random)", new BigInteger(255, random).mod(R));
+        List<BigInteger> valueList = new ArrayList<>(values.values());
+        SecureRandom blindings = new SecureRandom();
+        BigInteger[] blinding = {G1Pedersen.randomBlinding(blindings)};
+        record("G1Pedersen.commitScalar (pure Java)", values, valueList, v -> {
+            if (v == valueList.get(0)) blinding[0] = G1Pedersen.randomBlinding(blindings);
+            return pedersen.commitScalar(v, blinding[0]);
+        });
     }
 
     private static void record(String title, Map<String, BigInteger> classes, List<BigInteger> scalars,

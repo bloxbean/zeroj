@@ -158,31 +158,30 @@ public final class JacobianG1BLS381 {
     }
 
     /**
-     * Secret-scalar multiplication {@code [scalar mod r]·this} with a fixed, blinded operation
-     * schedule (ADR-0062 D1).
+     * Secret-scalar multiplication {@code [scalar mod r]·this} with additive scalar splitting and a
+     * fixed operation schedule (ADR-0062 D1, r4).
      *
-     * <p>The scalar is reduced mod {@code r} and blinded to {@code k̂ = k + m·r} with a fresh
-     * 64-bit-entropy {@code m}, chosen so that {@code k̂} always has exactly
-     * {@value SecretLadder#WIDTH} bits. A Montgomery ladder then runs from {@code (P, 2P)} for
-     * exactly {@value SecretLadder#ITERATIONS} iterations of one addition and one doubling, with no
-     * zero-scalar early return. For a uniformly distributed secret this removes the scalar's bit
-     * length from the operation count, and the blinding changes the per-bit pattern on every
-     * call.</p>
+     * <p>The scalar {@code k} is reduced mod {@code r} and split into a fresh uniform share
+     * {@code k₁ ∈ [0, r)} and {@code k₂ = (k − k₁) mod r} (Clavier–Joye, CHES 2001). Each share is
+     * uniform on its own, whatever {@code k} is, and is recoded to exactly
+     * {@value SecretLadder#WIDTH} bits; a Montgomery ladder then runs from {@code (P, 2P)} for
+     * exactly {@value SecretLadder#ITERATIONS} iterations of one addition and one doubling per share,
+     * and the two results are added. There is no zero-scalar early return. The operation count does
+     * not depend on the scalar, and because each ladder sees a uniform scalar, a small or
+     * near-{@code r} secret no longer drives it through identity intermediates (ADR-0062 F12).</p>
      *
-     * <p><b>Residual (ADR-0062 F12).</b> When {@code k} or {@code r − k} is small, an intermediate
-     * ladder value can be the identity and {@code add}/{@code doublePoint} take an early return:
-     * probability about {@code 2^-(bitLength(min(k, r−k)) − 1)} per call, always for
-     * {@code k ≡ 0} and {@code k ≡ −1}. A zero result also skips the inversion in {@code toAffine}.
-     * Low-entropy secrets (for example a Pedersen value in {@code {0, 1}}) are therefore not
-     * protected by this schedule.</p>
+     * <p><b>Allowed exceptions.</b> The final addition {@code [k₁]P + [k₂]P} takes a special branch
+     * for {@code k ≡ 0} (the result is the identity, and {@code toAffine} then skips its inversion)
+     * and, with probability {@code 1/r} each, when {@code k₁ = k₂}, {@code k₁ = 0} or
+     * {@code k₂ = 0}.</p>
      *
      * <p>It is <b>not</b> a JVM constant-time guarantee: the per-bit selection is a Java branch, and
      * {@link BigInteger} arithmetic, field reductions, JIT and GC remain variable-time. Secret-bearing
      * generation stays offline/isolated only.</p>
      *
-     * <p>The blinding is correct only for points in the prime-order subgroup, so this method checks
+     * <p>The recoding is correct only for points in the prime-order subgroup, so this method checks
      * that the point is on the curve and in the subgroup, and rejects any other point. A failure
-     * of the randomness source propagates; there is no unblinded fallback.</p>
+     * of the randomness source propagates; there is no unsplit fallback.</p>
      *
      * @param scalar any scalar with {@code bitLength() <= 256}; it is reduced mod {@code r}
      * @throws IllegalArgumentException if the scalar is wider than 256 bits or the point is not on
@@ -204,17 +203,25 @@ public final class JacobianG1BLS381 {
 
     /**
      * {@link #ctScalarMul} for a base the caller has already checked to be in the prime-order
-     * subgroup (the {@code G1Point} wrapper validates it). Package-private; the blinding source is a test
+     * subgroup (the {@code G1Point} wrapper validates it). Package-private; the share source is a test
      * seam.
      */
-    JacobianG1BLS381 ctScalarMulInSubgroup(BigInteger scalar, SecretLadder.BlindingSource source) {
+    JacobianG1BLS381 ctScalarMulInSubgroup(BigInteger scalar, SecretLadder.ShareSource source) {
         if (this.isInfinity()) return INFINITY;
-        BigInteger kHat = SecretLadder.blind(scalar.mod(G1Point.R), source);
-        return fixedLadder(kHat);
+        BigInteger[] shares = SecretLadder.split(scalar.mod(G1Point.R), source);
+        JacobianG1BLS381 a = fixedLadder(SecretLadder.recode(shares[0]));
+        JacobianG1BLS381 b = fixedLadder(SecretLadder.recode(shares[1]));
+        JacobianG1BLS381 sum = a.add(b);
+        SecretLadder.ScheduleObserver observer = SecretLadder.observer();
+        if (observer != null && (a.isInfinity() || b.isInfinity() || sum.isInfinity()
+                || shares[0].equals(shares[1]))) {
+            observer.combinationSpecial();
+        }
+        return sum;
     }
 
     /**
-     * Montgomery ladder over a {@value SecretLadder#WIDTH}-bit scalar whose top bit is set, from
+     * Montgomery ladder over a {@value SecretLadder#WIDTH}-bit recoded share whose top bit is set, from
      * {@code (P, 2P)}: invariant {@code r1 − r0 = P}, {@code r0 = [prefix]P}. Each iteration does
      * one addition and one doubling; the bit selects which accumulator receives which result.
      */

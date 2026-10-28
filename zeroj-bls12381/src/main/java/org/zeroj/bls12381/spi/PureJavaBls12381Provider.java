@@ -13,12 +13,10 @@ import java.util.Objects;
  * Default provider backed by ZeroJ's pure Java BLS12-381 implementation.
  *
  * <p>This provider is correctness-first and portable. Its secret-scalar methods use the
- * module's blinded fixed-schedule Java ladders (ADR-0062 D1): for a uniformly distributed secret
- * the operation count does not depend on the scalar, and a fresh blinding factor changes the
- * per-bit pattern on every call. Small scalars and scalars close to {@code r} keep a residual
- * identity-handling channel (ADR-0062 F12). They do not provide a JVM constant-time guarantee
- * (per-bit Java branch, point special cases, {@code BigInteger}, field reductions, JIT and GC
- * remain variable-time). No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
+ * module's split, fixed-schedule Java ladders (ADR-0062 D1, r4): the scalar is split into two fresh
+ * uniform shares, so neither the operation count nor the ladders' identity handling depends on it,
+ * including for small or near-{@code r} secrets. They do not provide a JVM constant-time guarantee
+ * (per-bit Java branch, {@code BigInteger}, field reductions, JIT and GC remain variable-time). No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
  * contract (ADR-0062 D2), so secret-bearing generation is offline/isolated only on every
  * provider.</p>
  */
@@ -55,7 +53,7 @@ public final class PureJavaBls12381Provider implements Bls12381Provider {
     }
 
     /**
-     * Blinded fixed-schedule ladder (ADR-0062 D1). {@link G1Point#ctScalarMul} validates the point
+     * Split, fixed-schedule ladders (ADR-0062 D1). {@link G1Point#ctScalarMul} validates the point
      * (on the curve, in the subgroup) and rejects anything else, so it is checked exactly once.
      */
     @Override

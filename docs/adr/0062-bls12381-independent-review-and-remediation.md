@@ -3,12 +3,12 @@
 ## Status
 **Accepted (design), 2026-10-28, by maintainer Satya.** Q1, Q3 and Q4 are decided (see "Open
 questions"); Q2 stays open. The maintainer chose the full D3 migration, so the D3 interim steps are
-superseded.
+superseded. Q5 decided r4 (additive scalar splitting).
 
 **Implemented (M0–M8), pending maintainer review; not merged.** Branch
 `fix/adr-0062-bls-remediation`, one commit per milestone plus review follow-ups (see
-"Implementation evidence"). Implementation found two further issues, F11 (fixed) and F12 (open,
-Q5). An independent AI review of the R3 milestone and of the native binding found no Critical
+"Implementation evidence"). Implementation found two further issues, F11 and F12, both fixed (F12 by
+the r4 split). An independent AI review of the R3 milestone and of the native binding found no Critical
 issue; its findings are fixed or recorded here. Maturity is unchanged: `zeroj-bls12381` stays Beta —
 verification-grade, secret-bearing generation stays offline/isolated only, and no AI review or test
 count upgrades a security claim (AGENTS.md).
@@ -23,7 +23,8 @@ explicitly (D1).
 
 ## Date
 2026-10-28 (r1); 2026-10-28 (r2: accepted, Q1/Q3/Q4 decided, D1 construction fixed);
-2026-10-28 (r3: implementation M0–M8, F11, F12, evidence)
+2026-10-28 (r3: implementation M0–M8, F11, F12, evidence); 2026-10-28 (r4: Q5 decided, additive
+splitting replaces the blinding, F12 fixed)
 
 ## Revision history
 - **r1 (2026-10-28):** first version, written from the review described in §Evidence.
@@ -39,6 +40,11 @@ explicitly (D1).
   "Identity can still appear" paragraph is corrected: the exception set is every scalar with
   `min(k, r − k)` small, not only `0` and `−1`. New section "Implementation evidence". No other
   decision changed.
+- **r4 (2026-10-28, maintainer decision Q5):** D1 now uses additive scalar splitting
+  (Clavier–Joye, CHES 2001) with deterministic 256-bit recoding of each share; the `m·r` blinding is
+  dropped. G1 Pedersen generation splits the committed value. F12 is fixed; the r2 construction
+  and why it leaked are kept in D1 with the maintainer's simulation numbers. Classification
+  unchanged: offline/isolated only, not constant-time.
 
 ## Risk classification
 - **R3:** D1 (secret-scalar ladder schedule). It changes how a secret-dependent primitive
@@ -147,7 +153,7 @@ with code or measurement during the review.
 | F9 | Test gap | Partial RFC 9380 vector coverage; positive-only pairing-check tests; thin WASM differential; no negative blst-provider tests | see D9 | Counted |
 | F10 | Info | Dead and mis-commented `FROBENIUS_COEFF_X/Y`; empty DST accepted; XOF oversize-DST fixed at `k = 128`; unreachable incorrect vertical-line branch; GraalVM FFM metadata unverified; docs path errors | see D10 | Code read / computed |
 | F11 (r3) | Medium | blst 0.3.15's MSM for fewer than 32 points loads each affine base with `Z = 1`, so an identity base (all-zero affine) corrupts the whole sum. The blst prover backend passes identity bases, so small blst-backed proofs could be invalid (they fail verification; not a forgery) | `BlstG1Msm`/`BlstG2Msm` → `blst_p*s_mult_pippenger` (`multi_scalar.c`, `precompute_row_wbits`) | Reproduced (n = 2..31 wrong, ≥ 32 right) |
-| F12 (r3) | Medium (R3 residual) | The D1 ladder still takes identity early returns when `k` or `r − k` is small (probability ≈ `2^-(bitlen − 1)`, always for `0` and `r − 1`), and a zero result skips the final inversion. Low-entropy secrets (G1 Pedersen values such as votes in `{0, 1}`) remain distinguishable by timing; uniform secrets (BBS) are not affected | `JacobianG*BLS381.add/doublePoint/toAffine`, `G1Pedersen.generate` | Measured (independent review; timing CIs separate for `k = 0`) |
+| F12 (r3; fixed r4) | Medium (R3 residual) | The D1 ladder still takes identity early returns when `k` or `r − k` is small (probability ≈ `2^-(bitlen − 1)`, always for `0` and `r − 1`), and a zero result skips the final inversion. Low-entropy secrets (G1 Pedersen values such as votes in `{0, 1}`) remain distinguishable by timing; uniform secrets (BBS) are not affected | `JacobianG*BLS381.add/doublePoint/toAffine`, `G1Pedersen.generate` | Measured (independent review; timing CIs separate for `k = 0`) |
 
 #### F1 — Secret-scalar ladder leaks bit length (R3)
 `ctScalarMul` initialises `r0 = INFINITY`, `r1 = P` and runs 256 MSB-first iterations. While
@@ -304,7 +310,8 @@ For a negative `BigInteger`, `exp.bitLength()` describes the two's-complement fo
 - ZCash BLS12-381 serialization (`zkcrypto/bls12_381` 0.8.0 `notes/serialization.rs`) as adopted by CIP-0381 and the Plutus V3 builtins.
 - `supranational/blst` v0.3.15 (`bindings/blst.h`, `src/e1.c`, `src/e2.c`, `src/pairing.c`). Pin to the commit hash under D6.
 - E. Brier, M. Joye, *Weierstraß Elliptic Curves and Side-Channel Attacks*, PKC 2002 (fixed-length scalar recoding by adding the group order).
-- J.-S. Coron, *Resistance against Differential Power Analysis for Elliptic Curve Cryptosystems*, CHES 1999 (scalar blinding `k + m·r`).
+- J.-S. Coron, *Resistance against Differential Power Analysis for Elliptic Curve Cryptosystems*, CHES 1999 (scalar blinding `k + m·r`; used r2–r3, superseded r4).
+- C. Clavier, M. Joye, *Universal Exponentiation Algorithm: A First Step towards Provable SPA-Resistance*, CHES 2001, LNCS 2162 (additive splitting of the secret scalar; D1 r4).
 - J. Jančár et al., *Minerva: The curse of ECDSA nonces*, TCHES 2020/4 (bit-length leakage → HNP).
 - ZeroJ precedent: [ADR-0038](0038-jubjub-dsl-remediation-plan.md) Decision 4 (P4 fixed width, P7.2 blinded fixed schedule, operation-count gate).
 
@@ -350,7 +357,37 @@ Requirements: I1, I2, plus:
   produces `O` at the end;
 - the iteration count is a constant independent of `k`.
 
-Construction (decided r2, Q1):
+Construction (decided r4, Q5 — supersedes the r2 construction below):
+- **Additive scalar splitting** (C. Clavier, M. Joye, CHES 2001). Draw `k₁` uniformly from
+  `[0, r)` with `SecureRandom` (rejection sampling of 255-bit values, branching on public
+  randomness only) and set `k₂ = (k − k₁) mod r`. Each share is uniform on its own whatever `k`
+  is, so each ladder sees a fresh uniform scalar on every call. `[k]P = [k₁]P + [k₂]P`.
+- **Deterministic recoding of each share**, no blinding: `ŝ = 2²⁵⁵ + ((s − 2²⁵⁵) mod r)`. Since
+  `r < 2²⁵⁵`, `ŝ ∈ [2²⁵⁵, 2²⁵⁵ + r)` has exactly 256 bits and `ŝ ≡ s (mod r)`. The ladder starts at
+  `(P, 2P)` and runs 255 fixed iterations of one addition and one doubling: 2 × 255 per
+  multiplication, about 1.6× the r2 schedule's 319. The `m·r` blinding is dropped: each share
+  already varies on every call, so blinding would add cost without protection.
+- **Allowed exceptions** (final addition `[k₁]P + [k₂]P` only): `k ≡ 0` (the output is the
+  identity, and `toAffine` then skips its inversion; the output reveals this anyway) and, with
+  probability `1/r` each, `k₁ = k₂` (the addition becomes a doubling) or a zero share (its ladder
+  ends at the identity). No ladder step is special for any secret otherwise.
+- The base must be on the curve and in the prime-order subgroup (checked); an RNG failure
+  propagates with no unsplit fallback; tests inject shares through a package-private seam.
+- **G1 Pedersen generation splits the committed value too:** `C = ([x − t]·G + [r]·H) + [t]·G` with a
+  fresh uniform `t`. Without it, `[x]·G` is the identity for `x = 0` and the following affine
+  addition returns early. Commitments are unchanged; generation takes three secret
+  multiplications instead of two.
+
+**Why the r2 blinding leaked (F12).** With `k̂ = k + m·r`, whenever `2^i` divides `m` the ladder
+prefix at step `i` reduces to `⌊k/2^i⌋ mod r`, which is 0 for small `k`: blinding by multiples of `r`
+randomises the high bits but not the bottom of the scalar. The maintainer's simulation (400 random
+runs per scalar, fraction of runs that hit an identity shortcut) of the r2 ladder:
+`k = 0`: 400/400; `1`: 202/400; `2`: 85/400; `5`: 54/400; `r − 1`: 400/400; `r − 2`: 209/400;
+uniform random: 0/400. The split version hit 0/400 for every one of them, including `0`, `1` and
+`r − 1`. `SecretLadderScheduleTest.blindingAloneLeakedAndTheSplitDoesNot` reproduces this with the
+exact prefix model.
+
+Construction (decided r2, Q1; **superseded r4**, kept for the record):
 - Draw a fresh blinding factor `m` uniformly from `[M_MIN, M_MAX] = [⌈2³¹⁹/r⌉, ⌊(2³²⁰ − r)/r⌋]`
   using `SecureRandom`, and set `k̂ = k + m·r` **without reducing**. For `0 ≤ k < r` this gives
   `k̂ ∈ [2³¹⁹, 2³²⁰)`: the top bit is fixed at bit 319, with no branch on `k`. Both ends of the
@@ -370,8 +407,8 @@ is correct and branch-free, but leaves the per-bit Java branch replaying a fixed
 use of the same key; blinding changes that pattern on every call, which defeats averaging across
 repeated signatures (the residual ADR-0038 later blinded for Jubjub).
 
-Identity can still appear inside the ladder only when a ladder prefix is `≡ 0`, `−1` or `−1/2`
-(mod `r`). **(Corrected r3.)** Writing `m = q·2^(i+1) + s`, the prefix at iteration `i` is
+(r2/r3 construction, superseded r4.) Identity can still appear inside the ladder only when a ladder
+prefix is `≡ 0`, `−1` or `−1/2` (mod `r`). **(Corrected r3.)** Writing `m = q·2^(i+1) + s`, the prefix at iteration `i` is
 `≡ ⌊(k + s·r)/2^(i+1)⌋`, which lies in `[0, r)` and hits one of those values only when `k` or
 `r − k` is at most `2^(i+1)`. So for scalars with `min(k, r − k) > 2^66` it never happens; for
 smaller ones it can happen in the last iterations (`i ≤ 65`) with probability about
@@ -602,14 +639,10 @@ Before a maturity upgrade:
 - **Q4 (D7) — decided r2:** document only. `BLS12381Pairing` is used directly by production
   code in `zeroj-crypto`, both verifiers and the benchmarks, so it stays public and its Javadoc
   states that it validates nothing.
-- **Q5 (F12, new r3):** close the low-entropy residual? Options: (a) additive scalar splitting in
-  the secret ladder, `[k]P = [k₁]P + [k − k₁]P` with `k₁` uniform, so both ladders see uniform
-  scalars (about +17% on `G1Point.ctScalarMul`, ~2× on the ladder itself); the final addition and
-  `toAffine` still reveal `k ≡ 0`, which the output reveals anyway; (b) complete exception-free
-  projective formulas (Renes–Costello–Batina, `a = 0`) plus a dummy inversion: removes the channel
-  in principle, larger R3 change; (c) document only. Recommendation: (a) now, (b) as part of the
-  future constant-time ADR. Until decided, low-entropy G1 Pedersen values are documented as not
-  protected.
+- **Q5 (F12) — decided r4:** additive scalar splitting (option (a)), with the blinding dropped and
+  each share recoded deterministically to 256 bits; G1 Pedersen generation splits the committed
+  value. Exception-free projective formulas (option (b)) stay with the future constant-time ADR:
+  on their own they still leave the per-bit Java branch and `BigInteger` timing in place.
 
 ## Implementation evidence (M0–M8)
 
@@ -629,6 +662,7 @@ macOS aarch64, unless stated.
 | M6 | 3733c60, e4d33ff | D3 FFM binding `BlstCurve`; provider, verifier and BBS-on-blst moved off `blst-java`; `BlstPairing` removed; julc codecs pure Java; D2 dedicated blst secret path. Review follow-up: the committed Linux `libblst.so` were the blst-java JNI binaries and were rebuilt from the pinned commit; namespaced resources, SHA-256 manifest enforced by the loader, provenance gate, owner-only temp dir; verifier returns `INTERNAL_ERROR` where no library exists. |
 | M7 | 0d068d9 | Shared cross-provider corpus (I8) run against pure Java, blst and zkcrypto-WASM, including a byte-level malformed-encoding corpus against each provider's own decoder. |
 | M8 | 1c672be | Native-image: foreign downcall metadata (9 shapes) and a metadata-sync test; a real consumer image builds and runs. |
+| D1 r4 | (this revision) | Additive scalar splitting with 256-bit recoding replaces the blinding; G1 Pedersen generation splits the value; schedule test asserts no special ladder step for `k ∈ {0, 1, 2, 5, 2⁶⁴, r−2, r−1, random}` over 64 seeds each (only the final addition for `k = 0`), reproduces the F12 simulation, and checks the 1/r share cases against the model. |
 
 ### Tests and vectors run
 - Final `./gradlew build` at 1c672be: green (all default modules, module-surface gate; 5409 tests,
@@ -652,16 +686,31 @@ macOS aarch64, unless stated.
   (no JNI symbols, glibc ≤ 2.4) but not executed locally**; CI is its first runtime run.
 
 ### D1 timing record (`./gradlew :zeroj-bls12381:secretLadderTimingRecord`)
-Ladder only, 1001 interleaved samples per class, median [95% CI of the median], ms:
-bit length 1: 0.935 [0.932, 0.937]; 65: 0.937; 129: 0.936; 192: 0.938; 255 random: 0.938;
-255 low HW: 0.939; 255 high HW: 0.933 [0.931, 0.935]; `k = 0`: 0.934. Before D1: 0.22 ms at 1
-bit to 0.93 ms at 255 bits (F1). The independent review re-ran it and found `k = 0` separable
-(0.837 [0.835, 0.838] vs 0.840 [0.839, 0.841]) and `toAffine` about 30 µs faster for a zero
-result: that is F12, not a flat record for every scalar. Full `G1Point.ctScalarMul` (subgroup check
-plus ladder): about 5.46 ms for every class except `k = 0` (5.39 ms).
+r4 (split), 1001 interleaved samples per class, median [95% CI of the median], ms:
+
+| Class | Ladders only | `G1Point.ctScalarMul` (subgroup check + ladders) |
+|---|---|---|
+| bit length 1 (`k = 1`) | 1.617 [1.611, 1.621] | 6.772 [6.745, 6.792] |
+| bit length 65 | 1.612 [1.606, 1.618] | 6.782 [6.761, 6.809] |
+| bit length 129 | 1.616 [1.611, 1.622] | 6.777 [6.751, 6.807] |
+| bit length 192 | 1.615 [1.608, 1.619] | 6.772 [6.747, 6.801] |
+| 255, random | 1.614 [1.609, 1.622] | 6.779 [6.752, 6.801] |
+| 255, low Hamming weight | 1.617 [1.612, 1.621] | 6.774 [6.751, 6.798] |
+| 255, high Hamming weight | 1.615 [1.608, 1.622] | 6.799 [6.769, 6.831] |
+| `k = 0` | 1.615 [1.611, 1.620] | 6.702 [6.682, 6.731] |
+
+G1 Pedersen `commitScalar` (fresh uniform blinding per sample): `commit(0)` 27.085 [26.767, 27.553];
+`commit(1)` 27.178 [26.738, 27.614]; `commit(random)` 27.187 [26.753, 27.531].
+
+Reading: the ladders are flat for every class, `k = 0` included, and the three Pedersen classes
+overlap. On the full `G1Point` path `k = 0` is about 70 µs faster: the output is the identity and
+`toAffine` skips its inversion (an allowed exception; the output reveals it). Earlier records:
+before D1, 0.22 ms at 1 bit to 0.93 ms at 255 bits (F1); r2 blinded ladder, flat at about 0.94 ms
+except `k = 0`, which an independent review separated (F12). Cost of r4 vs r2: ladders 1.73×,
+`G1Point.ctScalarMul` +24%, G1 Pedersen generation three split multiplications instead of two.
 
 ### Remaining assumptions and gates
-- Q2 (blst side-channel statement) and Q5 (F12) are open.
+- Q2 (blst side-channel statement) is open.
 - No Java path is constant-time; secret-bearing generation stays offline/isolated only.
 - External cryptographic review of `zeroj-bls12381`, the D1 ladder and the FFM binding;
   side-channel evaluation of the exact provider, version and platform.

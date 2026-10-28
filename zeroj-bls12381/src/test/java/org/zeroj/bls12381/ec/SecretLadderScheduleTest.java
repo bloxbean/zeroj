@@ -23,165 +23,184 @@ import java.util.function.Supplier;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * ADR-0062 D1 / I1 / I2: the secret ladders run a fixed, blinded operation schedule and return
- * exactly {@code [k mod r]P}.
+ * ADR-0062 D1 (r4) / I1 / I2: the secret ladders split the scalar into two fresh uniform shares
+ * (Clavier–Joye, CHES 2001), run a fixed schedule on each recoded share, and return exactly
+ * {@code [k mod r]P}.
  *
- * <p>The schedule gate is exact. For every scalar it compares the iterations at which an identity
+ * <p>The schedule gate is exact. For each ladder it compares the iterations at which an identity
  * appears (an early-return branch in {@code add}/{@code doublePoint}) with the set predicted by
- * integer arithmetic on the blinded scalar: at iteration {@code i} the inputs are
- * {@code r0 = [a]P}, {@code r1 = [a+1]P} and the sum {@code [2a+1]P}, with
- * {@code a = ⌊k̂ / 2^(i+1)⌋}, so a special case happens iff {@code a}, {@code a+1} or {@code 2a+1}
- * is {@code ≡ 0 (mod r)}.</p>
- *
- * <p>Writing {@code m = q·2^(i+1) + s}, {@code a ≡ ⌊(k + s·r) / 2^(i+1)⌋ (mod r)}, which lies in
- * {@code [0, r)}; it is {@code 0}, {@code r − 1} or {@code (r − 1)/2} only when {@code k} or
- * {@code r − k} is at most {@code 2^(i+1)}. Since {@code m < 2^66}, the predicted set is empty
- * whenever {@code k > 2^66} and {@code r − k > 2^66} ("far" scalars, all but a {@code 2^-188}
- * fraction of {@code [0, r)}); for the remaining "near" scalars it lies in iterations
- * {@code i <= 65} and depends on the low bits of the random {@code m}.</p>
+ * integer arithmetic on the recoded share: at iteration {@code i} the inputs are {@code [a]P},
+ * {@code [a+1]P} and the sum {@code [2a+1]P}, with {@code a = ⌊ŝ / 2^(i+1)⌋}, so a special case
+ * happens iff {@code a}, {@code a+1} or {@code 2a+1} is {@code ≡ 0 (mod r)}.</p>
  */
 class SecretLadderScheduleTest {
     private static final BigInteger R = G1Point.R;
     private static final G1Point G1 = Bls12381Generators.G1;
     private static final G2Point G2 = Bls12381Generators.G2;
 
+    /** The scalars the maintainer's F12 simulation showed leaking through the r1–r3 blinded ladder. */
+    private static final List<BigInteger> LOW_ENTROPY = List.of(BigInteger.ZERO, BigInteger.ONE, BigInteger.TWO,
+            BigInteger.valueOf(5), BigInteger.ONE.shiftLeft(64), R.subtract(BigInteger.TWO), R.subtract(BigInteger.ONE));
+
     @AfterEach
     void clearObserver() {
         SecretLadder.clearObserverForTesting();
     }
 
-    // ---- I2: fixed operation schedule ----
+    // ---- I2: fixed operation schedule, no identity steps for any secret ----
 
+    /**
+     * Requirement 4 (ADR-0062 r4): for low-entropy and random secrets, over many seeds, neither ladder
+     * takes a special step; the only allowed exception is the final addition for {@code k = 0}.
+     */
     @Test
-    void everyScalarRunsTheSameScheduleWithNoUnexplainedSpecialCase() {
-        Random random = new Random(0x0062_0001L);
-        for (BigInteger k : scheduleCorpus()) {
-            BigInteger m = SecretLadder.M_MIN.add(new BigInteger(64, random));
-            BigInteger kHat = k.add(m.multiply(R));
-            Set<Integer> predicted = predictedSpecialIterations(kHat);
-            if (isFar(k)) {
-                assertEquals(Set.of(), predicted, "far scalar k=" + k.toString(16));
-            } else {
-                assertTrue(predicted.stream().allMatch(i -> i <= 65), "near scalar k=" + k.toString(16) + " " + predicted);
+    void lowEntropySecretsTakeNoSpecialStepInEitherLadder() {
+        Random random = new Random(0x0062_0401L);
+        List<BigInteger> scalars = new ArrayList<>(LOW_ENTROPY);
+        scalars.add(new BigInteger(255, random).mod(R));
+        for (BigInteger k : scalars) {
+            for (int seed = 0; seed < 64; seed++) {
+                BigInteger k1 = new BigInteger(255, random).mod(R);
+                Counter c = observe(() -> G1.ctScalarMul(k, () -> k1));
+                c.assertFixed("k=" + k.toString(16));
+                assertEquals(List.of(Set.of(), Set.of()), c.special, "k=" + k.toString(16) + " k1=" + k1.toString(16));
+                assertEquals(k.signum() == 0, c.combinationSpecial, "combination k=" + k.toString(16));
             }
-            Counter g1 = observe(() -> G1.ctScalarMul(k, () -> m));
-            g1.assertFixed("G1 k=" + k.toString(16));
-            assertEquals(predicted, g1.special, "G1 special iterations, k=" + k.toString(16));
         }
     }
 
     @Test
-    void g2RunsTheSameSchedule() {
-        Random random = new Random(0x0062_0002L);
-        List<BigInteger> corpus = List.of(BigInteger.ZERO, BigInteger.ONE, BigInteger.TWO,
-                R.subtract(BigInteger.TWO), R.subtract(BigInteger.ONE), BigInteger.ONE.shiftLeft(200),
-                R.subtract(BigInteger.ONE).subtract(BigInteger.ONE.shiftLeft(100)));
-        for (BigInteger k : corpus) {
-            BigInteger m = SecretLadder.M_MIN.add(new BigInteger(64, random));
-            Counter c = observe(() -> G2.ctScalarMul(k, () -> m));
+    void g2RunsTheSameScheduleWithNoSpecialStep() {
+        Random random = new Random(0x0062_0402L);
+        for (BigInteger k : LOW_ENTROPY) {
+            BigInteger k1 = new BigInteger(255, random).mod(R);
+            Counter c = observe(() -> G2.ctScalarMul(k, () -> k1));
             c.assertFixed("G2 k=" + k.toString(16));
-            assertEquals(predictedSpecialIterations(k.add(m.multiply(R))), c.special, "G2 k=" + k.toString(16));
+            assertEquals(List.of(Set.of(), Set.of()), c.special, "G2 k=" + k.toString(16));
+            assertEquals(k.signum() == 0, c.combinationSpecial);
         }
     }
 
-    /** The documented exceptions sit only in the final iterations, never mid-ladder. */
+    /** The instrumentation matches the arithmetic model, including the probability-1/r share cases. */
     @Test
-    void zeroAndMinusOneAreSpecialOnlyAtTheEnd() {
-        for (BigInteger m : List.of(SecretLadder.M_MIN, SecretLadder.M_MAX,
-                SecretLadder.M_MIN.add(BigInteger.valueOf(12345)))) {
-            for (BigInteger k : List.of(BigInteger.ZERO, R.subtract(BigInteger.ONE))) {
-                Set<Integer> predicted = predictedSpecialIterations(k.add(m.multiply(R)));
-                assertFalse(predicted.isEmpty());
-                // Only the last iterations (i <= 65) can be special for a near scalar.
-                assertTrue(predicted.stream().allMatch(i -> i <= 65), "k=" + k + " m=" + m + " " + predicted);
-                Counter c = observe(() -> G1.ctScalarMul(k, () -> m));
-                c.assertFixed("k=" + k);
-                assertEquals(predicted, c.special);
+    void observedSpecialStepsEqualThePrediction() {
+        BigInteger k = BigInteger.valueOf(1234567);
+        // k1 = 0 and k1 = k (so k2 = 0): the corresponding ladder ends at the identity.
+        for (BigInteger k1 : List.of(BigInteger.ZERO, k)) {
+            BigInteger k2 = k.subtract(k1).mod(R);
+            Counter c = observe(() -> G1.ctScalarMul(k, () -> k1));
+            c.assertFixed("k1=" + k1);
+            assertEquals(List.of(predicted(SecretLadder.recode(k1)), predicted(SecretLadder.recode(k2))), c.special);
+            assertTrue(c.combinationSpecial, "an identity operand in the final addition");
+            assertFalse(c.special.get(0).isEmpty() && c.special.get(1).isEmpty());
+        }
+        // k1 = k2 (k = 2·k1): the final addition is a doubling.
+        BigInteger half = BigInteger.valueOf(777);
+        Counter c = observe(() -> G1.ctScalarMul(half.shiftLeft(1), () -> half));
+        assertEquals(List.of(Set.of(), Set.of()), c.special);
+        assertTrue(c.combinationSpecial);
+        assertEquals(G1.scalarMul(half.shiftLeft(1)), G1.ctScalarMul(half.shiftLeft(1), () -> half));
+    }
+
+    /**
+     * Why r4 replaced the blinding (ADR-0062 F12): with {@code k̂ = k + m·r}, {@code m} uniform in the
+     * 64-bit window, the prefix at step {@code i} is {@code ⌊k/2^i⌋ mod r} whenever {@code 2^i | m},
+     * which is 0 for small {@code k}. Same model, 400 runs per scalar: the blinded construction hits
+     * identity steps for every low-entropy scalar, the split hits none.
+     */
+    @Test
+    void blindingAloneLeakedAndTheSplitDoesNot() {
+        BigInteger mMin = BigInteger.ONE.shiftLeft(319).add(R).subtract(BigInteger.ONE).divide(R);
+        BigInteger mRange = BigInteger.ONE.shiftLeft(320).subtract(R).divide(R).subtract(mMin).add(BigInteger.ONE);
+        Random random = new Random(0x0062_0403L);
+        int[] blindedHits = new int[LOW_ENTROPY.size()];
+        int[] splitHits = new int[LOW_ENTROPY.size()];
+        for (int run = 0; run < 400; run++) {
+            for (int j = 0; j < LOW_ENTROPY.size(); j++) {
+                BigInteger k = LOW_ENTROPY.get(j);
+                BigInteger m = mMin.add(new BigInteger(66, random).mod(mRange));
+                if (!predicted(k.add(m.multiply(R)), 320).isEmpty()) blindedHits[j]++;
+                BigInteger k1 = new BigInteger(255, random).mod(R);
+                BigInteger k2 = k.subtract(k1).mod(R);
+                if (!predicted(SecretLadder.recode(k1)).isEmpty() || !predicted(SecretLadder.recode(k2)).isEmpty()) {
+                    splitHits[j]++;
+                }
             }
         }
-    }
-
-    /** Near scalars: whether an identity appears depends on the random m, not on k alone. */
-    @Test
-    void nearScalarSpecialCasesDependOnTheBlindingFactor() {
-        BigInteger even = SecretLadder.M_MIN; // m ≡ 2 (mod 4): exactly one trailing zero bit
-        while (!even.mod(BigInteger.valueOf(4)).equals(BigInteger.TWO)) even = even.add(BigInteger.ONE);
-        BigInteger odd = even.add(BigInteger.ONE);
-        final BigInteger m2 = even;
-        // k = 1: with m even the last prefix is (m·r)/2 ≡ 0 (and, for m ≡ 2 mod 4, the one before
-        // is ≡ (r−1)/2); with m odd no prefix is special.
-        Set<Integer> evenPredicted = predictedSpecialIterations(BigInteger.ONE.add(even.multiply(R)));
-        assertEquals(Set.of(0, 1), evenPredicted);
-        assertEquals(Set.of(), predictedSpecialIterations(BigInteger.ONE.add(odd.multiply(R))));
-        assertEquals(evenPredicted, observe(() -> G1.ctScalarMul(BigInteger.ONE, () -> m2)).special);
-        assertEquals(Set.of(), observe(() -> G1.ctScalarMul(BigInteger.ONE, () -> odd)).special);
-        // A far scalar is never special, whatever m is.
-        BigInteger far = BigInteger.ONE.shiftLeft(200).add(BigInteger.valueOf(12345));
-        for (BigInteger m : List.of(even, odd, SecretLadder.M_MAX, BigInteger.ONE.shiftLeft(65))) {
-            assertEquals(Set.of(), predictedSpecialIterations(far.add(m.multiply(R))), "m=" + m);
+        assertEquals(400, blindedHits[0], "k = 0");
+        assertEquals(400, blindedHits[6], "k = r - 1");
+        assertTrue(blindedHits[1] > 150 && blindedHits[1] < 250, "k = 1: about half, got " + blindedHits[1]);
+        for (int j = 0; j < LOW_ENTROPY.size(); j++) {
+            if (j != 4) assertTrue(blindedHits[j] > 0, "blinded k=" + LOW_ENTROPY.get(j));
+            assertEquals(0, splitHits[j], "split k=" + LOW_ENTROPY.get(j));
         }
     }
 
-    private static boolean isFar(BigInteger k) {
-        BigInteger bound = BigInteger.ONE.shiftLeft(66);
-        return k.compareTo(bound) > 0 && R.subtract(k).compareTo(bound) > 0;
+    // ---- recoding ----
+
+    @Test
+    void recodingGives256BitsAndPreservesTheResidue() {
+        BigInteger top = BigInteger.ONE.shiftLeft(255);
+        for (BigInteger s : List.of(BigInteger.ZERO, BigInteger.ONE, R.subtract(BigInteger.ONE),
+                top.subtract(R).subtract(BigInteger.ONE), top.subtract(R), top.subtract(R).add(BigInteger.ONE))) {
+            BigInteger hat = SecretLadder.recode(s.mod(R));
+            assertEquals(256, hat.bitLength(), "s=" + s);
+            assertEquals(s.mod(R), hat.mod(R), "s=" + s);
+        }
     }
 
-    /** Boundary cases from the M5 review: special iterations can reach i = 65. */
-    @Test
-    void boundaryNearScalarsReachIteration65() {
-        BigInteger k = R.subtract(BigInteger.ONE.shiftLeft(65));
-        BigInteger m = new BigInteger("1ffffffffffffffff", 16);
-        assertTrue(m.compareTo(SecretLadder.M_MIN) >= 0 && m.compareTo(SecretLadder.M_MAX) <= 0);
-        Set<Integer> predicted = predictedSpecialIterations(k.add(m.multiply(R)));
-        assertEquals(Set.of(64, 65), predicted);
-        Counter c = observe(() -> G1.ctScalarMul(k, () -> m));
-        c.assertFixed("r - 2^65");
-        assertEquals(predicted, c.special);
-        assertEquals(G1.scalarMul(k), G1.ctScalarMul(k, () -> m));
+    // ---- I1: output identity ----
 
-        BigInteger m65 = BigInteger.ONE.shiftLeft(65);
-        Set<Integer> zero = predictedSpecialIterations(m65.multiply(R));
-        assertTrue(zero.contains(65), zero.toString());
-        assertEquals(zero, observe(() -> G1.ctScalarMul(BigInteger.ZERO, () -> m65)).special);
-        assertFalse(isFar(k));
-    }
-
-    /** Production calls draw a fresh blinding factor each time (a constant m would pass the rest). */
     @Test
-    void productionCallsUseFreshBlindingFactors() {
-        BigInteger k = BigInteger.valueOf(123456789);
-        Counter first = observe(() -> G1.ctScalarMul(k));
-        Counter second = observe(() -> G1.ctScalarMul(k));
-        Counter viaProvider = observe(() -> Bls12381Providers.pureJava().g2SecretScalarMul(G2, k));
-        assertEquals(1, first.factors.size());
-        assertEquals(1, second.factors.size());
-        assertEquals(1, viaProvider.factors.size());
-        assertNotEquals(first.factors.get(0), second.factors.get(0));
-        assertNotEquals(first.factors.get(0), viaProvider.factors.get(0));
+    void outputEqualsPublicScalarMul() {
+        Random random = new Random(0x0062_0404L);
+        for (BigInteger k : LOW_ENTROPY) {
+            BigInteger k1 = new BigInteger(255, random).mod(R);
+            assertEquals(G1.scalarMul(k), G1.ctScalarMul(k, () -> k1), "k=" + k.toString(16));
+        }
+        for (int i = 0; i < 16; i++) {
+            BigInteger k = new BigInteger(256, random);
+            assertEquals(G1.scalarMul(k.mod(R)), G1.ctScalarMul(k), "G1 random " + i);
+            assertEquals(G2.scalarMul(k.mod(R)), G2.ctScalarMul(k), "G2 random " + i);
+        }
     }
 
     @Test
-    void candidateMaskAndAcceptanceBoundary() {
-        BigInteger range = SecretLadder.M_MAX.subtract(SecretLadder.M_MIN).add(BigInteger.ONE);
-        assertEquals(SecretLadder.M_MAX, SecretLadder.candidate(bytes(range.subtract(BigInteger.ONE))));
-        assertNull(SecretLadder.candidate(bytes(range)));
-        assertEquals(SecretLadder.M_MIN, SecretLadder.candidate(bytes(BigInteger.ZERO)));
-        // Bits above the 65-bit candidate width are masked off, not rejected.
-        byte[] high = bytes(BigInteger.ONE);
-        high[0] |= (byte) 0xfe;
-        assertEquals(SecretLadder.M_MIN.add(BigInteger.ONE), SecretLadder.candidate(high));
+    void differentSharesGiveTheSameOutput() {
+        BigInteger k = new BigInteger("5a1f0e9d8c7b6a5948372615f4e3d2c1b0a9f8e7d6c5b4a3928170f6e5d4c3b", 16).mod(R);
+        for (BigInteger k1 : List.of(BigInteger.ZERO, BigInteger.ONE, k, R.subtract(BigInteger.ONE))) {
+            assertEquals(G1.scalarMul(k), G1.ctScalarMul(k, () -> k1), "k1=" + k1);
+            assertEquals(G2.scalarMul(k), G2.ctScalarMul(k, () -> k1), "k1=" + k1);
+        }
     }
 
     @Test
-    void aThrowingSecureRandomPropagates() {
-        SecureRandom broken = new SecureRandom() {
-            @Override
-            public void nextBytes(byte[] bytes) {
-                throw new IllegalStateException("entropy source failed");
-            }
-        };
-        assertThrows(IllegalStateException.class, () -> SecretLadder.sample(broken));
+    void negativeAndOversizedScalarsAreReducedModR() {
+        for (BigInteger k : List.of(BigInteger.valueOf(-1), R, R.add(BigInteger.ONE),
+                BigInteger.ONE.shiftLeft(255).add(BigInteger.ONE), BigInteger.ONE.shiftLeft(256).subtract(BigInteger.ONE))) {
+            assertEquals(G1.scalarMul(k.mod(R)), G1.ctScalarMul(k), "k=" + k);
+        }
+        assertTrue(G1.ctScalarMul(BigInteger.ZERO).isInfinity());
+        assertTrue(G1.ctScalarMul(R).isInfinity());
+        assertThrows(IllegalArgumentException.class, () -> G1.ctScalarMul(BigInteger.ONE.shiftLeft(256)));
+    }
+
+    // ---- fail closed ----
+
+    /** [ŝ]P = [s]P only inside the prime-order subgroup, so other points must be rejected. */
+    @Test
+    void pointsOutsideTheSubgroupAreRejected() {
+        G1Point g1Torsion = g1PointOutsideSubgroup();
+        G2Point g2Torsion = g2PointOutsideSubgroup();
+        assertThrows(IllegalArgumentException.class, () -> g1Torsion.ctScalarMul(BigInteger.TWO));
+        assertThrows(IllegalArgumentException.class, () -> g2Torsion.ctScalarMul(BigInteger.TWO));
+        assertThrows(IllegalArgumentException.class,
+                () -> JacobianG1BLS381.fromAffine(g1Torsion.x().value(), g1Torsion.y().value()).ctScalarMul(BigInteger.TWO));
+        Bls12381Provider pure = Bls12381Providers.pureJava();
+        assertThrows(IllegalArgumentException.class, () -> pure.g1SecretScalarMul(g1Torsion, BigInteger.TWO));
+        assertThrows(IllegalArgumentException.class, () -> pure.g2SecretScalarMul(g2Torsion, BigInteger.TWO));
+        G1Point offCurve = new G1Point(Fp.ONE, Fp.ONE);
+        assertThrows(IllegalArgumentException.class, () -> offCurve.ctScalarMul(BigInteger.TWO));
     }
 
     @Test
@@ -202,158 +221,99 @@ class SecretLadderScheduleTest {
         assertThrows(NullPointerException.class, () -> G1.ctScalarMul(null));
     }
 
-    private static byte[] bytes(BigInteger u) {
-        byte[] out = new byte[SecretLadder.CANDIDATE_BYTES];
-        byte[] be = u.toByteArray();
-        int n = Math.min(be.length, out.length);
-        System.arraycopy(be, be.length - n, out, out.length - n, n);
-        return out;
-    }
-
-    // ---- I1: output identity ----
-
     @Test
-    void outputEqualsPublicScalarMulForEveryCorpusScalar() {
-        Random random = new Random(0x0062_0003L);
-        for (BigInteger k : scheduleCorpus()) {
-            BigInteger m = SecretLadder.M_MIN.add(new BigInteger(64, random));
-            assertEquals(G1.scalarMul(k.mod(R)), G1.ctScalarMul(k, () -> m), "k=" + k.toString(16));
-        }
-        for (int i = 0; i < 16; i++) {
-            BigInteger k = new BigInteger(256, random);
-            assertEquals(G1.scalarMul(k.mod(R)), G1.ctScalarMul(k), "G1 random " + i);
-            assertEquals(G2.scalarMul(k.mod(R)), G2.ctScalarMul(k), "G2 random " + i);
-        }
-    }
-
-    @Test
-    void differentBlindingFactorsGiveTheSameOutput() {
-        BigInteger k = new BigInteger("5a1f0e9d8c7b6a5948372615f4e3d2c1b0a9f8e7d6c5b4a3928170f6e5d4c3b", 16).mod(R);
-        G1Point expected = G1.scalarMul(k);
-        for (BigInteger m : List.of(SecretLadder.M_MIN, SecretLadder.M_MAX,
-                SecretLadder.M_MIN.add(BigInteger.ONE.shiftLeft(63)))) {
-            assertEquals(expected, G1.ctScalarMul(k, () -> m), "m=" + m);
-            assertEquals(G2.scalarMul(k), G2.ctScalarMul(k, () -> m), "m=" + m);
-        }
-    }
-
-    @Test
-    void negativeAndOversizedScalarsAreReducedModR() {
-        for (BigInteger k : List.of(BigInteger.valueOf(-1), R, R.add(BigInteger.ONE),
-                BigInteger.ONE.shiftLeft(255).add(BigInteger.ONE), BigInteger.ONE.shiftLeft(256).subtract(BigInteger.ONE))) {
-            assertEquals(G1.scalarMul(k.mod(R)), G1.ctScalarMul(k), "k=" + k);
-        }
-        assertTrue(G1.ctScalarMul(BigInteger.ZERO).isInfinity());
-        assertTrue(G1.ctScalarMul(R).isInfinity());
-        assertThrows(IllegalArgumentException.class, () -> G1.ctScalarMul(BigInteger.ONE.shiftLeft(256)));
-    }
-
-    // ---- fail closed ----
-
-    /** [k + m·r]P = [k]P only inside the prime-order subgroup, so other points must be rejected. */
-    @Test
-    void pointsOutsideTheSubgroupAreRejected() {
-        G1Point g1Torsion = g1PointOutsideSubgroup();
-        G2Point g2Torsion = g2PointOutsideSubgroup();
-        assertThrows(IllegalArgumentException.class, () -> g1Torsion.ctScalarMul(BigInteger.TWO));
-        assertThrows(IllegalArgumentException.class, () -> g2Torsion.ctScalarMul(BigInteger.TWO));
-        assertThrows(IllegalArgumentException.class,
-                () -> JacobianG1BLS381.fromAffine(g1Torsion.x().value(), g1Torsion.y().value()).ctScalarMul(BigInteger.TWO));
-        Bls12381Provider pure = Bls12381Providers.pureJava();
-        assertThrows(IllegalArgumentException.class, () -> pure.g1SecretScalarMul(g1Torsion, BigInteger.TWO));
-        assertThrows(IllegalArgumentException.class, () -> pure.g2SecretScalarMul(g2Torsion, BigInteger.TWO));
-        G1Point offCurve = new G1Point(Fp.ONE, Fp.ONE);
-        assertThrows(IllegalArgumentException.class, () -> offCurve.ctScalarMul(BigInteger.TWO));
-    }
-
-    @Test
-    void aFailingRandomSourcePropagatesWithNoUnblindedFallback() {
+    void aFailingRandomSourcePropagatesWithNoUnsplitFallback() {
         IllegalStateException failure = new IllegalStateException("entropy unavailable");
-        SecretLadder.BlindingSource broken = () -> { throw failure; };
+        SecretLadder.ShareSource broken = () -> { throw failure; };
         assertSame(failure, assertThrows(IllegalStateException.class, () -> G1.ctScalarMul(BigInteger.TEN, broken)));
         assertSame(failure, assertThrows(IllegalStateException.class, () -> G2.ctScalarMul(BigInteger.TEN, broken)));
+        SecureRandom brokenRandom = new SecureRandom() {
+            @Override
+            public void nextBytes(byte[] bytes) {
+                throw new IllegalStateException("entropy source failed");
+            }
+        };
+        assertThrows(IllegalStateException.class, () -> SecretLadder.sample(brokenRandom));
     }
 
     @Test
-    void blindingFactorsOutsideTheRangeAreRejected() {
-        BigInteger below = SecretLadder.M_MIN.subtract(BigInteger.ONE);
-        BigInteger above = SecretLadder.M_MAX.add(BigInteger.ONE);
-        assertThrows(IllegalStateException.class, () -> G1.ctScalarMul(BigInteger.TEN, () -> below));
-        assertThrows(IllegalStateException.class, () -> G1.ctScalarMul(BigInteger.TEN, () -> above));
+    void sharesOutsideTheRangeAreRejected() {
+        assertThrows(IllegalStateException.class, () -> G1.ctScalarMul(BigInteger.TEN, () -> BigInteger.valueOf(-1)));
+        assertThrows(IllegalStateException.class, () -> G1.ctScalarMul(BigInteger.TEN, () -> R));
         assertThrows(NullPointerException.class, () -> G1.ctScalarMul(BigInteger.TEN, () -> null));
     }
 
-    // ---- the blinding range ----
+    // ---- share sampling ----
 
     @Test
-    void rangeEndsGiveExactly320BitsForEveryReducedScalar() {
-        assertEquals(BigInteger.ONE.shiftLeft(319).add(R).subtract(BigInteger.ONE).divide(R), SecretLadder.M_MIN);
-        assertEquals(BigInteger.ONE.shiftLeft(320).subtract(R).divide(R), SecretLadder.M_MAX);
-        for (BigInteger m : List.of(SecretLadder.M_MIN, SecretLadder.M_MAX)) {
-            for (BigInteger k : List.of(BigInteger.ZERO, R.subtract(BigInteger.ONE))) {
-                assertEquals(320, SecretLadder.blind(k, () -> m).bitLength(), "m=" + m + " k=" + k);
-            }
-        }
-        // Just outside the range, some reduced scalar leaves the 320-bit window.
-        assertTrue(SecretLadder.M_MIN.subtract(BigInteger.ONE).multiply(R).bitLength() < 320);
-        assertTrue(SecretLadder.M_MAX.add(BigInteger.ONE).multiply(R).add(R.subtract(BigInteger.ONE)).bitLength() > 320);
-        // About 2^64 values: each call takes about 64 bits of entropy.
-        assertEquals(65, SecretLadder.M_MAX.subtract(SecretLadder.M_MIN).add(BigInteger.ONE).bitLength());
+    void candidateMaskAndAcceptanceBoundary() {
+        assertEquals(R.subtract(BigInteger.ONE), SecretLadder.candidate(bytes(R.subtract(BigInteger.ONE))));
+        assertNull(SecretLadder.candidate(bytes(R)));
+        assertEquals(BigInteger.ZERO, SecretLadder.candidate(bytes(BigInteger.ZERO)));
+        // The top bit is masked off (255-bit candidates), not rejected.
+        byte[] high = bytes(BigInteger.ONE);
+        high[0] |= (byte) 0x80;
+        assertEquals(BigInteger.ONE, SecretLadder.candidate(high));
     }
 
     @Test
-    void secureSamplesStayInRange() {
+    void secureSharesStayInRangeAndDoNotRepeat() {
         SecureRandom random = new SecureRandom();
         Set<BigInteger> seen = new LinkedHashSet<>();
         for (int i = 0; i < 2000; i++) {
-            BigInteger m = SecretLadder.sample(random);
-            assertTrue(m.compareTo(SecretLadder.M_MIN) >= 0 && m.compareTo(SecretLadder.M_MAX) <= 0, m.toString());
-            seen.add(m);
+            BigInteger k1 = SecretLadder.sample(random);
+            assertTrue(k1.signum() >= 0 && k1.compareTo(R) < 0, k1.toString());
+            seen.add(k1);
         }
-        assertTrue(seen.size() > 1990, "fresh blinding factors repeat: " + seen.size());
+        assertEquals(2000, seen.size());
     }
 
-    // ---- production call sites use the blinded schedule ----
+    /** Production calls draw a fresh share each time (a constant share would pass the rest). */
+    @Test
+    void productionCallsUseFreshShares() {
+        BigInteger k = BigInteger.valueOf(123456789);
+        Counter first = observe(() -> G1.ctScalarMul(k));
+        Counter second = observe(() -> G1.ctScalarMul(k));
+        Counter viaProvider = observe(() -> Bls12381Providers.pureJava().g2SecretScalarMul(G2, k));
+        assertEquals(1, first.shares.size());
+        assertEquals(1, second.shares.size());
+        assertEquals(1, viaProvider.shares.size());
+        assertNotEquals(first.shares.get(0), second.shares.get(0));
+        assertNotEquals(first.shares.get(0), viaProvider.shares.get(0));
+    }
+
+    // ---- production call sites ----
 
     @Test
-    void providerAndPedersenGenerationUseTheBlindedSchedule() {
+    void providerAndPedersenGenerationUseTheSplitSchedule() {
         Bls12381Provider pure = Bls12381Providers.pureJava();
         Counter secret = observe(() -> pure.g1SecretScalarMul(G1, BigInteger.ONE));
         secret.assertFixed("provider g1");
-        assertEquals(List.of(SecretLadder.ITERATIONS), secret.schedules);
         Counter secret2 = observe(() -> pure.g2SecretScalarMul(G2, BigInteger.ZERO));
-        assertEquals(List.of(SecretLadder.ITERATIONS), secret2.schedules);
+        secret2.assertFixed("provider g2");
         Counter publicMul = observe(() -> pure.g1ScalarMul(G1, BigInteger.TEN));
         assertEquals(List.of(), publicMul.schedules, "the public path must not run the secret ladder");
 
-        G1Pedersen pedersenInstance = G1Pedersen.pureJava(); // its capability probe runs here
-        Counter pedersen = observe(() -> pedersenInstance.commitScalar(BigInteger.valueOf(42), BigInteger.valueOf(7)));
-        assertEquals(List.of(SecretLadder.ITERATIONS, SecretLadder.ITERATIONS), pedersen.schedules,
-                "commit = [m]G + [r]H runs two blinded ladders");
+        G1Pedersen pedersen = G1Pedersen.pureJava(); // its capability probe runs here
+        for (BigInteger value : List.of(BigInteger.ZERO, BigInteger.ONE)) {
+            Counter c = observe(() -> pedersen.commitScalar(value, BigInteger.valueOf(7)));
+            assertEquals(6, c.schedules.size(), "commit = [x−t]G + [r]H + [t]G: three split multiplications");
+            assertTrue(c.special.stream().allMatch(Set::isEmpty), "value " + value);
+            assertFalse(c.combinationSpecial, "value " + value);
+        }
     }
 
     // ---- helpers ----
 
-    /** 0, 1, 2, r−2, r−1, every bit length 1..255, low and high Hamming weight. */
-    private static List<BigInteger> scheduleCorpus() {
-        List<BigInteger> corpus = new ArrayList<>(List.of(BigInteger.ZERO, BigInteger.ONE, BigInteger.TWO,
-                R.subtract(BigInteger.TWO), R.subtract(BigInteger.ONE)));
-        Random random = new Random(0x0062_0004L);
-        for (int bits = 1; bits <= 255; bits++) {
-            BigInteger low = BigInteger.ONE.shiftLeft(bits - 1);                  // Hamming weight 1
-            BigInteger high = BigInteger.ONE.shiftLeft(bits).subtract(BigInteger.ONE); // all ones
-            BigInteger mixed = low.or(new BigInteger(bits - 1, random));
-            for (BigInteger k : List.of(low, high, mixed)) {
-                if (k.compareTo(R) < 0) corpus.add(k);
-            }
-        }
-        return corpus;
+    /** Special iterations of a ladder over a 256-bit recoded share. */
+    private static Set<Integer> predicted(BigInteger hat) {
+        return predicted(hat, SecretLadder.WIDTH);
     }
 
-    private static Set<Integer> predictedSpecialIterations(BigInteger kHat) {
+    private static Set<Integer> predicted(BigInteger hat, int width) {
         Set<Integer> out = new TreeSet<>();
-        for (int i = SecretLadder.WIDTH - 2; i >= 0; i--) {
-            BigInteger a = kHat.shiftRight(i + 1);
+        for (int i = width - 2; i >= 0; i--) {
+            BigInteger a = hat.shiftRight(i + 1);
             if (a.mod(R).signum() == 0 || a.add(BigInteger.ONE).mod(R).signum() == 0
                     || a.shiftLeft(1).add(BigInteger.ONE).mod(R).signum() == 0) {
                 out.add(i);
@@ -375,22 +335,33 @@ class SecretLadderScheduleTest {
 
     private static final class Counter implements SecretLadder.ScheduleObserver {
         final List<Integer> schedules = new ArrayList<>();
-        final Set<Integer> special = new TreeSet<>();
-        final List<BigInteger> factors = new ArrayList<>();
+        final List<Set<Integer>> special = new ArrayList<>();
+        final List<BigInteger> shares = new ArrayList<>();
+        boolean combinationSpecial;
         int additions;
         int doublings;
 
-        @Override public void scheduleStarted(int iterations) { schedules.add(iterations); }
+        @Override public void scheduleStarted(int iterations) { schedules.add(iterations); special.add(new TreeSet<>()); }
         @Override public void addition() { additions++; }
         @Override public void doubling() { doublings++; }
-        @Override public void specialCase(int bitIndex) { special.add(bitIndex); }
-        @Override public void blindingFactor(BigInteger m) { factors.add(m); }
+        @Override public void specialCase(int bitIndex) { special.get(special.size() - 1).add(bitIndex); }
+        @Override public void combinationSpecial() { combinationSpecial = true; }
+        @Override public void share(BigInteger k1) { shares.add(k1); }
 
+        /** One split multiplication: two ladders of 255 iterations, one addition and doubling each. */
         void assertFixed(String label) {
-            assertEquals(List.of(SecretLadder.ITERATIONS), schedules, label);
-            assertEquals(SecretLadder.ITERATIONS, additions, label);
-            assertEquals(SecretLadder.ITERATIONS, doublings, label);
+            assertEquals(List.of(SecretLadder.ITERATIONS, SecretLadder.ITERATIONS), schedules, label);
+            assertEquals(2 * SecretLadder.ITERATIONS, additions, label);
+            assertEquals(2 * SecretLadder.ITERATIONS, doublings, label);
         }
+    }
+
+    private static byte[] bytes(BigInteger u) {
+        byte[] out = new byte[SecretLadder.CANDIDATE_BYTES];
+        byte[] be = u.toByteArray();
+        int n = Math.min(be.length, out.length);
+        System.arraycopy(be, be.length - n, out, out.length - n, n);
+        return out;
     }
 
     private static G1Point g1PointOutsideSubgroup() {

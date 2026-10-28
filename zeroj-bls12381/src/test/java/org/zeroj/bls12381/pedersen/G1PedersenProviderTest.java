@@ -31,6 +31,7 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -318,7 +319,7 @@ class G1PedersenProviderTest {
     // ---------------------------------------------------------------------------------------------
 
     @Test
-    void commitScalar_usesTwoSecretMultiplicationsOnGAndH() {
+    void commitScalar_usesThreeSecretMultiplicationsWithTheValueSplit() {
         Stub stub = Stub.delegating();
         G1Pedersen pedersen = G1Pedersen.withProvider(stub.provider);
         stub.calls.clear();
@@ -326,12 +327,12 @@ class G1PedersenProviderTest {
         G1PedersenCommitment c = pedersen.commitScalar(BigInteger.valueOf(12345), BigInteger.valueOf(67890));
 
         assertEquals(C_12345_67890, HEX.formatHex(c.toPointBytes()));
-        assertEquals(List.of(SECRET_MUL, SECRET_MUL), stub.names());
+        assertEquals(List.of(SECRET_MUL, SECRET_MUL, SECRET_MUL), stub.names());
         assertBaseScalars(stub.calls, BigInteger.valueOf(12345), BigInteger.valueOf(67890));
     }
 
     @Test
-    void commitBytes_usesTwoSecretMultiplicationsOnGAndHForEverySource() throws Exception {
+    void commitBytes_usesThreeSecretMultiplicationsForEverySource() throws Exception {
         BigInteger r = BigInteger.valueOf(67890);
         // Spec §3: a bytes commitment is the scalar commitment to s with the same r.
         byte[] expected = G1Pedersen.pureJava().commitScalar(S_ABC, r).toPointBytes();
@@ -345,7 +346,7 @@ class G1PedersenProviderTest {
             stub.calls.clear();
 
             assertArrayEquals(expected, source.run(pedersen));
-            assertEquals(List.of(SECRET_MUL, SECRET_MUL), stub.names());
+            assertEquals(List.of(SECRET_MUL, SECRET_MUL, SECRET_MUL), stub.names());
             assertBaseScalars(stub.calls, S_ABC, r);
         }
     }
@@ -595,14 +596,22 @@ class G1PedersenProviderTest {
     }
 
     /** Exactly two calls, in either order: one {@code (G, x)} and one {@code (H, r)}. */
+    /**
+     * ADR-0062 D1 r4: generation splits the value, {@code C = [x − t]·G + [r]·H + [t]·G} with a fresh
+     * uniform {@code t}, so the calls are (G, x − t), (H, r), (G, t) and the two G scalars sum to x.
+     */
     private static void assertBaseScalars(List<Call> calls, BigInteger x, BigInteger r) {
-        assertEquals(2, calls.size());
-        Call onG = calls.get(0).args()[0].equals(G) ? calls.get(0) : calls.get(1);
-        Call onH = onG == calls.get(0) ? calls.get(1) : calls.get(0);
-        assertEquals(G, onG.args()[0], "one multiplication must be on G (spec §2.2)");
-        assertEquals(H, onH.args()[0], "the other multiplication must be on H (spec §2.2)");
-        assertEquals(x, onG.args()[1], "scalar on G");
-        assertEquals(r, onH.args()[1], "scalar on H");
+        assertEquals(3, calls.size());
+        assertEquals(G, calls.get(0).args()[0], "first multiplication on G (spec §2.2)");
+        assertEquals(H, calls.get(1).args()[0], "second multiplication on H (spec §2.2)");
+        assertEquals(G, calls.get(2).args()[0], "third multiplication on G");
+        assertEquals(r, calls.get(1).args()[1], "scalar on H");
+        BigInteger xMinusT = (BigInteger) calls.get(0).args()[1];
+        BigInteger t = (BigInteger) calls.get(2).args()[1];
+        assertEquals(x.mod(Q), xMinusT.add(t).mod(Q), "the two scalars on G must sum to the value");
+        assertTrue(xMinusT.signum() >= 0 && xMinusT.compareTo(Q) < 0 && t.signum() >= 0 && t.compareTo(Q) < 0,
+                "both shares canonical");
+        assertNotEquals(x, xMinusT, "the value must not reach the provider unsplit");
     }
 
     private static BigInteger randomScalar(Random random) {

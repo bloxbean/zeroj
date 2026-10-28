@@ -6,75 +6,71 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Scalar blinding and the test seams shared by the G1 and G2 secret ladders (ADR-0062 D1).
+ * Additive scalar splitting, fixed-length recoding and the test seams shared by the G1 and G2
+ * secret ladders (ADR-0062 D1, r4).
  *
- * <p>A secret scalar {@code k ∈ [0, r)} is replaced by {@code k̂ = k + m·r} with a fresh blinding
- * factor {@code m} drawn uniformly from {@code [M_MIN, M_MAX] = [⌈2³¹⁹/r⌉, ⌊(2³²⁰ − r)/r⌋]}. That
- * range guarantees {@code k̂ ∈ [2³¹⁹, 2³²⁰)} for every {@code k ∈ [0, r)}: the top bit is always bit
- * 319, with no branch on {@code k}, so the ladder runs exactly {@value #ITERATIONS} iterations
- * from {@code (P, 2P)}. {@code [k̂]P = [k]P} holds only for {@code P} in the prime-order subgroup,
- * so callers must check the base first.</p>
+ * <p>A secret scalar {@code k ∈ [0, r)} is split into two shares (Clavier–Joye, CHES 2001):
+ * {@code k₁} drawn uniformly from {@code [0, r)} with {@link SecureRandom}, and
+ * {@code k₂ = (k − k₁) mod r}. Each share is uniform on its own whatever {@code k} is, so each ladder
+ * sees a fresh uniform scalar on every call: a small or near-{@code r} secret no longer drives the
+ * ladder through identity intermediates. {@code [k]P = [k₁]P + [k₂]P}.</p>
  *
- * <p>Blinding also changes the per-bit pattern the ladder replays on every call, which defeats
- * averaging across repeated use of one key (the residual ADR-0038 P7.2 blinded for Jubjub). The
- * range holds about 2^64.1 values, so each call takes about 64 bits of fresh entropy. {@code m} is
- * drawn by rejection sampling of 65-bit values; the rejection branches on public randomness only.
- * A failure of the randomness source propagates: there is no unblinded fallback.</p>
+ * <p>Each share {@code s} is recoded deterministically to {@code ŝ = 2²⁵⁵ + ((s − 2²⁵⁵) mod r)}.
+ * Because {@code r < 2²⁵⁵}, {@code ŝ ∈ [2²⁵⁵, 2²⁵⁵ + r)}: the top bit is always bit 255, with no
+ * branch on {@code s}, and {@code ŝ ≡ s (mod r)}. The ladder runs exactly {@value #ITERATIONS}
+ * iterations from {@code (P, 2P)}. {@code [ŝ]P = [s]P} holds only for {@code P} in the prime-order
+ * subgroup, so callers must check the base first.</p>
+ *
+ * <p>The r1–r3 version instead blinded {@code k} as {@code k + m·r} with a 64-bit {@code m}. That
+ * randomises the high bits but not the bottom of the scalar: when {@code 2^i} divides {@code m}, the
+ * ladder prefix at step {@code i} reduces to {@code ⌊k/2^i⌋ mod r}, which is 0 for small {@code k}
+ * (ADR-0062 F12). With the split the blinding adds cost without protection, so it is dropped.</p>
+ *
+ * <p>{@code k₁} is drawn by rejection sampling of 255-bit values, which branches on public
+ * randomness only. A failure of the randomness source propagates: there is no unsplit fallback.</p>
  */
 final class SecretLadder {
 
     private SecretLadder() {}
 
-    /** Bit length of every blinded scalar. */
-    static final int WIDTH = 320;
+    /** Bit length of every recoded share. */
+    static final int WIDTH = 256;
 
-    /** Ladder iterations after the fixed top bit. */
+    /** Ladder iterations after the fixed top bit, per share. */
     static final int ITERATIONS = WIDTH - 1;
 
     private static final BigInteger R = G1Point.R;
-    private static final BigInteger LOW = BigInteger.ONE.shiftLeft(WIDTH - 1);
-    private static final BigInteger HIGH = BigInteger.ONE.shiftLeft(WIDTH);
-
-    /** {@code ⌈2³¹⁹ / r⌉}. */
-    static final BigInteger M_MIN = LOW.add(R).subtract(BigInteger.ONE).divide(R);
-
-    /** {@code ⌊(2³²⁰ − r) / r⌋}. */
-    static final BigInteger M_MAX = HIGH.subtract(R).divide(R);
-
-    private static final BigInteger M_RANGE = M_MAX.subtract(M_MIN).add(BigInteger.ONE);
-    private static final int SAMPLE_BITS = M_RANGE.bitLength();
-    private static final int SAMPLE_BYTES = (SAMPLE_BITS + 7) / 8;
+    private static final BigInteger TOP = BigInteger.ONE.shiftLeft(WIDTH - 1);
+    private static final int SAMPLE_BYTES = 32;
 
     static {
-        // The range must map every k in [0, r) into [2^319, 2^320); fail class init otherwise.
-        if (M_MIN.multiply(R).compareTo(LOW) < 0
-                || M_MAX.multiply(R).add(R).subtract(BigInteger.ONE).compareTo(HIGH) >= 0
-                || M_RANGE.signum() <= 0) {
-            throw new IllegalStateException("ADR-0062 D1 blinding range is inconsistent");
+        // The recoding needs r < 2^255, so that 2^255 + [0, r) stays below 2^256.
+        if (R.compareTo(TOP) >= 0 || R.bitLength() != WIDTH - 1) {
+            throw new IllegalStateException("ADR-0062 D1 recoding needs r < 2^255");
         }
     }
 
-    /** Supplies blinding factors; package-private so tests can inject a seeded source. */
+    /** Supplies the first share {@code k₁}; package-private so tests can inject a seeded source. */
     @FunctionalInterface
-    interface BlindingSource {
-        /** Returns a blinding factor in {@code [M_MIN, M_MAX]}. */
-        BigInteger nextBlindingFactor();
+    interface ShareSource {
+        /** Returns a share in {@code [0, r)}. */
+        BigInteger nextShare();
     }
 
     private static final ThreadLocal<SecureRandom> RANDOM = ThreadLocal.withInitial(SecureRandom::new);
 
-    /** Production source: uniform over {@code [M_MIN, M_MAX]} from {@link SecureRandom}. */
-    static final BlindingSource SECURE = () -> sample(RANDOM.get());
+    /** Production source: uniform over {@code [0, r)} from {@link SecureRandom}. */
+    static final ShareSource SECURE = () -> sample(RANDOM.get());
 
-    /** Uniform {@code m ∈ [M_MIN, M_MAX]} by rejection sampling of {@code SAMPLE_BITS}-bit values. */
+    /** Uniform {@code k₁ ∈ [0, r)} by rejection sampling of 255-bit values. */
     static BigInteger sample(SecureRandom random) {
         byte[] bytes = new byte[SAMPLE_BYTES];
         try {
             while (true) {
                 random.nextBytes(bytes);
-                BigInteger m = candidate(bytes);
-                if (m != null) {
-                    return m;
+                BigInteger k1 = candidate(bytes);
+                if (k1 != null) {
+                    return k1;
                 }
             }
         } finally {
@@ -86,42 +82,49 @@ final class SecretLadder {
     static final int CANDIDATE_BYTES = SAMPLE_BYTES;
 
     /**
-     * Masks {@code bytes} (big-endian, {@value #CANDIDATE_BYTES} bytes) to {@code SAMPLE_BITS}
-     * bits and returns {@code M_MIN + u}, or {@code null} if {@code u} is outside the range and must
-     * be rejected. Package-private so the mask and acceptance boundary can be tested directly.
+     * Masks {@code bytes} (big-endian, {@value #CANDIDATE_BYTES} bytes) to 255 bits and returns the
+     * value if it is below {@code r}, or {@code null} if it must be rejected. Package-private so the
+     * mask and acceptance boundary can be tested directly.
      */
     static BigInteger candidate(byte[] bytes) {
-        bytes[0] &= (byte) ((1 << (SAMPLE_BITS - 8 * (SAMPLE_BYTES - 1))) - 1);
+        bytes[0] &= 0x7f;
         BigInteger u = new BigInteger(1, bytes);
-        return u.compareTo(M_RANGE) < 0 ? M_MIN.add(u) : null;
+        return u.compareTo(R) < 0 ? u : null;
     }
 
     /**
-     * Returns {@code k + m·r} for a fresh {@code m} from {@code source}.
+     * Returns the two shares {@code {k₁, (k − k₁) mod r}} for a fresh {@code k₁} from {@code source}.
      *
      * @param k a reduced scalar, {@code 0 <= k < r}
-     * @throws IllegalStateException if the source returns a factor outside {@code [M_MIN, M_MAX]}
+     * @throws IllegalStateException if the source returns a share outside {@code [0, r)}
      */
-    static BigInteger blind(BigInteger k, BlindingSource source) {
-        BigInteger m = Objects.requireNonNull(source.nextBlindingFactor(), "blinding factor");
-        if (m.compareTo(M_MIN) < 0 || m.compareTo(M_MAX) > 0) {
-            throw new IllegalStateException("Blinding factor outside [M_MIN, M_MAX]");
+    static BigInteger[] split(BigInteger k, ShareSource source) {
+        BigInteger k1 = Objects.requireNonNull(source.nextShare(), "share");
+        if (k1.signum() < 0 || k1.compareTo(R) >= 0) {
+            throw new IllegalStateException("Share outside [0, r)");
         }
         ScheduleObserver observer = OBSERVER.get();
-        if (observer != null) observer.blindingFactor(m);
-        BigInteger kHat = k.add(m.multiply(R));
-        if (kHat.bitLength() != WIDTH) { // unreachable for 0 <= k < r; fail closed regardless
-            throw new IllegalStateException("Blinded scalar is not " + WIDTH + " bits");
+        if (observer != null) observer.share(k1);
+        return new BigInteger[]{k1, k.subtract(k1).mod(R)};
+    }
+
+    /** {@code 2²⁵⁵ + ((s − 2²⁵⁵) mod r)}: exactly 256 bits and {@code ≡ s (mod r)}. */
+    static BigInteger recode(BigInteger share) {
+        BigInteger hat = TOP.add(share.subtract(TOP).mod(R));
+        if (hat.bitLength() != WIDTH) { // unreachable for r < 2^255; fail closed regardless
+            throw new IllegalStateException("Recoded share is not " + WIDTH + " bits");
         }
-        return kHat;
+        return hat;
     }
 
     // ---- operation-schedule observer (test seam, ADR-0062 I2) ----
 
     /**
-     * Records the ladder's operation schedule. {@link #specialCase} is reported whenever an
+     * Records the ladders' operation schedule. {@link #specialCase} is reported whenever an
      * iteration's inputs or sum is the identity, i.e. whenever {@code add} or {@code doublePoint}
      * would take an early-return branch instead of the general formula.
+     * {@link #combinationSpecial} is reported when the final addition of the two share results takes
+     * a special branch (an identity operand, equal operands, or an identity sum).
      */
     interface ScheduleObserver {
         void scheduleStarted(int iterations);
@@ -132,8 +135,11 @@ final class SecretLadder {
 
         void specialCase(int bitIndex);
 
-        /** The blinding factor drawn for this call (lets tests check production randomness). */
-        default void blindingFactor(BigInteger m) {}
+        /** The final {@code [k₁]P + [k₂]P} takes a special branch. */
+        default void combinationSpecial() {}
+
+        /** The first share drawn for this call (lets tests check production randomness). */
+        default void share(BigInteger k1) {}
     }
 
     private static final ThreadLocal<ScheduleObserver> OBSERVER = new ThreadLocal<>();
