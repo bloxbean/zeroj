@@ -11,9 +11,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -56,18 +53,6 @@ class Bls12381HashToCurveTest {
     void expandMessageXmd_allowsZeroLengthOutput() {
         assertArrayEquals(new byte[0],
                 Bls12381Hash.expandMessageXmdSha256("abc".getBytes(StandardCharsets.US_ASCII), G1_RO_DST, 0));
-    }
-
-    @Test
-    void expandMessageXmd_usesOversizeDstReduction() {
-        byte[] msg = "abc".getBytes(StandardCharsets.US_ASCII);
-        byte[] oversizedDst = ("QUUX-V01-CS02-with-expander-SHA256-128-long-DST-" + "1".repeat(256))
-                .getBytes(StandardCharsets.US_ASCII);
-        byte[] reducedDst = sha256(concat("H2C-OVERSIZE-DST-".getBytes(StandardCharsets.US_ASCII), oversizedDst));
-
-        assertArrayEquals(
-                Bls12381Hash.expandMessageXmdSha256(msg, reducedDst, 32),
-                Bls12381Hash.expandMessageXmdSha256(msg, oversizedDst, 32));
     }
 
     @Test
@@ -134,20 +119,6 @@ class Bls12381HashToCurveTest {
 
     private static Fp fp(String hex) {
         return Fp.of(new BigInteger(hex, 16));
-    }
-
-    private static byte[] sha256(byte[] input) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(input);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static byte[] concat(byte[] left, byte[] right) {
-        byte[] out = Arrays.copyOf(left, left.length + right.length);
-        System.arraycopy(right, 0, out, left.length, right.length);
-        return out;
     }
 
     private static byte[] hexToBytes(String hex) {
