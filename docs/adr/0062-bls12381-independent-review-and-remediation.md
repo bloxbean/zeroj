@@ -3,8 +3,15 @@
 ## Status
 **Accepted (design), 2026-10-28, by maintainer Satya.** Q1, Q3 and Q4 are decided (see "Open
 questions"); Q2 stays open. The maintainer chose the full D3 migration, so the D3 interim steps are
-superseded. **Implementation in progress** on branch `fix/adr-0062-bls-remediation`, one commit
-per milestone. Acceptance is not a maturity or security claim (AGENTS.md).
+superseded.
+
+**Implemented (M0–M8), pending maintainer review; not merged.** Branch
+`fix/adr-0062-bls-remediation`, one commit per milestone plus review follow-ups (see
+"Implementation evidence"). Implementation found two further issues, F11 (fixed) and F12 (open,
+Q5). An independent AI review of the R3 milestone and of the native binding found no Critical
+issue; its findings are fixed or recorded here. Maturity is unchanged: `zeroj-bls12381` stays Beta —
+verification-grade, secret-bearing generation stays offline/isolated only, and no AI review or test
+count upgrades a security claim (AGENTS.md).
 
 The ADR records the findings of an independent correctness/security review of the BLS12-381
 stack and decides what to fix, in which order, and with which evidence.
@@ -15,7 +22,8 @@ It supplements, and does not supersede, [ADR-0018](0018-shared-bls12381-primitiv
 explicitly (D1).
 
 ## Date
-2026-10-28 (r1); 2026-10-28 (r2: accepted, Q1/Q3/Q4 decided, D1 construction fixed)
+2026-10-28 (r1); 2026-10-28 (r2: accepted, Q1/Q3/Q4 decided, D1 construction fixed);
+2026-10-28 (r3: implementation M0–M8, F11, F12, evidence)
 
 ## Revision history
 - **r1 (2026-10-28):** first version, written from the review described in §Evidence.
@@ -25,6 +33,12 @@ explicitly (D1).
   decided: moot, because D5 now applies `z = 1` to verification keys too and no fixture has
   `z ≠ 1`. Q4 decided: document only. D3: full migration chosen; the interim steps are superseded.
   No invariant changed.
+- **r3 (2026-10-28, implementation):** Status records M0–M8 as implemented, pending review. New
+  findings F11 (blst small-batch MSM corrupts sums with identity bases; fixed in M4) and F12 (the
+  D1 ladder's residual identity-handling channel for low-entropy scalars; open, Q5). D1's
+  "Identity can still appear" paragraph is corrected: the exception set is every scalar with
+  `min(k, r − k)` small, not only `0` and `−1`. New section "Implementation evidence". No other
+  decision changed.
 
 ## Risk classification
 - **R3:** D1 (secret-scalar ladder schedule). It changes how a secret-dependent primitive
@@ -132,6 +146,8 @@ with code or measurement during the review.
 | F8 | Low | `MontFp381.pow` / `MontFr381.pow` return wrong results for negative exponents; Javadoc claims a "fixed bit-length loop" | `MontFp381.java:190-199`; `MontFr381.java:153-163` | Reproduced |
 | F9 | Test gap | Partial RFC 9380 vector coverage; positive-only pairing-check tests; thin WASM differential; no negative blst-provider tests | see D9 | Counted |
 | F10 | Info | Dead and mis-commented `FROBENIUS_COEFF_X/Y`; empty DST accepted; XOF oversize-DST fixed at `k = 128`; unreachable incorrect vertical-line branch; GraalVM FFM metadata unverified; docs path errors | see D10 | Code read / computed |
+| F11 (r3) | Medium | blst 0.3.15's MSM for fewer than 32 points loads each affine base with `Z = 1`, so an identity base (all-zero affine) corrupts the whole sum. The blst prover backend passes identity bases, so small blst-backed proofs could be invalid (they fail verification; not a forgery) | `BlstG1Msm`/`BlstG2Msm` → `blst_p*s_mult_pippenger` (`multi_scalar.c`, `precompute_row_wbits`) | Reproduced (n = 2..31 wrong, ≥ 32 right) |
+| F12 (r3) | Medium (R3 residual) | The D1 ladder still takes identity early returns when `k` or `r − k` is small (probability ≈ `2^-(bitlen − 1)`, always for `0` and `r − 1`), and a zero result skips the final inversion. Low-entropy secrets (G1 Pedersen values such as votes in `{0, 1}`) remain distinguishable by timing; uniform secrets (BBS) are not affected | `JacobianG*BLS381.add/doublePoint/toAffine`, `G1Pedersen.generate` | Measured (independent review; timing CIs separate for `k = 0`) |
 
 #### F1 — Secret-scalar ladder leaks bit length (R3)
 `ctScalarMul` initialises `r0 = INFINITY`, `r1 = P` and runs 256 MSB-first iterations. While
@@ -355,10 +371,14 @@ use of the same key; blinding changes that pattern on every call, which defeats 
 repeated signatures (the residual ADR-0038 later blinded for Jubjub).
 
 Identity can still appear inside the ladder only when a ladder prefix is `≡ 0`, `−1` or `−1/2`
-(mod `r`). With random `m` this has negligible probability, except at the final iteration for
-`k ≡ 0` and `k ≡ −1 (mod r)`, where the result (or its successor) is the identity by definition.
-Those cases are correct, because `add` handles `H = 0`, and the operation-count test lists them as
-documented exceptions.
+(mod `r`). **(Corrected r3.)** Writing `m = q·2^(i+1) + s`, the prefix at iteration `i` is
+`≡ ⌊(k + s·r)/2^(i+1)⌋`, which lies in `[0, r)` and hits one of those values only when `k` or
+`r − k` is at most `2^(i+1)`. So for scalars with `min(k, r − k) > 2^66` it never happens; for
+smaller ones it can happen in the last iterations (`i ≤ 65`) with probability about
+`2^-(bitlen(min(k, r−k)) − 1)` over `m`, and always for `k ≡ 0` and `k ≡ −1`. Results are correct,
+because `add` handles `H = 0`; the schedule test predicts the special iterations exactly from
+integer arithmetic. The early returns themselves are a residual timing channel for low-entropy
+secrets (F12).
 
 The per-bit selection between already-computed points stays a Java branch, and `BigInteger`,
 field reductions, JIT and GC stay variable-time. The Javadoc must say exactly that.
@@ -582,6 +602,73 @@ Before a maturity upgrade:
 - **Q4 (D7) — decided r2:** document only. `BLS12381Pairing` is used directly by production
   code in `zeroj-crypto`, both verifiers and the benchmarks, so it stays public and its Javadoc
   states that it validates nothing.
+- **Q5 (F12, new r3):** close the low-entropy residual? Options: (a) additive scalar splitting in
+  the secret ladder, `[k]P = [k₁]P + [k − k₁]P` with `k₁` uniform, so both ladders see uniform
+  scalars (about +17% on `G1Point.ctScalarMul`, ~2× on the ladder itself); the final addition and
+  `toAffine` still reveal `k ≡ 0`, which the output reveals anyway; (b) complete exception-free
+  projective formulas (Renes–Costello–Batina, `a = 0`) plus a dummy inversion: removes the channel
+  in principle, larger R3 change; (c) document only. Recommendation: (a) now, (b) as part of the
+  future constant-time ADR. Until decided, low-entropy G1 Pedersen values are documented as not
+  protected.
+
+## Implementation evidence (M0–M8)
+
+Everything below is evidence, not a security claim (AGENTS.md). Environment: Java 25.0.2-graal,
+macOS aarch64, unless stated.
+
+### Deliverables
+
+| Milestone | Commit | Deliverables |
+|---|---|---|
+| M0 | 4a46e7b | ADR r2; D2 documentation corrected (README, zeroj-bbs, zeroj-blst, provider Javadoc). `docs/component-status-2026-07-03.md` is excluded from git locally, so its corrections are not in the branch. |
+| M1 | 96e9854 | RFC 9380 J.9.1/J.9.2/J.10.1/J.10.2 (all 5 messages; `u`, `Q0`/`Q1`/`Q`, `P`) and K.1/K.2/K.6, machine-extracted (`src/test/resources/rfc9380`, extractor, NOTICE); XMD/XOF length bounds; external GT KAT from py_ecc 8.0.0; negative pairing products; mutation harness (constant-1 and `e⁻¹` fail); independent Fp6/Fp12 vectors; sqrt vs Euler; `sgn0`. |
+| M2 | 3c3f59b | D8 `pow` rejects negative exponents; D7 empty pairing products rejected on all providers (shared `requirePairingProductInput`), raw-class Javadoc, `lineFuncAdd` guard (order-13 twist point test); D10 empty DST rejected, `k = 128` documented, dead Frobenius constants removed. |
+| M3 | b404b44 | D5 `z = 1` for proof and VK points in both Groth16 verifiers and `SnarkjsToCardano`; parity test fails before the fix; migration note `docs/migration/0062-bls12381-remediation.md`. |
+| M4 | 0660296 | D4 MSM boundary (reduce mod `r`, counts, lengths, flags, canonical encoder scalars, `msmValidated`); **F11** fixed (identity bases dropped before the native call, sizes 1..40 tested); D6 release fail-closed, checksums, blst pinned by commit `6d960cd0`. |
+| M5 | 3831448, f4c97a6 | D1 blinded fixed-schedule ladder (m-range construction), exact schedule gate, timing record; review follow-up: on-curve check in the Jacobian ladders, corrected residual documentation (**F12**), boundary and randomness tests. |
+| M6 | 3733c60, e4d33ff | D3 FFM binding `BlstCurve`; provider, verifier and BBS-on-blst moved off `blst-java`; `BlstPairing` removed; julc codecs pure Java; D2 dedicated blst secret path. Review follow-up: the committed Linux `libblst.so` were the blst-java JNI binaries and were rebuilt from the pinned commit; namespaced resources, SHA-256 manifest enforced by the loader, provenance gate, owner-only temp dir; verifier returns `INTERNAL_ERROR` where no library exists. |
+| M7 | 0d068d9 | Shared cross-provider corpus (I8) run against pure Java, blst and zkcrypto-WASM, including a byte-level malformed-encoding corpus against each provider's own decoder. |
+| M8 | 1c672be | Native-image: foreign downcall metadata (9 shapes) and a metadata-sync test; a real consumer image builds and runs. |
+
+### Tests and vectors run
+- Final `./gradlew build` at 1c672be: green (all default modules, module-surface gate; 5409 tests,
+  0 failures, 33 opt-in skips).
+- `./gradlew -PincludeAssurance :zeroj-bls12381-wasm:test :zeroj-bbs-wasm:test :zeroj-bbs:test`:
+  green (17 / 26 / 91).
+- Module totals: `zeroj-bls12381` 2071, `zeroj-blst` 33, `zeroj-crypto-blst` 17 (2 opt-in
+  benchmarks skipped), `zeroj-verifier-groth16` 27, `zeroj-verifier-plonk` 38, `zeroj-bbs` 91,
+  `zeroj-onchain-julc` 113 (2 skipped).
+- External vectors: RFC 9380 text; py_ecc 8.0.0 (its `e(G1, G2)` equals the existing self-pinned
+  and ffjavascript-corroborated value); an independent Python Fp12 model; CFRG BBS fixtures and G1
+  Pedersen profile vectors unchanged (I1).
+
+### Differential checks
+- Pure Java vs blst vs zkcrypto WASM on the shared corpus (M7): equal results or all reject.
+- Independent review (M6): 3166 G1/G2 encodings through `BlstCurve` vs the pure-Java codecs, 0
+  accept/reject mismatches; 42 Groth16 cases through both verifiers, identical verdicts and reason
+  codes.
+- Linux aarch64 runtime smoke (Docker, JDK 25): scalar multiplication, secret path, pairing and
+  MSM on the rebuilt library match pure Java. **Linux amd64 was cross-built and checked statically
+  (no JNI symbols, glibc ≤ 2.4) but not executed locally**; CI is its first runtime run.
+
+### D1 timing record (`./gradlew :zeroj-bls12381:secretLadderTimingRecord`)
+Ladder only, 1001 interleaved samples per class, median [95% CI of the median], ms:
+bit length 1: 0.935 [0.932, 0.937]; 65: 0.937; 129: 0.936; 192: 0.938; 255 random: 0.938;
+255 low HW: 0.939; 255 high HW: 0.933 [0.931, 0.935]; `k = 0`: 0.934. Before D1: 0.22 ms at 1
+bit to 0.93 ms at 255 bits (F1). The independent review re-ran it and found `k = 0` separable
+(0.837 [0.835, 0.838] vs 0.840 [0.839, 0.841]) and `toAffine` about 30 µs faster for a zero
+result: that is F12, not a flat record for every scalar. Full `G1Point.ctScalarMul` (subgroup check
+plus ladder): about 5.46 ms for every class except `k = 0` (5.39 ms).
+
+### Remaining assumptions and gates
+- Q2 (blst side-channel statement) and Q5 (F12) are open.
+- No Java path is constant-time; secret-bearing generation stays offline/isolated only.
+- External cryptographic review of `zeroj-bls12381`, the D1 ladder and the FFM binding;
+  side-channel evaluation of the exact provider, version and platform.
+- Release rehearsal tag to prove the fail-closed native pipeline and published checksums.
+- The BN254 ladders (`JacobianG{1,2}BN254.ctScalarMul`) probably share F1; legacy-gated, out of
+  scope, follow-up.
+- ADR-0057 D4 (blst isolation in images) should take the M8 metadata into account.
 
 ## Consequences
 ### Easier
