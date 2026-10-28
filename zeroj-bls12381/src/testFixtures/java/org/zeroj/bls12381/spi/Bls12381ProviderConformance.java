@@ -176,6 +176,7 @@ public final class Bls12381ProviderConformance {
         out.add(new Encoding("[7]G", Bls12381Codecs.g2ToUncompressed(G2.scalarMul(BigInteger.valueOf(7))), true));
         out.add(new Encoding("identity", Bls12381Codecs.g2ToUncompressed(G2Point.INFINITY), true));
         out.add(new Encoding("length 191", Arrays.copyOf(g, 191), false));
+        out.add(new Encoding("length 193", Arrays.copyOf(g, 193), false));
         out.add(new Encoding("compression flag", flag(g, 0x80), false));
         out.add(new Encoding("sort flag", flag(g, 0x20), false));
         out.add(new Encoding("identity flag on a point", flag(g, 0x40), false));
@@ -185,6 +186,7 @@ public final class Bls12381ProviderConformance {
         out.add(new Encoding("all zero, no flag", new byte[192], false));
         out.add(new Encoding("x.c1 = p", withFp(g, 0, Fp.P), false));
         out.add(new Encoding("x.c0 = p", withFp(g, 48, Fp.P), false));
+        out.add(new Encoding("y.c1 = p", withFp(g, 96, Fp.P), false));
         out.add(new Encoding("y.c0 = p", withFp(g, 144, Fp.P), false));
         out.add(new Encoding("off curve (y.c0 + 1)", withFp(g, 144, G2.y().c0().value().add(BigInteger.ONE)), false));
         // Fp2 halves swapped (c0‖c1 instead of c1‖c0): must not decode as a valid point.

@@ -30,8 +30,11 @@ and a negative exponent that returned a wrong power.
 | `G1Pedersen` generation | two secret multiplications, `[x]·G` and `[r]·H` | three: `[x − t]·G`, `[r]·H`, `[t]·G` with a fresh uniform `t`; commitments are unchanged, generation costs about one more multiplication. A custom provider sees three `g1SecretScalarMul` calls | D1 (r4) |
 | `zeroj-blst` dependencies | `api 'foundation.icon:blst-java:0.3.2'` (a prebuilt third-party JNI `libblst` of unknown version) | removed; the provider, pairing and `Groth16BLS12381Verifier` use the source-built `libblst` through FFM (`org.zeroj.blst.ffm.BlstCurve`) | D3 |
 | `org.zeroj.blst.BlstPairing` | public raw JNI helpers (returned `supranational.blst.PT`; no subgroup check, no scalar reduction) | **removed**; use `BlstBls12381Provider` or the validating `ffm.BlstCurve` | D3, D7 |
-| `zeroj-blst` platforms | the JNI half also covered macOS x86_64 | linux amd64/aarch64 and macOS aarch64 only; use the pure-Java provider elsewhere | D3 |
-| `zeroj-onchain-julc` | depended on `zeroj-blst` for point compression | depends only on pure-Java codecs; `SnarkjsToCardano` also rejects coordinates `≥ p` instead of truncating them | D3 |
+| `zeroj-blst` platforms | the JNI half also covered macOS x86_64 (and Windows) | linux amd64/aarch64 and macOS aarch64 only. Elsewhere `BlstFfm` fails with "use the pure-Java provider" (Intel macOS included), and `Groth16BLS12381Verifier` used directly returns `INTERNAL_ERROR` ("blst native library unavailable") | D3 |
+| `VerifierRegistry.find` / `withServiceLoader()` for Groth16 BLS12-381 | always returned the first registered backend, the blst verifier | skips backends whose new `ZkVerifier.isAvailable()` is `false`; the blst verifier reports unavailable where no `libblst` is bundled, so Intel macOS and Windows get the pure-Java verifier (same accept/reject semantics). A bundled library that fails to load still selects blst and reports `INTERNAL_ERROR` | D3 |
+| `zeroj-onchain-julc` | depended on `zeroj-blst` for point compression | depends only on pure-Java codecs | D3 |
+| `SnarkjsToCardano` input checks (`zeroj-onchain-julc`) | blst-java decoded whatever bytes the coordinates produced | stricter, all `IllegalArgumentException`: coordinates `≥ p`, including `x + 2³⁸⁴`-style aliases that were silently truncated to the same bytes; on-curve points outside the prime-order subgroup (G1 and G2); a G1 point with other than 3 coordinates (a 4th used to be ignored); a G2 coordinate with other than 2 elements (a 3rd used to be ignored); any `z = 0` triple other than the canonical identity | D3, D5 |
+| `SnarkjsToCardano` identity points | every identity encoding threw | `pi_a`/`pi_b`/`pi_c` and `vk_alpha_1`/`vk_beta_2`/`vk_gamma_2`/`vk_delta_2` still throw ("must not be the point at infinity"); an `IC` entry `[0, 1, 0]` is now passed through as the compressed identity `0xC0‖0…0` for the verifier to reject (ADR-0045 V3). `g1Compress`/`g2Compress` themselves accept the canonical identity | ADR-0045 |
 | — | no subgroup check on MSM bases | new `BlstG1Msm.msmValidated` / `BlstG2Msm.msmValidated` check every base; the hot path stays caller-validated | D4 |
 
 No proof format, verification key format, transcript, encoding, circuit or on-chain script
@@ -47,10 +50,13 @@ changes. Julc script hashes are unchanged.
 3. Use a non-empty domain separation tag for every hash-to-curve or hash-to-scalar call.
 4. If you call the raw `BLS12381Pairing` class with untrusted points, validate them first with
    `Bls12381Codecs.requireValid` or the checked decoders, or use a `Bls12381Provider`.
-5. If you used `supranational.blst.*` classes through `zeroj-blst`'s transitive dependency, add
+5. On Intel macOS or Windows, use the pure-Java provider and verifier. `VerifierRegistry` now does
+   this for you; code that instantiates `Groth16BLS12381Verifier` directly gets `INTERNAL_ERROR`
+   there and should use `Groth16BLS12381PureJavaVerifier`.
+6. If you used `supranational.blst.*` classes through `zeroj-blst`'s transitive dependency, add
    `foundation.icon:blst-java` to your own build, or move to `BlstBls12381Provider` /
    `org.zeroj.blst.ffm.BlstCurve`. Replace `BlstPairing` calls with the provider.
-6. If you call `BlstG1Msm` / `BlstG2Msm` directly, pass exactly one scalar per point and only
+7. If you call `BlstG1Msm` / `BlstG2Msm` directly, pass exactly one scalar per point and only
    uncompressed encodings, and use `msmValidated` for bases you did not validate yourself. If you
    proved small circuits with the blst prover backend (`zeroj-crypto-blst`) before this release,
    a proof whose MSMs had fewer than 32 bases, at least one of them the identity, was computed

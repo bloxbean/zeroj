@@ -50,6 +50,8 @@ public final class BlstCurve {
     private static final long P2 = 288;
     private static final long FP12 = 576;
     private static final long NBITS = 255;
+    /** blst limb structs hold 64-bit limbs; allocate them 8-byte aligned rather than relying on malloc. */
+    private static final long LIMB_ALIGN = 8;
     private static final BigInteger R = Bls12381Generators.SCALAR_FIELD_ORDER;
 
     private static final ValueLayout.OfByte BYTE = ValueLayout.JAVA_BYTE;
@@ -158,10 +160,12 @@ public final class BlstCurve {
     /**
      * {@code [scalar mod r]·point} for a secret scalar (ADR-0062 D2): the scalar is written as a
      * fixed 32-byte little-endian value without {@code toByteArray} length variance, {@code blst}
-     * always runs with {@code nbits = 255}, there is no zero-scalar early return, and the temporary
-     * Java and native copies of the scalar are zeroed. Any side-channel property comes from blst's
-     * internal scalar multiplication, which ZeroJ has not evaluated; {@link BigInteger#mod} is
-     * variable-time.
+     * always runs with {@code nbits = 255}, and there is no zero-scalar early return. The 32-byte
+     * little-endian {@code byte[]} and the native scalar buffer are zeroed after use; the
+     * {@link BigInteger} intermediates ({@code scalar.mod(r)} and the {@code shiftRight} values) are
+     * immutable heap copies that cannot be zeroed and stay until garbage-collected, as does the
+     * caller's own {@code scalar}. Any side-channel property comes from blst's internal scalar
+     * multiplication, which ZeroJ has not evaluated; {@link BigInteger#mod} is variable-time.
      */
     public static byte[] g1MulSecret(byte[] point, BigInteger scalar) {
         return mul(point, scalar, true, true);
@@ -193,7 +197,7 @@ public final class BlstCurve {
         }
         try (Arena a = Arena.ofConfined()) {
             MemorySegment acc = null;
-            MemorySegment term = a.allocate(FP12);
+            MemorySegment term = a.allocate(FP12, LIMB_ALIGN);
             for (int i = 0; i < g1Points.length; i++) {
                 MemorySegment p = affine(a, g1Points[i], true, "g1[" + i + "]");
                 MemorySegment q = affine(a, g2Points[i], false, "g2[" + i + "]");
@@ -201,7 +205,7 @@ public final class BlstCurve {
                     continue;
                 }
                 if (acc == null) {
-                    acc = a.allocate(FP12);
+                    acc = a.allocate(FP12, LIMB_ALIGN);
                     MILLER_LOOP.invoke(acc, q, p);
                 } else {
                     MILLER_LOOP.invoke(term, q, p);
@@ -211,7 +215,7 @@ public final class BlstCurve {
             if (acc == null) {
                 return true; // every pair had an identity component
             }
-            MemorySegment gt = a.allocate(FP12);
+            MemorySegment gt = a.allocate(FP12, LIMB_ALIGN);
             FINAL_EXP.invoke(gt, acc);
             return (boolean) FP12_IS_ONE.invoke(gt);
         } catch (Throwable t) {
@@ -225,7 +229,7 @@ public final class BlstCurve {
         try (Arena a = Arena.ofConfined()) {
             MemorySegment l = projective(a, affine(a, left, g1, "left"), g1);
             MemorySegment r = projective(a, affine(a, right, g1, "right"), g1);
-            MemorySegment out = a.allocate(g1 ? P1 : P2);
+            MemorySegment out = a.allocate(g1 ? P1 : P2, LIMB_ALIGN);
             (g1 ? P1_ADD : P2_ADD).invoke(out, l, r);
             return serialize(a, out, g1);
         } catch (Throwable t) {
@@ -256,7 +260,7 @@ public final class BlstCurve {
             MemorySegment sc = a.allocate(32);
             try {
                 MemorySegment.copy(le, 0, sc, BYTE, 0, 32);
-                MemorySegment out = a.allocate(g1 ? P1 : P2);
+                MemorySegment out = a.allocate(g1 ? P1 : P2, LIMB_ALIGN);
                 (g1 ? P1_MULT : P2_MULT).invoke(out, p, sc, NBITS);
                 return serialize(a, out, g1);
             } finally {
@@ -278,7 +282,7 @@ public final class BlstCurve {
 
     /** Deserialize and fully validate; returns a native affine point (the identity is allowed). */
     private static MemorySegment affine(Arena a, byte[] encoding, boolean g1, String label) throws Throwable {
-        MemorySegment out = a.allocate(g1 ? P1_AFFINE : P2_AFFINE);
+        MemorySegment out = a.allocate(g1 ? P1_AFFINE : P2_AFFINE, LIMB_ALIGN);
         PointStatus status = decode(a, encoding, g1, out);
         if (status != PointStatus.VALID && status != PointStatus.IDENTITY) {
             throw new IllegalArgumentException(label + " is not a valid " + (g1 ? "G1" : "G2") + " point: " + status);
@@ -288,7 +292,7 @@ public final class BlstCurve {
 
     private static PointStatus status(Arena a, byte[] encoding, boolean g1) {
         try {
-            return decode(a, encoding, g1, a.allocate(g1 ? P1_AFFINE : P2_AFFINE));
+            return decode(a, encoding, g1, a.allocate(g1 ? P1_AFFINE : P2_AFFINE, LIMB_ALIGN));
         } catch (Throwable t) {
             throw rethrow(t);
         }
@@ -319,7 +323,7 @@ public final class BlstCurve {
     }
 
     private static MemorySegment projective(Arena a, MemorySegment affine, boolean g1) throws Throwable {
-        MemorySegment out = a.allocate(g1 ? P1 : P2);
+        MemorySegment out = a.allocate(g1 ? P1 : P2, LIMB_ALIGN);
         (g1 ? P1_FROM_AFFINE : P2_FROM_AFFINE).invoke(out, affine);
         return out;
     }

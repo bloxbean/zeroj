@@ -25,6 +25,8 @@ public final class BlstG2Msm {
     private static final long P2 = 288;        // 3 * fp2(96)
     private static final long SCALAR = 32;
     private static final long NBITS = 255;
+    /** blst limb structs hold 64-bit limbs; allocate them 8-byte aligned rather than relying on malloc. */
+    private static final long LIMB_ALIGN = 8;
 
     private static final ValueLayout.OfByte BYTE = ValueLayout.JAVA_BYTE;
     private static final ValueLayout.OfLong I64 = ValueLayout.JAVA_LONG;
@@ -126,9 +128,9 @@ public final class BlstG2Msm {
         byte[] sbuf = new byte[32];
         try (Arena a = Arena.ofConfined()) {
             // Identity bases contribute nothing and are dropped (ADR-0062 F11; see BlstG1Msm).
-            MemorySegment pts = a.allocate(P2_AFFINE * n);
+            MemorySegment pts = a.allocate(P2_AFFINE * n, LIMB_ALIGN);
             MemorySegment scal = a.allocate(SCALAR * n);
-            MemorySegment inBuf = a.allocate(P2_AFFINE);
+            MemorySegment inBuf = a.allocate(P2_AFFINE, LIMB_ALIGN);
             int m = 0;
             for (int i = 0; i < n; i++) {
                 points.encode(i, buf);
@@ -164,8 +166,8 @@ public final class BlstG2Msm {
                 scalPtr.setAtIndex(ValueLayout.ADDRESS, i, scal.asSlice(i * SCALAR, SCALAR));
             }
             long scratchBytes = (long) SCRATCH_SIZEOF.invoke((long) count);
-            MemorySegment scratch = a.allocate(Math.max(8, scratchBytes));
-            MemorySegment ret = a.allocate(P2);
+            MemorySegment scratch = a.allocate(Math.max(8, scratchBytes), LIMB_ALIGN);
+            MemorySegment ret = a.allocate(P2, LIMB_ALIGN);
             PIPPENGER.invoke(ret, ptsPtr, (long) count, scalPtr, NBITS, scratch);
 
             return serializeAffine(a, ret);
@@ -186,28 +188,28 @@ public final class BlstG2Msm {
     private static byte[] singleMulCore(byte[] encoded, byte[] le, boolean validateBase) {
         BlstMsmInputs.requireUncompressedFlags(encoded, 0);
         try (Arena a = Arena.ofConfined()) {
-            MemorySegment in = a.allocate(P2_AFFINE);
+            MemorySegment in = a.allocate(P2_AFFINE, LIMB_ALIGN);
             MemorySegment.copy(encoded, 0, in, BYTE, 0, (int) P2_AFFINE);
-            MemorySegment aff = a.allocate(P2_AFFINE);
+            MemorySegment aff = a.allocate(P2_AFFINE, LIMB_ALIGN);
             int err = (int) DESERIALIZE.invoke(aff, in);
             if (err != 0) throw new IllegalArgumentException("deserialize err=" + err);
             if (validateBase && !(boolean) IN_G2.invoke(aff)) {
                 throw new IllegalArgumentException("Point 0 is not in the G2 subgroup");
             }
-            MemorySegment jac = a.allocate(P2);
+            MemorySegment jac = a.allocate(P2, LIMB_ALIGN);
             FROM_AFFINE.invoke(jac, aff);
             MemorySegment sc = a.allocate(SCALAR);
             MemorySegment.copy(le, 0, sc, BYTE, 0, 32);
-            MemorySegment ret = a.allocate(P2);
+            MemorySegment ret = a.allocate(P2, LIMB_ALIGN);
             P2_MULT.invoke(ret, jac, sc, NBITS);
             return serializeAffine(a, ret);
         } catch (RuntimeException e) { throw e; } catch (Throwable t) { throw new RuntimeException(t); }
     }
 
     private static byte[] serializeAffine(Arena a, MemorySegment jacP2) throws Throwable {
-        MemorySegment retAff = a.allocate(P2_AFFINE);
+        MemorySegment retAff = a.allocate(P2_AFFINE, LIMB_ALIGN);
         TO_AFFINE.invoke(retAff, jacP2);
-        MemorySegment out = a.allocate(P2_AFFINE);
+        MemorySegment out = a.allocate(P2_AFFINE, LIMB_ALIGN);
         AFFINE_SERIALIZE.invoke(out, retAff);
         byte[] r = new byte[(int) P2_AFFINE];
         MemorySegment.copy(out, BYTE, 0, r, 0, (int) P2_AFFINE);

@@ -86,6 +86,42 @@ class BlstCurveAndProviderNegativeTest {
         assertThrows(NullPointerException.class, () -> BlstCurve.g1Mul(g1, null));
     }
 
+    /**
+     * ADR-0062 PR review: the provider validates before calling {@link BlstCurve}, so
+     * {@link #providerRejectsOffCurveNonSubgroupNullAndEmpty} cannot show that the binding itself
+     * validates. These call the binding directly with off-curve and non-subgroup encodings in every
+     * argument position.
+     */
+    @Test
+    void bindingValidatesEveryPointArgumentOnItsOwn() {
+        byte[] g1 = Bls12381Codecs.g1ToUncompressed(G1);
+        byte[] g2 = Bls12381Codecs.g2ToUncompressed(G2);
+        List<byte[]> badG1 = List.of(Bls12381Codecs.g1ToUncompressed(g1Torsion()),
+                Bls12381Codecs.g1ToUncompressed(new G1Point(Fp.ONE, Fp.ONE)));
+        List<byte[]> badG2 = List.of(Bls12381Codecs.g2ToUncompressed(g2Torsion()),
+                Bls12381Codecs.g2ToUncompressed(new G2Point(Fp2.ONE, Fp2.ONE)));
+        for (byte[] bad : badG1) {
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g1Add(bad, g1));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g1Add(g1, bad));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g1Negate(bad));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g1Mul(bad, BigInteger.TWO));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g1MulSecret(bad, BigInteger.TWO));
+            assertThrows(IllegalArgumentException.class,
+                    () -> BlstCurve.pairingProductIsOne(new byte[][]{bad}, new byte[][]{g2}));
+            assertThrows(IllegalArgumentException.class,
+                    () -> BlstCurve.pairingProductIsOne(new byte[][]{g1, bad}, new byte[][]{g2, g2}));
+        }
+        for (byte[] bad : badG2) {
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g2Add(bad, g2));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g2Add(g2, bad));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g2Negate(bad));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g2Mul(bad, BigInteger.TWO));
+            assertThrows(IllegalArgumentException.class, () -> BlstCurve.g2MulSecret(bad, BigInteger.TWO));
+            assertThrows(IllegalArgumentException.class,
+                    () -> BlstCurve.pairingProductIsOne(new byte[][]{g1}, new byte[][]{bad}));
+        }
+    }
+
     @Test
     void providerRejectsOffCurveNonSubgroupNullAndEmpty() {
         G1Point offCurve = new G1Point(Fp.ONE, Fp.ONE);

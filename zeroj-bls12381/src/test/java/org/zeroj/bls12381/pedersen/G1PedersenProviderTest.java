@@ -595,7 +595,6 @@ class G1PedersenProviderTest {
                 p -> p.commitBytesToEnd(new ByteArrayInputStream(ABC), 16, r).toPointBytes());
     }
 
-    /** Exactly two calls, in either order: one {@code (G, x)} and one {@code (H, r)}. */
     /**
      * ADR-0062 D1 r4: generation splits the value, {@code C = [x − t]·G + [r]·H + [t]·G} with a fresh
      * uniform {@code t}, so the calls are (G, x − t), (H, r), (G, t) and the two G scalars sum to x.

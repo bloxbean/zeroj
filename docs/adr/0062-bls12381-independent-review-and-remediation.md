@@ -5,7 +5,8 @@
 questions"); Q2 stays open. The maintainer chose the full D3 migration, so the D3 interim steps are
 superseded. Q5 decided r4 (additive scalar splitting).
 
-**Implemented (M0–M8), pending maintainer review; not merged.** Branch
+**Implemented (M0–M8); maintainer review on PR #108 (2026-10-28): approve after small fixes,
+applied in r5; not merged.** Branch
 `fix/adr-0062-bls-remediation`, one commit per milestone plus review follow-ups (see
 "Implementation evidence"). Implementation found two further issues, F11 and F12, both fixed (F12 by
 the r4 split). An independent AI review of the R3 milestone and of the native binding found no Critical
@@ -24,7 +25,7 @@ explicitly (D1).
 ## Date
 2026-10-28 (r1); 2026-10-28 (r2: accepted, Q1/Q3/Q4 decided, D1 construction fixed);
 2026-10-28 (r3: implementation M0–M8, F11, F12, evidence); 2026-10-28 (r4: Q5 decided, additive
-splitting replaces the blinding, F12 fixed)
+splitting replaces the blinding, F12 fixed); 2026-10-28 (r5: PR #108 review follow-ups)
 
 ## Revision history
 - **r1 (2026-10-28):** first version, written from the review described in §Evidence.
@@ -45,6 +46,13 @@ splitting replaces the blinding, F12 fixed)
   dropped. G1 Pedersen generation splits the committed value. F12 is fixed; the r2 construction
   and why it leaked are kept in D1 with the maintainer's simulation numbers. Classification
   unchanged: offline/isolated only, not constant-time.
+- **r5 (2026-10-28, PR #108 review):** follow-ups to the maintainer's review, no decision
+  changed. `SnarkjsToCardano` no longer accepts identity proof or VK header points (a new accept
+  path the migration had introduced). Intel macOS is rejected explicitly, and `VerifierRegistry`
+  skips the blst verifier where no `libblst` is bundled (Compatibility). The extracted library is
+  deleted right after `dlopen`, and the residual tmpdir risk is documented. Zeroization claims are
+  narrowed to what is zeroed. The release builds aarch64 on `ubuntu-22.04-arm`, matching
+  `build-blst.yml`. More negative tests and an independent XOF oversize-DST known answer.
 
 ## Risk classification
 - **R3:** D1 (secret-scalar ladder schedule). It changes how a secret-dependent primitive
@@ -585,6 +593,19 @@ on the class.
   unaffected.
 - D3: removes a transitive dependency (`foundation.icon:blst-java`) from `zeroj-blst`. Any
   downstream code that used its classes directly must migrate.
+- D3 platforms (r5): the bundled `libblst` covers linux amd64/aarch64 and macOS aarch64 only;
+  blst-java also served Intel macOS (and Windows). There `BlstFfm` fails with "use the pure-Java
+  provider", and `Groth16BLS12381Verifier` used directly returns `INTERNAL_ERROR`. To keep
+  service-loaded verification working, `ZkVerifier` gains a default `isAvailable()`;
+  `VerifierRegistry.find` skips unavailable backends, and the blst verifier is unavailable only
+  where no library is bundled, so those platforms get the pure-Java verifier with identical
+  accept/reject semantics (I8). A bundled library that fails its integrity check is not a fallback
+  case: blst stays selected and fails closed.
+- D3 codec (r5): `SnarkjsToCardano` keeps rejecting identity proof points and VK
+  `alpha/beta/gamma/delta`, as blst-java did; an identity `IC` entry is transported as the
+  compressed identity for the verifier to reject (ADR-0045 V3). It is stricter than `main` for
+  coordinates `≥ p` (no silent truncation), non-subgroup points and wrong coordinate counts
+  (see the migration note).
 
 ## Implementation milestones
 Each milestone is a separate, reviewed PR with positive and negative tests.

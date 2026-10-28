@@ -15,7 +15,10 @@ import java.util.List;
  * Converts snarkjs JSON decimal coordinate format to BLS12-381 compressed bytes
  * suitable for Cardano on-chain use (UPLC BLS12-381 builtins). Points are validated with the
  * pure-Java checked decoders (ADR-0062 D3); only affine {@code z = 1} encodings and the
- * {@code z = 0} identity are accepted (D5).
+ * canonical {@code z = 0} identity are accepted (D5). {@link #parseProof} and the
+ * {@code alpha/beta/gamma/delta} points of {@link #parseVk} reject the identity (ADR-0025,
+ * ADR-0045 V2); {@code IC} entries pass it through as the compressed identity for the verifier
+ * to reject (ADR-0045 V3).
  * <p>
  * snarkjs format: {@code [x_decimal, y_decimal, "1"]} (projective affine)
  * Cardano format: compressed BLS point bytes (48 for G1, 96 for G2)
@@ -76,10 +79,10 @@ public final class SnarkjsToCardano {
      */
     public static VkCompressed parseVk(String vkJson) throws Exception {
         JsonNode root = MAPPER.readTree(vkJson);
-        byte[] alpha = g1Compress(parseG1(root.get("vk_alpha_1")));
-        byte[] beta = g2Compress(parseG2(root.get("vk_beta_2")));
-        byte[] gamma = g2Compress(parseG2(root.get("vk_gamma_2")));
-        byte[] delta = g2Compress(parseG2(root.get("vk_delta_2")));
+        byte[] alpha = g1CompressNonIdentity(parseG1(root.get("vk_alpha_1")), "vk_alpha_1");
+        byte[] beta = g2CompressNonIdentity(parseG2(root.get("vk_beta_2")), "vk_beta_2");
+        byte[] gamma = g2CompressNonIdentity(parseG2(root.get("vk_gamma_2")), "vk_gamma_2");
+        byte[] delta = g2CompressNonIdentity(parseG2(root.get("vk_delta_2")), "vk_delta_2");
 
         JsonNode icNode = root.get("IC");
         List<byte[]> ic = new ArrayList<>();
@@ -94,10 +97,27 @@ public final class SnarkjsToCardano {
      */
     public static ProofCompressed parseProof(String proofJson) throws Exception {
         JsonNode root = MAPPER.readTree(proofJson);
-        byte[] piA = g1Compress(parseG1(root.get("pi_a")));
-        byte[] piB = g2Compress(parseG2(root.get("pi_b")));
-        byte[] piC = g1Compress(parseG1(root.get("pi_c")));
+        byte[] piA = g1CompressNonIdentity(parseG1(root.get("pi_a")), "pi_a");
+        byte[] piB = g2CompressNonIdentity(parseG2(root.get("pi_b")), "pi_b");
+        byte[] piC = g1CompressNonIdentity(parseG1(root.get("pi_c")), "pi_c");
         return new ProofCompressed(piA, piB, piC);
+    }
+
+    /** {@link #g1Compress} for a point that must not be the identity (proof and VK header points). */
+    private static byte[] g1CompressNonIdentity(List<BigInteger> coords, String name) {
+        if (coords.size() == 3 && coords.get(2).signum() == 0) {
+            throw new IllegalArgumentException(name + " must not be the point at infinity");
+        }
+        return g1Compress(coords);
+    }
+
+    /** {@link #g2Compress} for a point that must not be the identity (proof and VK header points). */
+    private static byte[] g2CompressNonIdentity(List<List<BigInteger>> coords, String name) {
+        if (coords.size() == 3 && coords.get(2).size() == 2
+                && coords.get(2).get(0).signum() == 0 && coords.get(2).get(1).signum() == 0) {
+            throw new IllegalArgumentException(name + " must not be the point at infinity");
+        }
+        return g2Compress(coords);
     }
 
     /**

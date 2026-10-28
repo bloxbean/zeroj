@@ -7,6 +7,7 @@ import org.zeroj.codec.SnarkjsJsonCodec;
 import org.zeroj.codec.SnarkjsProof;
 import org.zeroj.codec.SnarkjsVerificationKey;
 import org.zeroj.blst.ffm.BlstCurve;
+import org.zeroj.blst.ffm.BlstPlatform;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -39,6 +40,17 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
     @Override
     public BackendDescriptor descriptor() {
         return DESCRIPTOR;
+    }
+
+    /**
+     * False where no {@code libblst} is bundled (e.g. Intel macOS, Windows), so
+     * {@code VerifierRegistry} picks the pure-Java verifier, which has the same accept/reject
+     * semantics. A bundled library that fails to load stays available and reports
+     * {@code INTERNAL_ERROR} instead of falling back silently.
+     */
+    @Override
+    public boolean isAvailable() {
+        return BlstPlatform.isSupported();
     }
 
     @Override

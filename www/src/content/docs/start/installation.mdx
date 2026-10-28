@@ -32,12 +32,14 @@ The default path of circuit, witness, prove, and verify needs **nothing installe
 no native toolchain and no external CLIs. Everything below the "Optional tools" heading is only for
 specific scenarios.
 
-:::note[About the blst jar on your classpath]
-`zeroj-verifier-groth16` depends on `zeroj-blst`, which brings the `blst-java` JNI binding (a jar
-with prebuilt native code) for the module's optional native verifier. The pure-Java prover and
-`Groth16BLS12381PureJavaVerifier` never load it. If you discover verifiers with
-`VerifierRegistry.withServiceLoader()`, note that the native `Groth16BLS12381Verifier` is listed
-first; construct `Groth16BLS12381PureJavaVerifier` explicitly when you want a pure-Java path.
+:::note[About the native blst library on your classpath]
+`zeroj-verifier-groth16` depends on `zeroj-blst`, which bundles a source-built `libblst` (called
+through Java's FFM API, no JNI) for Linux amd64/aarch64 and Apple-silicon macOS, used by the
+module's optional native verifier. The pure-Java prover and `Groth16BLS12381PureJavaVerifier` never
+load it. If you discover verifiers with `VerifierRegistry.withServiceLoader()`, the native
+`Groth16BLS12381Verifier` is chosen first where the library is bundled, and the pure-Java verifier
+elsewhere (Intel macOS, Windows); construct `Groth16BLS12381PureJavaVerifier` explicitly when you
+want a pure-Java path everywhere.
 :::
 
 ## Add ZeroJ to your build
@@ -514,9 +516,10 @@ See [Performance](/guides/proving/performance/) for when it helps.
 
 ## GraalVM native image
 
-ZeroJ's pure-Java path doesn't call into JNI, so it suits GraalVM. (The `blst-java` jar that
-`zeroj-verifier-groth16` brings along is only used by its native verifier; test your image with
-the verifier you actually use.) Several
+ZeroJ's pure-Java path doesn't call native code, so it suits GraalVM. (The bundled `libblst` that
+`zeroj-verifier-groth16` brings along is only used by its native verifier, through FFM downcalls
+registered in `zeroj-blst`'s native-image metadata; test your image with the verifier you actually
+use.) Several
 modules ship native-image metadata under `META-INF/native-image/org.zeroj/<artifact>/`, which
 `native-image` picks up from the classpath automatically: `zeroj-api`, `zeroj-codec`,
 `zeroj-backend-spi`, `zeroj-verifier-groth16`, `zeroj-verifier-plonk`, `zeroj-bls12381`,

@@ -19,7 +19,8 @@ import java.util.Objects;
  * natively.</p>
  *
  * <p><b>Side channels.</b> The secret-scalar methods use a dedicated path (fixed-width scalar,
- * {@code nbits = 255}, no zero-scalar early return, zeroed temporaries), but any side-channel
+ * {@code nbits = 255}, no zero-scalar early return; the scalar byte array and native buffer are
+ * zeroed, but the {@code BigInteger} intermediates are immutable and cannot be), but any side-channel
  * property comes from blst's internal scalar multiplication, which ZeroJ has not evaluated
  * (ADR-0062 D2, Q2). Secret-bearing generation is offline/isolated only on this provider too.</p>
  */

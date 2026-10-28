@@ -56,6 +56,22 @@ class BundledLibblstProvenanceTest {
         assertThrows(IllegalStateException.class, () -> BlstFfm.expectedSha256("windows/amd64/libblst.dll"));
     }
 
+    /** ADR-0062 PR review item 2: unbundled platforms fail with a clear message, not a manifest miss. */
+    @Test
+    void platformSelectionCoversExactlyTheBundledTargets() {
+        assertEquals("mac/aarch64/libblst.dylib", BlstFfm.platformLibrary("Mac OS X", "aarch64"));
+        assertEquals("linux/aarch64/libblst.so", BlstFfm.platformLibrary("Linux", "aarch64"));
+        assertEquals("linux/amd64/libblst.so", BlstFfm.platformLibrary("Linux", "amd64"));
+        assertEquals("linux/amd64/libblst.so", BlstFfm.platformLibrary("Linux", "x86_64"));
+        for (String[] unsupported : new String[][]{
+                {"Mac OS X", "x86_64"}, {"Windows 11", "amd64"}, {"Linux", "riscv64"}, {"FreeBSD", "amd64"}}) {
+            var e = assertThrows(IllegalStateException.class,
+                    () -> BlstFfm.platformLibrary(unsupported[0], unsupported[1]));
+            assertTrue(e.getMessage().contains("use the pure-Java provider"), e.getMessage());
+            assertFalse(e.getMessage().contains("manifest"), e.getMessage());
+        }
+    }
+
     private static Map<String, String> manifest() throws IOException {
         byte[] raw = resource("libblst.sha256");
         assertNotNull(raw, "libblst.sha256 manifest missing");

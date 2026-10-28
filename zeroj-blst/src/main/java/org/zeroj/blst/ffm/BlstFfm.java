@@ -32,8 +32,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * environment variable or {@code java.library.path} lookup); an unsupported OS or architecture is
  * rejected rather than mapped to a default; and the library's SHA-256 must match the bundled
  * manifest {@code libblst.sha256} before it is mapped. The library is written to a new file inside a
- * fresh owner-only temporary directory. The manifest guards against a stale or substituted binary
- * in the jar; it does not defend against an attacker who controls the class path.</p>
+ * fresh owner-only temporary directory under {@code java.io.tmpdir} and deleted as soon as it is
+ * mapped. The manifest guards against a stale or substituted binary in the jar; it does not defend
+ * against an attacker who controls the class path.</p>
+ *
+ * <p>Residual risk: between the write and the {@code dlopen} the file exists on disk. Inside the
+ * owner-only directory only the same user can replace it, provided {@code java.io.tmpdir} itself
+ * cannot be renamed by others — true for a per-user directory or a sticky {@code /tmp}. Pointing
+ * {@code java.io.tmpdir} at a directory other users can write without the sticky bit weakens this,
+ * and is the deployer's responsibility.</p>
+ *
+ * <p>{@link BlstPlatform} decides which bundled library serves the platform; every unbundled
+ * platform, including Intel macOS and Windows, is rejected with a "use the pure-Java provider"
+ * message.</p>
  */
 public final class BlstFfm {
 
@@ -58,28 +69,12 @@ public final class BlstFfm {
 
     /** {@code <os>/<arch>/libblst.<ext>} for this platform; throws if the platform is unsupported. */
     static String platformLibrary() {
-        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
-        String osToken;
-        String ext;
-        if (os.contains("mac") || os.contains("darwin")) {
-            osToken = "mac";
-            ext = "dylib";
-        } else if (os.contains("linux")) {
-            osToken = "linux";
-            ext = "so";
-        } else {
-            throw new IllegalStateException("zeroj-blst has no libblst for OS '" + os + "'; use the pure-Java provider");
-        }
-        String archToken;
-        if (arch.equals("aarch64") || arch.equals("arm64")) {
-            archToken = "aarch64";
-        } else if (arch.equals("amd64") || arch.equals("x86_64")) {
-            archToken = osToken.equals("mac") ? "x86_64" : "amd64";
-        } else {
-            throw new IllegalStateException("zeroj-blst has no libblst for arch '" + arch + "'; use the pure-Java provider");
-        }
-        return osToken + "/" + archToken + "/libblst." + ext;
+        return BlstPlatform.library(System.getProperty("os.name", ""), System.getProperty("os.arch", ""));
+    }
+
+    /** {@code <os>/<arch>/libblst.<ext>} for the given {@code os.name} / {@code os.arch} values. */
+    static String platformLibrary(String osName, String osArch) {
+        return BlstPlatform.library(osName, osArch);
     }
 
     private static SymbolLookup loadBlst() {
@@ -101,7 +96,16 @@ public final class BlstFfm {
             Path tmp = dir.resolve(library.substring(library.lastIndexOf('/') + 1));
             Files.write(tmp, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
             tmp.toFile().deleteOnExit();
-            return SymbolLookup.libraryLookup(tmp, LIB_ARENA);
+            SymbolLookup lookup = SymbolLookup.libraryLookup(tmp, LIB_ARENA); // dlopen happens here
+            // The mapping outlives the directory entry on every bundled (POSIX) platform, so remove
+            // the file at once instead of leaving it on disk for the JVM's lifetime.
+            try {
+                Files.deleteIfExists(tmp);
+                Files.deleteIfExists(dir);
+            } catch (IOException ignored) {
+                // deleteOnExit above still applies
+            }
+            return lookup;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to extract/load libblst", e);
         } catch (NoSuchAlgorithmException e) {

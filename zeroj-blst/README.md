@@ -36,8 +36,9 @@ Every `BlstCurve` method validates its point inputs (length, no compression/sort
 The MSM hot path is caller-validated; `msmValidated` checks the bases (ADR-0062 D4).
 
 No ZeroJ provider has an evidenced side-channel contract. `BlstBls12381Provider` has a dedicated
-secret-scalar path (fixed-width scalar, `nbits = 255`, no zero-scalar early return, zeroed
-temporaries), but ZeroJ has not evaluated blst's scalar multiplication for side channels
+secret-scalar path (fixed-width scalar, `nbits = 255`, no zero-scalar early return; the byte
+array and native scalar buffer are zeroed, but the `BigInteger` intermediates are immutable and
+cannot be), but ZeroJ has not evaluated blst's scalar multiplication for side channels
 (ADR-0062 D2, Q2). Secret-bearing generation is offline/isolated only, whichever provider is
 selected.
 
