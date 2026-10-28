@@ -101,8 +101,8 @@ on top. ZeroJ brings the whole workflow to the JVM:</p>
 <ul>
 <li><strong>Pure Java on the default path.</strong> Circuit compilation, witness generation, proving, and
 verification with <code dir="auto">Groth16BLS12381PureJavaVerifier</code> run in pure Java, with nothing to install
-beyond a JDK. Native <code dir="auto">blst</code> acceleration is optional. (The verifier module also carries the
-<code dir="auto">blst-java</code> binding for its native verifier; see <a href="/guides/verifying/off-chain/">Verify proofs in Java</a>.)</li>
+beyond a JDK. Native <code dir="auto">blst</code> acceleration is optional. (The verifier module also carries a
+bundled, source-built <code dir="auto">libblst</code> for its native verifier; see <a href="/guides/verifying/off-chain/">Verify proofs in Java</a>.)</li>
 <li><strong>Circuits are Java code.</strong> You write circuits with annotations and symbolic types
 (<code dir="auto">ZkField</code>, <code dir="auto">ZkBool</code>, <code dir="auto">ZkUInt</code>), so your IDE, refactoring tools, and unit tests all work.</li>
 <li><strong>GraalVM friendly.</strong> ZeroJ targets Java 25, and several modules ship GraalVM native-image

@@ -97,8 +97,8 @@ keeps some BN254 classes for old off-chain experiments, disabled by default.</p>
 verification and on-chain codecs) is pure Java 25, and there is nothing to install beyond a JDK.</p>
 <ul>
 <li><strong>Native code that is on the classpath anyway:</strong> <code dir="auto">zeroj-verifier-groth16</code> depends on
-<code dir="auto">zeroj-blst</code>, which brings the <code dir="auto">blst-java</code> JNI jar for the module’s native
-<code dir="auto">Groth16BLS12381Verifier</code>. <code dir="auto">Groth16BLS12381PureJavaVerifier</code> never loads it, but
+<code dir="auto">zeroj-blst</code>, which bundles the source-built <code dir="auto">libblst</code> (called through FFM) for the module’s
+native <code dir="auto">Groth16BLS12381Verifier</code>. <code dir="auto">Groth16BLS12381PureJavaVerifier</code> never loads it, but
 <code dir="auto">VerifierRegistry.withServiceLoader()</code> lists the native verifier first, so construct the
 pure-Java verifier explicitly if you want to stay pure Java.</li>
 <li><strong>Optional native code:</strong> <code dir="auto">zeroj-blst</code> / <code dir="auto">zeroj-crypto-blst</code> bundle a source-built <code dir="auto">libblst</code>

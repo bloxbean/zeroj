@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: 3e6a149e48248ffbbc187172dda9084c10c260dc
+Source revision: d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40
 
 ## Key facts
 
@@ -13,7 +13,7 @@ Source revision: 3e6a149e48248ffbbc187172dda9084c10c260dc
 - Status: experimental research software, not externally audited, not for production or value-bearing/mainnet use. "Beta" components are feature-complete and correctness-tested but not audited.
 - **Groth16 on BLS12-381 is the supported path for the current release.** PlonK (prover, verifier and on-chain validators) is experimental: make no correctness claims about it and do not choose it by default. BN254 is legacy and disabled by default.
 - Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre13. Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre13`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
-- Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` carries the blst-java JNI jar for its native verifier, and `VerifierRegistry.withServiceLoader()` lists that verifier first: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path.
+- Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` bundles a source-built libblst (FFM, no JNI) for its native verifier on Linux amd64/aarch64 and Apple-silicon macOS; `VerifierRegistry.withServiceLoader()` picks that verifier where the library is bundled and the pure-Java one elsewhere: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path everywhere.
 - Write application circuits with annotations: `@ZKCircuit`, `@Prove`, `@Public`/`@Secret`, symbolic types `ZkField`, `ZkBool`, `ZkUInt` (always with `@UInt(bits = N)`), `ZkArray`/`ZkBits`/`ZkBytes` (with `@FixedSize`). The annotation processor generates a `<Name>Circuit` companion. Never use Java `if`, `&&`, `||` on secret values — use `ZkBool.and/or/not/select`.
 - For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). MiMC and the no-params Poseidon overload are BN254-oriented; do not use them for Cardano.
 - Single-party trusted setup (`PowersOfTauBLS381.generate`, `Groth16Keys.setupInMemory`) is for development and tests only and requires `-Dzeroj.allowInsecureTrustedSetup=true`. Production keys come from a multi-party ceremony (snarkjs `.zkey`, imported into ZeroJ).
@@ -131,8 +131,8 @@ on top. ZeroJ brings the whole workflow to the JVM:
 
 - **Pure Java on the default path.** Circuit compilation, witness generation, proving, and
   verification with `Groth16BLS12381PureJavaVerifier` run in pure Java, with nothing to install
-  beyond a JDK. Native `blst` acceleration is optional. (The verifier module also carries the
-  `blst-java` binding for its native verifier; see [Verify proofs in Java](https://zeroj.dev/guides/verifying/off-chain/).)
+  beyond a JDK. Native `blst` acceleration is optional. (The verifier module also carries a
+  bundled, source-built `libblst` for its native verifier; see [Verify proofs in Java](https://zeroj.dev/guides/verifying/off-chain/).)
 - **Circuits are Java code.** You write circuits with annotations and symbolic types
   (`ZkField`, `ZkBool`, `ZkUInt`), so your IDE, refactoring tools, and unit tests all work.
 - **GraalVM friendly.** ZeroJ targets Java 25, and several modules ship GraalVM native-image
@@ -271,13 +271,15 @@ The default path of circuit, witness, prove, and verify needs **nothing installe
 no native toolchain and no external CLIs. Everything below the "Optional tools" heading is only for
 specific scenarios.
 
-> **Note: About the blst jar on your classpath**
+> **Note: About the native blst library on your classpath**
 >
-> `zeroj-verifier-groth16` depends on `zeroj-blst`, which brings the `blst-java` JNI binding (a jar
-> with prebuilt native code) for the module's optional native verifier. The pure-Java prover and
-> `Groth16BLS12381PureJavaVerifier` never load it. If you discover verifiers with
-> `VerifierRegistry.withServiceLoader()`, note that the native `Groth16BLS12381Verifier` is listed
-> first; construct `Groth16BLS12381PureJavaVerifier` explicitly when you want a pure-Java path.
+> `zeroj-verifier-groth16` depends on `zeroj-blst`, which bundles a source-built `libblst` (called
+> through Java's FFM API, no JNI) for Linux amd64/aarch64 and Apple-silicon macOS, used by the
+> module's optional native verifier. The pure-Java prover and `Groth16BLS12381PureJavaVerifier` never
+> load it. If you discover verifiers with `VerifierRegistry.withServiceLoader()`, the native
+> `Groth16BLS12381Verifier` is chosen first where the library is bundled, and the pure-Java verifier
+> elsewhere (Intel macOS, Windows); construct `Groth16BLS12381PureJavaVerifier` explicitly when you
+> want a pure-Java path everywhere.
 
 ### Add ZeroJ to your build
 
@@ -728,9 +730,10 @@ See [Performance](https://zeroj.dev/guides/proving/performance/) for when it hel
 
 ### GraalVM native image
 
-ZeroJ's pure-Java path doesn't call into JNI, so it suits GraalVM. (The `blst-java` jar that
-`zeroj-verifier-groth16` brings along is only used by its native verifier; test your image with
-the verifier you actually use.) Several
+ZeroJ's pure-Java path doesn't call native code, so it suits GraalVM. (The bundled `libblst` that
+`zeroj-verifier-groth16` brings along is only used by its native verifier, through FFM downcalls
+registered in `zeroj-blst`'s native-image metadata; test your image with the verifier you actually
+use.) Several
 modules ship native-image metadata under `META-INF/native-image/org.zeroj/<artifact>/`, which
 `native-image` picks up from the classpath automatically: `zeroj-api`, `zeroj-codec`,
 `zeroj-backend-spi`, `zeroj-verifier-groth16`, `zeroj-verifier-plonk`, `zeroj-bls12381`,
@@ -8026,7 +8029,7 @@ The `ReasonCode` enum covers both sides:
 | Backend class | Module | Descriptor name | Notes |
 |---|---|---|---|
 | `Groth16BLS12381PureJavaVerifier` | `zeroj-verifier-groth16` | `groth16-bls12381-java` | Pure Java, no native code. The portable default. |
-| `Groth16BLS12381Verifier` | `zeroj-verifier-groth16` | `groth16-bls12381-blst` | Same checks, pairing via the native blst library (the `blst-java` JNI binding that `zeroj-blst` brings in). |
+| `Groth16BLS12381Verifier` | `zeroj-verifier-groth16` | `groth16-bls12381-blst` | Same checks, pairing via the native blst library (the source-built `libblst`, through FFM). |
 | `PlonkBLS12381Verifier` | `zeroj-verifier-plonk` (opt-in) | — | **Experimental.** See [PlonK](https://zeroj.dev/guides/proving/plonk/). |
 | `BbsZkVerifier` | `zeroj-bbs` (opt-in) | `bbs-bls12381-java` | Verifies BBS presentations wrapped in an envelope. See [BBS](https://zeroj.dev/guides/credentials/bbs/). |
 
@@ -14586,7 +14589,7 @@ dependencies {
 | `zeroj-backend-spi` | Verifier SPI, key registry, routing | Beta | `ZkVerifier`, `BackendDescriptor`, `VerificationKeyRegistry`, `InMemoryVerificationKeyRegistry`, `VerifierRegistry`, `VerifierOrchestrator` |
 | `zeroj-verifier-groth16` | Groth16 BLS12-381 verification | Beta | `Groth16BLS12381PureJavaVerifier` (pure Java), `Groth16BLS12381Verifier` (blst-backed) |
 | `zeroj-bls12381` | Pure-Java BLS12-381 fields, curves and pairing | Beta (verification-grade) | `BLS12381Pairing`, `G1Point`, `G2Point`, `Bls12381Provider` |
-| `zeroj-blst` | Native BLS12-381 via [blst](https://github.com/supranational/blst): FFM MSM binding with a source-built, bundled `libblst`, plus pairing | Beta, opt-in native code | `BlstBls12381Provider`, `BlstPairing`, `ffm.BlstFfm` |
+| `zeroj-blst` | Native BLS12-381 via [blst](https://github.com/supranational/blst): FFM binding over a source-built, bundled `libblst` (MSM, curve arithmetic, pairing) | Beta, opt-in native code | `BlstBls12381Provider`, `ffm.BlstCurve`, `ffm.BlstFfm` |
 | `zeroj-crypto` | The pure-Java prover: Groth16 setup, proving, key stores, ceremony import, snarkjs export | Beta (Groth16); PlonK classes are experimental | `Groth16Keys`, `Groth16Pipeline`, `Groth16ProverBLS381`, `Groth16SetupBLS381`, `PowersOfTauBLS381`, `ZkeyImporterBLS381`, `ZkeyPkStoreImporter`, `SnarkjsGroth16Json` |
 | `zeroj-crypto-blst` | Opt-in blst MSM backend for the Groth16 prover; bit-identical proofs | Beta, opt-in | `BlstProverBackend` |
 | `zeroj-circuit-dsl` | Java circuit DSL; compiles to R1CS | Beta | `CircuitBuilder`, `CircuitSpec`, `SignalBuilder`, `Signal` |
@@ -14952,19 +14955,19 @@ uses it:
 | Where blst is used | Binding | Pulled in by |
 |---|---|---|
 | Groth16 prover MSM (`BlstProverBackend`) | Java 25 FFM, with a `libblst` built from source (pinned v0.3.15) and bundled in the `zeroj-blst` jar | `zeroj-crypto-blst` |
-| Pairing for `Groth16BLS12381Verifier` (off-chain) and `BlstBls12381Provider` (BBS) | JNI via `foundation.icon:blst-java` | `zeroj-verifier-groth16`, `zeroj-blst` |
+| Pairing for `Groth16BLS12381Verifier` (off-chain) and `BlstBls12381Provider` (BBS) | Java 25 FFM (`ffm.BlstCurve`), the same bundled `libblst` (ADR-0062 D3) | `zeroj-verifier-groth16`, `zeroj-blst` |
 
 How the FFM library is found:
 
-- There is **no path setting**. `BlstFfm` picks `/native/<os>/<arch>/libblst.<ext>` from the jar
-  (`os` is `linux`, `mac` or `windows`; `arch` is `amd64` or `aarch64`, with `x86_64` on macOS),
-  copies it to a temp file named `libblst-zeroj-*`, and loads it. The JVM needs a writable temp
-  directory.
+- There is **no path setting**. `BlstFfm` picks `/org/zeroj/blst/native/<os>/<arch>/libblst.<ext>`
+  from the jar (linux amd64/aarch64, macOS aarch64), checks its SHA-256 against the bundled
+  manifest `libblst.sha256`, writes it into a new owner-only temp directory `zeroj-blst-*`, and
+  loads it. The JVM needs a writable temp directory.
 - Release builds rebuild the bundled binaries from source for each supported platform. macOS is
-  **arm64-only**: Intel Macs can't use the blst prover backend but work normally on the pure-Java
-  default.
-- If your platform has no bundled binary, the first blst MSM call fails with an error containing
-  `Bundled libblst not found for this platform`. Stay on the pure-Java path.
+  **arm64-only**: Intel Macs can't use blst but work normally on the pure-Java default.
+- On any other platform the first blst call fails with an error saying zeroj-blst has no libblst
+  for that OS or architecture; the blst Groth16 verifier reports this as `INTERNAL_ERROR`. Use the
+  pure-Java path there.
 - FFM downcalls need native access enabled:
 
 ```bash
@@ -15064,8 +15067,8 @@ No. The default path (circuit DSL, witness generation, trusted setup for develop
 verification and on-chain codecs) is pure Java 25, and there is nothing to install beyond a JDK.
 
 - **Native code that is on the classpath anyway:** `zeroj-verifier-groth16` depends on
-  `zeroj-blst`, which brings the `blst-java` JNI jar for the module's native
-  `Groth16BLS12381Verifier`. `Groth16BLS12381PureJavaVerifier` never loads it, but
+  `zeroj-blst`, which bundles the source-built `libblst` (called through FFM) for the module's
+  native `Groth16BLS12381Verifier`. `Groth16BLS12381PureJavaVerifier` never loads it, but
   `VerifierRegistry.withServiceLoader()` lists the native verifier first, so construct the
   pure-Java verifier explicitly if you want to stay pure Java.
 - **Optional native code:** `zeroj-blst` / `zeroj-crypto-blst` bundle a source-built `libblst`

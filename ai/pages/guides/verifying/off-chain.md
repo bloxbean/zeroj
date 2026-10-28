@@ -126,7 +126,7 @@ The `ReasonCode` enum covers both sides:
 | Backend class | Module | Descriptor name | Notes |
 |---|---|---|---|
 | `Groth16BLS12381PureJavaVerifier` | `zeroj-verifier-groth16` | `groth16-bls12381-java` | Pure Java, no native code. The portable default. |
-| `Groth16BLS12381Verifier` | `zeroj-verifier-groth16` | `groth16-bls12381-blst` | Same checks, pairing via the native blst library (the `blst-java` JNI binding that `zeroj-blst` brings in). |
+| `Groth16BLS12381Verifier` | `zeroj-verifier-groth16` | `groth16-bls12381-blst` | Same checks, pairing via the native blst library (the source-built `libblst`, through FFM). |
 | `PlonkBLS12381Verifier` | `zeroj-verifier-plonk` (opt-in) | — | **Experimental.** See [PlonK](https://zeroj.dev/guides/proving/plonk/). |
 | `BbsZkVerifier` | `zeroj-bbs` (opt-in) | `bbs-bls12381-java` | Verifies BBS presentations wrapped in an envelope. See [BBS](https://zeroj.dev/guides/credentials/bbs/). |
 

@@ -174,18 +174,18 @@ uses it:</p>
 
 
 
-<table><thead><tr><th>Where blst is used</th><th>Binding</th><th>Pulled in by</th></tr></thead><tbody><tr><td>Groth16 prover MSM (<code dir="auto">BlstProverBackend</code>)</td><td>Java 25 FFM, with a <code dir="auto">libblst</code> built from source (pinned v0.3.15) and bundled in the <code dir="auto">zeroj-blst</code> jar</td><td><code dir="auto">zeroj-crypto-blst</code></td></tr><tr><td>Pairing for <code dir="auto">Groth16BLS12381Verifier</code> (off-chain) and <code dir="auto">BlstBls12381Provider</code> (BBS)</td><td>JNI via <code dir="auto">foundation.icon:blst-java</code></td><td><code dir="auto">zeroj-verifier-groth16</code>, <code dir="auto">zeroj-blst</code></td></tr></tbody></table>
+<table><thead><tr><th>Where blst is used</th><th>Binding</th><th>Pulled in by</th></tr></thead><tbody><tr><td>Groth16 prover MSM (<code dir="auto">BlstProverBackend</code>)</td><td>Java 25 FFM, with a <code dir="auto">libblst</code> built from source (pinned v0.3.15) and bundled in the <code dir="auto">zeroj-blst</code> jar</td><td><code dir="auto">zeroj-crypto-blst</code></td></tr><tr><td>Pairing for <code dir="auto">Groth16BLS12381Verifier</code> (off-chain) and <code dir="auto">BlstBls12381Provider</code> (BBS)</td><td>Java 25 FFM (<code dir="auto">ffm.BlstCurve</code>), the same bundled <code dir="auto">libblst</code> (ADR-0062 D3)</td><td><code dir="auto">zeroj-verifier-groth16</code>, <code dir="auto">zeroj-blst</code></td></tr></tbody></table>
 <p>How the FFM library is found:</p>
 <ul>
-<li>There is <strong>no path setting</strong>. <code dir="auto">BlstFfm</code> picks <code dir="auto">/native/&#x3C;os>/&#x3C;arch>/libblst.&#x3C;ext></code> from the jar
-(<code dir="auto">os</code> is <code dir="auto">linux</code>, <code dir="auto">mac</code> or <code dir="auto">windows</code>; <code dir="auto">arch</code> is <code dir="auto">amd64</code> or <code dir="auto">aarch64</code>, with <code dir="auto">x86_64</code> on macOS),
-copies it to a temp file named <code dir="auto">libblst-zeroj-*</code>, and loads it. The JVM needs a writable temp
-directory.</li>
+<li>There is <strong>no path setting</strong>. <code dir="auto">BlstFfm</code> picks <code dir="auto">/org/zeroj/blst/native/&#x3C;os>/&#x3C;arch>/libblst.&#x3C;ext></code>
+from the jar (linux amd64/aarch64, macOS aarch64), checks its SHA-256 against the bundled
+manifest <code dir="auto">libblst.sha256</code>, writes it into a new owner-only temp directory <code dir="auto">zeroj-blst-*</code>, and
+loads it. The JVM needs a writable temp directory.</li>
 <li>Release builds rebuild the bundled binaries from source for each supported platform. macOS is
-<strong>arm64-only</strong>: Intel Macs can’t use the blst prover backend but work normally on the pure-Java
-default.</li>
-<li>If your platform has no bundled binary, the first blst MSM call fails with an error containing
-<code dir="auto">Bundled libblst not found for this platform</code>. Stay on the pure-Java path.</li>
+<strong>arm64-only</strong>: Intel Macs can’t use blst but work normally on the pure-Java default.</li>
+<li>On any other platform the first blst call fails with an error saying zeroj-blst has no libblst
+for that OS or architecture; the blst Groth16 verifier reports this as <code dir="auto">INTERNAL_ERROR</code>. Use the
+pure-Java path there.</li>
 <li>FFM downcalls need native access enabled:</li>
 </ul>
 <div class="expressive-code"><figure class="frame is-terminal not-content"><figcaption class="header"><span class="title"></span><span class="sr-only">Terminal window</span></figcaption><pre data-language="bash"><code><div class="ec-line"><div class="code"><span style="--0:#B392F0;--1:#6F42C1">java</span><span style="--0:#E1E4E8;--1:#24292E"> </span><span style="--0:#79B8FF;--1:#005CC5">--enable-native-access=ALL-UNNAMED</span><span style="--0:#E1E4E8;--1:#24292E"> </span><span style="--0:#79B8FF;--1:#005CC5">-cp</span><span style="--0:#E1E4E8;--1:#24292E"> </span><span style="--0:#9ECBFF;--1:#032F62">…</span><span style="--0:#E1E4E8;--1:#24292E"> </span><span style="--0:#9ECBFF;--1:#032F62">my.App</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="java --enable-native-access=ALL-UNNAMED -cp … my.App"><div></div></button></div></figure></div>

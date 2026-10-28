@@ -58,7 +58,7 @@ dependencies {
 | `zeroj-backend-spi` | Verifier SPI, key registry, routing | Beta | `ZkVerifier`, `BackendDescriptor`, `VerificationKeyRegistry`, `InMemoryVerificationKeyRegistry`, `VerifierRegistry`, `VerifierOrchestrator` |
 | `zeroj-verifier-groth16` | Groth16 BLS12-381 verification | Beta | `Groth16BLS12381PureJavaVerifier` (pure Java), `Groth16BLS12381Verifier` (blst-backed) |
 | `zeroj-bls12381` | Pure-Java BLS12-381 fields, curves and pairing | Beta (verification-grade) | `BLS12381Pairing`, `G1Point`, `G2Point`, `Bls12381Provider` |
-| `zeroj-blst` | Native BLS12-381 via [blst](https://github.com/supranational/blst): FFM MSM binding with a source-built, bundled `libblst`, plus pairing | Beta, opt-in native code | `BlstBls12381Provider`, `BlstPairing`, `ffm.BlstFfm` |
+| `zeroj-blst` | Native BLS12-381 via [blst](https://github.com/supranational/blst): FFM binding over a source-built, bundled `libblst` (MSM, curve arithmetic, pairing) | Beta, opt-in native code | `BlstBls12381Provider`, `ffm.BlstCurve`, `ffm.BlstFfm` |
 | `zeroj-crypto` | The pure-Java prover: Groth16 setup, proving, key stores, ceremony import, snarkjs export | Beta (Groth16); PlonK classes are experimental | `Groth16Keys`, `Groth16Pipeline`, `Groth16ProverBLS381`, `Groth16SetupBLS381`, `PowersOfTauBLS381`, `ZkeyImporterBLS381`, `ZkeyPkStoreImporter`, `SnarkjsGroth16Json` |
 | `zeroj-crypto-blst` | Opt-in blst MSM backend for the Groth16 prover; bit-identical proofs | Beta, opt-in | `BlstProverBackend` |
 | `zeroj-circuit-dsl` | Java circuit DSL; compiles to R1CS | Beta | `CircuitBuilder`, `CircuitSpec`, `SignalBuilder`, `Signal` |

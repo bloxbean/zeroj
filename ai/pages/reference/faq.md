@@ -37,8 +37,8 @@ No. The default path (circuit DSL, witness generation, trusted setup for develop
 verification and on-chain codecs) is pure Java 25, and there is nothing to install beyond a JDK.
 
 - **Native code that is on the classpath anyway:** `zeroj-verifier-groth16` depends on
-  `zeroj-blst`, which brings the `blst-java` JNI jar for the module's native
-  `Groth16BLS12381Verifier`. `Groth16BLS12381PureJavaVerifier` never loads it, but
+  `zeroj-blst`, which bundles the source-built `libblst` (called through FFM) for the module's
+  native `Groth16BLS12381Verifier`. `Groth16BLS12381PureJavaVerifier` never loads it, but
   `VerifierRegistry.withServiceLoader()` lists the native verifier first, so construct the
   pure-Java verifier explicitly if you want to stay pure Java.
 - **Optional native code:** `zeroj-blst` / `zeroj-crypto-blst` bundle a source-built `libblst`

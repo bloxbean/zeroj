@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "3e6a149e48248ffbbc187172dda9084c10c260dc",
+  "sourceRevision": "d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -15,14 +15,14 @@
       "description": "ZeroJ is a Java-first zero-knowledge proof toolkit for Cardano. Learn what it does, how the pieces fit, and where to start.",
       "url": "https://zeroj.dev/start/overview/",
       "markdown": "https://zeroj.dev/ai/pages/start/overview.md",
-      "sha256": "2cdb02f5048d8d921871eaed629cd77497d636578477bd4207ab07e873200f50"
+      "sha256": "22ef531ef7f065805a36e9ae28ecbbb264c78d20b63d2771fe647f456e4a5e80"
     },
     {
       "title": "Installation",
       "description": "Add ZeroJ to a Gradle or Maven project with the BOM, wire up the annotation processor, and enable the dev-only trusted setup for local runs.",
       "url": "https://zeroj.dev/start/installation/",
       "markdown": "https://zeroj.dev/ai/pages/start/installation.md",
-      "sha256": "06682f891db7feb1f69bb696c27d6dfe27dea5b2b164b9599a5e45a770d78b88"
+      "sha256": "35975484dc94faf2eed02671d006490f14c396f43c5d6eae06c323b46f0e53c4"
     },
     {
       "title": "Quickstart: your first proof",
@@ -225,7 +225,7 @@
       "description": "Verify Groth16 proofs off-chain with ZeroJ's proof model, verifier backends and registries, and build a service that only trusts keys you pinned.",
       "url": "https://zeroj.dev/guides/verifying/off-chain/",
       "markdown": "https://zeroj.dev/ai/pages/guides/verifying/off-chain.md",
-      "sha256": "8c846f3bcef69e271bfec23e8de84f307ce293fa1faf6119c2d1febbb1563d10"
+      "sha256": "9d59e071c568d1feff96e194336e91fc2fadb1206192d77f3b51816312525f38"
     },
     {
       "title": "Verify proofs on Cardano",
@@ -386,7 +386,7 @@
       "description": "Every published ZeroJ artifact with its coordinates, purpose, BOM membership, maturity and main entry-point classes, plus the unpublished support projects.",
       "url": "https://zeroj.dev/reference/modules/",
       "markdown": "https://zeroj.dev/ai/pages/reference/modules.md",
-      "sha256": "db792839551527539460f4d3735106c9823f6b6d46765f171049fd75f10e003c"
+      "sha256": "1c43d25dfec31782119225eb6613f5575982ac3ff9c2d773f0571f7f7624a58a"
     },
     {
       "title": "API cheat sheet",
@@ -400,14 +400,14 @@
       "description": "Every ZeroJ system property, environment variable, native-library requirement, external tool and contributor Gradle flag, and which ones are dev-only.",
       "url": "https://zeroj.dev/reference/configuration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/configuration.md",
-      "sha256": "9f007aae8aa6b411d3568b87b8821b75be1ad8905131594f83077f13dd166031"
+      "sha256": "5eec1b065fee9a302faba6d9de32b36758e7df4246b541c314f61eb8ef032f49"
     },
     {
       "title": "FAQ & troubleshooting",
       "description": "Straight answers about ZeroJ's maturity, proof systems, tooling and performance, plus fixes for the errors you are most likely to hit.",
       "url": "https://zeroj.dev/reference/faq/",
       "markdown": "https://zeroj.dev/ai/pages/reference/faq.md",
-      "sha256": "d01f157737546cff4b59c8195163838b7782a349b29820d2f480735d0caeb844"
+      "sha256": "ed77814c9610e6958232312453a980cff0025866a1cc207fbec9f4dc41709118"
     },
     {
       "title": "Migration notes",
@@ -434,11 +434,11 @@
   "artifacts": [
     {
       "url": "https://zeroj.dev/llms.txt",
-      "sha256": "9dceff94545a077c6939a1e094b50c387bc4c5eeb7c0e8b6b66467360f2747aa"
+      "sha256": "92f0c7dfe726587da444e34dde570f03191a1cf198ea1d1190503b82d22709c6"
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "b0f665d631a9060225d7c60174c90bb7531a8e8b1fe4916e8895bf7cbe74f144"
+      "sha256": "a4afb618150d7b60b6f7f3683ce4483b0c2a4e875bd2c34ec78357da2fb600b0"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
