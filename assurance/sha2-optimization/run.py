@@ -94,7 +94,8 @@ def run_case(launch, folder, algorithm, length, heap, backend, args):
     folder.mkdir(parents=True, exist_ok=False)
     scale = getattr(args, 'scale', False)
     expected_heap = int(heap[:-1]) * (1 << 30)
-    extra = ([ '-XX:+ExitOnOutOfMemoryError', '-Dsha2.benchmark.checkpoints=true',
+    extra = ([ *([] if getattr(args, 'capture_oom_stack', False) else ['-XX:+ExitOnOutOfMemoryError']),
+               '-Dsha2.benchmark.checkpoints=true',
                f'-Xlog:gc:file={folder / "gc.log"}:time,uptime,level,tags',
                f'-Dsha2.benchmark.expectedHeapBytes={expected_heap}',
                f'-Dsha2.benchmark.expectedProcessors={args.processors}',

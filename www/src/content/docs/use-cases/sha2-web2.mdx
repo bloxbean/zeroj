@@ -227,6 +227,12 @@ membership, voting, large documents or state transitions. Additional hashes and 
 increase off-chain cost. Public inputs and validator logic affect on-chain cost. New circuits
 need matching setup artifacts and new execution measurements.
 
+**Choose the proving flow.** For applications using stored keys, prefer `Groth16Pipeline`,
+especially for repeated SHA-256/SHA-512 proofs or larger documents. It reuses validated
+constraints and orders large allocations; your callbacks must still release their circuit
+graphs. The [tutorial's pipeline guidance](/tutorials/sha256-record/#when-to-use-groth16pipeline)
+explains when the simpler API is sufficient, key reuse, cache-miss costs and memory limits.
+
 For a starting budget, retained local DevKit runs paid about **0.43 ADA for a simple SHA-256
 proof spend** and **0.46 ADA for SHA-512**, including transaction size and verification execution.
 These are preimage-verifier baselines, not prices for the complete applications above. The

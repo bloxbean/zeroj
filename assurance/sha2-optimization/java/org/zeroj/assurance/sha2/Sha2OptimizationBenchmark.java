@@ -272,7 +272,7 @@ public final class Sha2OptimizationBenchmark {
                 StandardCopyOption.REPLACE_EXISTING);
     }
 
-    private static CircuitBuilder circuit(String algorithm, int length, int count) {
+    static CircuitBuilder circuit(String algorithm, int length, int count) {
         var builder = CircuitBuilder.create("sha2-optimization-" + algorithm + "-" + length);
         for (int i = 0; i < count; i++) builder.publicVar("digest" + i);
         for (int i = 0; i < length; i++) builder.secretVar("byte" + i);
@@ -288,37 +288,37 @@ public final class Sha2OptimizationBenchmark {
         });
     }
 
-    private static Map<String, List<BigInteger>> inputs(byte[] message, BigInteger[] digest) {
+    static Map<String, List<BigInteger>> inputs(byte[] message, BigInteger[] digest) {
         var input = new HashMap<String, List<BigInteger>>();
         for (int i = 0; i < digest.length; i++) input.put("digest" + i, List.of(digest[i]));
         for (int i = 0; i < message.length; i++) input.put("byte" + i, List.of(BigInteger.valueOf(message[i] & 255)));
         return input;
     }
 
-    private static BigInteger[] limbs(byte[] digest) {
+    static BigInteger[] limbs(byte[] digest) {
         var values = new BigInteger[digest.length / 16];
         for (int i = 0; i < values.length; i++) values[i] = new BigInteger(1, Arrays.copyOfRange(digest, i * 16, (i + 1) * 16));
         return values;
     }
 
-    private static boolean verify(String name, String vk, String pub, String proof) {
+    static boolean verify(String name, String vk, String pub, String proof) {
         var id = new CircuitId(name);
         var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(proof, vk, pub, id);
         var material = VerificationMaterial.of(vk.getBytes(StandardCharsets.UTF_8), ProofSystemId.GROTH16, CURVE, id);
         return new Groth16BLS12381PureJavaVerifier().verify(envelope, material).proofValid();
     }
 
-    private static String sha256(byte[] bytes) throws Exception {
+    static String sha256(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
 
-    private static double elapsed(long start) { return (System.nanoTime() - start) / 1e6; }
+    static double elapsed(long start) { return (System.nanoTime() - start) / 1e6; }
 
-    private static void require(boolean condition, String message) {
+    static void require(boolean condition, String message) {
         if (!condition) throw new IllegalStateException(message);
     }
 
-    private static long directoryBytes(Path directory) throws IOException {
+    static long directoryBytes(Path directory) throws IOException {
         long bytes = 0;
         try (var stream = Files.walk(directory)) {
             for (Path path : stream.filter(Files::isRegularFile).toList()) bytes += Files.size(path);
@@ -335,7 +335,7 @@ public final class Sha2OptimizationBenchmark {
         return new long[]{count, millis};
     }
 
-    private static final class HeapSampler implements AutoCloseable {
+    static final class HeapSampler implements AutoCloseable {
         private final AtomicLong maximum = new AtomicLong();
         private volatile boolean running = true;
         private final Thread worker;
