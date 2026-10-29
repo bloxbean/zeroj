@@ -1,9 +1,12 @@
 # ADR-0057: WebAssembly and native shared-library bindings (GraalVM)
 
 ## Status
-Proposed — 2026-10-13. Design only: this ADR changes no code. It records a proof of concept
-and proposes how ZeroJ can be used from JavaScript (Node.js and browsers), Python, Go, Rust and
-other languages, without a JVM at runtime.
+Accepted for experimental WebAssembly/TypeScript implementation — 2026-10-30, following the
+maintainer's explicit direction to implement the modular SDK in PR #92. This accepts the
+architecture, not production use, side-channel safety, or permission to publish to npm.
+The native C ABI remains a future, separately validated target. The r2 decisions below replace
+conflicting r1 packaging, milestone, and distribution proposals; historical measurements remain
+identified as such.
 
 This ADR revisits one [ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md)
 disposition. ADR-0044 removed `zeroj-prover-wasm` "unless browser/circom-WASM witness
@@ -20,7 +23,205 @@ code compiled *to* WebAssembly or to a native library.
 2026-10-13
 
 ## Revision history
+- **r2 (2026-10-30):** modular Java adapters and TypeScript/npm workspaces; browser and Node
+  workers; hashes, Pedersen, BBS, Groth16, exponential ElGamal, threshold decryption/DKG and
+  confidential notes. Implementation and milestone reviews stay in PR #92. Main merged at
+  `65412c40ed1b6397ecfeb654e7bff547f6ea5b96`. Follow-up research supersedes the monolithic POC.
 - **r1 (2026-10-13):** first version, written from the proof of concept described in §Evidence.
+
+## r2 implementation decisions (governing)
+
+### Scope, evidence and limits
+
+The isolated `zeroj-research/zeroj-wasm-poc` study (commit `25a256d`) validated modular
+Java-to-Wasm images, WebCrypto entropy, strict verification, browser-made cubic proofs and BBS
+presentations, with JVM/snarkjs checks. Chrome and Firefox passed; the local WebKit runner
+crashed before loading the application, so Safari is unverified. These are prior research
+results, not tests of this PR's eventual artifacts.
+
+Its full account-ownership circuit had 9,951,996 constraints after the existing SHA optimization
+(the legacy circuit had 18,757,203). A fresh JVM proof verified in Chrome/Firefox, but Chrome
+exhausted memory building the witness graph and Firefox did not finish that graph within 600 s.
+No full account-ownership browser proof was generated. The browser SDK supports measured,
+bounded workloads; no claim that an arbitrary Java circuit fits a browser follows.
+
+Initial artifacts target the pinned GraalVM 25.3.4.1+1.1 line, with Binaryen 132. The official
+Web Image/API guides were rechecked on 2026-10-30. Web Image remains experimental. Its launcher
+requires a JavaScript host; these artifacts are not general WASI modules for Python/Go/Rust.
+
+### Repository and package structure
+
+```text
+bindings/
+  wasm/                       # opt-in Gradle composite build, uses this checkout
+    adapter-common/           # bounded wire types, errors, lifecycle, entropy bridge
+    adapter-hash/             # ordinary SHA-256/SHA-512/BLAKE2b, explicit Poseidon profile
+    adapter-pedersen/          # explicit BLS12-381 and Jubjub profiles
+    adapter-bbs/               # explicit ciphersuites
+    adapter-groth16/           # strict verify; supplied-key, compiled-circuit proving
+    adapter-elgamal/           # exponential ElGamal safe-layer operations
+    adapter-threshold/         # DKG state, qualified contexts, verified shares
+    adapter-notes/             # confidential-note-jubjub-v1 seal/open
+    bundles/                  # explicit entry points; no reflection-based method discovery
+  js/                         # private npm workspace root
+    packages/
+      runtime/                # worker transport and integrity/version checks
+      hash/ pedersen/ bbs/ groth16-verifier/ groth16-prover/
+      elgamal/ threshold/ confidential-notes/
+      bundle-*/               # generated launcher, Wasm, immutable descriptor, notices
+    examples/browser/
+    examples/node/
+    tests/
+```
+
+Use the repository Gradle wrapper with `-p bindings/wasm`; the composite substitutes the Java
+projects from this same checkout. The root default build/BOM/Maven publication remain unchanged.
+Bindings never replace the independent Rust-derived `assurance/*-wasm` oracles. TypeScript
+packages use npm workspaces. Proposed public names are `@zeroj/runtime`, `@zeroj/hash`,
+`@zeroj/pedersen`, `@zeroj/bbs`, `@zeroj/groth16-verifier`, `@zeroj/groth16-prover`,
+`@zeroj/elgamal`, `@zeroj/threshold`, `@zeroj/confidential-notes`, and `@zeroj/bundle-*`.
+The organization must control the chosen scope before actual publication.
+
+Java algorithms remain the single implementation. Adapters call existing validating APIs;
+ordinary BLAKE2b may receive an additive public facade over its existing implementation, not
+a new algorithm. No circuit hash gadget is represented as an ordinary digest API.
+
+### Logical capabilities versus physical images
+
+Wrappers depend on the lightweight runtime, not every image. Applications register immutable
+bundle descriptors. One capability can be supplied by a dedicated image or a combined image;
+duplicate capability providers are rejected, never chosen implicitly. The runtime shares a
+worker by the complete bundle identity, not by API namespace. Each independently compiled
+image has its own Java runtime/heap. No Wasm dynamic linking or shared Java heap is claimed.
+
+Profiles include a hash image, crypto combinations (Pedersen/BBS), verifier-only, a
+confidential combination (ElGamal/threshold/notes), and explicit compiled-circuit prover images.
+Measure raw/gzip/brotli size and cold/warm calls before choosing defaults. A combined image
+can avoid duplicated JDK/JCA code. JS tree shaking cannot prune a precompiled Wasm image.
+No fetch or worker startup occurs merely from importing a wrapper. WebCrypto may implement
+ordinary SHA digests without loading Wasm; callers can explicitly select the Java/Wasm path
+for parity and deployments needing it. No fallback to an unreviewed algorithm is permitted.
+
+### Boundary and runtime contract
+
+- Versioned requests select a capability and named operation; exact field sets, nesting,
+  request size, collection lengths and scalar ranges are validated in Java.
+- Public TS APIs use `Uint8Array` and `bigint`; the first wire format is bounded JSON with
+  canonical decimal strings and lowercase hex. No JS `number` for a cryptographic scalar.
+  This copies data; it is not a zero-copy ABI. All cryptographic decoders stay in existing Java.
+- Stable error codes never include Java stack traces, input values or secret-bearing messages.
+- Browser Web Workers and Node worker threads provide the same Promise API. Startup errors,
+  deadlines, disposal, concurrent requests and worker failures must settle every pending call.
+  A timeout terminates the image and invalidates its state handles. No automatic replay of
+  secret operations or implicit runtime restart with stale handles is allowed.
+- Opaque, bounded worker-local handles preserve provenance for safe-layer contexts,
+  ciphertexts, shares and DKG participants. They are runtime capabilities, not serialized
+  cryptographic evidence. Releasing a handle removes references; it cannot guarantee erasure
+  of immutable Java/JS values. Raw encoded bytes never automatically regain a verified type.
+- A descriptor pins the launcher and Wasm byte lengths/hashes, API version and capabilities.
+  Assets are checked before execution. Descriptors and the serving origin are trusted;
+  checksums do not protect against replacement of both descriptor and code by that origin.
+  Default browser delivery is same-origin and redirect-free; Node loads local package assets.
+- Every secret-bearing operation requires an explicit `experimentalSecrets` runtime opt-in,
+  checked again by the Java dispatcher. It carries the label **browser/Node Wasm unassessed**.
+  This is permission to run experiments, not a claim of cryptographic deployment safety.
+
+### Randomness and native exclusion
+
+Install the WebCrypto provider first, including when entropy is unavailable: in that case it
+throws and never leaves the substituted weak provider as a fallback. Probe actual entropy
+before secret work. Chunk requests at 65,536 bytes. Node workers use Node's WebCrypto.
+The trusted host can still replace its own crypto implementation; no runtime test proves that
+a malicious host supplies unpredictable bytes.
+
+Retain D3's defense in depth: core-created RNGs must fail closed in Web Image without the safe
+provider. Runtime detection must be validated in the actual image, not assumed from a JVM
+property name. Caller-supplied RNG APIs retain their documented trusted-caller obligation;
+bindings never accept a caller-supplied RNG. Negative images and absent/throwing/late-failing
+entropy tests must demonstrate no weak fallback. Core changes are limited and separately
+reviewed; normal JVM behavior stays unchanged.
+
+The binding classpath excludes `zeroj-blst`/`zeroj-crypto-blst`, selects pure-Java providers
+explicitly, and builds with reachability guards. This supersedes r1's requirement to modify
+all native metadata first. Guard trusted setup/ceremony entry points out of all consumer
+images. Any metadata exclusion is narrow, documented and tested; never globally disable
+validation or make reflection blindly reachable to obtain a build.
+
+### Expanded cryptographic surface and trust preservation
+
+| Capability | Required semantics |
+|---|---|
+| Hash | Standard ordinary SHA-256/SHA-512/BLAKE2b; separately named Poseidon field profile |
+| Pedersen | Existing profile-specific canonical decoders and hiding/blinding rules; no implicit curve conversion |
+| BBS | Existing SHA-256/SHAKE-256 suites; keygen/sign/derive opt-in, verify public; preserve headers and disclosure indexes |
+| Groth16 | BLS12-381 strict verifier; trusted VK selected by application; validity is not authorization |
+| Exponential ElGamal | `elgamal-jubjub-v1`; same-context sums, established plaintext bounds, explicit bounded decryption search |
+| Threshold | `elgamal-jubjub-threshold-v1`; `t` faults means `t+1` shares; qualified identifiers, context/ciphertext binding and duplicate rejection |
+| Confidential notes | `confidential-note-jubjub-v1`; distinct readers, fresh per-reader ephemeral secrets, fixed AEAD profile, commitment-checked opening |
+
+Bind to the current ADR-0051/0052/0053/0055/0058/0059/0060/0062 specifications and tests.
+The ElGamal and threshold adapters must never create a verified object from a caller's
+`verified: true`. Existing proof obligations remain: imported key shares require possession
+proofs; imported ciphertexts require the exact encryption/width relation; imported decryption
+shares require the exact DLEQ relation. The initial built-in proof bridge uses the existing
+Groth16 verifier with public inputs derived from the Java statement and an application-trusted
+relation VK. It never trusts public inputs supplied alongside a proof, and introduces no new
+Chaum–Pedersen transcript/ciphersuite.
+
+DKG participant APIs retain the Java authenticated-sender/channel contract. The application
+must supply authenticated private channels, broadcast agreement, deadlines, and round closure.
+Running all participants in a local example is a protocol simulation, not a deployed distributed
+trust boundary. Public transcript recomputation does not admit a threshold key context.
+External-context admission requires the existing authentication and closure obligations; do
+not expose a convenience method that manufactures them. A milestone may explicitly leave a
+network transport/admission integration unsupported rather than weaken these checks.
+
+Notes seal/open are delivery primitives, not a complete private ledger: spending authorization,
+nullifier/replay checks, balance/range proofs, auditor policy, and on-chain state transitions
+remain application responsibilities. None of these elliptic-curve constructions is post-quantum.
+
+### Proving and examples
+
+Keep verifier and prover independently installable/loadable. Proving uses named compiled
+circuits and authenticated, validated key artifacts; setup never runs in consumer Wasm.
+Small, explicitly development-only examples may carry public development proving parameters,
+with fixture provenance and no persisted toxic waste. They are not production setup artifacts.
+The supplied-key loader and circuit-template path must document exact formats and bounded
+memory, and reject wrong fingerprints, malformed points and mismatched keys. Generic arbitrary
+Java class loading, arbitrary R1CS/witness programs and the large ownership prover are excluded.
+
+Examples cover hash parity, a commitment/opening, a BBS credential/presentation, Groth16
+prove/verify and tampering, encrypted totals, a threshold round simulation, and notes for an
+owner/auditor. Run them in browser and Node with disposable test secrets only. No recovery
+phrase field, witness upload, analytics, private-key logs, or hidden remote proving service.
+
+### Distribution and validation
+
+Ship compiled ESM, `.d.ts`, workers, and prebuilt image assets in versioned npm tarballs.
+Consumers need no Java/GraalVM compiler. Generated binaries, setup artifacts and raw logs stay
+out of Git; curated results and small public fixtures belong in Git. Each release records the
+source revision, toolchain, exact wrapper/image compatibility, hashes and third-party notices.
+Test `npm pack` outputs as installed dependencies, not only workspace symlinks. Publication
+uses a separate protected workflow with npm provenance; implementing packages does not publish
+them. Native/Python/Go/Rust distribution remains future work.
+
+Every milestone is implemented, reviewed, tested and corrected in **this same PR #92**, as
+requested by the maintainer (supersedes r1's separate-PR instruction):
+
+| Milestone | Exit criteria |
+|---|---|
+| W0 design | Main merged, r2 architecture/threat model recorded, protocol API inventory |
+| W1 foundation | Composite build, adapters, fail-closed entropy and strict boundary tests; native/setup reachability guards |
+| W2 SDK | Typed wrappers, lazy bundle mapping, browser/Node workers, lifecycle/error/integrity tests, actual image smoke |
+| W3 primitives | Hash/Pedersen/BBS APIs; official/reference vectors, negative and JVM differential checks |
+| W4 proofs | Strict verifier, bounded supplied-key proving/circuit example, independent snarkjs checks, key negatives |
+| W5 confidential | ElGamal/threshold/notes safe-layer APIs, state/statement tampering tests, reference-vector parity, transport limits |
+| W6 delivery | Runnable examples, browser/Node matrix, npm tarball consumer tests, sizes/timings, documentation, final diff review |
+
+The implementation ledger under `bindings/` records actual completion and unresolved gates.
+Tests do not establish constant-time behavior, zeroization, external audit, Safari support, or
+production readiness. External review of entropy/secret handling and each inherited protocol's
+release gates remains required before a production release.
 
 ## Risk classification
 - **R2:** the decisions as a whole. They add new runtimes and a new distribution of
