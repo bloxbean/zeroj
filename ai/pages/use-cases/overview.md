@@ -1,6 +1,6 @@
 # Use cases
 
-> What zero-knowledge proofs, commitments and encryption unlock on Cardano — thirteen worked use cases, the building block behind each, and runnable demos.
+> What zero-knowledge proofs, commitments and encryption unlock on Cardano — worked use cases, Web2 record integration, the building blocks behind each, and runnable demos.
 
 Canonical URL: https://zeroj.dev/use-cases/overview/
 
@@ -64,6 +64,10 @@ app, `pedersen-commitments`, with a tab per use case.
 
   - [Digital product passport](https://zeroj.dev/use-cases/digital-product-passport/): Prove a product meets carbon, recycled-content and origin rules without exposing supplier data.
 
+## Existing Web2 records
+
+  - [Private proofs for SHA-2 records](https://zeroj.dev/use-cases/sha2-web2/): Keep existing SHA-256/SHA-512 digests: explore documents, selective disclosure, eligibility, voting, private state and audits. Includes a runnable approval-record tutorial.
+
 ## Pick the right tool
 
 Almost every use case is built from a small set of patterns. Start from what you need to prove:
@@ -71,6 +75,7 @@ Almost every use case is built from a small set of patterns. Start from what you
 | You need to… | Approach | ZeroJ building blocks |
 |---|---|---|
 | Prove a predicate over a hidden value (age ≥ 18, carbon ≤ 50 kg, reserves ≥ liabilities) | Groth16 circuit | `ZkUInt` with `@UInt(bits = …)` and `gte` / `lte` comparisons |
+| Prove a fact about a record committed by an existing SHA-2 digest | SHA-2 and policy constraints, plus issuer/registry trust | `Sha256` / `Sha512`, `ZkSha256` / `ZkSha512`; bind the full digest |
 | Reveal some issuer-signed attributes and hide the rest | BBS selective disclosure (no circuit, no trusted setup) | `BbsService` in `zeroj-bbs`; `BbsProofVerify` for on-chain checks |
 | Prove you're in a set without saying which member | Merkle tree + Poseidon | `ZkMerkle.verifyProofPoseidon` with `PoseidonParamsBLS12_381T3.INSTANCE` |
 | Allow one action per person, credential or NFT | Nullifier | `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, secret, contextId)`, stored on-chain (sorted list, spent UTxO) |
@@ -83,7 +88,7 @@ Almost every use case is built from a small set of patterns. Start from what you
 | Prove facts about large private state (millions of entries) | Poseidon MPF / JMT (**experimental**) | `zeroj-mpf-poseidon`, `zeroj-jmt-poseidon` |
 
 Not sure whether to reveal, prove, commit or encrypt? [Choose how to disclose](https://zeroj.dev/selective-disclosure/)
-compares the options on one example. Groth16 on BLS12-381 is the default proof system for everything above. Circuits use Poseidon with
+compares the options on one example. Groth16 on BLS12-381 is the default proof system for the circuit-based patterns above. Where a circuit uses Poseidon, pass
 explicit BLS12-381 parameters. For the concepts behind these patterns, read
 [Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-witnesses/) and
 [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).

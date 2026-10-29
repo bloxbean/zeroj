@@ -34,8 +34,10 @@ circuits within ordinary machines:
   key is never fully resident.
 - **Packed constraints and witnesses.** `R1CSFlat` stores the matrices in CSR form, and
   `FlatScalars` stores the witness as packed limbs instead of millions of `BigInteger`s.
-- **Ordered peaks.** `Groth16Pipeline` generates the witness *before* it maps the cached
-  constraints, and drops the constraints before the MSMs, so the big memory peaks never overlap.
+- **Ordered phases.** On a cache hit, `Groth16Pipeline` generates and packs the witness
+  *before* validating and mapping cached constraints. Callers must release their circuit
+  graphs and heap constraints for that ordering to reduce memory overlap. The mapped
+  constraint arena closes when proving returns; memory-mapped pages still contribute to RSS.
 - **Parallel MSMs.** `ProverBackend.PURE_JAVA` splits large MSMs across cores; the result is
   bit-identical to the single-threaded `ProverBackend.PURE_JAVA_SERIAL`.
 

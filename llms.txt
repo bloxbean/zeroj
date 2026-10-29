@@ -51,6 +51,7 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [Private allowlist with a Merkle tree](https://zeroj.dev/ai/pages/tutorials/private-allowlist.md): Prove you're on a list without saying who you are, using a Poseidon Merkle tree, then add a nullifier so each member can act only once per event.
 - [Verify your proof on Cardano](https://zeroj.dev/ai/pages/tutorials/verify-on-cardano.md): Lock test ADA behind a Groth16 verifier on a local Yaci DevKit devnet, unlock it with a proof, and learn why a bare verifier must never guard real value.
 - [Bring circom & snarkjs circuits](https://zeroj.dev/ai/pages/tutorials/snarkjs-interop.md): Prove a circom circuit with ZeroJ's pure-Java prover using snarkjs keys, and hand ZeroJ proofs to snarkjs. Groth16 on BLS12-381, both directions.
+- [Prove a private SHA-256 approval](https://zeroj.dev/ai/pages/tutorials/sha256-record.md): Run a Java Groth16 proof for a private approval record, bind all SHA-256 digest bits, reject invalid records, and distinguish proof validity from a trusted issuer registry.
 
 ## Selective disclosure: what to use when
 
@@ -96,7 +97,7 @@ Key facts an AI agent must know before generating ZeroJ code:
 
 ## Use cases
 
-- [Use cases](https://zeroj.dev/ai/pages/use-cases/overview.md): What zero-knowledge proofs, commitments and encryption unlock on Cardano — thirteen worked use cases, the building block behind each, and runnable demos.
+- [Use cases](https://zeroj.dev/ai/pages/use-cases/overview.md): What zero-knowledge proofs, commitments and encryption unlock on Cardano — worked use cases, Web2 record integration, the building blocks behind each, and runnable demos.
 - [Private voting](https://zeroj.dev/ai/pages/use-cases/private-voting.md): Let each eligible member vote exactly once, keep every choice secret, and publish only the total, using Merkle membership, nullifiers, ElGamal-encrypted ballots and Groth16 on Cardano.
 - [Proof of reserves](https://zeroj.dev/ai/pages/use-cases/proof-of-reserves.md): A custodian proves its reserves cover every customer balance without publishing any balance, and each customer can check they were counted.
 - [Age & KYC eligibility](https://zeroj.dev/ai/pages/use-cases/age-and-kyc.md): Prove you're old enough and live in an approved country, using an issuer-signed credential, while the validator learns only "eligible".
@@ -110,6 +111,7 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [Sealed-bid auction](https://zeroj.dev/ai/pages/use-cases/sealed-bid-auction.md): Bids stay hidden from other bidders and the public, every bid is readable by the auctioneer from the moment it's placed, and a zero-knowledge proof makes the auctioneer pick the right winner.
 - [Confidential loyalty points](https://zeroj.dev/ai/pages/use-cases/confidential-points.md): Customers hold and move loyalty points with hidden amounts on Cardano, wallets recover their balances from chain data, and an auditor can still read every amount.
 - [Proof of solvency with hidden balances](https://zeroj.dev/ai/pages/use-cases/private-solvency.md): An exchange proves its locked reserves cover every customer balance while hiding each balance and even the total. Customers and an auditor check their part from on-chain data.
+- [Private proofs for existing Web2 records](https://zeroj.dev/ai/pages/use-cases/sha2-web2.md): Use SHA-256 and SHA-512 commitments for private documents, selective disclosure, governance eligibility, voting, private application state and audit proofs. See the trust boundaries and try an approval-record tutorial.
 
 ## Reference
 
@@ -117,7 +119,7 @@ Key facts an AI agent must know before generating ZeroJ code:
 - [API cheat sheet](https://zeroj.dev/ai/pages/reference/api-cheatsheet.md): One page of the ZeroJ calls you use most, grouped by task, each with the class's package, from circuit definition to on-chain verification, BBS, commitments and encryption.
 - [Configuration](https://zeroj.dev/ai/pages/reference/configuration.md): Every ZeroJ system property, environment variable, native-library requirement, external tool and contributor Gradle flag, and which ones are dev-only.
 - [FAQ & troubleshooting](https://zeroj.dev/ai/pages/reference/faq.md): Straight answers about ZeroJ's maturity, proof systems, tooling and performance, plus fixes for the errors you are most likely to hit.
-- [Migration notes](https://zeroj.dev/ai/pages/reference/migration.md): Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.
+- [Migration notes](https://zeroj.dev/ai/pages/reference/migration.md): Migrate affected circuit keys after Boolean and SHA-2 optimization, and update ZeroJ and JuLC namespaces and modules.
 
 ## Source code and examples
 

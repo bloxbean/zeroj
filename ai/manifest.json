@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40",
+  "sourceRevision": "fc99a09b8208f59ff0a9aea25ee32c265dbc5bee",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -116,6 +116,13 @@
       "sha256": "085208c84e62b5ef6dd6a4834b35ab209a761319d078bf3a1fd62c3d13c7c44b"
     },
     {
+      "title": "Prove a private SHA-256 approval",
+      "description": "Run a Java Groth16 proof for a private approval record, bind all SHA-256 digest bits, reject invalid records, and distinguish proof validity from a trusted issuer registry.",
+      "url": "https://zeroj.dev/tutorials/sha256-record/",
+      "markdown": "https://zeroj.dev/ai/pages/tutorials/sha256-record.md",
+      "sha256": "017c840a1e31128a2fda6df4bf8b77955b882c0ea04ffa5570e025028f8d80f0"
+    },
+    {
       "title": "Choose how to disclose",
       "description": "Six ways to share private data on Cardano with ZeroJ, and what each party learns: reveal signed values, prove a rule, hide a number, tell chosen readers, encrypt for an auditor, or split the trust.",
       "url": "https://zeroj.dev/selective-disclosure/",
@@ -183,7 +190,7 @@
       "description": "The circuit building blocks in zeroj-circuit-lib (hashes, Merkle proofs, ranges, Jubjub, and Cardano key derivation), with status and cost.",
       "url": "https://zeroj.dev/guides/circuits/gadgets/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/gadgets.md",
-      "sha256": "2f7cd84163c3c8f6a2f899026f70b85809d70a6c651a560dcb4b7d8632e5ddbe"
+      "sha256": "fbc9aa5afcd0e3e010c42061f9b5d4ffac89fcc5c75f7af5f9d808cfb650d626"
     },
     {
       "title": "Test your circuits for soundness",
@@ -197,7 +204,7 @@
       "description": "Set up keys, generate Groth16 proofs on BLS12-381, scale to millions of constraints, and export proofs and keys for verifiers.",
       "url": "https://zeroj.dev/guides/proving/groth16/",
       "markdown": "https://zeroj.dev/ai/pages/guides/proving/groth16.md",
-      "sha256": "2c877d36272453503b32a8e773c788e435faa9da3c9e263e483b1ec416ed01d3"
+      "sha256": "91945a5a53bbcb2e18754ab805dd93c194906f5b11a191de74e21d287f1ee7d9"
     },
     {
       "title": "Run a trusted setup ceremony",
@@ -211,7 +218,7 @@
       "description": "How ZeroJ's pure-Java Groth16 prover handles millions of constraints, how to size memory, when the optional blst backend helps, and JVM and GraalVM notes.",
       "url": "https://zeroj.dev/guides/proving/performance/",
       "markdown": "https://zeroj.dev/ai/pages/guides/proving/performance.md",
-      "sha256": "38f9328871e04f292eb2ff26bfac9d909d5cb89c671ccc678c1922051b6ef241"
+      "sha256": "27b0910c995695e0087f0ecca2d27b2adf14c0b8d02b739d4c2aa1c0284f080d"
     },
     {
       "title": "Prove with PlonK",
@@ -285,10 +292,10 @@
     },
     {
       "title": "Use cases",
-      "description": "What zero-knowledge proofs, commitments and encryption unlock on Cardano — thirteen worked use cases, the building block behind each, and runnable demos.",
+      "description": "What zero-knowledge proofs, commitments and encryption unlock on Cardano — worked use cases, Web2 record integration, the building blocks behind each, and runnable demos.",
       "url": "https://zeroj.dev/use-cases/overview/",
       "markdown": "https://zeroj.dev/ai/pages/use-cases/overview.md",
-      "sha256": "4d74b98ba2d77e3ef749c492e4a6a9c9c11c9cdc349d5002ddc1cd2b61781c39"
+      "sha256": "fd23f2b1bf84d08a38c3d8e0775ef48a6b4cb40c580233654edac0a0d27acc46"
     },
     {
       "title": "Private voting",
@@ -382,6 +389,13 @@
       "sha256": "31d1e930201fa881d8c1a2e7d6c806c94764a6fc4e6403bde2d9a1a7cce71a99"
     },
     {
+      "title": "Private proofs for existing Web2 records",
+      "description": "Use SHA-256 and SHA-512 commitments for private documents, selective disclosure, governance eligibility, voting, private application state and audit proofs. See the trust boundaries and try an approval-record tutorial.",
+      "url": "https://zeroj.dev/use-cases/sha2-web2/",
+      "markdown": "https://zeroj.dev/ai/pages/use-cases/sha2-web2.md",
+      "sha256": "e5b25165d00a6547c9c9a0b74c8e041576b77125f03ec00c67541f8eef488bd9"
+    },
+    {
       "title": "Modules",
       "description": "Every published ZeroJ artifact with its coordinates, purpose, BOM membership, maturity and main entry-point classes, plus the unpublished support projects.",
       "url": "https://zeroj.dev/reference/modules/",
@@ -411,10 +425,10 @@
     },
     {
       "title": "Migration notes",
-      "description": "Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.",
+      "description": "Migrate affected circuit keys after Boolean and SHA-2 optimization, and update ZeroJ and JuLC namespaces and modules.",
       "url": "https://zeroj.dev/reference/migration/",
       "markdown": "https://zeroj.dev/ai/pages/reference/migration.md",
-      "sha256": "079b133616371c454ae1df3d386037a1c7b31bc16cc1d480250b2a5c942a43e1"
+      "sha256": "329571b9c86b321dfe030ade120621be50bade011e02f807c3bfdd737eaf5268"
     },
     {
       "title": "Build with AI",
@@ -434,11 +448,11 @@
   "artifacts": [
     {
       "url": "https://zeroj.dev/llms.txt",
-      "sha256": "92f0c7dfe726587da444e34dde570f03191a1cf198ea1d1190503b82d22709c6"
+      "sha256": "e9b403492de2f2d9ec911123855573941c1fb51f4f5f7c33c19bd03623a56140"
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "a4afb618150d7b60b6f7f3683ce4483b0c2a4e875bd2c34ec78357da2fb600b0"
+      "sha256": "b8c6b8f1edea439f4ab619b932e04a9da720274c9e660f6a6f4cd6fe511c87f4"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",

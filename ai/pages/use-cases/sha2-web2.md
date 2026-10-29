@@ -1,0 +1,233 @@
+# Private proofs for existing Web2 records
+
+> Use SHA-256 and SHA-512 commitments for private documents, selective disclosure, governance eligibility, voting, private application state and audit proofs. See the trust boundaries and try an approval-record tutorial.
+
+Canonical URL: https://zeroj.dev/use-cases/sha2-web2/
+
+An approval service already records a SHA-256 digest of each document. A partner needs to know
+whether a particular approval satisfies its rules, but should not receive the applicant's entire
+record. With a SHA-256 circuit, the holder can prove a fact about the **same bytes and the same
+digest** that the existing service uses.
+
+ZeroJ provides in-circuit SHA-256 and SHA-512, alongside Poseidon. The SHA-2 gadget connects a
+private witness to a familiar external digest; your application supplies the policy and the
+reason to trust that digest. The hash computations happen during off-chain proving. Cardano
+verifies the resulting Groth16 proof and the transaction's application rules.
+
+**Note: What exists today:** 
+
+The hash gadgets, their tests and a [runnable approval-record tutorial](https://zeroj.dev/tutorials/sha256-record/)
+are in this repository. The six scenarios below are application designs, not six deployed apps.
+The Java tutorial is implemented; its Cardano adaptation, SHA-2 membership trees and private-state
+designs need their own application circuits and validators. SHA-256 remains experimental pending
+external review. Groth16 is classical and requires trusted setup; using SHA-2 does not make it
+post-quantum.
+
+## First, understand the three jobs
+
+| Piece | What it establishes | What supplies it |
+|---|---|---|
+| Hash | These exact private bytes match this digest | SHA-256 or SHA-512 constraints |
+| Policy | Those same bytes satisfy a rule, such as an approved status | Additional circuit constraints |
+| Trust and action | This issuer, record, policy and requested action are accepted here | Registry/signature checks and application or validator logic |
+
+A **witness** is the private data given to the prover. A **public input** is a value that the
+verifier sees and that the proof binds. A **commitment** is a value that binds a record while
+potentially hiding it; a bare hash of a predictable record does not automatically hide it.
+
+Try **Denied record** and **Unregistered record** below. They fail at different places.
+Switch to **Public view** to see the intended information boundary. These are public teaching
+fixtures, and the illustration does not run a prover in your browser.
+
+_The web version of this page has an interactive illustration here._
+
+```text
+Web2 issuer: registers a trusted digest D
+                      |
+Holder: private record + nonce -> circuit: SHA256(record) = D AND approval policy
+                      |
+               proof + public D
+                      v
+Application: trusted verification key + registered D + valid proof -> accept
+
+Edited bytes / denied status -> circuit rejects.
+A different approved record can have a valid proof -> registry still rejects it.
+```
+
+## Six real-world scenarios
+
+### 1. Private document possession
+
+**Situation:** a procurement portal stores a SHA-256 digest of a submitted contract. A supplier
+needs to demonstrate knowledge of the registered file without sending it to another service.
+
+**Statement:** “I know bytes whose SHA-256 digest equals the registered digest.” The file stays
+private; the digest and proof are public. The registry establishes which submission matters.
+This proves knowledge of bytes, not legal ownership, authorship, current validity or exclusive
+possession. Anyone who has the file can make the same kind of proof.
+
+For a condition *inside* the contract, the circuit also needs an exact format and a constrained
+parser. A SHA gadget does not understand PDF pages or their meaning. Large files require many
+hash blocks; start with a bounded structured record when the issuer can attest one. That attestation
+changes the trust model: it proves what the issuer recorded, not an independent reading of the PDF.
+
+### 2. Selective disclosure from an approval or qualification record
+
+**Situation:** a vendor-onboarding service issues a record containing a supplier reference,
+program identifier, approval status and private randomness. A partner only needs to know that
+the record is approved for its program.
+
+**Statement:** “This registered record has version 1, program 7 and status approved.” The
+supplier reference and randomness stay private. The public digest still identifies the record
+and can link repeated presentations; hiding fields is different from anonymous presentation.
+
+This is the [hands-on tutorial](https://zeroj.dev/tutorials/sha256-record/). A real qualification system may also
+need expiry, revocation and holder authentication. An accepted “approved” predicate necessarily
+reveals that fact, even though the original status byte is a private witness.
+
+### 3. Governance eligibility against an existing list
+
+**Situation:** an association maintains a SHA-256 Merkle tree of approved membership records.
+A participant should prove eligibility without naming their leaf.
+
+**Statement:** “My private record satisfies the eligibility policy and is a leaf under the
+accepted root.” Only the root and required policy context need be public; the record, leaf
+position and sibling path can stay private.
+
+Match the existing tree exactly: leaf encoding, node prefixes, digest bytes, left/right order,
+depth and any leaf prehashing. SHA-256 and Poseidon roots are not interchangeable. The
+[private allowlist tutorial](https://zeroj.dev/tutorials/private-allowlist/) teaches the membership/nullifier
+pattern using Poseidon; adapting it to a SHA-2 tree requires an actual SHA-2 path circuit,
+not a change of the root's label. Each additional hash increases proving work.
+
+### 4. Private voting with one use per credential
+
+**Situation:** a governance system wants an eligible participant to commit a valid choice without
+revealing the participant's identity or the choice to chain observers.
+
+The circuit must combine eligibility, a valid choice, a randomized vote commitment and a
+**nullifier**: a public identifier that repeats when the same credential is used again in the
+same election. Its secret must be bound to that credential, and the election/action domain must
+be constrained. Letting the prover choose a new nullifier secret for each ballot defeats the rule.
+Using a predictable member number as that secret can reveal the voter.
+
+The validator atomically rejects reused nullifiers and binds the ballot, election and action to
+the transaction. This gives at most one use **per admitted credential**, not one credential per
+human; issuance policy controls that. Commitments alone do not produce a private tally: you still
+need a tally/decryption protocol. See [private voting](https://zeroj.dev/use-cases/private-voting/) for that wider flow.
+
+### 5. Private application state
+
+**Situation:** a loyalty service or governance workflow tracks internal credits or confidential
+policy state. Cardano should check valid transitions while storing only commitments to the state.
+
+Use an unambiguous commitment encoding, such as:
+
+```text
+C = SHA256(encode(domain, stateId, version, privateState, privateNonce))
+```
+
+Here `encode` means a specified byte layout with widths or lengths, not ambiguous string
+concatenation. A fresh high-entropy nonce helps hide predictable state when the format permits
+it. The circuit must open both commitments, enforce the transition, constrain numeric ranges,
+and bind the authorized action and state context. The validator must check the actual UTxOs.
+
+_The web version of this page has an interactive illustration here._
+
+```text
+Current UTxO: C7, version 7, state identity
+     + private opening: old state, nonce r7
+     + private next state and fresh nonce r8
+     -> circuit proves both SHA256 openings and an authorized, range-checked transition
+     -> proof binds C7, C8 and required action/context
+     -> validator consumes C7 and creates exactly the permitted C8 continuation
+
+A proof starting at C6 cannot spend the current C7 state.
+Private internal values can be hidden; ledger values and transaction links remain visible.
+```
+
+This is a design sketch, not an implemented SHA-2 state validator. It does not make ADA or native
+asset quantities in transaction outputs private. A shared state UTxO also serializes updates;
+sharding or batching changes the state design. Holders/operators need access to the private
+openings for later transitions—publishing a commitment alone does not make the data recoverable.
+The existing [authenticated-state guide](https://zeroj.dev/guides/credentials/authenticated-state/) describes
+separate Poseidon-based state implementations.
+
+### 6. Audit proofs over Web2 records
+
+**Situation:** a service commits an ordered batch of invoices, approvals or processing events.
+An auditor wants to check a total, a count or whether every record follows a policy without
+receiving all records.
+
+**Statement:** “The records committed by this accepted root satisfy the specified calculation.”
+The circuit needs membership and coverage rules, correct arithmetic and the business predicate.
+A proof about a convenient subset does not establish a claim about the whole batch. Bind the
+period, number of records and ordering/deduplication rule to prevent omissions or double counting.
+
+The registry or signer establishes the batch's origin. Neither a correct hash nor a valid proof
+establishes that the source database captured every real-world event. For numeric examples,
+specify units, rounding and range bounds; see [proof of reserves](https://zeroj.dev/use-cases/proof-of-reserves/)
+for a related completeness boundary.
+
+## Choose what to keep compatible
+
+| Existing system | What the circuit must reproduce | Application work still needed |
+|---|---|---|
+| A stored SHA-256 file digest | The exact original file bytes and full 32-byte digest | Trusted registration; format constraints for claims about contents |
+| A SHA-512 record digest | The exact record encoding and full 64-byte digest | Issuer/registry policy, expiry and revocation where needed |
+| A SHA-2 Merkle root | The complete tree convention, not just its hash algorithm | Root authority, membership paths and lifecycle |
+| A signed API response | Its signed message representation and relevant signature verification | Signer trust, freshness and binding to the intended request |
+| A new private application state | A specified, domain-separated randomized encoding | Transition circuit, authorization, UTxO binding and data availability |
+
+SHA-2 is useful at an existing-system boundary. A new internal tree can still use Poseidon if its
+root does not need to match an external SHA-2 root. A mixed design must constrain the conversion
+or relationship; calling two unrelated hashes “the same commitment” does not bind them.
+
+## Advanced integration notes
+
+**Bytes before fields.** SHA-2 hashes bytes, not an abstract JSON object. Whitespace, key order,
+Unicode representation and numeric formatting can change a digest. If both sides already use
+[JSON Canonicalization Scheme (RFC 8785)](https://www.rfc-editor.org/rfc/rfc8785), reproduce that
+exact representation. Introducing canonicalization to a system that hashes raw JSON changes
+its digest. The gadget supplies neither a JSON parser nor canonicalization constraints.
+
+**Constrain the connection.** Hashing a file outside the circuit and providing only its digest
+does not prove knowledge of that file, or that a separately supplied field came from it. The
+message-to-digest relation and the predicate must concern the same constrained witness.
+
+**Preserve every digest bit.** SHA-256 needs two 128-bit public limbs and SHA-512 four in the
+documented packing. Do not reduce a whole digest modulo the scalar field. The tutorial explains
+the exact byte order and how the verifier constructs its expected public inputs.
+
+**Name the privacy observer.** An issuer may know the record it issued; a remote proving service
+sees a witness you send to it. Zero knowledge hides the witness from the proof verifier, not from
+those services. Public digests and nullifiers can link uses. Hashes of low-entropy data can be
+guessed; adding a nonce later would change an existing digest. New randomized formats need
+fresh issuance randomness and a clear policy for who knows it.
+
+**Measure the complete application.** The 32-byte preimage benchmarks are not benchmarks for
+membership, voting, large documents or state transitions. Additional hashes and policy constraints
+increase off-chain cost. Public inputs and validator logic affect on-chain cost. New circuits
+need matching setup artifacts and new execution measurements.
+
+**Choose the proving flow.** For applications using stored keys, prefer `Groth16Pipeline`,
+especially for repeated SHA-256/SHA-512 proofs or larger documents. It reuses validated
+constraints and orders large allocations; your callbacks must still release their circuit
+graphs. The [tutorial's pipeline guidance](https://zeroj.dev/tutorials/sha256-record/#when-to-use-groth16pipeline)
+explains when the simpler API is sufficient, key reuse, cache-miss costs and memory limits.
+
+For a starting budget, retained local DevKit runs paid about **0.43 ADA for a simple SHA-256
+proof spend** and **0.46 ADA for SHA-512**, including transaction size and verification execution.
+These are preimage-verifier baselines, not prices for the complete applications above. The
+[tutorial's cost breakdown](https://zeroj.dev/tutorials/sha256-record/#estimated-cardano-verification-cost)
+explains the public-input counts, fee assumptions and exclusions.
+
+## Build the first piece
+
+  - [Prove a private SHA-256 approval](https://zeroj.dev/tutorials/sha256-record/): Run a Java example, inspect the byte layout and explore both circuit and registry rejection.
+  - [Bind a proof to an application](https://zeroj.dev/guides/verifying/application-security/): Trusted keys, public-input policy, replay protection and transaction context.
+
+The gadgets follow [FIPS 180-4](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
+See [ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md)
+and the [validation report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-issue-111-validation.md)
+for the tested construction, independent vectors, performance evidence and remaining review gates.

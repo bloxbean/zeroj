@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40
+Source revision: fc99a09b8208f59ff0a9aea25ee32c265dbc5bee
 
 ## Key facts
 
@@ -38,6 +38,7 @@ Source revision: d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40
 - [Tutorials → Private allowlist with a Merkle tree](https://zeroj.dev/tutorials/private-allowlist/)
 - [Tutorials → Verify your proof on Cardano](https://zeroj.dev/tutorials/verify-on-cardano/)
 - [Tutorials → Bring circom & snarkjs circuits](https://zeroj.dev/tutorials/snarkjs-interop/)
+- [Tutorials → Prove a private SHA-256 approval](https://zeroj.dev/tutorials/sha256-record/)
 - [Selective disclosure: what to use when → Choose how to disclose](https://zeroj.dev/selective-disclosure/)
 - [Selective disclosure: what to use when → Reveal the value (BBS)](https://zeroj.dev/selective-disclosure/reveal-attributes/)
 - [Selective disclosure: what to use when → Prove a rule (Groth16 predicates)](https://zeroj.dev/selective-disclosure/prove-a-rule/)
@@ -76,6 +77,7 @@ Source revision: d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40
 - [Use cases → Sealed-bid auction](https://zeroj.dev/use-cases/sealed-bid-auction/)
 - [Use cases → Confidential loyalty points](https://zeroj.dev/use-cases/confidential-points/)
 - [Use cases → Proof of solvency with hidden balances](https://zeroj.dev/use-cases/private-solvency/)
+- [Use cases → Private proofs for existing Web2 records](https://zeroj.dev/use-cases/sha2-web2/)
 - [Reference → Modules](https://zeroj.dev/reference/modules/)
 - [Reference → API cheat sheet](https://zeroj.dev/reference/api-cheatsheet/)
 - [Reference → Configuration](https://zeroj.dev/reference/configuration/)
@@ -4860,6 +4862,409 @@ about binding proofs to their context apply here unchanged.
 
 ---
 
+## Prove a private SHA-256 approval
+
+Source: https://zeroj.dev/tutorials/sha256-record/
+
+> Run a Java Groth16 proof for a private approval record, bind all SHA-256 digest bits, reject invalid records, and distinguish proof validity from a trusted issuer registry.
+
+A vendor-onboarding service has approved a record and registered its SHA-256 digest. A partner
+wants to check “approved for program 7” without receiving the subject reference or the record's
+private nonce. You will build that statement and verify it in Java.
+
+**What you'll run:** a 48-byte private record, a circuit that checks its format and approval
+policy, a BLS12-381 Groth16 proof, and an application verifier that trusts a particular issuer
+digest. The example includes rejection cases, including a valid proof about an unregistered record.
+
+**What you'll learn:** exact byte encoding, private witnesses versus public inputs, full digest
+packing, and why “proof verified” is only one part of application acceptance. The
+[Web2 use-case guide](https://zeroj.dev/use-cases/sha2-web2/) extends the idea to documents, eligibility, voting,
+private state and audit proofs.
+
+**Note: Run against the source checkout:** 
+
+You need Java 25 and a checkout containing the SHA-256 gadget and this example. The command
+uses the repository's Gradle wrapper and a local composite build, so it does not depend on the
+docsite's pinned Maven release having the new API. No Node.js, Circom or Yaci DevKit is needed
+for the Java tutorial. See [Installation](https://zeroj.dev/start/installation/) for Java setup.
+
+**Caution: Public teaching data and development setup:** 
+
+The sample record and nonce are deliberately public and deterministic. Do not use them for
+private records. Each run makes fresh single-party development keys, enables the existing
+insecure-setup flag for the demo process, and deletes its temporary key directory afterwards.
+The example is not an issuer service, a holder-authentication protocol or a production ceremony.
+SHA-256 remains experimental pending external review.
+
+### See the statement before running it
+
+Try **Edit the record**, **Denied record**, and **Unregistered record**. The first two cannot
+satisfy the circuit; the last satisfies the circuit but fails the trusted-registry check.
+
+_The web version of this page has an interactive illustration here._
+
+```text
+Private: record[48] = header + subject reference + nonce
+Public:  digest0, digest1 = all 32 bytes of the issuer's registered SHA-256 digest
+Circuit: correct header AND approved status AND SHA256(record) = public digest
+App:     expected issuer digest AND trusted circuit key AND valid proof
+```
+
+### Run the complete example
+
+1. **Open the source checkout.** The complete example is under
+   [`www/examples/sha256-record`](https://github.com/bloxbean/zeroj/blob/main/www/examples/sha256-record).
+   Its `settings.gradle` includes the repository root as a composite build; its dependencies are
+   substituted with the local ZeroJ projects. It is separate from the default library build.
+
+2. **Run from the repository root.**
+
+   ```sh
+   ./gradlew -p www/examples/sha256-record run --max-workers=2
+   ```
+
+   The first invocation may download Gradle dependencies. Development-setup warnings are expected.
+   The Java process uses a maximum 4 GiB heap. The demo generates and verifies real proofs;
+   the illustration above is only an explanation of those steps.
+
+3. **Read the acceptance and rejection results.** Alongside Gradle output, you should see:
+
+   ```text
+   Trusted SHA-256: e0dea9dc571d39771bfef376bd3fa167458246ee8a3492f1f3c601532a88e891
+   Public input order: [digest0, digest1]
+   Registered approved record: accepted
+   Changed record: rejected
+   Denied record with its own matching hash: rejected
+   Wrong program with its own matching hash: rejected
+   Changed public digest: rejected
+   Unregistered approved record: proof is mathematically valid
+   Unregistered approved record: application rejects
+   ```
+
+   Unexpected acceptance or rejection makes the program fail. Proof bytes change between runs
+   because proving uses random blinding; the public fixture's digest stays the same.
+
+### 1. Define the exact record bytes
+
+This is an **illustrative fixed-width format**, not an existing credential standard. A real
+integration must reproduce the issuer's actual format.
+
+| Byte offsets | Length | Meaning | Circuit rule |
+|---|---:|---|---|
+| 0–3 | 4 | ASCII `ZJAP`, a format/domain tag | Equals those four bytes |
+| 4 | 1 | Format version | Equals `1` |
+| 5 | 1 | Approval status | Equals `1` (approved) |
+| 6–7 | 2 | Unsigned program ID, big-endian | Equals `7` (`00 07`) |
+| 8–15 | 8 | Opaque subject reference | Private bytes; not otherwise interpreted |
+| 16–47 | 32 | Private issuance nonce | Private bytes included in the hash |
+
+All 48 bytes are private inputs. The accepted predicate reveals the required header/status
+values; it does not reveal the subject reference or nonce. The sample subject is ASCII
+`USER0042` and its nonce is the byte sequence `00` through `1f` so you can reproduce the digest.
+For a new private-record format, generate fresh 32-byte nonces with a cryptographic RNG such as
+`SecureRandom` at issuance and keep them with the private record. A circuit can bind a nonce;
+it does not certify that the issuer sampled it randomly.
+
+The issuer hashes the entire record with ordinary Java `MessageDigest`. Inside the circuit,
+`Sha256.hashBytes` constrains the *same* hash relation. Computing the hash only in host Java
+would not constrain a dishonest prover's witness.
+
+### 2. Constrain the hash and the policy
+
+The core below is the `circuit()` method from
+[`ApprovedRecordDemo`](https://github.com/bloxbean/zeroj/blob/main/www/examples/sha256-record/src/main/java/org/zeroj/docs/sha2/ApprovedRecordDemo.java).
+`RECORD_BYTES` is the class constant `48`. The imports are `CircuitBuilder`, `Variable` and
+`Sha256`; the full runnable class includes setup, proving, verification and rejection cases.
+
+```java
+    public static CircuitBuilder circuit() {
+        var builder = CircuitBuilder.create("sha256-approved-record-v1");
+        builder.publicVar("digest0").publicVar("digest1");
+        for (int i = 0; i < RECORD_BYTES; i++) builder.secretVar("byte" + i);
+        return builder.define(api -> {
+            Variable[] record = new Variable[RECORD_BYTES];
+            for (int i = 0; i < record.length; i++) record[i] = api.var("byte" + i);
+
+            // "ZJAP", version 1, approved=1, program=7 (unsigned 16-bit big-endian).
+            int[] requiredHeader = {0x5a, 0x4a, 0x41, 0x50, 1, 1, 0, 7};
+            for (int i = 0; i < requiredHeader.length; i++)
+                api.assertEqual(record[i], api.constant(requiredHeader[i]));
+
+            Variable[] digest = Sha256.hashBytes(api, record); // All bytes range-constrained.
+            for (int limb = 0; limb < 2; limb++) {
+                Variable packed = api.constant(0);
+                for (int j = 0; j < 16; j++)
+                    packed = api.add(api.mul(packed, api.constant(256)), digest[16 * limb + j]);
+                api.assertEqual(packed, api.var("digest" + limb));
+            }
+        });
+    }
+```
+
+Every input byte is constrained to 0–255 by the hash gadget. Its padding and length suffix
+are circuit constants. The header assertions enforce the policy, and the final assertions
+bind every output digest byte to the public statement. Version and program are constants of
+this circuit; changing them changes the relation and requires matching setup keys.
+
+For annotation-based circuits the equivalent hash adapter is `ZkSha256.hash(zk, message)`.
+It returns a `ZkBytes` digest: callers still need to constrain the policy and bind that digest
+to their chosen public representation. See [gadgets](https://zeroj.dev/guides/circuits/gadgets/#standard-sha-2-digests)
+for the API conventions.
+
+### 3. Preserve the complete digest
+
+The BLS12-381 scalar field cannot represent every 256-bit SHA-256 digest as one scalar without
+loss. This example uses two unsigned 128-bit pieces, called **limbs**:
+
+```text
+digest0 = integer from digest bytes  0..15, big-endian
+digest1 = integer from digest bytes 16..31, big-endian
+public inputs, in order = [digest0, digest1]
+```
+
+On the host, `new BigInteger(1, bytes)` supplies the positive sign explicitly. The circuit's
+multiply-by-256 loop reproduces the same big-endian packing. Each limb fits in the field, and
+both limbs together retain the full digest. Reducing the entire digest modulo the scalar field
+or truncating it would change the statement.
+
+For SHA-512, use `Sha512.hashBytes`, retain all 64 output bytes and bind **four** 128-bit limbs.
+That is a different circuit with different keys and public-input arity. Do not swap verification
+keys or reuse the SHA-256 limb schema.
+
+### 4. Check the application statement before the proof
+
+The sample's `accept` method compares the claimed public limbs with the digest obtained from
+its trusted registry, then verifies with the application's trusted verification key. Both actors
+are simulated in one program; no remote registry is contacted. A real service must authenticate
+the registry and decide which record is acceptable.
+
+The **unregistered record** case is deliberate: another record has a correct hash and an approved
+status, so its proof verifies mathematically. The partner still rejects it because its digest is
+not the one the issuer registered. Letting the prover supply both the claimed digest and the
+“trusted” digest would remove this trust boundary.
+
+| Negative case | What rejects it |
+|---|---|
+| Change the subject bytes but claim the original digest | Hash constraints during witness generation |
+| Denied status with its own correct digest | Approval constraint during witness generation |
+| Program 8 with its own correct digest | Program constraint during witness generation |
+| Change a digest limb after proof generation | Cryptographic verifier |
+| A valid proof for another approved record | Application's trusted-registry policy |
+
+These checks explain the tutorial's behavior. They are not an exhaustive circuit audit. The
+[gadget assurance suite](https://github.com/bloxbean/zeroj/blob/main/assurance/sha2-circom/README.md)
+also checks compiled R1CS directly, independently of honest witness generation, with NIST vectors
+and pinned Circom implementations.
+
+### 5. Adapt the boundary to Cardano
+
+The runnable example stops at Java verification. To use the statement on Cardano, start with
+[Verify your proof on Cardano](https://zeroj.dev/tutorials/verify-on-cardano/) and add the application bindings:
+
+- Pin the intended verification key/circuit and digest-limb order.
+- Obtain the trusted digest or membership root from authenticated on-chain state, not an
+  arbitrary redeemer or untrusted reference input.
+- Bind the permitted action, beneficiary, policy context and relevant state to the proof and
+  the actual transaction. The current two-input circuit does not bind those actions.
+- Add expiry/revocation, holder authorization and one-use enforcement where the application
+  requires them. This tutorial deliberately does not implement those protocols.
+- Measure the complete validator's execution units, serialized script and transaction sizes,
+  and fees. Host proof-generation time is not an on-chain fee measurement.
+
+Anyone who obtains the private record can prove this statement, and an existing proof can be
+copied. Knowledge of a record is not authentication of a specific wallet. A standalone valid
+proof also does not remember whether it was used before.
+
+### Advanced choices and costs
+
+**Fixed lengths.** Both low-level SHA APIs accept a fixed-length array at circuit construction.
+`hashBits` expects byte-aligned, MSB-first input. The low-level APIs support empty messages;
+symbolic `ZkBytes` currently requires a nonempty vector. This is not a streaming or secret-length
+interface. A variable-length protocol needs constrained padding/length handling of its own.
+
+**Existing JSON, XML or PDFs.** Match the exact bytes the existing system hashes. Constrain any
+field extraction used by the predicate. Supplying an extracted status separately from a file
+digest leaves them unrelated unless the circuit proves their connection. The 48-byte example
+avoids that parser problem by specifying each field's offset.
+
+**Public hash privacy.** A public digest can reveal a predictable record by guessing and can
+link repeated uses. The example's deterministic nonce is only a test fixture. A fresh secret
+nonce can help a new format, but adding one to an existing digest format breaks compatibility.
+Hiding which approved record was used needs a different statement, such as private membership
+under a shared root. Issuers and outsourced provers can still know the data they handle.
+
+**Optimized reference measurements.** These runs use 32-byte preimage circuits with complete
+public digests, not this 48-byte approval policy. Each time is a pure-Java median of three proofs
+after one warmup, on a shared Apple M4 Max with Java 25.0.2 and eight visible processors.
+
+| 32-byte preimage | ZeroJ constraints | Proof median, 6 GiB heap cap | Proof median, 8 GiB heap cap |
+|---|---:|---:|---:|
+| SHA-256 | 25,758 | 1.15 s | 1.11 s |
+| SHA-512 | 64,980 | 1.55 s | 1.91 s |
+
+Both `-Xmx6g` and `-Xmx8g` completed the full compile, witness, development-setup and proving
+pipeline. These are maximum Java heap settings, not total-process memory limits or minimum
+requirements. Timings vary with workload and host activity; a larger heap is not automatically
+faster. The same comparison also tested 128-byte and 1 KiB messages. Some individual runs had
+higher memory peaks or slower timings after optimization, so do not assume every metric improves.
+
+Rebuild circuit artifacts and generate new circuit-specific keys after upgrading. The digest
+format is unchanged, but the optimized constraint layout differs. Keep old proofs with their
+original verification keys.
+
+**Document-sized messages.** A follow-up used the same machine, pure-Java prover and full
+public digest at 2, 4, 8 and 16 KiB (one KiB is 1,024 bytes). This original measurement
+used the compatibility API path. These are proof-time medians;
+compilation, witness generation and one-time development setup are separate.
+
+| Hash | Message | Proof seconds, 6 GiB heap | Proof seconds, 8 GiB heap |
+|---|---:|---:|---:|
+| SHA-256 | 2 KiB | 10.9 s | 11.7 s |
+| SHA-512 | 2 KiB | 17.1 s | 16.5 s |
+| SHA-256 | 4 KiB | 17.4 s | 17.2 s |
+| SHA-512 | 4 KiB | 27.9 s | 28.4 s |
+| SHA-256 | 8 KiB | 27.9 s | 39.1 s |
+| SHA-512 | 8 KiB | 65.2 s | 65.4 s |
+| SHA-256 | 16 KiB | Setup ran out of heap | 67.8 s |
+| SHA-512 | 16 KiB | Setup ran out of heap | Setup ran out of heap |
+
+All three failures occurred during setup, after compilation and witness generation. They
+measure this pipeline's memory use, not an intrinsic hash-size limit. The 16 KiB SHA-256
+success at 8 GiB used about 365 seconds for development setup, a 2.61 GiB key store and
+10.88 GiB peak total-process RSS. A heap cap is not a physical-RAM budget. More heap was
+not consistently faster, and these shared-machine timings are not latency guarantees.
+
+**Memory-conscious pipeline follow-up.** A separate test of the existing `Groth16Pipeline`
+completed full 16 KiB SHA-256 and SHA-512 proofs at both 6 GiB and 8 GiB heap caps, with the
+same constraints. It releases the circuit graph before setup and loads cached constraints
+after witness generation, avoiding the earlier memory overlap. Each profile used one warmup
+and one measured proof, so its timings should not be substituted into the median table above.
+Total-process RSS was about 9.28–12.62 GiB; these results do not establish operation on a
+6 GB or 8 GB physical machine. See the
+[setup-memory report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-setup-memory-investigation.md)
+for the working example, measurements, independent checks and remaining limits.
+
+This hashes the exact file bytes; it does not parse a PDF/JSON document or prove predicates
+about extracted fields. Additional application logic, multiple hash calls and Merkle paths
+need separate measurements. See the
+[document-size report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-document-scaling-results.md)
+for all stages, memory limits and reproducible commands, and the
+[optimization report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-optimization-results.md)
+for the earlier before/after comparison.
+
+#### When to use Groth16Pipeline
+
+**Use `Groth16Pipeline` as the default application flow for BLS12-381 Groth16 with stored
+keys**, particularly when proving repeatedly or hashing larger documents. It coordinates
+compilation, witness generation, cached constraints and proving. You still use `Sha256` or
+`Sha512` to define the complete hash relation; the pipeline controls how that circuit is run.
+
+| Your situation | Suggested approach | Why |
+|---|---|---|
+| A small teaching example or an in-memory test | The direct `Groth16Keys` flow is sufficient | Fewer callbacks and no constraint-cache files to manage |
+| Repeated proofs with stored keys for the same circuit | Prefer `Groth16Pipeline` | Reuse the key bundle and validated constraint cache, while generating a fresh witness and proof each time |
+| Larger documents, multiple hashes or a constrained heap | Prefer `Groth16Pipeline` and measure the whole application | Its ordering helps avoid retaining the circuit graph alongside setup/proving allocations |
+
+A **circuit graph** is the Java object structure describing the circuit's operations. A
+**witness** contains the values for one proof. Both can be large, and setup/proving need their
+own working arrays. Keeping an already-used graph reachable can exhaust the heap even when
+the next phase would fit on its own. The 16 KiB follow-up above resolved this overlap with the
+existing pipeline and the same exact circuit constraints.
+
+**Separate preparing a circuit from proving a document:**
+
+1. **Prepare the circuit's key bundle and constraint cache.** For local development,
+   compile in a helper that returns only `Groth16Pipeline.Compiled`, then call
+   `Groth16Pipeline.setup` after its graph is out of scope. Release the compiled heap
+   constraints after setup. This setup API is development-only; production keys require
+   the separate [ceremony and import process](https://zeroj.dev/guides/proving/trusted-setup-ceremony/).
+2. **For each document, load the matching keys and create a fresh witness.** Build and
+   evaluate the graph inside a helper that returns only the witness array. After that helper
+   returns, pack with `FlatScalars.packConsuming`. On a valid cache hit, the pipeline then
+   validates and memory-maps the constraints, and generates the randomized proof.
+
+Keys and cached constraints can be reused for different messages and public digests **only
+when the exact compiled relation is unchanged**. For these fixed-length circuits, changing
+message length, SHA-256 to SHA-512, policy constants or constraint layout requires matching
+artifacts. Reusing the keys does not reuse the witness or the proof. A SHA-512 document proof
+observed at about 89 seconds therefore does not include a new setup for every document; see
+the report for the separate setup and witness/cache timings.
+
+**Trade-offs and integration details.** The pipeline needs compile/witness callbacks and,
+for the cached path, disk space and a managed cache location. It rebuilds the witness graph
+for each proof and validates the cached relation; those operations still cost time. A missing,
+stale or unreadable cache can trigger compilation, increasing latency and retaining heap
+constraints during witness construction. Benchmark cache misses separately from cache hits;
+use `Groth16Pipeline.Progress` to observe which path ran.
+
+The caller must respect the lifetime boundaries: avoid capturing an outer `CircuitBuilder`
+or retaining a compiled relation in a service field or callback. The pipeline cannot release
+objects your application still references. Close loaded keys with try-with-resources, retain
+the expected exact circuit fingerprint, and follow the ceremony guide's binding-row rules
+for imported keys. Memory-mapped files also use physical memory outside the Java heap, so
+measure RSS as well as `-Xmx` and budget for concurrent proofs.
+
+See the [pipeline API walkthrough](https://zeroj.dev/guides/proving/groth16/#groth16pipeline-for-very-large-circuits)
+and [memory-sizing guide](https://zeroj.dev/guides/proving/performance/). The
+[SHA-2 investigation example](https://github.com/bloxbean/zeroj/blob/main/assurance/sha2-optimization/java/org/zeroj/assurance/sha2/Sha2MemoryInvestigation.java)
+implements the measured helper boundaries and cache-hit checks for public fixtures. The
+48-byte approval demo earlier on this page keeps its simpler direct flow.
+
+#### Estimated Cardano verification cost
+
+For initial planning, a simple SHA-256 proof-consuming transaction is **about 0.43 ADA**;
+SHA-512 is **about 0.46 ADA** in the reference measurements below. These totals include the
+transaction's size fee and proof-verification execution fee, with the script carried in the
+transaction. They exclude the separate transaction that creates the locked output.
+
+These are retained **local Yaci DevKit measurements from 2026-10-29**, rechecked with
+optimized proofs under both heap caps with unchanged costs. They use ZeroJ's Groth16
+verifier, JuLC and full-digest preimage proofs. They are not a mainnet submission or a benchmark
+of this tutorial's 48-byte approval application. Use them as a starting estimate, then evaluate
+your complete validator with your target network's parameters.
+
+| Reference profile | SHA-256 | SHA-512 |
+|---|---:|---:|
+| Public inputs (128-bit digest limbs) | 2 | 4 |
+| CPU steps | 2,191,936,964 | 2,471,295,658 |
+| Memory units | 167,718 | 225,480 |
+| Verification execution fee | 0.167716 ADA | 0.191191 ADA |
+| Full signed spending transaction | 2,399 bytes | 2,499 bytes |
+| Actual spending transaction fee | 0.433097 ADA | 0.460972 ADA |
+
+**Why SHA-512 is only slightly more expensive here.** The chain checks a Groth16 proof;
+it does not rerun the SHA circuit. In this verifier, the additional public digest limbs add
+work. Bigger private messages primarily increase off-chain proving cost when the public-input
+shape stays the same. More public inputs and application checks still need their own budget.
+
+**How to update the estimate.** The captured prices were 0.0000721 lovelace per CPU step,
+0.0577 lovelace per memory unit, and a size fee of `155381 + 44 × transaction_bytes` lovelace.
+One ADA is 1,000,000 lovelace. The execution fee is the rounded-up sum of the two execution
+charges. The recorded totals include 4,444 lovelace of builder overestimation above that
+size-plus-execution calculation. A reference script changes the transaction size and introduces
+a reference-script charge; its publication also costs a separate transaction. Locked minimum
+ADA and collateral requirements are separate from the fee paid for a successful spend.
+
+See the [measurement provenance and fee arithmetic](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-cardano-cost-baseline.md)
+and Cardano's [transaction-fee explanation](https://developers.cardano.org/docs/learn/core-concepts/fees/).
+The Java command above does not submit a Cardano transaction; follow
+[Verify your proof on Cardano](https://zeroj.dev/tutorials/verify-on-cardano/) to measure your integration.
+
+### Try these changes
+
+- Change a format byte and supply its new, correct digest. The header constraints must still reject it.
+- Change the program policy and regenerate keys. A verification key identifies a particular relation.
+- Run the retained independent proof checks in
+  [the proof-vector directory](https://github.com/bloxbean/zeroj/blob/main/assurance/sha2-proof-vectors/README.md).
+- Design the public statement for your own workflow before adding hashing: whose digest is trusted,
+  what fact is revealed, who knows the witness, and what action must be bound?
+
+Continue with [Web2 scenarios and private state](https://zeroj.dev/use-cases/sha2-web2/),
+[application security](https://zeroj.dev/guides/verifying/application-security/) and
+[private allowlists](https://zeroj.dev/tutorials/private-allowlist/).
+
+---
+
 ## Choose how to disclose
 
 Source: https://zeroj.dev/selective-disclosure/
@@ -6224,7 +6629,7 @@ different circuit.
 
 Poseidon is the hash to use inside Cardano circuits. It's designed for arithmetic circuits: a
 two-input hash compiles to roughly 240 R1CS constraints on BLS12-381 with the current compiler,
-while bit-oriented hashes such as SHA-512 cost around a hundred thousand per block.
+while bit-oriented hashes such as SHA-512 cost tens of thousands per block.
 
 **Always pass BLS12-381 parameters explicitly.** The no-parameter overloads use BN254 constants
 for backward compatibility. If you mix them with a BLS12-381 compile, `CircuitBuilder` refuses to
@@ -6612,29 +7017,55 @@ issuer.
 > once, after a deadline" is your application's rule: decrypting running totals lets anyone
 > recover individual messages by differencing.
 
-### Real-world crypto: Cardano key derivation
+### Real-world crypto: standard digests and Cardano key derivation
 
-These gadgets reproduce standard wallet primitives *inside* a circuit, so a proof can show "I know
-the root key behind this Cardano address" without revealing it. They're bit-oriented and
+These gadgets reproduce standard digest and wallet primitives *inside* a circuit, so a proof can
+bind an existing document hash or show knowledge of a Cardano root key. They're bit-oriented and
 independent of the circuit field, so they run on BLS12-381 Groth16, but they are **large**.
 
 | Gadget | Adapter | What it's for | Measured size |
 |--------|---------|---------------|---------------|
 | BLAKE2b (RFC 7693) | `ZkBlake2b.hash224` / `hash256` / `hash` | Cardano key hashes (blake2b-224) | 76,832 constraints per block |
-| SHA-512 (FIPS 180-4) | `ZkSha512.hash` | Building block for HMAC and BIP32 | ~109,000 constraints per block |
+| SHA-256 (FIPS 180-4) | `ZkSha256.hash` | Existing document and governance digests; experimental, external review pending | ~26,000 constraints for a 32-byte message with the complete digest bound |
+| SHA-512 (FIPS 180-4) | `ZkSha512.hash` | Building block for HMAC and BIP32 | ~65,000 constraints for a 32-byte message with the complete digest bound |
 | HMAC-SHA512 (RFC 2104) | `ZkHmacSha512.hmac` | BIP32-Ed25519 child derivation | ~454,000 constraints at the BIP32 input shape |
 | GF(2²⁵⁵−19) field, Ed25519 points | `Fe25519`, `Ed25519Point` (no `Zk*` adapter) | Non-native Ed25519 arithmetic, fixed-base scalar multiplication | Building blocks |
 | BIP32-Ed25519 | `Bip32Ed25519` (no `Zk*` adapter) | Hardened and soft child-key derivation, Icarus style | Building block |
 | CIP-1852 derivation | `ZkCip1852.paymentKeyHash`, `leafKeyHash` | Root key → `m/1852'/1815'/account'/role/index` → 28-byte payment key hash | On the order of 19 million constraints for the full path |
 
-Sizes are ZeroJ's own measurements from the gadget design work
+The SHA-256/SHA-512 rows use the optimized full-digest circuits described in
+[ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md).
+Other sizes are historical ZeroJ measurements from the gadget design work
 ([ADR-0027](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0027-real-world-crypto-gadgets-sha512-hmac-blake2b-ed25519.md),
 [ADR-0028](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0028-dsl-optimization-and-hint-soundness.md))
-and may change as the gadgets are optimized. `ZkCip1852.paymentKeyHash` has overloads that take
+and have not been remeasured after this optimization. `ZkCip1852.paymentKeyHash` has overloads that take
 the account, role, and index as Java constants or as `ZkBytes` circuit inputs; with all three as
 inputs, one circuit and one setup cover every address of a root key. A proof of this size needs
 the large-circuit proving path in [Performance & large circuits](https://zeroj.dev/guides/proving/performance/).
 See [Account recovery](https://zeroj.dev/use-cases/account-recovery/) for the application built on it.
+
+#### Standard SHA-2 digests
+
+SHA-256 returns the complete 32-byte digest; SHA-512 returns 64 bytes. Both constrain
+byte ranges, padding and the fixed message length. Bind the output to the expected digest;
+a hash alone does not authenticate a document issuer. The lower-level `Sha256`/`Sha512`
+byte and bit APIs support empty messages; symbolic `ZkBytes` requires a nonempty input.
+
+Use `Sha256.hashBytes(api, bytes)` / `Sha512.hashBytes(api, bytes)` for byte arrays;
+`hashBits` takes byte-aligned MSB-first bits. Symbolic circuits use
+`ZkSha256.hash(zk, message)` / `ZkSha512.hash(zk, message)` and bind the returned `ZkBytes`.
+For a compact public statement, constrain packing into two/four big-endian 128-bit limbs.
+
+After upgrading to the optimized SHA-2 and Boolean-assertion implementation, rebuild
+your circuit artifacts and generate new circuit-specific proving and verification keys.
+The digest format is unchanged, but the internal constraint layout changes. Boolean
+assertions also affect circuits that do not use SHA-2. Keep old proofs paired with
+their original verification keys; do not mix old keys with a rebuilt circuit.
+
+Start with the illustrated [SHA-256 approval tutorial](https://zeroj.dev/tutorials/sha256-record/) and
+[Web2 use cases](https://zeroj.dev/use-cases/sha2-web2/). See
+[ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md)
+for the construction and independent SHA-2 assurance.
 
 ### Status at a glance
 
@@ -6661,6 +7092,7 @@ authorization or replay rules.
 | Encrypted DKG share delivery (`dkg-share-delivery-hpke-v1`) | X25519 HPKE | Experimental; Assumption A1 and the delivery contract await external review |
 | Confidential notes (`confidential-note-jubjub-v1`) | Jubjub | Experimental; secret operations offline or isolated only; assumptions A1–A3 await external review |
 | BLAKE2b, CIP-1852 derivation | Field-agnostic | Ready on BLS12-381 Groth16 |
+| SHA-256 | Field-agnostic | Experimental building block; external review pending |
 | SHA-512, HMAC-SHA512, BIP32-Ed25519 | Field-agnostic | Ready as building blocks |
 | Poseidon MPF/JMT authenticated state | BLS12-381 Poseidon profile | Experimental (separate modules) |
 
@@ -6676,7 +7108,7 @@ The authoritative, detailed table is in the
 4. **Use `ZkUInt` for every quantity,** with the tightest honest width.
 5. **Bind every witness-supplied curve point** with `witnessAffine`, and pick the EdDSA entry
    point that matches who controls the key.
-6. **Reach for SHA-512, HMAC, BLAKE2b, or Ed25519 only when a protocol demands them.** They cost
+6. **Reach for SHA-256, SHA-512, HMAC, BLAKE2b, or Ed25519 when interoperability requires them.** They cost
    orders of magnitude more than Poseidon.
 7. **Match off-circuit and in-circuit hashing exactly.** Same parameters, same argument order,
    same path-bit convention, or honest proofs will fail.
@@ -7013,6 +7445,10 @@ circuit ──compileR1CS(BLS12_381)──▶ R1CS ──setup / import──▶
 | Imported ceremony key | `ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)`, then `Groth16Keys.load(dir, manifestSha256)` | Anything beyond local testing | Memory-mapped at prove time |
 
 `Groth16Keys` is `AutoCloseable`. Use try-with-resources so store-backed keys are unmapped.
+For applications using stored keys, prefer the [pipeline flow](#groth16pipeline-for-very-large-circuits)
+below as the default orchestration, especially for repeated proofs and larger circuits.
+`Groth16Keys` remains the key handle; the pipeline coordinates compilation, witness generation
+and the constraint cache around it. Direct flows remain useful for small tests and custom callers.
 
 > **Caution: The first three rows are development keys**
 >
@@ -7132,9 +7568,15 @@ multi-core pure-Java backend; the opt-in native backend is covered in
 
 `Groth16Pipeline` packages the orchestration ZeroJ uses for its ~19-million-constraint
 account-ownership circuit: a constraint cache written during setup, witness generation *before*
-the constraints are memory-mapped (so the two memory peaks never overlap), and a circuit
-fingerprint that fails fast if a key bundle doesn't match the circuit. You supply two things:
-how to compile, and how to compute the witness.
+the constraints are validated and memory-mapped on a cache hit, and an exact circuit
+fingerprint that rejects a mismatched bound key bundle. You supply how to compile and how
+to compute the witness, with helpers that release their graphs before the next heavy phase.
+This is the recommended application flow for stored keys; small in-memory examples can keep
+the direct API. See the [SHA-2 guide's use cases and trade-offs](https://zeroj.dev/tutorials/sha256-record/#when-to-use-groth16pipeline).
+
+The cache is an optimization: a miss or unreadable cache can trigger compilation and keep
+heap constraints alive during witness generation. The cache-hit memory profile therefore
+does not establish the memory requirement of a missing or failed-cache path.
 
 ```java
 Supplier<Groth16Pipeline.Compiled> compile = () -> {
@@ -7142,9 +7584,12 @@ Supplier<Groth16Pipeline.Compiled> compile = () -> {
     return new Groth16Pipeline.Compiled(
             cs.flat(), cs.numConstraints(), cs.numWires(), cs.numPublicInputs());
 };
+Supplier<BigInteger[]> computeBoxedWitness = () -> {
+    var c = SealedBidCircuit.build();
+    return inputs.calculateWitness(c, CurveId.BLS12_381);
+};
 Supplier<FlatScalars> computeWitness = () -> {
-    var c = SealedBidCircuit.build();                           // released when the lambda returns
-    BigInteger[] w = inputs.calculateWitness(c, CurveId.BLS12_381);
+    BigInteger[] w = computeBoxedWitness.get(); // its graph is out of scope BEFORE packing
     return FlatScalars.packConsuming(w, w.length);
 };
 
@@ -7588,8 +8033,10 @@ circuits within ordinary machines:
   key is never fully resident.
 - **Packed constraints and witnesses.** `R1CSFlat` stores the matrices in CSR form, and
   `FlatScalars` stores the witness as packed limbs instead of millions of `BigInteger`s.
-- **Ordered peaks.** `Groth16Pipeline` generates the witness *before* it maps the cached
-  constraints, and drops the constraints before the MSMs, so the big memory peaks never overlap.
+- **Ordered phases.** On a cache hit, `Groth16Pipeline` generates and packs the witness
+  *before* validating and mapping cached constraints. Callers must release their circuit
+  graphs and heap constraints for that ordering to reduce memory overlap. The mapped
+  constraint arena closes when proving returns; memory-mapped pages still contribute to RSS.
 - **Parallel MSMs.** `ProverBackend.PURE_JAVA` splits large MSMs across cores; the result is
   bit-identical to the single-threaded `ProverBackend.PURE_JAVA_SERIAL`.
 
@@ -11151,7 +11598,7 @@ Timings are from one Apple M4 Max laptop and are only a rough guide.
 
 Source: https://zeroj.dev/use-cases/overview/
 
-> What zero-knowledge proofs, commitments and encryption unlock on Cardano — thirteen worked use cases, the building block behind each, and runnable demos.
+> What zero-knowledge proofs, commitments and encryption unlock on Cardano — worked use cases, Web2 record integration, the building blocks behind each, and runnable demos.
 
 A zero-knowledge proof lets you prove a fact without revealing the data behind it. "I'm over 18"
 without a birth date. "I'm on the voter list" without saying which voter. "Our reserves cover every
@@ -11213,6 +11660,10 @@ app, `pedersen-commitments`, with a tab per use case.
 
   - [Digital product passport](https://zeroj.dev/use-cases/digital-product-passport/): Prove a product meets carbon, recycled-content and origin rules without exposing supplier data.
 
+### Existing Web2 records
+
+  - [Private proofs for SHA-2 records](https://zeroj.dev/use-cases/sha2-web2/): Keep existing SHA-256/SHA-512 digests: explore documents, selective disclosure, eligibility, voting, private state and audits. Includes a runnable approval-record tutorial.
+
 ### Pick the right tool
 
 Almost every use case is built from a small set of patterns. Start from what you need to prove:
@@ -11220,6 +11671,7 @@ Almost every use case is built from a small set of patterns. Start from what you
 | You need to… | Approach | ZeroJ building blocks |
 |---|---|---|
 | Prove a predicate over a hidden value (age ≥ 18, carbon ≤ 50 kg, reserves ≥ liabilities) | Groth16 circuit | `ZkUInt` with `@UInt(bits = …)` and `gte` / `lte` comparisons |
+| Prove a fact about a record committed by an existing SHA-2 digest | SHA-2 and policy constraints, plus issuer/registry trust | `Sha256` / `Sha512`, `ZkSha256` / `ZkSha512`; bind the full digest |
 | Reveal some issuer-signed attributes and hide the rest | BBS selective disclosure (no circuit, no trusted setup) | `BbsService` in `zeroj-bbs`; `BbsProofVerify` for on-chain checks |
 | Prove you're in a set without saying which member | Merkle tree + Poseidon | `ZkMerkle.verifyProofPoseidon` with `PoseidonParamsBLS12_381T3.INSTANCE` |
 | Allow one action per person, credential or NFT | Nullifier | `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, secret, contextId)`, stored on-chain (sorted list, spent UTxO) |
@@ -11232,7 +11684,7 @@ Almost every use case is built from a small set of patterns. Start from what you
 | Prove facts about large private state (millions of entries) | Poseidon MPF / JMT (**experimental**) | `zeroj-mpf-poseidon`, `zeroj-jmt-poseidon` |
 
 Not sure whether to reveal, prove, commit or encrypt? [Choose how to disclose](https://zeroj.dev/selective-disclosure/)
-compares the options on one example. Groth16 on BLS12-381 is the default proof system for everything above. Circuits use Poseidon with
+compares the options on one example. Groth16 on BLS12-381 is the default proof system for the circuit-based patterns above. Where a circuit uses Poseidon, pass
 explicit BLS12-381 parameters. For the concepts behind these patterns, read
 [Circuits, constraints & witnesses](https://zeroj.dev/learn/circuits-and-witnesses/) and
 [ZK on Cardano](https://zeroj.dev/learn/zk-on-cardano/).
@@ -14529,6 +14981,242 @@ Design notes: ADR-0006 (demo C) and ADR-0007 (on-chain deliveries) in the zeroj-
 
 ---
 
+## Private proofs for existing Web2 records
+
+Source: https://zeroj.dev/use-cases/sha2-web2/
+
+> Use SHA-256 and SHA-512 commitments for private documents, selective disclosure, governance eligibility, voting, private application state and audit proofs. See the trust boundaries and try an approval-record tutorial.
+
+An approval service already records a SHA-256 digest of each document. A partner needs to know
+whether a particular approval satisfies its rules, but should not receive the applicant's entire
+record. With a SHA-256 circuit, the holder can prove a fact about the **same bytes and the same
+digest** that the existing service uses.
+
+ZeroJ provides in-circuit SHA-256 and SHA-512, alongside Poseidon. The SHA-2 gadget connects a
+private witness to a familiar external digest; your application supplies the policy and the
+reason to trust that digest. The hash computations happen during off-chain proving. Cardano
+verifies the resulting Groth16 proof and the transaction's application rules.
+
+**Note: What exists today:** 
+
+The hash gadgets, their tests and a [runnable approval-record tutorial](https://zeroj.dev/tutorials/sha256-record/)
+are in this repository. The six scenarios below are application designs, not six deployed apps.
+The Java tutorial is implemented; its Cardano adaptation, SHA-2 membership trees and private-state
+designs need their own application circuits and validators. SHA-256 remains experimental pending
+external review. Groth16 is classical and requires trusted setup; using SHA-2 does not make it
+post-quantum.
+
+### First, understand the three jobs
+
+| Piece | What it establishes | What supplies it |
+|---|---|---|
+| Hash | These exact private bytes match this digest | SHA-256 or SHA-512 constraints |
+| Policy | Those same bytes satisfy a rule, such as an approved status | Additional circuit constraints |
+| Trust and action | This issuer, record, policy and requested action are accepted here | Registry/signature checks and application or validator logic |
+
+A **witness** is the private data given to the prover. A **public input** is a value that the
+verifier sees and that the proof binds. A **commitment** is a value that binds a record while
+potentially hiding it; a bare hash of a predictable record does not automatically hide it.
+
+Try **Denied record** and **Unregistered record** below. They fail at different places.
+Switch to **Public view** to see the intended information boundary. These are public teaching
+fixtures, and the illustration does not run a prover in your browser.
+
+_The web version of this page has an interactive illustration here._
+
+```text
+Web2 issuer: registers a trusted digest D
+                      |
+Holder: private record + nonce -> circuit: SHA256(record) = D AND approval policy
+                      |
+               proof + public D
+                      v
+Application: trusted verification key + registered D + valid proof -> accept
+
+Edited bytes / denied status -> circuit rejects.
+A different approved record can have a valid proof -> registry still rejects it.
+```
+
+### Six real-world scenarios
+
+#### 1. Private document possession
+
+**Situation:** a procurement portal stores a SHA-256 digest of a submitted contract. A supplier
+needs to demonstrate knowledge of the registered file without sending it to another service.
+
+**Statement:** “I know bytes whose SHA-256 digest equals the registered digest.” The file stays
+private; the digest and proof are public. The registry establishes which submission matters.
+This proves knowledge of bytes, not legal ownership, authorship, current validity or exclusive
+possession. Anyone who has the file can make the same kind of proof.
+
+For a condition *inside* the contract, the circuit also needs an exact format and a constrained
+parser. A SHA gadget does not understand PDF pages or their meaning. Large files require many
+hash blocks; start with a bounded structured record when the issuer can attest one. That attestation
+changes the trust model: it proves what the issuer recorded, not an independent reading of the PDF.
+
+#### 2. Selective disclosure from an approval or qualification record
+
+**Situation:** a vendor-onboarding service issues a record containing a supplier reference,
+program identifier, approval status and private randomness. A partner only needs to know that
+the record is approved for its program.
+
+**Statement:** “This registered record has version 1, program 7 and status approved.” The
+supplier reference and randomness stay private. The public digest still identifies the record
+and can link repeated presentations; hiding fields is different from anonymous presentation.
+
+This is the [hands-on tutorial](https://zeroj.dev/tutorials/sha256-record/). A real qualification system may also
+need expiry, revocation and holder authentication. An accepted “approved” predicate necessarily
+reveals that fact, even though the original status byte is a private witness.
+
+#### 3. Governance eligibility against an existing list
+
+**Situation:** an association maintains a SHA-256 Merkle tree of approved membership records.
+A participant should prove eligibility without naming their leaf.
+
+**Statement:** “My private record satisfies the eligibility policy and is a leaf under the
+accepted root.” Only the root and required policy context need be public; the record, leaf
+position and sibling path can stay private.
+
+Match the existing tree exactly: leaf encoding, node prefixes, digest bytes, left/right order,
+depth and any leaf prehashing. SHA-256 and Poseidon roots are not interchangeable. The
+[private allowlist tutorial](https://zeroj.dev/tutorials/private-allowlist/) teaches the membership/nullifier
+pattern using Poseidon; adapting it to a SHA-2 tree requires an actual SHA-2 path circuit,
+not a change of the root's label. Each additional hash increases proving work.
+
+#### 4. Private voting with one use per credential
+
+**Situation:** a governance system wants an eligible participant to commit a valid choice without
+revealing the participant's identity or the choice to chain observers.
+
+The circuit must combine eligibility, a valid choice, a randomized vote commitment and a
+**nullifier**: a public identifier that repeats when the same credential is used again in the
+same election. Its secret must be bound to that credential, and the election/action domain must
+be constrained. Letting the prover choose a new nullifier secret for each ballot defeats the rule.
+Using a predictable member number as that secret can reveal the voter.
+
+The validator atomically rejects reused nullifiers and binds the ballot, election and action to
+the transaction. This gives at most one use **per admitted credential**, not one credential per
+human; issuance policy controls that. Commitments alone do not produce a private tally: you still
+need a tally/decryption protocol. See [private voting](https://zeroj.dev/use-cases/private-voting/) for that wider flow.
+
+#### 5. Private application state
+
+**Situation:** a loyalty service or governance workflow tracks internal credits or confidential
+policy state. Cardano should check valid transitions while storing only commitments to the state.
+
+Use an unambiguous commitment encoding, such as:
+
+```text
+C = SHA256(encode(domain, stateId, version, privateState, privateNonce))
+```
+
+Here `encode` means a specified byte layout with widths or lengths, not ambiguous string
+concatenation. A fresh high-entropy nonce helps hide predictable state when the format permits
+it. The circuit must open both commitments, enforce the transition, constrain numeric ranges,
+and bind the authorized action and state context. The validator must check the actual UTxOs.
+
+_The web version of this page has an interactive illustration here._
+
+```text
+Current UTxO: C7, version 7, state identity
+     + private opening: old state, nonce r7
+     + private next state and fresh nonce r8
+     -> circuit proves both SHA256 openings and an authorized, range-checked transition
+     -> proof binds C7, C8 and required action/context
+     -> validator consumes C7 and creates exactly the permitted C8 continuation
+
+A proof starting at C6 cannot spend the current C7 state.
+Private internal values can be hidden; ledger values and transaction links remain visible.
+```
+
+This is a design sketch, not an implemented SHA-2 state validator. It does not make ADA or native
+asset quantities in transaction outputs private. A shared state UTxO also serializes updates;
+sharding or batching changes the state design. Holders/operators need access to the private
+openings for later transitions—publishing a commitment alone does not make the data recoverable.
+The existing [authenticated-state guide](https://zeroj.dev/guides/credentials/authenticated-state/) describes
+separate Poseidon-based state implementations.
+
+#### 6. Audit proofs over Web2 records
+
+**Situation:** a service commits an ordered batch of invoices, approvals or processing events.
+An auditor wants to check a total, a count or whether every record follows a policy without
+receiving all records.
+
+**Statement:** “The records committed by this accepted root satisfy the specified calculation.”
+The circuit needs membership and coverage rules, correct arithmetic and the business predicate.
+A proof about a convenient subset does not establish a claim about the whole batch. Bind the
+period, number of records and ordering/deduplication rule to prevent omissions or double counting.
+
+The registry or signer establishes the batch's origin. Neither a correct hash nor a valid proof
+establishes that the source database captured every real-world event. For numeric examples,
+specify units, rounding and range bounds; see [proof of reserves](https://zeroj.dev/use-cases/proof-of-reserves/)
+for a related completeness boundary.
+
+### Choose what to keep compatible
+
+| Existing system | What the circuit must reproduce | Application work still needed |
+|---|---|---|
+| A stored SHA-256 file digest | The exact original file bytes and full 32-byte digest | Trusted registration; format constraints for claims about contents |
+| A SHA-512 record digest | The exact record encoding and full 64-byte digest | Issuer/registry policy, expiry and revocation where needed |
+| A SHA-2 Merkle root | The complete tree convention, not just its hash algorithm | Root authority, membership paths and lifecycle |
+| A signed API response | Its signed message representation and relevant signature verification | Signer trust, freshness and binding to the intended request |
+| A new private application state | A specified, domain-separated randomized encoding | Transition circuit, authorization, UTxO binding and data availability |
+
+SHA-2 is useful at an existing-system boundary. A new internal tree can still use Poseidon if its
+root does not need to match an external SHA-2 root. A mixed design must constrain the conversion
+or relationship; calling two unrelated hashes “the same commitment” does not bind them.
+
+### Advanced integration notes
+
+**Bytes before fields.** SHA-2 hashes bytes, not an abstract JSON object. Whitespace, key order,
+Unicode representation and numeric formatting can change a digest. If both sides already use
+[JSON Canonicalization Scheme (RFC 8785)](https://www.rfc-editor.org/rfc/rfc8785), reproduce that
+exact representation. Introducing canonicalization to a system that hashes raw JSON changes
+its digest. The gadget supplies neither a JSON parser nor canonicalization constraints.
+
+**Constrain the connection.** Hashing a file outside the circuit and providing only its digest
+does not prove knowledge of that file, or that a separately supplied field came from it. The
+message-to-digest relation and the predicate must concern the same constrained witness.
+
+**Preserve every digest bit.** SHA-256 needs two 128-bit public limbs and SHA-512 four in the
+documented packing. Do not reduce a whole digest modulo the scalar field. The tutorial explains
+the exact byte order and how the verifier constructs its expected public inputs.
+
+**Name the privacy observer.** An issuer may know the record it issued; a remote proving service
+sees a witness you send to it. Zero knowledge hides the witness from the proof verifier, not from
+those services. Public digests and nullifiers can link uses. Hashes of low-entropy data can be
+guessed; adding a nonce later would change an existing digest. New randomized formats need
+fresh issuance randomness and a clear policy for who knows it.
+
+**Measure the complete application.** The 32-byte preimage benchmarks are not benchmarks for
+membership, voting, large documents or state transitions. Additional hashes and policy constraints
+increase off-chain cost. Public inputs and validator logic affect on-chain cost. New circuits
+need matching setup artifacts and new execution measurements.
+
+**Choose the proving flow.** For applications using stored keys, prefer `Groth16Pipeline`,
+especially for repeated SHA-256/SHA-512 proofs or larger documents. It reuses validated
+constraints and orders large allocations; your callbacks must still release their circuit
+graphs. The [tutorial's pipeline guidance](https://zeroj.dev/tutorials/sha256-record/#when-to-use-groth16pipeline)
+explains when the simpler API is sufficient, key reuse, cache-miss costs and memory limits.
+
+For a starting budget, retained local DevKit runs paid about **0.43 ADA for a simple SHA-256
+proof spend** and **0.46 ADA for SHA-512**, including transaction size and verification execution.
+These are preimage-verifier baselines, not prices for the complete applications above. The
+[tutorial's cost breakdown](https://zeroj.dev/tutorials/sha256-record/#estimated-cardano-verification-cost)
+explains the public-input counts, fee assumptions and exclusions.
+
+### Build the first piece
+
+  - [Prove a private SHA-256 approval](https://zeroj.dev/tutorials/sha256-record/): Run a Java example, inspect the byte layout and explore both circuit and registry rejection.
+  - [Bind a proof to an application](https://zeroj.dev/guides/verifying/application-security/): Trusted keys, public-input policy, replay protection and transaction context.
+
+The gadgets follow [FIPS 180-4](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
+See [ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md)
+and the [validation report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-issue-111-validation.md)
+for the tested construction, independent vectors, performance evidence and remaining review gates.
+
+---
+
 ## Modules
 
 Source: https://zeroj.dev/reference/modules/
@@ -15300,13 +15988,36 @@ details.
 
 Source: https://zeroj.dev/reference/migration/
 
-> Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.
+> Migrate affected circuit keys after Boolean and SHA-2 optimization, and update ZeroJ and JuLC namespaces and modules.
 
-ZeroJ is pre-1.0 and its coordinates have changed twice. `0.1.0-pre12` also moves the on-chain
-module to JuLC `0.1.0-pre18`, which has new coordinates of its own. This page covers all three.
-None of them changes cryptography, proof bytes, keys, transcripts or public-input order, and none
-upgrades any maturity claim. The JuLC upgrade does change compiled validator bytes, so script
-hashes differ from builds on older JuLC versions.
+ZeroJ is pre-1.0. The upcoming Boolean and SHA-2 optimization changes compiled circuit
+artifacts; the older namespace and module migrations are documented below.
+
+### Upcoming breaking changes: Boolean and SHA-2 optimization
+
+> **Caution: Regenerate affected circuit-specific keys**
+>
+> PR #112 changes the compiled relation of Boolean-using DSL circuits in R1CS, PlonK and
+> Halo2, including MPF/JMT and confidential-note circuits. SHA-256/SHA-512 layouts also
+> change. Recompile affected circuits and regenerate their constraint caches, fingerprints
+> and circuit-specific proving/verification keys. An old circuit-specific ceremony output
+> must not be reused for the replacement relation.
+
+Keep old proofs with their original keys and application configuration. A compatible
+universal setup or phase-1 Powers of Tau transcript is distinct from the circuit-specific
+artifacts and is not automatically invalidated. Never bypass a key/cache fingerprint
+mismatch. Deployment owners must inventory existing keys and plan validator/state
+migration before upgrading; the repository tests cannot establish which external
+deployments currently use ceremony keys.
+
+The public sealed `Gate` interface gains `Gate.AssertBoolean`. Downstream exhaustive
+switches and visitors must handle the new subtype. See the
+[release migration notes](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0063-sha2-boolean-optimization.md).
+Proof formats, full SHA digest semantics and security parameters are unchanged.
+
+The namespace and module changes below do not change keys, transcripts or public-input
+order. The JuLC upgrade changes compiled validator bytes, so script hashes differ from
+builds on older JuLC versions. None of these changes upgrades a maturity claim.
 
 ### The `org.zeroj` namespace
 

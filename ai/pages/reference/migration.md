@@ -1,14 +1,37 @@
 # Migration notes
 
-> Move from com.bloxbean.cardano to the org.zeroj namespace, to JuLC's org.julclang namespace, and from the pre-cleanup module set to today's focused module surface.
+> Migrate affected circuit keys after Boolean and SHA-2 optimization, and update ZeroJ and JuLC namespaces and modules.
 
 Canonical URL: https://zeroj.dev/reference/migration/
 
-ZeroJ is pre-1.0 and its coordinates have changed twice. `0.1.0-pre12` also moves the on-chain
-module to JuLC `0.1.0-pre18`, which has new coordinates of its own. This page covers all three.
-None of them changes cryptography, proof bytes, keys, transcripts or public-input order, and none
-upgrades any maturity claim. The JuLC upgrade does change compiled validator bytes, so script
-hashes differ from builds on older JuLC versions.
+ZeroJ is pre-1.0. The upcoming Boolean and SHA-2 optimization changes compiled circuit
+artifacts; the older namespace and module migrations are documented below.
+
+## Upcoming breaking changes: Boolean and SHA-2 optimization
+
+> **Caution: Regenerate affected circuit-specific keys**
+>
+> PR #112 changes the compiled relation of Boolean-using DSL circuits in R1CS, PlonK and
+> Halo2, including MPF/JMT and confidential-note circuits. SHA-256/SHA-512 layouts also
+> change. Recompile affected circuits and regenerate their constraint caches, fingerprints
+> and circuit-specific proving/verification keys. An old circuit-specific ceremony output
+> must not be reused for the replacement relation.
+
+Keep old proofs with their original keys and application configuration. A compatible
+universal setup or phase-1 Powers of Tau transcript is distinct from the circuit-specific
+artifacts and is not automatically invalidated. Never bypass a key/cache fingerprint
+mismatch. Deployment owners must inventory existing keys and plan validator/state
+migration before upgrading; the repository tests cannot establish which external
+deployments currently use ceremony keys.
+
+The public sealed `Gate` interface gains `Gate.AssertBoolean`. Downstream exhaustive
+switches and visitors must handle the new subtype. See the
+[release migration notes](https://github.com/bloxbean/zeroj/blob/main/docs/migration/0063-sha2-boolean-optimization.md).
+Proof formats, full SHA digest semantics and security parameters are unchanged.
+
+The namespace and module changes below do not change keys, transcripts or public-input
+order. The JuLC upgrade changes compiled validator bytes, so script hashes differ from
+builds on older JuLC versions. None of these changes upgrades a maturity claim.
 
 ## The `org.zeroj` namespace
 

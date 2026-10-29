@@ -35,6 +35,10 @@ circuit ──compileR1CS(BLS12_381)──▶ R1CS ──setup / import──▶
 | Imported ceremony key | `ZkeyPkStoreImporter.importToPkStore(zkey, dir, sha256)`, then `Groth16Keys.load(dir, manifestSha256)` | Anything beyond local testing | Memory-mapped at prove time |
 
 `Groth16Keys` is `AutoCloseable`. Use try-with-resources so store-backed keys are unmapped.
+For applications using stored keys, prefer the [pipeline flow](#groth16pipeline-for-very-large-circuits)
+below as the default orchestration, especially for repeated proofs and larger circuits.
+`Groth16Keys` remains the key handle; the pipeline coordinates compilation, witness generation
+and the constraint cache around it. Direct flows remain useful for small tests and custom callers.
 
 > **Caution: The first three rows are development keys**
 >
@@ -154,9 +158,15 @@ multi-core pure-Java backend; the opt-in native backend is covered in
 
 `Groth16Pipeline` packages the orchestration ZeroJ uses for its ~19-million-constraint
 account-ownership circuit: a constraint cache written during setup, witness generation *before*
-the constraints are memory-mapped (so the two memory peaks never overlap), and a circuit
-fingerprint that fails fast if a key bundle doesn't match the circuit. You supply two things:
-how to compile, and how to compute the witness.
+the constraints are validated and memory-mapped on a cache hit, and an exact circuit
+fingerprint that rejects a mismatched bound key bundle. You supply how to compile and how
+to compute the witness, with helpers that release their graphs before the next heavy phase.
+This is the recommended application flow for stored keys; small in-memory examples can keep
+the direct API. See the [SHA-2 guide's use cases and trade-offs](https://zeroj.dev/tutorials/sha256-record/#when-to-use-groth16pipeline).
+
+The cache is an optimization: a miss or unreadable cache can trigger compilation and keep
+heap constraints alive during witness generation. The cache-hit memory profile therefore
+does not establish the memory requirement of a missing or failed-cache path.
 
 ```java
 Supplier<Groth16Pipeline.Compiled> compile = () -> {
@@ -164,9 +174,12 @@ Supplier<Groth16Pipeline.Compiled> compile = () -> {
     return new Groth16Pipeline.Compiled(
             cs.flat(), cs.numConstraints(), cs.numWires(), cs.numPublicInputs());
 };
+Supplier<BigInteger[]> computeBoxedWitness = () -> {
+    var c = SealedBidCircuit.build();
+    return inputs.calculateWitness(c, CurveId.BLS12_381);
+};
 Supplier<FlatScalars> computeWitness = () -> {
-    var c = SealedBidCircuit.build();                           // released when the lambda returns
-    BigInteger[] w = inputs.calculateWitness(c, CurveId.BLS12_381);
+    BigInteger[] w = computeBoxedWitness.get(); // its graph is out of scope BEFORE packing
     return FlatScalars.packConsuming(w, w.length);
 };
 
