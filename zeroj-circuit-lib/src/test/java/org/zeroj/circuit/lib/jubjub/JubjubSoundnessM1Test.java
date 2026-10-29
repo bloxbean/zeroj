@@ -242,7 +242,7 @@ class JubjubSoundnessM1Test {
     }
 
     @Test
-    @DisplayName("cost pins: witnessAffine 5, assertWellFormed 13, verifyCore 8,929")
+    @DisplayName("cost pins: witnessAffine 5, assertWellFormed 13, verifyCore 7,657")
     void constraintCostsArePinned() {
         var wa = CircuitBuilder.create("wa_cost")
                 .secretVar("u").secretVar("v")
@@ -260,16 +260,16 @@ class JubjubSoundnessM1Test {
                         + "their assertion, and the isZero(Z) inverse witness");
 
         var verifyCore = fixedCircuit().compileR1CS(CurveId.BLS12_381);
-        assertEquals(8_929, verifyCore.constraints().size(),
+        assertEquals(7_657, verifyCore.constraints().size(),
                 "verifyCore cost is pinned so a regression is visible. The original forgeable "
                         + "relation cost 18,965; the fixed one -- affine-bound, canonically "
-                        + "reduced, domain-separated -- is 8,929, less than half, after the "
-                        + "ADR-0037 M5 work (booleanity dedup, constant-multiplication folding "
-                        + "in the R1CS compiler, and the windowed fixed-base table).");
-        assertEquals(364_200, verifyCore.constraints().stream()
+                        + "reduced, domain-separated -- fell to 8,929 after ADR-0037 M5 and "
+                        + "to 7,657 after ADR-0063 direct Boolean assertions. The relation and "
+                        + "all Boolean checks are retained.");
+        assertEquals(360_384, verifyCore.constraints().stream()
                         .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum(),
                 "verifyCore sparse-matrix nonzeros");
-        assertEquals(16_384,
+        assertEquals(8_192,
                 Integer.highestOneBit(verifyCore.constraints().size() - 1) << 1,
                 "row-derived padded proving domain");
     }

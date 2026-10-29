@@ -151,25 +151,27 @@ class ZkMpfOperationCircuitTest {
         }
     }
 
+    // Template names identify semantic/schema versions. ADR-0063 direct Boolean lowering
+    // changes the exact R1CS pins and requires fresh circuit-specific keys.
     @Test
     void branchProfileConstraintCountsArePinned() {
         int[][] expected = {
-                {0, 3_575, 14_831, 65},
-                {1, 9_699, 48_429, 71},
-                {3, 21_433, 115_559, 83},
-                {8, 50_768, 283_384, 113},
-                {9, 56_635, 316_949, 119},
-                {12, 74_236, 417_644, 137},
-                {64, 379_321, 2_163_024, 449}
+                {0, 3_051, 13_259, 65},
+                {1, 8_921, 46_095, 71},
+                {3, 20_163, 111_749, 83},
+                {8, 48_268, 275_884, 113},
+                {9, 53_889, 308_711, 119},
+                {12, 70_752, 407_192, 137},
+                {64, 363_045, 2_114_196, 449}
         };
         String[] digests = {
-                "72bbab48083b0f44e347a21b7310c948e8f2f558d68260b3848400d4cee16e07",
-                "2ce7c0a3ba476fe849ef1add054223e957ba7c62ecd615115d706f6f77033caf",
-                "022a7ee4f514c07b285f35c1430774b145fc7ca67e779d51c4af688953585ee6",
-                "e3a9fe7f2bcce454395a5bb0f2fac12e3fd99065d6b6c82325d7cdce16c1b74c",
-                "540279f349be215c837245a888934dd507bbfecf21c4a66146a3febcd33d427d",
-                "84975e990f84da821650147a9e6b8f5fdd2b67b20ce06c31ecb490411915bf00",
-                "9505d73edcbb136c0783636eb45158b8a2b625bf05b6427716071a264ce5a17a"
+                "29b7aa4d9c198c94017a26432008ac9ad6feb8eb2010a3047033661a9d884847",
+                "c163d744f308044b5aaea66b301be2e42bec907d14d3bef0e560f3dacd98cadb",
+                "14b8718f15e8181e9d24eb02a781e523181cb3fa941b8d0ad54adb967f042647",
+                "ff0c5c68e02fd7418d014fc1ec74d89626611d9aedad1907f8dc8fba25e0e2a5",
+                "dd69a34951612ab67283ecf6ffbd6c5cdf47003db3bdb2ecc6b0da2f72eb3b7d",
+                "baa1ce903d9bf95a669477dd7032187a663e0f8c0e5b5c05d872f9e80b41d9b9",
+                "3517e47361e51c47c5ca190c494b15fd6278da49f1818da55a4e6ebb7d9a07a4"
         };
         for (int index = 0; index < expected.length; index++) {
             int[] profile = expected[index];
@@ -207,13 +209,13 @@ class ZkMpfOperationCircuitTest {
         assertExactProfile(
                 PoseidonMpfCircuitTemplates.nonInclusionEmpty(8),
                 "zeroj-mpf-v1-non-inclusion-empty-s8-p1",
-                47_397, 269_978, 112,
-                "e59025c48cf71b4fb17ce03045944307e43687f60b4dab61916b2f414dcdc46d");
+                45_165, 263_282, 112,
+                "aea0fbe7a19badb27df3db6dd8851681464b55d8e897344de2226eee20ad2a0a");
         assertExactProfile(
                 PoseidonMpfCircuitTemplates.nonInclusionDifferentLeaf(8),
                 "zeroj-mpf-v1-non-inclusion-different-leaf-s8-p1",
-                54_766, 291_445, 178,
-                "1184ef318658e8b63d752b0e05fb1ab1339a1438adcc689fee6e244484849873");
+                50_881, 279_787, 178,
+                "22c45307ee886d545013d6ce0f38b6d0ed32ff0c43233cf7cb1b759b2c3f196c");
     }
 
     private static void assertExactProfile(

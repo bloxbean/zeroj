@@ -174,16 +174,19 @@ public final class Sha512 {
         Variable[] e = h[4], f = h[5], g = h[6], hh = h[7];
 
         for (int t = 0; t < 80; t++) {
-            Variable[] t1 = addMod64(api, hh, bigSigma1(api, e), ch(api, e, f, g), constWord(api, K[t]), w[t]);
-            Variable[] t2 = addMod64(api, bigSigma0(api, a), maj(api, a, b, c));
+            Variable t1 = sumWords(api, hh, bigSigma1(api, e), ch(api, e, f, g), constWord(api, K[t]), w[t]);
+            Variable t2 = sumWords(api, bigSigma0(api, a), maj(api, a, b, c));
             hh = g;
             g = f;
             f = e;
-            e = addMod64(api, d, t1);
+            // T1 has five w-bit addends; T1+d has six. Decompose the exact sum,
+            // including three carry bits, only where the next state needs bits.
+            e = lowWord(api, api.add(api.fromBinary(d), t1), 3);
             d = c;
             c = b;
             b = a;
-            a = addMod64(api, t1, t2);
+            // T1+T2 has seven w-bit addends, below 2^(w+3) and the field modulus.
+            a = lowWord(api, api.add(t1, t2), 3);
         }
 
         Variable[][] out = new Variable[8][];
@@ -231,14 +234,15 @@ public final class Sha512 {
     }
 
     /**
-     * Maj(a,b,c) = {@code a·b + c·(a⊕b)} — 3 mul/bit (vs 5 for 3×AND + 2×XOR). Equals the majority:
+     * Maj(a,b,c) = {@code ab + c·(a+b-2ab)} — two products per bit, reusing ab. Equals the majority:
      * when a=b it is a; when a≠b it is c.
      */
-    private static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
+    static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
         Variable[] r = new Variable[WORD_BITS];
         for (int i = 0; i < WORD_BITS; i++) {
             Variable ab = api.mul(a[i], b[i]);
-            r[i] = api.add(ab, api.mul(c[i], api.xor(a[i], b[i])));
+            Variable xor = api.sub(api.add(a[i], b[i]), api.add(ab, ab));
+            r[i] = api.add(ab, api.mul(c[i], xor));
         }
         return r;
     }
@@ -274,11 +278,20 @@ public final class Sha512 {
      * (free), then a single decomposition splits value and carry; the low 64 bits are returned.
      */
     private static Variable[] addMod64(CircuitAPI api, Variable[]... words) {
+        int carryBits = 32 - Integer.numberOfLeadingZeros(words.length - 1);
+        return lowWord(api, sumWords(api, words), carryBits);
+    }
+
+    /** Exact integer sum of already-Boolean words; callers bound the number of addends. */
+    private static Variable sumWords(CircuitAPI api, Variable[]... words) {
         Variable sum = api.constant(0);
-        for (Variable[] w : words) sum = api.add(sum, api.fromBinary(w));
-        int extra = 0;
-        while ((1 << extra) < words.length) extra++;   // ceil(log2(#addends))
-        Variable[] full = api.toBinary(sum, WORD_BITS + extra);
+        for (Variable[] word : words) sum = api.add(sum, api.fromBinary(word));
+        return sum;
+    }
+
+    /** Fully constrain the bounded sum, including carries, before retaining its low word. */
+    private static Variable[] lowWord(CircuitAPI api, Variable sum, int carryBits) {
+        Variable[] full = api.toBinary(sum, WORD_BITS + carryBits);
         Variable[] low = new Variable[WORD_BITS];
         System.arraycopy(full, 0, low, 0, WORD_BITS);
         return low;

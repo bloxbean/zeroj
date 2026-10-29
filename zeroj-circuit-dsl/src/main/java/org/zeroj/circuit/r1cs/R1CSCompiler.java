@@ -167,6 +167,12 @@ public final class R1CSCompiler {
                     csrReserve = saturatingAdd(csrReserve, 3);
                     workReserve = saturatingAdd(workReserve, 4);
                 }
+                case Gate.AssertBoolean(var value) -> {
+                    // Consume the expression once, then reuse it in A and B=A-1.
+                    incrementRead(reads, value.id());
+                    csrReserve = saturatingAdd(csrReserve, 3);
+                    workReserve = saturatingAdd(workReserve, 2);
+                }
                 case Gate.Select(var out, var cond, var ifTrue, var ifFalse) ->
                         throw rawSelectUnsupported();
                 default -> {
@@ -317,6 +323,20 @@ public final class R1CSCompiler {
                     var diff = subExprs(leftExpr, rightExpr, p);
                     if (!diff.isEmpty()) {
                         sink.add(diff, one, Map.of());
+                    }
+                }
+
+                case Gate.AssertBoolean(var value) -> {
+                    long terms = expressions.termCount(value.id());
+                    budget.beforeWork(saturatingAdd(terms, 1));
+                    budget.beforePotentialRow(saturatingAdd(saturatingMultiply(terms, 2), 1));
+                    materialiseOperandsIfPressured(expressions, sink, budget, oneWire, value.id());
+                    var expression = expressions.consume(value.id());
+                    BigInteger constant = constantValue(expression, oneWire);
+                    // Fold only true constant assertions; invalid constants must still fail.
+                    if (!BigInteger.ZERO.equals(constant) && !BigInteger.ONE.equals(constant)) {
+                        budget.recordWork(saturatingAdd(expression.size(), 1));
+                        sink.add(expression, subExprs(expression, one, p), Map.of());
                     }
                 }
 

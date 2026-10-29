@@ -170,11 +170,13 @@ class WindowedFixedBaseTest {
                 .compileR1CS(CurveId.BLS12_381);
         int windowed = windowedSystem.constraints().size();
         int bitwise = bitwiseSystem.constraints().size();
-        assertEquals(1_506, windowed, "252-bit windowed fixed-base cost");
-        assertEquals(2_513, bitwise, "252-bit bit-by-bit fixed-base cost");
-        assertEquals(7_865, nnz(windowedSystem),
+        // Direct Boolean assertions remove 252 rows and 756 nonzeros from both paths.
+        // The windowed path retains its 1,007-row advantage; neither domain changes.
+        assertEquals(1_254, windowed, "252-bit windowed fixed-base cost");
+        assertEquals(2_261, bitwise, "252-bit bit-by-bit fixed-base cost");
+        assertEquals(7_109, nnz(windowedSystem),
                 "windowed sparse-matrix nonzeros are a production performance pin");
-        assertEquals(638_804, nnz(bitwiseSystem),
+        assertEquals(638_048, nnz(bitwiseSystem),
                 "bitwise reference nonzeros must not regress under compiler repair");
         assertEquals(2_048, paddedDomain(windowed));
         assertEquals(4_096, paddedDomain(bitwise));

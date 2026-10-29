@@ -14,7 +14,7 @@ import org.zeroj.circuit.Variable;
  * Input bits are constrained boolean and input bytes are range-checked. Padding,
  * the 64-bit length suffix and round constants are circuit constants. Every modular
  * addition decomposes the whole sum including its carry before retaining its low
- * 32 bits. At most five words are summed, so values stay below 2^35, well below
+ * 32 bits. At most seven words are summed, so values stay below 2^35, well below
  * ZeroJ's supported scalar fields. No host hash or unconstrained witness hint is used.
  * Callers must bind the returned digest to their intended public statement.
  *
@@ -149,17 +149,20 @@ public final class Sha256 {
         Variable[] e = h[4], f = h[5], g = h[6], hh = h[7];
         for (int t = 0; t < w.length; t++) {
             Variable[] s1 = xor3(api, rotr(e, 6), rotr(e, 11), rotr(e, 25));
-            Variable[] t1 = addMod32(api, hh, s1, ch(api, e, f, g), constWord(api, K[t]), w[t]);
+            Variable t1 = sumWords(api, hh, s1, ch(api, e, f, g), constWord(api, K[t]), w[t]);
             Variable[] s0 = xor3(api, rotr(a, 2), rotr(a, 13), rotr(a, 22));
-            Variable[] t2 = addMod32(api, s0, maj(api, a, b, c));
+            Variable t2 = sumWords(api, s0, maj(api, a, b, c));
             hh = g;
             g = f;
             f = e;
-            e = addMod32(api, d, t1);
+            // T1 has five w-bit addends; T1+d has six. Decompose the exact sum,
+            // including three carry bits, only where the next state needs bits.
+            e = lowWord(api, api.add(api.fromBinary(d), t1), 3);
             d = c;
             c = b;
             b = a;
-            a = addMod32(api, t1, t2);
+            // T1+T2 has seven w-bit addends, below 2^(w+3) and the field modulus.
+            a = lowWord(api, api.add(t1, t2), 3);
         }
         return new Variable[][]{
                 addMod32(api, h[0], a), addMod32(api, h[1], b),
@@ -177,11 +180,14 @@ public final class Sha256 {
         return result;
     }
 
-    /** Maj(a,b,c) = ab + c(a XOR b), Boolean for all Boolean inputs. */
-    private static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
+    /** Maj(a,b,c) = ab + c(a+b-2ab): two products, Boolean for Boolean inputs. */
+    static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
         Variable[] result = new Variable[WORD_BITS];
-        for (int i = 0; i < WORD_BITS; i++)
-            result[i] = api.add(api.mul(a[i], b[i]), api.mul(c[i], api.xor(a[i], b[i])));
+        for (int i = 0; i < WORD_BITS; i++) {
+            Variable ab = api.mul(a[i], b[i]);
+            Variable xor = api.sub(api.add(a[i], b[i]), api.add(ab, ab));
+            result[i] = api.add(ab, api.mul(c[i], xor));
+        }
         return result;
     }
 
@@ -216,9 +222,19 @@ public final class Sha256 {
 
     /** The complete sum is range-constrained before discarding the carry. */
     private static Variable[] addMod32(CircuitAPI api, Variable[]... words) {
+        int carryBits = 32 - Integer.numberOfLeadingZeros(words.length - 1);
+        return lowWord(api, sumWords(api, words), carryBits);
+    }
+
+    /** Exact integer sum of already-Boolean words; callers bound the number of addends. */
+    private static Variable sumWords(CircuitAPI api, Variable[]... words) {
         Variable sum = api.constant(0);
         for (Variable[] word : words) sum = api.add(sum, api.fromBinary(word));
-        int carryBits = 32 - Integer.numberOfLeadingZeros(words.length - 1);
+        return sum;
+    }
+
+    /** Fully constrain the bounded sum, including carries, before retaining its low word. */
+    private static Variable[] lowWord(CircuitAPI api, Variable sum, int carryBits) {
         Variable[] full = api.toBinary(sum, WORD_BITS + carryBits);
         Variable[] low = new Variable[WORD_BITS];
         System.arraycopy(full, 0, low, 0, WORD_BITS);

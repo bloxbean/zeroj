@@ -73,7 +73,7 @@ vectors is not CAVP validation, formal circuit soundness or an independent audit
 
 ## Outputs and measurements
 
-The [retained 2026-10-29 result](evidence/2026-10-29.json) passed all **75 positive
+The [retained optimized result](evidence/2026-10-29-optimized.json) passed all **75 positive
 R1CS checks**, **60 compiled-witness rejection checks** and **eight invalid-input
 generator checks** across 25 messages. It records the exact tested working-tree
 source hashes, dependency pins, per-case relation identities and adversarial checks.
@@ -82,10 +82,15 @@ The four fixed-message profiles produced these constraint counts over BLS12-381:
 
 | Hash | Message bytes | Public 128-bit digest limbs | ZeroJ byte API | ZeroJ bit API | Circom O2 |
 |---|---:|---:|---:|---:|---:|
-| SHA-256 | 32 | 2 | 42,694 | 42,662 | 29,636 |
-| SHA-256 | 128 | 2 | 130,219 | 130,091 | 90,633 |
-| SHA-512 | 32 | 4 | 106,332 | 106,300 | 74,952 |
-| SHA-512 | 128 | 4 | 215,913 | 215,785 | 152,453 |
+| SHA-256 | 32 | 2 | 25,758 | 25,726 | 29,636 |
+| SHA-256 | 128 | 2 | 79,027 | 78,899 | 90,633 |
+| SHA-512 | 32 | 4 | 64,980 | 64,948 | 74,952 |
+| SHA-512 | 128 | 4 | 132,569 | 132,441 | 152,453 |
+
+The [pre-optimization result](evidence/2026-10-29.json) is retained separately;
+its ZeroJ byte-API counts were 42,694 / 130,219 / 106,332 / 215,913 in table order.
+See the [optimization report](../../docs/reviews/sha2-optimization-results.md) for
+controlled proof-generation comparisons at 6 GiB and 8 GiB heap limits.
 
 All rows bind the entire standard digest. These counts reflect different circuit
 shapes and compiler backends; they establish circuit cost, not a proof-time ranking.

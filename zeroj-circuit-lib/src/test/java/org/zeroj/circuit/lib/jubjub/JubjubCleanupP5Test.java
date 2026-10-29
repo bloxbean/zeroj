@@ -123,10 +123,10 @@ class JubjubCleanupP5Test {
                         api, JubjubPoint.SUBGROUP_GENERATOR, api.var("k"), 252))
                 .compileR1CS(org.zeroj.api.CurveId.BLS12_381);
 
-        // Measured: 1,506 rows for the whole circuit — the 252-bit decomposition the Variable
-        // overload emits plus the windowed multiplication. Matches the figure pinned by
-        // WindowedFixedBaseTest and quoted in scalarMulFixedBase's Javadoc.
-        assertEquals(1506, circuit.constraints().size(),
+        // The dead-table cleanup retained 1,506 rows. ADR-0063's direct Boolean assertions
+        // subsequently remove one row for each of the 252 decomposition bits: 1,254 rows for
+        // the same complete relation. This agrees with WindowedFixedBaseTest.
+        assertEquals(1254, circuit.constraints().size(),
                 "fixed-base 252-bit scalar multiplication constraint count");
     }
 

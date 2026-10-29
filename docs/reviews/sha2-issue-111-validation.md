@@ -1,5 +1,9 @@
 # SHA-2 implementation validation — issue #111
 
+This is the **pre-optimization** validation record for commit `9d56105`. The later
+PR #112 optimization changes circuit shapes; its new measurements and acceptance
+checks are recorded separately in [the optimization report](sha2-optimization-results.md).
+
 Date: 2026-10-29. Baseline: `d0b1f32` on `main`. Design:
 [ADR-0063](../adr/0063-sha256-gadget-and-sha2-assurance.md).
 This record covers the new `Sha256` / `ZkSha256` APIs and the existing SHA-512

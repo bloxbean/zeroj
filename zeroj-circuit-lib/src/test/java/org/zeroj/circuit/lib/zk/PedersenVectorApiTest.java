@@ -365,16 +365,17 @@ class PedersenVectorApiTest {
         R1CSConstraintSystem n4 = dimensionCircuit(4).compileR1CS(CurveId.BLS12_381);
         R1CSConstraintSystem n16 = dimensionCircuit(16).compileR1CS(CurveId.BLS12_381);
         // Complete operation: schema-digest binding, decompositions, canonical blinding, the
-        // multi-scalar sum and the affine public binding. About 390 rows per extra 64-bit value.
+        // multi-scalar sum and the affine public binding. After ADR-0063 direct Boolean
+        // assertions, each extra 64-bit value costs 326 rows.
         // n = 1 is cheaper than the v1 64/252 commitment (2,918) because a value narrower than
         // 252 bits is canonical by its width and needs no comparator.
         assertAll(
-                () -> assertEquals(2_411, n1.constraints().size(), "n=1 rows"),
-                () -> assertEquals(11_686, nnz(n1), "n=1 nonzeros"),
-                () -> assertEquals(3_581, n4.constraints().size(), "n=4 rows"),
-                () -> assertEquals(17_755, nnz(n4), "n=4 nonzeros"),
-                () -> assertEquals(8_261, n16.constraints().size(), "n=16 rows"),
-                () -> assertEquals(42_031, nnz(n16), "n=16 nonzeros"));
+                () -> assertEquals(1_842, n1.constraints().size(), "n=1 rows"),
+                () -> assertEquals(9_979, nnz(n1), "n=1 nonzeros"),
+                () -> assertEquals(2_820, n4.constraints().size(), "n=4 rows"),
+                () -> assertEquals(15_472, nnz(n4), "n=4 nonzeros"),
+                () -> assertEquals(6_732, n16.constraints().size(), "n=16 rows"),
+                () -> assertEquals(37_444, nnz(n16), "n=16 nonzeros"));
     }
 
     // ------------------------------------------------------------------

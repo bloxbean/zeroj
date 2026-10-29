@@ -211,8 +211,7 @@ class CircuitAPIImpl implements CircuitAPI {
     }
 
     private Variable newIntermediate() {
-        // Every gate this class emits either allocates an intermediate output or is an
-        // AssertEq, so guarding these two points covers all of them.
+        // Output-free assertions and hints have their own lifecycle guards.
         requireNotFrozen();
         var v = Variable.intermediate(nextId++);
         intermediateVars.add(v);
@@ -513,10 +512,8 @@ class CircuitAPIImpl implements CircuitAPI {
         // constraints without adding information. This is what makes a four-coordinate
         // point-select cost one booleanity check instead of four.
         if (!booleanWires.add(a.id())) return;
-        // a * (a - 1) = 0
-        var aMinusOne = sub(a, oneWire);
-        var product = mul(a, aMinusOne);
-        assertEqual(product, constant(0));
+        // Keep this equation explicit: no unconstrained hint or removable auxiliary.
+        gates.add(new Gate.AssertBoolean(a));
     }
 
     @Override

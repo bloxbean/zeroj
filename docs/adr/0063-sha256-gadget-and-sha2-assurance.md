@@ -39,7 +39,8 @@ Circuit authors choose the public statement and must bind the returned digest th
    padding, length suffix, initial words and round constants are circuit constants.
 4. Standard Boolean XOR/choice/majority polynomials preserve the Boolean invariant.
    A modular word addition constrains the whole sum and carry before taking low bits.
-   At most five words are added: SHA-256 sums are below 2^35 and SHA-512 below 2^67,
+   At most seven words are added after the optimization extension below:
+   SHA-256 sums are below 2^35 and SHA-512 below 2^67,
    so neither wraps in the supported BLS12-381, BN254 or Pallas scalar fields.
 5. Input byte count multiplication and padded-array rounding use checked arithmetic
    before allocation/emitting constraints. Java array limits bound the API more tightly
@@ -104,3 +105,49 @@ Implementation evidence, build results and measured proof costs are recorded in 
 [Circom assurance runner](../../assurance/sha2-circom/README.md) documents pinned
 independent circuits and compiled-witness checks. These records do not waive the
 external-review or production-setup gates.
+
+## Optimization extension (2026-10-29, PR #112)
+
+The user authorized optimization in the same PR, with comparative measurements at
+both 6 GiB and 8 GiB maximum JVM heap and independent agent reviews after implementation.
+This extension supersedes the original prohibition on compiler optimization only
+for the bounded changes below; primitive/security parameters remain unchanged.
+Risk: R2/R3 relation-preserving circuit/compiler optimization.
+
+1. Reuse the existing `a*b` product in SHA majority: `ab + c*(a+b-2*ab)`.
+   Boolean input invariants make this exactly the FIPS majority function. Exhaustive
+   truth-table and malformed compiled-witness tests accompany standard SHA vectors.
+2. Represent the existing boolean assertion explicitly in the graph rather than
+   allocating a multiplication result and separately asserting it zero. Lower the
+   assertion to `b*(b-1)=0` in R1CS, and the same equation in other supported graph
+   backends; both witness paths must reject non-Boolean values. This avoids a general
+   row-pattern optimizer and its auxiliary-liveness assumptions. Review every gate
+   consumer and preserve lifecycle/context checks and idempotency. This affects
+   boolean-using circuits beyond SHA and therefore needs full regression coverage.
+3. Evaluate deferred reduction of SHA round sums only with explicit integer bounds:
+   keep T1 (five words) and T2 (two words) as exact field expressions, then decompose
+   T1+d and T1+T2 including every carry bit. Seven w-bit words sum below 2^(w+3),
+   hence below 2^35/2^67 for SHA-256/512 and below every supported scalar modulus.
+   State/message words and final output bits must remain Boolean/range constrained.
+   No hint-only hashing, reduced rounds, truncated digests or weakened carries.
+
+Any changed graph/R1CS requires newly generated circuit-specific setup, proving keys,
+verification keys and proof artifacts. Existing retained evidence stays historical;
+never reuse old keys or relabel previous timings. No live protocol parameters or
+on-chain verifier equation change. Public digest arity/order remains two/four full
+128-bit limbs in the benchmark.
+
+`Gate` is a public sealed interface: downstream exhaustive switches over its
+permitted subtypes must handle `AssertBoolean` when recompiling. Existing serialized
+R1CS/proof formats do not change. Graph-derived circuit identities and keys change
+for Boolean-using circuits in all affected backends, not only these SHA gadgets.
+
+Compare the pre-optimization commit with the candidate using the same harness,
+hardware, CPU count, isolated sequential JVMs and both heap limits. Record compile,
+witness, setup, proof, verification, heap/RSS, constraint/wire/term counts, FFT domain,
+key bytes and actual failures. Row savings alone do not establish speed/memory gains.
+Retain source identities and fresh positive/negative proof vectors; independently
+verify them. Run NIST/JCA/Circom compiled-relation checks, direct adversarial witness
+tests (bits/carries/outputs), backend/lifecycle tests, the full build and applicable
+JuLC checks. Two or more independent agent reviews must examine the final changes;
+fix substantive findings before pushing. This is AI-assisted review, not an audit.

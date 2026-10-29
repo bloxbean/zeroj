@@ -235,6 +235,7 @@ authorization, replay protection and the privacy of a low-entropy public digest 
 separate application design. These APIs inherit the DSL's side-channel/security limits.
 See [ADR-0063](../docs/adr/0063-sha256-gadget-and-sha2-assurance.md), the
 [validation and performance report](../docs/reviews/sha2-issue-111-validation.md),
+[optimization comparison and migration](../docs/reviews/sha2-optimization-results.md),
 [SHA-512 review](../docs/reviews/sha512-issue-111.md) and the optional
 [Circom assurance runner](../assurance/sha2-circom/README.md) for validation evidence.
 
