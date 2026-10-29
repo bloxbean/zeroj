@@ -12,7 +12,14 @@ constant-time claim, audit, production approval or post-quantum proof system.
 Temporary proving keys are removed when the Java process exits normally or throws;
 an externally killed process can leave a `zeroj-sha2-benchmark-keys-*` temporary
 directory for the operator to remove. Verification keys and public proof vectors
-are retained. Never use these keys for production.
+are retained in local output only. Never use these keys for production.
+
+The historical comparison measured baseline
+`3f1570f33ef2f45d26abeaf6085de5a2dc7a1c5e` against optimized implementation
+`e8947a6dd751fe490c5d2064cd9e83d848ce1b5c`. See the
+[comparison report](../../docs/reviews/sha2-optimization-results.md) and
+[document-size report](../../docs/reviews/sha2-document-scaling-results.md).
+Raw benchmark outputs are not published in Git; rerun the harness to generate them.
 
 ## Prepare and run
 
@@ -132,7 +139,62 @@ python3 -B assurance/sha2-optimization/run.py summarize \
   assurance/sha2-optimization/build/comparison
 ```
 
-All generated output belongs under ignored `build/`. Only explicitly selected
-small evidence records and public vectors should be retained for a PR. Existing
-gadget/NIST/malicious-witness/Circom relation tests remain necessary: successful
-proofs for honest witnesses do not establish circuit soundness.
+Write generated output under ignored `build/` and keep it local. The legacy
+`assurance/sha2-optimization/evidence/` directory is also ignored to prevent raw
+benchmark dumps from being recommitted. Do not add per-run proofs, verification
+keys, process records, GC logs, machine paths or manifests of unpublished outputs
+to a PR. Commit the harness, measured report tables and reproduction instructions.
+The separate small [curated proof-vector set](../sha2-proof-vectors/README.md)
+remains available; it is not the complete benchmark output set.
+
+Existing gadget/NIST/malicious-witness/Circom relation tests remain necessary:
+successful proofs for honest witnesses do not establish circuit soundness.
+
+## Document-size scaling (2–16 KiB)
+
+The optimized-only runner measures 2,048, 4,096, 8,192 and 16,384 bytes for both
+hashes at both heap caps: **16 fresh sequential JVMs**. This answers the practical
+size question for the current implementation; it does not rerun the old baseline.
+The public ascending-byte fixtures measure byte-length hashing work, not PDF/JSON
+parsing or application predicates. Circuit length remains fixed per profile.
+
+```sh
+python3 -B assurance/sha2-optimization/scale.py run --checkout . \
+  --output assurance/sha2-optimization/build/document-scaling
+```
+
+The default still uses pure Java, eight visible processors, one warmup and three
+measured proofs, and a 900-second total budget per process. Every requested case
+is attempted even if earlier cases fail; a matrix containing failures exits nonzero.
+Use a new output directory for each attempt. `--timeout` can extend a diagnostic
+attempt; a timeout is not evidence of heap exhaustion or a cryptographic size limit.
+
+Scaling enables atomic stage-start/completion checkpoints outside stage timers,
+GC logging and `-XX:+ExitOnOutOfMemoryError`. The JVM checks its effective heap and
+processor count before constructing the circuit. These controls make OOM failures
+observable even if Java cannot allocate an exception report. The runner removes
+only the temporary key directory owned by the newly created case, after its process
+has exited or the entire owned process group has been killed. Large keys are not
+retained. The old comparison protocol remains available without scaling telemetry.
+
+`summary.json` distinguishes heap OOM, other OOM, timeouts and other failures. Failed
+cases retain their last atomic checkpoint, raw process output, GC log and peak RSS.
+A failed case's sampled heap is only its last surviving checkpoint, not its final
+peak. Partial verified samples are recorded separately; only completed pipelines
+get proof medians. Failures apply to the measured API path and settings, not every
+possible ZeroJ proving architecture. No security parameter, constraint, digest bit
+or trusted-setup guard is weakened to obtain a pass.
+
+After the timed matrix, independently verify all completed proof sets and explicitly
+record failed/incomplete cases as unverified:
+
+```sh
+python3 -B assurance/sha2-optimization/run.py verify \
+  assurance/sha2-optimization/build/document-scaling --allow-failed \
+  --snarkjs assurance/sha2-circom/node_modules/snarkjs/build/cli.cjs
+```
+
+The oracle does not silently classify skipped failures as passes. If no complete
+case exists, it records skips and fails with “No successful cases found.” Any
+alternate packed/native/cached proving experiment must be labeled separately with
+its own source identities and independent checks.

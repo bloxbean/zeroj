@@ -108,7 +108,7 @@ external-review or production-setup gates.
 
 ## Optimization extension (2026-10-29, PR #112)
 
-The user authorized optimization in the same PR, with comparative measurements at
+Maintainers approved the optimization extension in PR #112, with comparative measurements at
 both 6 GiB and 8 GiB maximum JVM heap and independent agent reviews after implementation.
 This extension supersedes the original prohibition on compiler optimization only
 for the bounded changes below; primitive/security parameters remain unchanged.
@@ -151,3 +151,17 @@ verify them. Run NIST/JCA/Circom compiled-relation checks, direct adversarial wi
 tests (bits/carries/outputs), backend/lifecycle tests, the full build and applicable
 JuLC checks. Two or more independent agent reviews must examine the final changes;
 fix substantive findings before pushing. This is AI-assisted review, not an audit.
+
+## Document-size measurement extension (2026-10-29)
+
+The measurement scope extends to 2/4/8/16 KiB messages after the optimization comparison.
+This extends optional assurance tooling only; production gadgets, compilers,
+provers and cryptographic parameters remain unchanged. The primary matrix uses
+the optimized implementation and the same list-compatible proving API, both hashes,
+both 6/8 GiB caps, fresh development keys and full public digest limbs. Atomic phase
+telemetry and process-owned failure records distinguish incomplete pipelines from
+successful proofs; OOMs and timeouts must remain evidence, not be relabeled as a
+cryptographic maximum. Independently verify completed public proof vectors. Any
+existing packed/cached API fallback is a separate measured experiment, never a
+silent replacement of a failed primary result. Document actual method-specific
+limits and shared-host timing uncertainty.

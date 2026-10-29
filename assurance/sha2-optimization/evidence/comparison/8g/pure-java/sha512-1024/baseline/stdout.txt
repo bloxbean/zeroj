@@ -1,4 +1,0 @@
-sha512-1024/pure-java sample=0 witness=123.096ms prove=14625.280ms verify=273.601ms
-sha512-1024/pure-java sample=1 witness=117.762ms prove=14166.149ms verify=250.674ms
-sha512-1024/pure-java sample=2 witness=92.365ms prove=12200.072ms verify=227.229ms
-sha512-1024/pure-java sample=3 witness=142.255ms prove=11023.342ms verify=226.983ms

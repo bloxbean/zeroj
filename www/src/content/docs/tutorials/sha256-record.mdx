@@ -265,9 +265,34 @@ Rebuild circuit artifacts and generate new circuit-specific keys after upgrading
 format is unchanged, but the optimized constraint layout differs. Keep old proofs with their
 original verification keys.
 
-Larger documents, multiple hash calls and longer Merkle paths need their own measurements. See the
+**Document-sized messages.** A follow-up used the same machine, pure-Java prover and full
+public digest at 2, 4, 8 and 16 KiB (one KiB is 1,024 bytes). These are proof-time medians;
+compilation, witness generation and one-time development setup are separate.
+
+| Hash | Message | Proof seconds, 6 GiB heap | Proof seconds, 8 GiB heap |
+|---|---:|---:|---:|
+| SHA-256 | 2 KiB | 10.9 s | 11.7 s |
+| SHA-512 | 2 KiB | 17.1 s | 16.5 s |
+| SHA-256 | 4 KiB | 17.4 s | 17.2 s |
+| SHA-512 | 4 KiB | 27.9 s | 28.4 s |
+| SHA-256 | 8 KiB | 27.9 s | 39.1 s |
+| SHA-512 | 8 KiB | 65.2 s | 65.4 s |
+| SHA-256 | 16 KiB | Setup ran out of heap | 67.8 s |
+| SHA-512 | 16 KiB | Setup ran out of heap | Setup ran out of heap |
+
+All three failures occurred during setup, after compilation and witness generation. They
+measure this pipeline's memory use, not an intrinsic hash-size limit. The 16 KiB SHA-256
+success at 8 GiB used about 365 seconds for development setup, a 2.61 GiB key store and
+10.88 GiB peak total-process RSS. A heap cap is not a physical-RAM budget. More heap was
+not consistently faster, and these shared-machine timings are not latency guarantees.
+
+This hashes the exact file bytes; it does not parse a PDF/JSON document or prove predicates
+about extracted fields. Additional application logic, multiple hash calls and Merkle paths
+need separate measurements. See the
+[document-size report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-document-scaling-results.md)
+for all stages, memory limits and reproducible commands, and the
 [optimization report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-optimization-results.md)
-for before/after results, memory measurements, validation scope and reproducible commands.
+for the earlier before/after comparison.
 
 ### Estimated Cardano verification cost
 

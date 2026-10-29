@@ -27,6 +27,7 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class Sha2OptimizationBenchmark {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final CurveId CURVE = CurveId.BLS12_381;
+    private static final boolean CHECKPOINTS = Boolean.getBoolean("sha2.benchmark.checkpoints");
     private static String stage = "arguments";
 
     private Sha2OptimizationBenchmark() {}
@@ -56,12 +58,14 @@ public final class Sha2OptimizationBenchmark {
         Path output = Path.of(args[3]);
         String backendName = args[4];
         require(List.of("SHA-256", "SHA-512").contains(algorithm), "Unsupported algorithm");
-        require(List.of(32, 128, 1024).contains(length), "Unsupported profile length");
+        require(List.of(32, 128, 1024, 2048, 4096, 8192, 16384).contains(length), "Unsupported profile length");
         require(samples >= 3 && samples <= 20, "Need 3..20 measured samples");
         require(List.of("pure-java", "blst").contains(backendName), "Unsupported backend");
         require(Boolean.getBoolean("zeroj.allowInsecureTrustedSetup"), "Development setup requires explicit opt-in");
         Files.createDirectory(output); // Never combine earlier results with a new key.
-        Path temporary = Files.createTempDirectory("zeroj-sha2-benchmark-keys-");
+        String ownedTemporary = System.getProperty("sha2.benchmark.tempKeys");
+        Path temporary = ownedTemporary == null ? Files.createTempDirectory("zeroj-sha2-benchmark-keys-")
+                : Files.createDirectory(Path.of(ownedTemporary));
         var report = new LinkedHashMap<String, Object>();
         report.put("algorithm", algorithm);
         report.put("messageBytes", length);
@@ -80,6 +84,14 @@ public final class Sha2OptimizationBenchmark {
         long[] gcBefore = gcCounters();
         try (var memory = new HeapSampler()) {
             try {
+                beginStage("effective-controls", output, report, memory);
+                if (CHECKPOINTS) {
+                    require(Runtime.getRuntime().maxMemory() == Long.getLong("sha2.benchmark.expectedHeapBytes", -1L),
+                            "Effective maximum heap differs from requested cap");
+                    require(Runtime.getRuntime().availableProcessors() == Integer.getInteger("sha2.benchmark.expectedProcessors", -1),
+                            "Effective processor count differs from requested count");
+                }
+                completeStage(output, report, memory);
                 run(algorithm, length, samples, backendName, output, temporary, report, memory);
                 report.put("status", "passed");
             } catch (Throwable failure) {
@@ -119,7 +131,7 @@ public final class Sha2OptimizationBenchmark {
         String name = algorithm.toLowerCase().replace("-", "") + "-" + length;
         ProverBackend backend = backendName.equals("pure-java") ? ProverBackend.PURE_JAVA : BlstProverBackend.create();
 
-        stage = "circuit-build-and-compile";
+        beginStage("circuit-build-and-compile", output, report, memory);
         long start = System.nanoTime();
         var circuit = circuit(algorithm, length, publicInputs.length);
         var compiled = circuit.compileR1CSWithDiagnostics(CURVE);
@@ -134,23 +146,26 @@ public final class Sha2OptimizationBenchmark {
                 "total", (long) flat.a().nnz() + flat.b().nnz() + flat.c().nnz()));
         report.put("pressureModeEntered", compiled.diagnostics().pressureModeEntered());
         memory.observe();
+        completeStage(output, report, memory);
 
-        stage = "relation-fingerprint";
+        beginStage("relation-fingerprint", output, report, memory);
         start = System.nanoTime();
         String relation = R1CSFlatIO.canonicalSha256(flat, system.numWires(), system.numPublicInputs());
         report.put("fingerprintMs", elapsed(start));
         report.put("r1csCanonicalSha256", relation);
         report.put("fingerprint", "c" + system.numConstraints() + "-w" + system.numWires()
                 + "-p" + system.numPublicInputs() + "-r" + relation);
+        completeStage(output, report, memory);
 
-        stage = "first-witness";
+        beginStage("first-witness", output, report, memory);
         start = System.nanoTime();
         var witness = circuit.calculateWitness(input, CURVE);
         report.put("firstWitnessMs", elapsed(start));
         require(Arrays.equals(publicInputs, Arrays.copyOfRange(witness, 1, publicInputs.length + 1)), "Digest limbs mismatch");
         memory.observe();
+        completeStage(output, report, memory);
 
-        stage = "development-setup";
+        beginStage("development-setup", output, report, memory);
         start = System.nanoTime();
         // Only the fresh sampled tau scalar is used, not a four-power ceremony transcript.
         var tau = PowersOfTauBLS381.generate(4).tauScalar();
@@ -159,22 +174,34 @@ public final class Sha2OptimizationBenchmark {
             report.put("setupMs", elapsed(start));
             report.put("qapDomain", keys.domain());
             report.put("keyStoreBytes", directoryBytes(keyPath));
+            completeStage(output, report, memory);
             String vk = SnarkjsGroth16Json.verificationKeyJson(keys);
             String pub = SnarkjsGroth16Json.publicJson(publicInputs);
+            if (CHECKPOINTS) {
+                // Retain enough public data to inspect partial runs without retaining a proving key.
+                Files.writeString(output.resolve("verification_key.json"), vk);
+                Files.writeString(output.resolve("public.json"), pub);
+                Files.writeString(output.resolve("message.hex"), HexFormat.of().formatHex(message) + "\n");
+                Files.writeString(output.resolve("digest.hex"), HexFormat.of().formatHex(digest) + "\n");
+            }
             var rows = new ArrayList<Map<String, Object>>();
             var proofHashes = new HashSet<String>();
             Groth16ProofBLS381 last = null;
             for (int i = 0; i <= samples; i++) {
-                stage = "witness-sample-" + i;
+                beginStage("witness-sample-" + i, output, report, memory);
                 start = System.nanoTime();
                 witness = circuit.calculateWitness(input, CURVE);
                 double witnessMs = elapsed(start);
-                stage = "prove-sample-" + i;
+                if (CHECKPOINTS) report.put("lastWitnessMs", witnessMs);
+                completeStage(output, report, memory);
+                beginStage("prove-sample-" + i, output, report, memory);
                 start = System.nanoTime();
                 last = keys.prove(backend, witness, system.constraints());
                 double proveMs = elapsed(start);
+                if (CHECKPOINTS) report.put("lastProveMs", proveMs);
+                completeStage(output, report, memory);
                 String proof = SnarkjsGroth16Json.proofJson(last);
-                stage = "verify-sample-" + i;
+                beginStage("verify-sample-" + i, output, report, memory);
                 start = System.nanoTime();
                 require(verify(name, vk, pub, proof), "Valid proof rejected");
                 double verifyMs = elapsed(start);
@@ -185,13 +212,14 @@ public final class Sha2OptimizationBenchmark {
                 Files.writeString(output.resolve("proof-" + i + ".json"), proof);
                 memory.observe();
                 report.put("samples", rows);
+                completeStage(output, report, memory);
                 System.out.printf("%s/%s sample=%d witness=%.3fms prove=%.3fms verify=%.3fms%n",
                         name, backendName, i, witnessMs, proveMs, verifyMs);
             }
             require(proofHashes.size() == samples + 1, "Blinded proofs unexpectedly repeat");
             require(last != null, "No proof generated");
             String proof = SnarkjsGroth16Json.proofJson(last);
-            stage = "negative-proof-checks";
+            beginStage("negative-proof-checks", output, report, memory);
             for (int i = 0; i < publicInputs.length; i++) {
                 var changed = publicInputs.clone();
                 changed[i] = changed[i].xor(BigInteger.ONE);
@@ -213,8 +241,35 @@ public final class Sha2OptimizationBenchmark {
             report.put("changedDigestLimbsRejected", publicInputs.length);
             report.put("canonicalNegatedARejected", true);
             report.put("verificationKeySha256", sha256(vk.getBytes(StandardCharsets.UTF_8)));
+            completeStage(output, report, memory);
             stage = "complete";
         }
+    }
+
+    private static void beginStage(String name, Path output, Map<String, Object> report,
+                                   HeapSampler memory) throws IOException {
+        stage = name;
+        checkpoint(output, report, memory, "running");
+    }
+
+    private static void completeStage(Path output, Map<String, Object> report,
+                                      HeapSampler memory) throws IOException {
+        checkpoint(output, report, memory, "completed");
+    }
+
+    /** Small atomic snapshots survive fail-fast heap exhaustion without retaining circuit objects. */
+    private static void checkpoint(Path output, Map<String, Object> report, HeapSampler memory,
+                                   String phaseState) throws IOException {
+        if (!CHECKPOINTS) return;
+        report.put("currentStage", stage);
+        report.put("phaseState", phaseState);
+        report.put("checkpointTimestamp", Instant.now().toString());
+        report.put("sampledHeapPeakBytes", memory.peak());
+        report.put("checkpointHeapUsedBytes", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed());
+        Path pending = output.resolve("progress.pending.json");
+        JSON.writerWithDefaultPrettyPrinter().writeValue(pending.toFile(), report);
+        Files.move(pending, output.resolve("progress.json"), StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static CircuitBuilder circuit(String algorithm, int length, int count) {

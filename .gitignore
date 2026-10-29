@@ -83,3 +83,6 @@ plan.md
 # Python reference generators (run with python3 -B; never commit bytecode)
 __pycache__/
 *.pyc
+
+# Raw SHA-2 benchmark output stays local; keep harnesses and review reports in Git.
+/assurance/sha2-optimization/evidence/

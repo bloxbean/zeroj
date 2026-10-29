@@ -1,4 +1,0 @@
-sha256-32/blst sample=0 witness=6.828ms prove=1070.511ms verify=321.802ms
-sha256-32/blst sample=1 witness=7.069ms prove=478.837ms verify=311.828ms
-sha256-32/blst sample=2 witness=5.873ms prove=361.674ms verify=311.573ms
-sha256-32/blst sample=3 witness=6.166ms prove=425.304ms verify=309.540ms

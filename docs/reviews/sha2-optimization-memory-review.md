@@ -3,6 +3,11 @@
 Date: 2026-10-29. Scope: the pure-Java SHA-512/1,024-byte profile in PR #112.
 This independent review inspected completed benchmark records and GC logs; it did
 not launch another workload or change the implementation/harness.
+The raw optimization outputs remain local and ignored, not tracked in Git. This
+report records the inspected values and their limits. See the
+[comparison harness](../../assurance/sha2-optimization/README.md) and the
+[results report's repeat controls](sha2-optimization-results.md#reproducing-local-outputs)
+to generate fresh local measurements.
 
 ## Observed trade-off
 
@@ -18,20 +23,17 @@ All results must remain visible; the repeat does not replace the original result
 | Diagnostic repeat, `-Xmx6g` | 3.657 → 3.961 | 4.361 → 4.545 | 12.369 → 11.021 |
 | Primary, `-Xmx8g` | 5.314 → 4.162 | 5.934 → 4.469 | 12.200 → 11.320 |
 
-The repeat's [baseline result](../../assurance/sha2-optimization/evidence/memory-repeat/6g/pure-java/sha512-1024/baseline/artifacts/result.json)
-and [candidate result](../../assurance/sha2-optimization/evidence/memory-repeat/6g/pure-java/sha512-1024/candidate/artifacts/result.json)
-retain the effective controls, samples and GC counters; adjacent `process.json`
-files retain RSS. Each reports the actual 6,442,450,944-byte maximum heap and eight
-visible processors. These remain shared-host diagnostics, not a general speed or
-memory guarantee. Heap sampling can miss brief peaks; RSS also includes non-heap
-memory and resident mapped-key pages.
+The repeat's local baseline/candidate `result.json` records were checked alongside
+their `process.json` RSS records. Each reported the actual 6,442,450,944-byte maximum
+heap and eight visible processors. The measurements above remain shared-host
+diagnostics, not a general speed or memory guarantee. Heap sampling can miss brief
+peaks; RSS also includes non-heap memory and resident mapped-key pages.
 
 ## What the GC logs establish
 
 Both repeat JVMs used G1, 4 MiB regions, a 2 GiB initial heap and a 6 GiB maximum.
-Values below are parsed from completed pause records in the
-[baseline log](../../assurance/sha2-optimization/evidence/memory-repeat/gc-baseline.log)
-and [candidate log](../../assurance/sha2-optimization/evidence/memory-repeat/gc-candidate.log).
+Values below were parsed from completed pause records in the local baseline and
+candidate GC logs. Those raw logs are not published in the repository.
 The logs' `M` units are MiB and are rounded, unlike the byte-valued sampler.
 
 | GC-log observation | Baseline | Candidate |
@@ -87,12 +89,3 @@ beyond the observed GC behavior. Report the measured memory regressions honestly
 do not claim that the optimization preserves or improves every performance metric.
 A future memory investigation should use comparable phase checkpoints and live
 heap/allocation profiles, separately from ordinary timing measurements.
-
-## Evidence identity
-
-The retained GC copies must match the inspected original files:
-
-| Original file | SHA-256 |
-|---|---|
-| `zeroj-sha2-opt-gc-52517.log` (baseline) | `6e8ad0907ebda50941403fda189bb08eed2ba80f08f3412d9ea0a443984e5133` |
-| `zeroj-sha2-opt-gc-52718.log` (candidate) | `9c7106625c9ec1907fdba995f2a4316bbf39633e78dfc73df85f24b5b12c51f8` |

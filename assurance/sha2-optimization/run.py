@@ -9,6 +9,7 @@ import pathlib
 import platform
 import re
 import signal
+import shutil
 import statistics
 import subprocess
 import time
@@ -91,7 +92,15 @@ def assert_unchanged(launch):
 
 def run_case(launch, folder, algorithm, length, heap, backend, args):
     folder.mkdir(parents=True, exist_ok=False)
+    scale = getattr(args, 'scale', False)
+    expected_heap = int(heap[:-1]) * (1 << 30)
+    extra = ([ '-XX:+ExitOnOutOfMemoryError', '-Dsha2.benchmark.checkpoints=true',
+               f'-Xlog:gc:file={folder / "gc.log"}:time,uptime,level,tags',
+               f'-Dsha2.benchmark.expectedHeapBytes={expected_heap}',
+               f'-Dsha2.benchmark.expectedProcessors={args.processors}',
+               f'-Dsha2.benchmark.tempKeys={folder / "temporary-keys"}'] if scale else [])
     command = [launch['java'], f'-Xmx{heap}', f'-XX:ActiveProcessorCount={args.processors}',
+               *extra,
                '--enable-native-access=ALL-UNNAMED', '-Dzeroj.allowInsecureTrustedSetup=true',
                '-cp', launch['classpath'], launch['main'], algorithm, str(length), str(args.samples),
                str(folder / 'artifacts'), backend]
@@ -103,6 +112,8 @@ def run_case(launch, folder, algorithm, length, heap, backend, args):
     status = {'command': timed_command, 'algorithm': algorithm, 'messageBytes': length,
               'heap': heap, 'backend': backend, 'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'initialLoadAverage': os.getloadavg() if hasattr(os, 'getloadavg') else None}
+    if scale:
+        save(folder / 'process-start.json', status)
     with (folder / 'stdout.log').open('w') as out, (folder / 'stderr.log').open('w') as err:
         try:
             process = subprocess.Popen(timed_command, cwd=launch['checkout'], stdout=out, stderr=err,
@@ -135,7 +146,6 @@ def run_case(launch, folder, algorithm, length, heap, backend, args):
     if status.get('exitCode') == 0 and result.exists():
         try:
             measured = json.loads(result.read_text())
-            expected_heap = int(heap[:-1]) * (1 << 30)
             status['effectiveControlsMatch'] = (measured['maxHeapBytes'] == expected_heap
                                                 and measured['processors'] == args.processors)
             status['passed'] = measured['status'] == 'passed' and status['effectiveControlsMatch']
@@ -143,6 +153,43 @@ def run_case(launch, folder, algorithm, length, heap, backend, args):
                 status['failure'] = 'Effective JVM heap/processor controls differ from the requested values'
         except (ValueError, KeyError, TypeError) as failure:
             status['failure'] = 'Invalid benchmark result: ' + str(failure)
+    if scale:
+        # An OOM exit deliberately bypasses Java's allocation-dependent exception handler.
+        # Last completed atomic checkpoint and process output are separate failure evidence.
+        telemetry = None
+        for record in [result, folder / 'artifacts/progress.json']:
+            if record.exists():
+                try:
+                    candidate = json.loads(record.read_text())
+                    if isinstance(candidate, dict):
+                        telemetry = candidate
+                        break
+                except (ValueError, OSError):
+                    pass
+        output = (folder / 'stdout.log').read_text() + stderr
+        if status['passed']:
+            outcome = 'passed'
+        elif status.get('failure') == 'process timeout':
+            outcome = 'timeout'
+        elif re.search(r'OutOfMemoryError: (Java heap space|GC overhead limit exceeded)', output):
+            outcome = 'heap-oom'
+        elif 'OutOfMemoryError' in output:
+            outcome = 'other-oom'
+        else:
+            outcome = 'failed'
+        status['outcome'] = outcome
+        if telemetry:
+            status['lastReportedStage'] = telemetry.get('failedStage', telemetry.get('currentStage'))
+            status['lastReportedPhaseState'] = telemetry.get('phaseState')
+            status['effectiveControlsMatch'] = (telemetry.get('maxHeapBytes') == expected_heap
+                                                and telemetry.get('processors') == args.processors)
+            if not status['effectiveControlsMatch']:
+                status.update(passed=False, outcome='invalid-controls')
+        # This exact directory belongs to this newly created case; never touch global temp files.
+        temporary = folder / 'temporary-keys'
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        status['temporaryKeysRemoved'] = not temporary.exists()
     status['artifactSha256'] = {str(p.relative_to(folder)): digest(p) for p in sorted((folder / 'artifacts').glob('*'))
                                 if p.is_file()}
     save(folder / 'process.json', status)
@@ -221,7 +268,7 @@ def summarize(output):
     (output / 'summary.md').write_text('\n'.join(lines))
 
 
-def verify(output, cli):
+def verify(output, cli, allow_failed=False):
     cli = cli.resolve()
     command = ['node', str(cli)] if cli.suffix in ('.js', '.cjs', '.mjs') else [str(cli)]
     version = subprocess.run([*command, '--version'], capture_output=True, text=True)
@@ -231,10 +278,18 @@ def verify(output, cli):
     folder = output / 'independent-verification'
     folder.mkdir(exist_ok=False)
     checks = []
+    skipped = []
     for process_path in sorted(output.glob('*/*/*/*/process.json')):
         process = json.loads(process_path.read_text())
         if not process['passed']:
-            raise RuntimeError('Cannot verify an incomplete/failed case: ' + str(process_path))
+            if not allow_failed:
+                raise RuntimeError('Cannot verify an incomplete/failed case: ' + str(process_path))
+            skipped.append({'case': str(process_path.parent.relative_to(output)),
+                            'outcome': process.get('outcome', 'failed'),
+                            'reason': 'Incomplete pipeline; not counted as independently verified'})
+            save(folder / 'result.json', {'cliSha256': digest(cli), 'version': version_text.splitlines()[0],
+                                         'checks': checks, 'skippedFailedCases': skipped})
+            continue
         for filename, expected in process['artifactSha256'].items():
             if digest(process_path.parent / filename) != expected:
                 raise RuntimeError('Artifact identity changed: ' + filename)
@@ -262,12 +317,13 @@ def verify(output, cli):
             checks.append({'case': str(process_path.parent.relative_to(output)), 'proof': proof.name,
                            'public': public.name, 'expectedValid': valid, 'passed': okay, 'exitCode': p.returncode})
             (folder / f'{len(checks):04d}.log').write_text(text)
-            save(folder / 'result.json', {'cliSha256': digest(cli), 'version': version_text.splitlines()[0], 'checks': checks})
+            save(folder / 'result.json', {'cliSha256': digest(cli), 'version': version_text.splitlines()[0],
+                                         'checks': checks, 'skippedFailedCases': skipped})
             if not okay:
                 raise RuntimeError(f'Independent verification failed: {call}; {text}')
     if not checks:
         raise RuntimeError('No successful cases found')
-    print(f'{len(checks)} independent snarkjs checks passed')
+    print(f'{len(checks)} independent snarkjs checks passed; {len(skipped)} failed/incomplete cases not verified')
 
 
 def main():
@@ -282,7 +338,7 @@ def main():
     run.add_argument('--output', type=pathlib.Path, required=True)
     run.add_argument('--heaps', nargs='+', choices=['6g', '8g'], default=['6g', '8g'])
     run.add_argument('--algorithms', nargs='+', choices=['SHA-256', 'SHA-512'], default=['SHA-256', 'SHA-512'])
-    run.add_argument('--lengths', nargs='+', type=int, choices=[32, 128, 1024], default=[32, 128, 1024])
+    run.add_argument('--lengths', nargs='+', type=int, choices=[32, 128, 1024, 2048, 4096, 8192, 16384], default=[32, 128, 1024])
     run.add_argument('--backends', nargs='+', choices=['pure-java', 'blst'], default=['pure-java'])
     run.add_argument('--samples', type=int, default=3)
     run.add_argument('--processors', type=int, default=8)
@@ -292,6 +348,7 @@ def main():
     oracle = sub.add_parser('verify')
     oracle.add_argument('output', type=pathlib.Path)
     oracle.add_argument('--snarkjs', type=pathlib.Path, required=True)
+    oracle.add_argument('--allow-failed', action='store_true', help='Record failed cases as skipped; verify every completed case')
     args = parser.parse_args()
     if args.command == 'prepare':
         prepare(args.checkout, args.output.resolve())
@@ -302,7 +359,7 @@ def main():
     elif args.command == 'summarize':
         summarize(args.output.resolve())
     else:
-        verify(args.output.resolve(), args.snarkjs)
+        verify(args.output.resolve(), args.snarkjs, args.allow_failed)
 
 
 if __name__ == '__main__':

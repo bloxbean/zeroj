@@ -4,6 +4,12 @@ Date: 2026-10-29. Reviewer: a separate AI agent, not an implementation author.
 Baseline: `3f1570f33ef2f45d26abeaf6085de5a2dc7a1c5e`. Governing design:
 [ADR-0063 optimization extension](../adr/0063-sha256-gadget-and-sha2-assurance.md).
 
+Raw optimization run outputs discussed below were inspected locally. They are now
+ignored and excluded from Git; the historical counts, measurements and source
+identities remain in these reports. The
+[harness README](../../assurance/sha2-optimization/README.md) documents reproducible
+fresh runs. This review does not claim the complete benchmark output set is published.
+
 ## Result and scope
 
 No blocking correctness or soundness defect was identified in the reviewed production
@@ -116,7 +122,7 @@ proof-relation or measurement-labeling defect was identified in its source.
   two/four big-endian 128-bit public limbs, and uses fresh development setup. Every
   randomized proof must pass strict verification; changed public limbs and a
   canonical negated-A proof must fail. The optional pinned snarkjs oracle checks all
-  retained randomized proofs and independently recomputes the digest with Python.
+  locally generated randomized proofs and independently recomputes the digest with Python.
   Honest-proof success remains distinct from the malicious-witness relation tests.
 - Setup/compile/first-witness are single observations. Proving medians omit the
   first-call warmup; one warmup does not establish full JIT stabilization, and three
@@ -184,34 +190,113 @@ Reviewed final additional test identities (SHA-256):
 | `ZkMpfOperationCircuitTest.java` | `2f2868a825267984433bef04c6e1bd01c56f445da0bc5ce4e67b94db155a3a46` |
 | `ZkMpfTransitionCircuitTest.java` | `3643d217392b7f8271c9a54ca43c69f197a89c2e54f81f781d121481591f5e2b` |
 
-## Final retained-evidence and report audit
+## Historical local-output and report audit
 
-The completed results report, evidence README, four benchmark summaries and oracle
-verdict sets, Cardano records/provenance, and updated tutorial were independently
-reviewed. No defect was identified in this final evidence/report check.
+The completed results report, local archive inventory, four benchmark summaries
+and oracle verdict sets, Cardano records/provenance, and updated tutorial were
+independently reviewed. No defect was identified in this evidence/report check.
+The subsequent repository cleanup removed the raw outputs from version control;
+the local files and these historical audit results were preserved.
 
-- All **861** retained-manifest entries and **628** per-process artifact hashes
+- All **861** local-manifest entries and **628** per-process artifact hashes
   matched. The four summaries recomputed exactly from their underlying records.
 - All **44 benchmark JVMs** reported the requested effective 6/8 GiB maximum heap
   and eight processors. Their verification-key hashes were distinct. The recorded
-  candidate production-source and harness hashes still matched the current files.
+  candidate production-source and harness hashes matched the files at review time.
 - Oracle records contain exactly **184 accepted randomized proofs and 180 rejected
   invalid fixtures: 364 passing checks**, using pinned snarkjs 0.7.6. Message digests
-  and complete public limbs were independently recomputed from the retained fixtures.
+  and complete public limbs were independently recomputed from the local fixtures.
 - Structural, proof-time, other-stage, memory and native-provider tables match the
   raw summaries and their stated rounding. The primary 11/12 pure-Java and 7/8 native
   improvement counts are correct. Original timing and memory regressions remain
   visible alongside separate repeats; no universal performance improvement is claimed.
 - The **four additional Cardano JVMs** have matching heap settings, confirmed-spend
   records, eight rejected VM negatives each and signed-invalid-submission records.
-  Reported budgets/fees match the Haskell records; retained transaction/script byte
+  Reported budgets/fees match the Haskell records; local transaction/script byte
   lengths match the tables. Proof inputs match the optimized benchmark artifacts.
-  Current verifier-library, validator and codec source hashes match provenance.
+  Reviewed verifier-library, validator and codec source hashes match provenance.
 - Tutorial measurements contain ZeroJ numbers, distinguish the measured 32-byte
   preimage from the 48-byte approval policy, and retain local-devnet, development-
-  setup, security and performance limits. Relative evidence/report links resolve.
+  setup, security and performance limits. Documentation now points to reports and
+  rerun instructions rather than untracked raw-output files.
 
 This was a read-only consistency and source/provenance audit by an AI reviewer,
 not an external cryptographic audit or a rerun of proof generation, independent
 verification, ledger submissions or browser layout inspection. No heavy workload
 was launched for this final check.
+
+## Subsequent 2–16 KiB scaling-harness review
+
+The user subsequently requested optimized SHA-256/SHA-512 measurements at 2, 4, 8
+and 16 KiB with both heap caps. The optional harness extension was reviewed before
+the new matrix. It changes measurement/control code, not production cryptography.
+No blocking source-level issue was found. This review does not predict which large
+profiles will complete within their resource/time limits.
+
+The same complete digest statement, prover API, fresh development setup, randomized
+proofs and negative checks remain. The scaling mode checks effective heap/processor
+controls before circuit construction. Atomic stage-start/completion snapshots
+contain scalar telemetry and sample metadata, not retained circuit objects. OOM
+exit can bypass Java's allocation-dependent failure handler; the runner separately
+retains process status/output and the last surviving checkpoint. Timeouts remain
+distinct from heap exhaustion, and invalid effective controls cannot establish an
+authorized heap boundary. Cleanup targets only the new case's owned key directory.
+
+The optimized-only summary gives medians only to completed pipelines, records
+partial verified samples separately, and distinguishes unfinished matrices from
+fully attempted matrices with failures. Explicit `verify --allow-failed` verifies
+every completed case while recording failed pipelines as skipped/unverified;
+zero successful cases still produce an error. Oracle crashes are not accepted
+as valid cryptographic rejections.
+
+Added [13 lightweight Python control tests](../../assurance/sha2-optimization/tests/test_scale.py).
+They passed with mocked subprocesses and cover both heap caps, effective-control
+mismatches, heap/other OOM classification, timeout process-group termination,
+owned-directory cleanup, malformed/missing telemetry, incomplete and failed
+summaries, partial-sample accounting, explicit/default oracle failure handling,
+the all-failed case and an unrelated oracle crash. These tests launch no JVM,
+Gradle or cryptographic oracle and are not cryptographic validation.
+
+The reviewed harness was frozen before the coordinated measurement campaign.
+Historical local comparison records remain tied to their earlier harness identities.
+These are AI-assisted review findings, not an external audit.
+
+| Scaling source file | SHA-256 at review |
+|---|---|
+| `run.py` | `ee34abb3547b3cffc019fa8370d902f044e535055f2bd115001c498a47730f31` |
+| `scale.py` | `40c3aaedf57f4e5bb2bba879491910cf8c09c92d7432b2225650f68eb4a826bc` |
+| `Sha2OptimizationBenchmark.java` | `277435294dd54536987f09763a71910adc302609fa95440da993716b31676772` |
+| `tests/test_scale.py` | `cd8adcabd536c616c10523bbc5d97bd85ac7c9e884675e9f4d61f7a1bc1c460f` |
+
+## Final document-size and repository-cleanup review (2026-10-29)
+
+Two independent agent reviews checked the completed scaling report and the evidence
+cleanup. Neither found a blocking defect. This remains an internal review, not an
+external cryptographic audit.
+
+- The report and tutorial tables match every local timing/domain/key/memory row
+  and their stated rounding. All 16 effective heap/CPU settings matched the request.
+- Thirteen pipelines passed; three 16 KiB profiles exited with Java heap exhaustion
+  during setup. No timeout or partial proof run was misclassified. Temporary keys
+  were removed. First-witness timings and failed-run memory scope are distinguished
+  from successful medians and whole-process peaks.
+- The local artifact check covered 197 hashes; all eight cross-heap circuit
+  identities match, and no compiler pressure mode was entered. Production source
+  hashes match the measured checkout.
+- The independent oracle checked exactly 52 distinct valid proofs and 51 invalid
+  fixtures, with three explicit setup-failure skips: 103 successful checks. No
+  proof/check was duplicated or omitted.
+- All 862 raw-evidence removals are confined to the requested subtree. Every local
+  backup matches its original Git object; none remains indexed. The backup and
+  generated outputs are ignored. Reports and reproducible tooling remain tracked,
+  and their relevant relative links resolve.
+- Migration wording correctly scopes fingerprint binding to `Groth16Pipeline`,
+  leaves direct expert APIs responsible for correct relation/key pairing, and
+  distinguishes circuit-specific keys from compatible universal/phase-1 setup.
+
+Parent validation also passed all 13 lightweight harness tests, the small real-proof
+control and its seven independent checks, and docsite check/build: zero Astro
+errors/warnings/hints, 138 Java blocks checked, 64 HTML pages, 62 Markdown twins and
+five AI artifacts. The new measurements and limits are in the
+[document-size report](sha2-document-scaling-results.md). Full raw outputs remain
+local, not published as a repository archive.
