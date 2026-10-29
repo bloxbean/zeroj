@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Experimental ZeroJ precompiled unprotected Web Image bundle",
-  "license": "MIT",
+  "license": "SEE LICENSE IN DISTRIBUTION.md",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -18,7 +18,9 @@
     "assets",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "DISTRIBUTION.md",
+    "third-party"
   ],
   "dependencies": {
     "@zeroj/runtime": "0.1.0-experimental.1"

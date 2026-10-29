@@ -1,5 +1,5 @@
 /** Experimental Wasm runtime. Integrity pins assume the descriptor and host are trusted. */
-export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 export interface BundleFile { readonly url: string | URL; readonly sha256: string; readonly bytes: number; }
 export interface BundleDescriptor {
   readonly id: string; readonly apiVersion: 1; readonly capabilities: readonly string[];

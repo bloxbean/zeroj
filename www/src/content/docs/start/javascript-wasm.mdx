@@ -1,0 +1,166 @@
+---
+title: ZeroJ in JavaScript and the browser
+description: Try the experimental typed JavaScript and TypeScript SDK, select modular WebAssembly images, and run real local examples in browsers or Node.
+sidebar:
+  order: 25
+  label: JavaScript & WebAssembly
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import WasmModulesDiagram from '../../../components/walkthrough/WasmModulesDiagram.astro';
+import TextOnly from '../../../components/TextOnly.astro';
+
+ZeroJ's experimental web SDK exposes its Java implementation through a small Java adapter and
+an idiomatic TypeScript wrapper. You pass `Uint8Array` bytes and `bigint` values, await a result,
+and keep long-lived keys in worker-local handles. A browser uses Web Workers; Node uses worker
+threads. The built image needs a JavaScript host, so it is not a standalone WASI library.
+
+<Aside type="caution" title="Experimental source builds; not published to npm">
+
+The examples work in tested Chromium, Firefox and Node environments. Secret operations require
+`experimentalSecrets: true` and remain unassessed for browser side channels. Use disposable test
+inputs. Binary npm distribution also needs resolution of the supplied Oracle GraalVM runtime's
+terms; generated bundles are private. Tests do not establish production readiness or quantum
+resistance. See the [distribution record](https://github.com/bloxbean/zeroj/blob/main/bindings/DISTRIBUTION.md).
+
+</Aside>
+
+## Pick the API, then pick the image
+
+A **logical package** is the API you import. A **physical bundle** contains the compiled Java
+runtime and selected capabilities. Several APIs can share one image. Importing a descriptor
+loads no Wasm; the first operation loads it, checks its bytes against the descriptor and starts
+its worker. The application and descriptor must themselves be trusted.
+
+<WasmModulesDiagram />
+
+<TextOnly>
+
+```text
+TypeScript wrapper → runtime / worker → Java adapter → existing ZeroJ implementation
+
+hash                  → bundle-hash
+Pedersen + BBS        → bundle-crypto
+Groth16 verification  → bundle-verifier
+compiled small prover → bundle-prover
+ElGamal + DKG + notes → bundle-confidential
+all of the above      → optional bundle-all
+```
+
+</TextOnly>
+
+| Package | What you can try |
+|---|---|
+| `@zeroj/hash` | Ordinary SHA-256/SHA-512 using WebCrypto or ZeroJ Wasm; BLAKE2b; explicitly named BLS12-381 Poseidon profile |
+| `@zeroj/pedersen` | Scalar and byte commitments on BLS12-381 G1 or Jubjub; disclosed-opening checks |
+| `@zeroj/bbs` | Keys, signatures, selective-disclosure presentations and verification in both supported suites |
+| `@zeroj/groth16-verifier` | Strict BLS12-381 proof verification under your trusted verification key |
+| `@zeroj/groth16-prover` | Supplied-key proving for the compiled cubic tutorial; Java extension point for other compiled circuits |
+| `@zeroj/elgamal` | Bounded exponential ElGamal encryption, homomorphic sums and verified decryption shares |
+| `@zeroj/threshold` | DKG participant state and threshold decryption; the example runs a local 2-of-3 simulation |
+| `@zeroj/confidential-notes` | Viewing keys, commitments, owner/auditor delivery and commitment-checked opening |
+
+Ordinary SHA through WebCrypto computes a hash. It does **not** add SHA constraints to a ZK
+circuit. The separate Java SHA circuit gadgets still provide that relation when needed.
+
+## Run the examples locally
+
+Use a checkout containing `bindings/`. Prerequisites are the pinned Oracle GraalVM
+25.3.4.1+1.1, Binaryen 132, Python 3 and Node 22+. Set `GRAALVM_HOME` to your installation.
+
+```sh
+export JAVA_HOME="$GRAALVM_HOME"
+cd bindings/js
+npm ci --ignore-scripts
+npx playwright install chromium firefox
+cd ../..
+python3 bindings/wasm/check.py
+```
+
+That opt-in script builds the images, generates development-only proof fixtures, tests them and
+checks local npm tarballs. It never publishes packages and does not change the default Java build.
+Then start the browser examples:
+
+```sh
+cd bindings/js
+python3 scripts/serve.py
+```
+
+Open `http://127.0.0.1:8788/examples/browser/`. The seven cards cover hashing, commitments,
+credentials, a real small Groth16 proof, encrypted voting, DKG and confidential notes. Inputs stay
+local. Each scenario displays its result and elapsed time. The DKG example holds every participant
+in one process; it demonstrates protocol mechanics, not distributed trust.
+
+For Node, run:
+
+```sh
+node --experimental-wasm-exnref examples/node/all.mjs
+```
+
+Node versions before 25 need the exception-handling flag. Safari and generic WASI hosts are not
+validated by these results.
+
+## A small TypeScript example
+
+Inside the built npm workspace, or after installing locally packed packages:
+
+```ts
+import { createRuntime } from '@zeroj/runtime';
+import { createConfidentialNotes } from '@zeroj/confidential-notes';
+import { bundle } from '@zeroj/bundle-confidential';
+
+const runtime = createRuntime({ bundles: [bundle], experimentalSecrets: true });
+try {
+  const notes = createConfidentialNotes(runtime);
+  const reader = await notes.generateViewingKey();
+  const opening = await notes.createOpening(42n);
+  const [delivery] = await notes.seal(opening.handle, [reader.readerKey]);
+  const recovered = await notes.open({
+    key: reader.handle, delivery: delivery!, u: opening.u, v: opening.v,
+  });
+  if (recovered) {
+    const value = await notes.exportOpening(recovered);
+    console.log(value.value); // 42n — deliberately disclosed by this example.
+  }
+} finally {
+  await runtime.dispose();
+}
+```
+
+A handle belongs to its runtime and physical image. Serializing it or copying it to another
+worker does not transfer its authority. `runtime.release(handle)` invalidates an individual
+handle; `dispose()` terminates the workers. Neither promises erasure of every immutable copy.
+
+## Keep the application rules explicit
+
+A verified proof is not permission to act. Pin the correct circuit, verification key and expected
+public inputs. A key hash sent alongside an untrusted proving key is not a trust anchor.
+
+For ElGamal, imported ciphertexts need an encryption proof for the exact key and message width;
+imported shares need the exact DLEQ proof. The adapter derives the statement itself. For DKG,
+the host must authenticate sender identities and private channels, establish broadcast agreement,
+and decide round closure. External context admission and durable DKG restart are not exposed by
+the initial SDK.
+
+A confidential note is a delivery and commitment primitive. A private state machine additionally
+needs spending authorization, nullifiers/replay protection, range and balance relations, and
+binding to the actual old and new ledger state. Opening a delivery alone does not establish that
+a ledger output belongs to your application or wallet.
+
+## Limits and extension work
+
+The initial JSON transport accepts at most 256 KiB per byte array. Supplied proving keys must fit
+that bound; the shipped prover demonstrates three constraints, not a large account-ownership
+circuit. DKG supports up to 16 participants, and decryption search is capped at 1,000,000. These
+are explicit resource limits; proof/security parameters are not reduced to bypass them.
+
+Separate images are about 3.3–3.4 MiB each under Brotli in this experiment. The optional combined
+image is about 3.52 MiB because the Java runtime is shared. Those are compressed-byte measurements,
+not heap requirements or mobile performance guarantees. Applications should choose images for
+the capabilities they actually use.
+
+The [SDK guide](https://github.com/bloxbean/zeroj/blob/main/bindings/README.md),
+[review records](https://github.com/bloxbean/zeroj/blob/main/bindings/reviews/W4-W5.md) and
+[ADR-0057](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0057-webassembly-and-native-library-bindings.md)
+describe the boundaries and extension points. The examples run actual cryptography; the diagram
+on this page is only an illustration.

@@ -26,6 +26,8 @@ ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify
 > on-chain). **Try those first** to get a feel for what ZeroJ does before diving into the library
 > APIs below.
 
+**Experimental browser and Node SDK:** see [bindings](bindings/README.md) for modular Java-to-Wasm/TypeScript APIs, runnable examples and measured support limits. Packages are not yet published to npm.
+
 ## Support Matrix
 
 **Beta** means feature-complete and correctness-tested (3,500+ tests; the full

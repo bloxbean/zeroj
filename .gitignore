@@ -94,3 +94,6 @@ __pycache__/
 /bindings/js/packages/*/NOTICE
 /bindings/js/build/
 *.tgz
+
+/bindings/js/packages/*/third-party/
+/bindings/js/packages/bundle-*/DISTRIBUTION.md

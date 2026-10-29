@@ -20,7 +20,17 @@ try {
    await page.locator('#hash').click();
    await page.waitForFunction(()=>!document.querySelector('#hash').disabled);
    assert.equal(assets.filter(p=>p.endsWith('.wasm')).length,1,'one shared image load');
+   const timings={};
+   for(const scenario of ['pedersen','bbs','groth16','elgamal','threshold','notes']) {
+    await page.locator('[data-scenario="'+scenario+'"]').click();
+    await page.waitForFunction(scenario=>!!document.querySelector('#result-'+scenario).dataset.status,scenario,{timeout:60_000});
+    const result=page.locator('#result-'+scenario);
+    assert.equal(await result.getAttribute('data-status'),'pass',scenario+': '+await result.textContent());
+    timings[scenario]=JSON.parse(await result.textContent());
+   }
    assert.deepEqual(errors,[]);
+   console.log(name,'scenario timings',JSON.stringify(timings));
+   await page.screenshot({path:'build/browser-'+name+'.png',fullPage:true});
    await page.setViewportSize({width:390,height:844});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    console.log(name, 'PASS',await browser.version());

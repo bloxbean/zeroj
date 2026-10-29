@@ -46,3 +46,17 @@ test('startup queue is bounded and disposal settles every queued request',async(
   }
   assert.equal(results[64].status,'rejected');assert.equal(results[64].reason.code,'QUEUE_LIMIT');
 });
+test('explicit BLS12-381 Poseidon profile matches independent Sage vectors and rejects aliases',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../../../zeroj-circuit-lib/src/test/resources/poseidon-sage/sage-reference-output.txt',import.meta.url),'utf8');
+ const runtime=createRuntime({bundles:[bundle],experimentalSecrets:true});
+ try {
+  const api=createHash(runtime);let count=0;
+  for(const match of source.matchAll(/Poseidon\((\d+),\s*(\d+)\)\s*=\s*(0x[0-9a-f]+)/g)){
+   assert.equal(await api.poseidonBls12381T3(BigInt(match[1]),BigInt(match[2])),BigInt(match[3]));count++;
+  }
+  assert.equal(count,3);
+  await assert.rejects(api.poseidonBls12381T3(-1n,0n));
+  await assert.rejects(api.poseidonBls12381T3(52435875175126190479447740508185965837690552500527637822603658699938581184513n,0n));
+ } finally {await runtime.dispose();}
+});

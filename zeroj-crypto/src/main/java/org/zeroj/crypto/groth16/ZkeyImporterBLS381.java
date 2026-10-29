@@ -68,11 +68,27 @@ public final class ZkeyImporterBLS381 {
         return importZkeyFull(data, null);
     }
 
+    /** Allocation limits for restricted hosts. These tighten, never relax, the default limits. */
+    public record Limits(int maxBytes, int maxWires, int maxDomainSize, int maxCoefficients) {
+        public Limits {
+            if (maxBytes < 1 || maxBytes > MAX_ZKEY_BYTES || maxWires < 2 || maxWires > MAX_WIRES
+                    || maxDomainSize < MIN_DOMAIN_SIZE || maxDomainSize > (1 << MAX_DOMAIN_POWER)
+                    || maxCoefficients < 0 || maxCoefficients > MAX_COEFFICIENTS)
+                throw new IllegalArgumentException("Invalid zkey resource limits");
+        }
+    }
+
     public static ZkeyDataBLS381 importZkeyFull(byte[] data, byte[] expectedSha256) throws IOException {
+        return importZkeyFull(data, expectedSha256,
+                new Limits(MAX_ZKEY_BYTES, MAX_WIRES, 1 << MAX_DOMAIN_POWER, MAX_COEFFICIENTS));
+    }
+
+    public static ZkeyDataBLS381 importZkeyFull(byte[] data, byte[] expectedSha256, Limits limits) throws IOException {
+        if (limits == null) throw new NullPointerException("limits");
         if (data == null) {
             throw new IOException(".zkey input must not be null");
         }
-        if (data.length > MAX_ZKEY_BYTES) {
+        if (data.length > limits.maxBytes()) {
             throw new IOException(".zkey input exceeds supported size limit");
         }
         requireExpectedSha256(data, expectedSha256, ".zkey");
@@ -132,6 +148,8 @@ public final class ZkeyImporterBLS381 {
         int nPublic = buf.getInt();
         int domainSize = buf.getInt();
         validateHeaderDimensions(nVars, nPublic, domainSize);
+        if (nVars > limits.maxWires() || domainSize > limits.maxDomainSize())
+            throw new IOException(".zkey dimensions exceed caller resource limits");
 
         var alphaG1 = readG1Montgomery(buf, n8q, q, false, "alphaG1");
         var betaG1 = readG1Montgomery(buf, n8q, q, false, "betaG1");
@@ -144,6 +162,8 @@ public final class ZkeyImporterBLS381 {
         requireRemaining(buf, 4, "Groth16 coefficient count");
         int numCoeffs = buf.getInt();
         validateCoefficientSection(sections, 4, numCoeffs, n8r);
+        if (numCoeffs > limits.maxCoefficients())
+            throw new IOException(".zkey coefficients exceed caller resource limits");
 
         @SuppressWarnings("unchecked")
         Map<Integer, BigInteger>[] aMap = new Map[domainSize];

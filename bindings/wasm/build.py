@@ -6,6 +6,9 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / 'bindings/wasm'
 PROFILES = {'hash': ('HashWeb', ['hash']), 'probe': ('PlatformProbeWeb', ['probe']),
             'crypto': ('CryptoWeb', ['bbs','pedersen']),
+            'all': ('AllWeb', ['hash','pedersen','bbs','groth16-verifier','groth16-prover','elgamal','threshold','confidential-notes']),
+            'confidential': ('ConfidentialWeb', ['elgamal','threshold','confidential-notes']),
+            'verifier': ('VerifierWeb', ['groth16-verifier']), 'prover': ('ProverWeb', ['groth16-prover']),
             'unprotected': ('UnprotectedWeb', ['unprotected'])}
 parser = argparse.ArgumentParser()
 parser.add_argument('profiles', nargs='*', choices=list(PROFILES))
@@ -25,6 +28,20 @@ def run(command, log):
         raise SystemExit(result.returncode)
 run([str(ROOT/'gradlew'), '-p', str(HERE), ':bundles:classpath', '--max-workers=2', '--console=plain'], out/'compile.log')
 cp = (HERE/'bundles/build/classpath.txt').read_text()
+binaryen = subprocess.check_output(['wasm-as','--version'],text=True).strip()
+if binaryen != 'wasm-as version 132': raise SystemExit('Expected Binaryen 132, got '+binaryen)
+inputs = hashlib.sha256()
+for index, entry in enumerate(cp.split(os.pathsep)):
+    path = Path(entry)
+    inputs.update(str(index).encode()+b'\0')
+    if not path.exists():
+        inputs.update(b'absent-classpath-entry\0')
+        continue
+    for item in (sorted(p for p in path.rglob('*') if p.is_file()) if path.is_dir() else [path]):
+        inputs.update((str(item.relative_to(path)) if path.is_dir() else path.name).encode()+b'\0')
+        inputs.update(hashlib.sha256(item.read_bytes()).digest())
+inputs.update(Path(__file__).read_bytes())
+inputs.update((home/'release').read_bytes())
 if any('blst' in p.lower() for p in cp.split(os.pathsep)):
     raise SystemExit('Native blst classpath rejected')
 for name in args.profiles or ['hash']:
@@ -39,7 +56,8 @@ for name in args.profiles or ['hash']:
          '-H:AbortOnTypeReachable=org.zeroj.crypto.setup.*',
          'org.zeroj.bindings.bundles.'+entry], folder/'compile.log')
     metadata = {'profile': name, 'capabilities': capabilities, 'apiVersion': 1,
-                'graalvm': '25.3.4.1+1.1', 'seconds': time.perf_counter()-start,
+                'graalvm': '25.3.4.1+1.1', 'binaryen': binaryen, 'classpathAndBuildSha256': inputs.hexdigest(),
+                'worktreeDirty': bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip()), 'seconds': time.perf_counter()-start,
                 'zerojCommit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()}
     (folder/'build.json').write_text(json.dumps(metadata,indent=2)+'\n')
     print(name, 'built in', round(metadata['seconds'],2), 's', flush=True)

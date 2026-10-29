@@ -24,6 +24,7 @@ globalThis.ZEROJ_WASM_BYTES=new Uint8Array(rawWasm);
 globalThis.require=require;
 globalThis.__filename=path.resolve(folder,'assets/engine.js');
 globalThis.__dirname=path.dirname(globalThis.__filename);
+globalThis.zerojLoadFailed=()=>{process.stderr.write('Image startup failed');process.exitCode=1;};
 globalThis.zerojReady=()=>{
  const results=requests.map(request=>{
   try {return JSON.parse(String(globalThis.zerojCall(JSON.stringify(request))));}

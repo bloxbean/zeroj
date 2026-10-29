@@ -2,10 +2,10 @@
 'use strict';
 (async () => {
   const node = typeof process !== 'undefined' && !!process.versions?.node;
-  let send, listen, fs, vm, createRequire, fileURLToPath;
+  let send, listen, openFile, vm, createRequire, fileURLToPath;
   if (node) {
     const { parentPort } = await import('node:worker_threads');
-    ({readFile:fs} = await import('node:fs/promises'));
+    ({open:openFile} = await import('node:fs/promises'));
     vm = await import('node:vm');
     ({createRequire} = await import('node:module'));
     ({fileURLToPath} = await import('node:url'));
@@ -25,7 +25,13 @@
     let bytes;
     if(node) {
       if(url.protocol!=='file:') throw Error();
-      bytes=new Uint8Array(await fs(url));
+      const handle=await openFile(url,'r');
+      try {
+        const stat=await handle.stat();if(!stat.isFile() || stat.size!==file.bytes)throw Error();
+        bytes=new Uint8Array(file.bytes);let offset=0;
+        while(offset<bytes.length){const {bytesRead}=await handle.read(bytes,offset,bytes.length-offset,offset);if(!bytesRead)throw Error();offset+=bytesRead;}
+        if((await handle.stat()).size!==file.bytes)throw Error();
+      } finally {await handle.close();}
     } else {
       if(url.origin!==self.location.origin || !['https:','http:'].includes(url.protocol)) throw Error();
       const response=await fetch(url,{credentials:'omit',redirect:'error'});
@@ -62,6 +68,7 @@
         globalThis.ZEROJ_EXPERIMENTAL_SECRETS=data.experimentalSecrets===true;
         await new Promise((resolve,reject)=>{
           globalThis.zerojReady=resolve;
+          globalThis.zerojLoadFailed=()=>reject(Error());
           if(node) {
             globalThis.require=createRequire(descriptor.launcher.url);
             globalThis.__filename=fileURLToPath(descriptor.launcher.url);

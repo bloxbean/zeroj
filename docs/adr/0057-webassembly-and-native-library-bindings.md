@@ -232,6 +232,31 @@ Tests do not establish constant-time behavior, zeroization, external audit, Safa
 production readiness. External review of entropy/secret handling and each inherited protocol's
 release gates remains required before a production release.
 
+### r2 implementation refinements — 2026-10-30
+
+W4 reuses `ZkeyImporterBLS381` with a tightening-only allocation-limits overload. Initial JSON
+key transport is capped at 256 KiB and the importer at 4,096 wires/domain cells and 16,384
+coefficients. The default compiled tutorial is `tutorial-cubic-bls12381-v1`; applications add
+trusted Java `CompiledCircuit` implementations and build a selected image. This does not claim
+arbitrary circuit compilation or large-key proving in the browser.
+
+W5 caps DKG at 16 participants and 1,024 unique accepted messages per participant per round;
+resource overflow permanently invalidates that participant. The protocol's t+1/2t+1 rules are
+unchanged. Decryption search is capped at 1,000,000 and must cover the established bound.
+External context admission and durable DKG restart remain unsupported by the initial SDK.
+Notes and ElGamal statement imports retain the existing safe Java types and proof obligations.
+
+Physical image options now include hash, crypto (Pedersen/BBS), verifier, prover, confidential
+(ElGamal/threshold/notes), and an optional all-capability image. Logical wrappers stay independent.
+The combined image reduces repeated Java runtime downloads for apps that need many capabilities;
+apps using one capability can still select the smaller image explicitly.
+
+The supplied Oracle GraalVM includes runtime terms beyond ZeroJ's MIT license. Generated bundle
+packages are `private: true` and not MIT-only licensed; local tarball testing is distinct from
+npm publication. See `bindings/DISTRIBUTION.md` for the inventory and unresolved redistribution/
+corresponding-source gates. A source-built open-source toolchain is an unvalidated alternative.
+This release gate does not block the authorized experimental source implementation and tests.
+
 ## Risk classification
 - **R2:** the decisions as a whole. They add new runtimes and a new distribution of
   cryptographic code. They also add new trust boundaries: the JavaScript↔Java boundary, the C ABI

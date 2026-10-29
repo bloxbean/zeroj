@@ -37,3 +37,12 @@ test('entropy chunking, complete host routing and late failure',()=>{
  assert.equal(failure.results[0].error.code,'RANDOMNESS_UNAVAILABLE');
  assert.equal('value' in failure.results[0],false);
 });
+test('new prover and confidential secret APIs fail closed before exposing results',()=>{
+ for(const mode of ['absent','throw']) {
+  const requests=[request('elgamal','generateKey'),request('confidential-notes','generateViewingKey'),
+    request('confidential-notes','createOpening',{value:'42'})];
+  for(const result of run('confidential',mode,requests).results)assert.equal(result.error.code,'RANDOMNESS_UNAVAILABLE');
+  const proof=run('prover',mode,[request('groth16-prover','prove',{key:'h1',input:{x:'3'}})]);
+  assert.equal(proof.results[0].error.code,'RANDOMNESS_UNAVAILABLE');
+ }
+});
