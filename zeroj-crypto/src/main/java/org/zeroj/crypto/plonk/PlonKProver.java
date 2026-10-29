@@ -1,5 +1,7 @@
 package org.zeroj.crypto.plonk;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.LegacyCurvePolicy;
 import org.zeroj.crypto.ec.JacobianG1BN254;
 import org.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
@@ -49,7 +51,7 @@ public final class PlonKProver {
         MontFr254 omega = pk.omega();
         AffineG1[] srs = pk.srsG1();
 
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         MontFr254[] b = new MontFr254[11];
         for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
         return proveInternal(pk, wireA, wireB, wireC, pubInputs, b);

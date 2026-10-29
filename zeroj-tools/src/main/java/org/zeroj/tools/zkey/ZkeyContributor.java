@@ -1,5 +1,7 @@
 package org.zeroj.tools.zkey;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import org.zeroj.bls12381.ec.JacobianG2BLS381;
@@ -107,7 +109,7 @@ public final class ZkeyContributor {
             }
 
             // fresh secret + s-pair
-            SecureRandom rnd = new SecureRandom();
+            SecureRandom rnd = SecureRandoms.create();
             BigInteger k = randScalar(rnd);
             BigInteger s = randScalar(rnd);
             AffineG1 g1s = JacobianG1BLS381.GENERATOR.scalarMul(s).toAffine();

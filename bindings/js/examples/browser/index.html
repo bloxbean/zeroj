@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZeroJ in your browser</title>
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"@zeroj/runtime":"/packages/runtime/dist/index.js","@zeroj/hash":"/packages/hash/dist/index.js"}}</script>
+<script type="module" src="./app.js"></script>
+</head>
+<body><main>
+<p class="eyebrow">ZEROJ · EXPERIMENTAL WEB SDK</p>
+<h1>Java cryptography.<br>In your browser.</h1>
+<p class="intro">These examples run locally in a worker. Each capability loads its own selected
+WebAssembly bundle only when you use it.</p>
+<section>
+<div class="number">01</div>
+<h2>Hash a document</h2>
+<p>Compare the browser's SHA-256 with the same input hashed by ZeroJ's Java code compiled to
+Wasm. BLAKE2b runs through ZeroJ too. These are ordinary hashes, not zero-knowledge proofs.</p>
+<label for="message">Public example text</label>
+<textarea id="message" rows="3">Hello from ZeroJ</textarea>
+<button id="hash">Compare hashes</button>
+<pre id="result" aria-live="polite">No Wasm has been downloaded yet.</pre>
+</section>
+<aside>Research software. Browser/Node Wasm secret operations are unassessed for side channels.
+Use disposable test inputs. No examples upload inputs to a server.</aside>
+</main></body></html>

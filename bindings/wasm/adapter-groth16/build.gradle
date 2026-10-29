@@ -1,0 +1,1 @@
+dependencies { implementation('org.zeroj:zeroj-verifier-groth16:0.1.0') { exclude group: 'org.zeroj', module: 'zeroj-blst' } }

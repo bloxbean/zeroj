@@ -1,5 +1,7 @@
 package org.zeroj.crypto.setup;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.LegacyCurvePolicy;
 import org.zeroj.api.R1CSConstraint;
 import org.zeroj.api.R1CSValidation;
@@ -79,7 +81,7 @@ public final class Groth16Setup {
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use snarkjs multi-party ceremony for production.");
 
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         int nConstraints = constraints.size();
 
         // Domain size: next power of 2 >= nConstraints

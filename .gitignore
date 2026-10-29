@@ -86,3 +86,11 @@ __pycache__/
 
 # Raw SHA-2 benchmark output stays local; keep harnesses and review reports in Git.
 /assurance/sha2-optimization/evidence/
+
+# ADR-0057: generated npm/image artifacts; source and curated results stay tracked.
+/bindings/js/packages/*/dist/
+/bindings/js/packages/*/assets/
+/bindings/js/packages/*/LICENSE
+/bindings/js/packages/*/NOTICE
+/bindings/js/build/
+*.tgz

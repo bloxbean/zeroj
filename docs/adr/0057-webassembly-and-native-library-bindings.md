@@ -190,6 +190,15 @@ The supplied-key loader and circuit-template path must document exact formats an
 memory, and reject wrong fingerprints, malformed points and mismatched keys. Generic arbitrary
 Java class loading, arbitrary R1CS/witness programs and the large ownership prover are excluded.
 
+**Main-code inspection (2026-10-30):** `ZkeyImporterBLS381.importZkeyFull(byte[], byte[])`
+already provides a bounded heap importer with an expected SHA-256 and strict field/point
+validation. Reuse it for W4 instead of inventing a key format or implementing a second parser.
+The r1 G4 claim is stale for zkeys; the mmap store remains unavailable in Web Image. Bind each
+named compiled circuit to an application-trusted key hash, exact circuit identity and VK;
+passing a hash from the same untrusted source as the key does not authenticate it. Test supplied
+key loading and proof generation from these bytes in the actual image. Arbitrary mmap-store
+conversion and the native C ABI remain outside this browser/Node milestone.
+
 Examples cover hash parity, a commitment/opening, a BBS credential/presentation, Groth16
 prove/verify and tampering, encrypted totals, a threshold round simulation, and notes for an
 owner/auditor. Run them in browser and Node with disposable test secrets only. No recovery

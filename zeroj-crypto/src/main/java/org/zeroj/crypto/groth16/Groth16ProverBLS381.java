@@ -1,5 +1,7 @@
 package org.zeroj.crypto.groth16;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.R1CSConstraint;
 import org.zeroj.api.R1CSValidation;
 import org.zeroj.bls12381.ec.JacobianG1BLS381;
@@ -194,7 +196,7 @@ public final class Groth16ProverBLS381 {
 
     /** The production blinder source: two uniformly random scalars from {@link SecureRandom}. */
     static BlinderSource secureRandomBlinders() {
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         return () -> new BigInteger[]{randomScalar(rng), randomScalar(rng)};
     }
 

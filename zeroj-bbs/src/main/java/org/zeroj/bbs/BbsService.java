@@ -1,5 +1,7 @@
 package org.zeroj.bbs;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.bbs.internal.CfrgBbsCore;
 import org.zeroj.bbs.spi.BbsProvider;
 import org.zeroj.bbs.spi.BbsProviders;
@@ -18,7 +20,7 @@ public final class BbsService {
     private final SecureRandom random;
 
     public BbsService(BbsProvider provider) {
-        this(provider, new SecureRandom());
+        this(provider, SecureRandoms.create());
     }
 
     public BbsService(BbsProvider provider, SecureRandom random) {

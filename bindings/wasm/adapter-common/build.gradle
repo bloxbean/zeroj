@@ -1,0 +1,5 @@
+dependencies {
+    api 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    api 'org.zeroj:zeroj-api:0.1.0'
+    compileOnly 'org.graalvm.sdk:webimage-preview:25.3.4.1'
+}
