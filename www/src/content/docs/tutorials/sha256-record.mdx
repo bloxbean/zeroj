@@ -305,6 +305,64 @@ for all stages, memory limits and reproducible commands, and the
 [optimization report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-optimization-results.md)
 for the earlier before/after comparison.
 
+### When to use Groth16Pipeline
+
+**Use `Groth16Pipeline` as the default application flow for BLS12-381 Groth16 with stored
+keys**, particularly when proving repeatedly or hashing larger documents. It coordinates
+compilation, witness generation, cached constraints and proving. You still use `Sha256` or
+`Sha512` to define the complete hash relation; the pipeline controls how that circuit is run.
+
+| Your situation | Suggested approach | Why |
+|---|---|---|
+| A small teaching example or an in-memory test | The direct `Groth16Keys` flow is sufficient | Fewer callbacks and no constraint-cache files to manage |
+| Repeated proofs with stored keys for the same circuit | Prefer `Groth16Pipeline` | Reuse the key bundle and validated constraint cache, while generating a fresh witness and proof each time |
+| Larger documents, multiple hashes or a constrained heap | Prefer `Groth16Pipeline` and measure the whole application | Its ordering helps avoid retaining the circuit graph alongside setup/proving allocations |
+
+A **circuit graph** is the Java object structure describing the circuit's operations. A
+**witness** contains the values for one proof. Both can be large, and setup/proving need their
+own working arrays. Keeping an already-used graph reachable can exhaust the heap even when
+the next phase would fit on its own. The 16 KiB follow-up above resolved this overlap with the
+existing pipeline and the same exact circuit constraints.
+
+**Separate preparing a circuit from proving a document:**
+
+1. **Prepare the circuit's key bundle and constraint cache.** For local development,
+   compile in a helper that returns only `Groth16Pipeline.Compiled`, then call
+   `Groth16Pipeline.setup` after its graph is out of scope. Release the compiled heap
+   constraints after setup. This setup API is development-only; production keys require
+   the separate [ceremony and import process](/guides/proving/trusted-setup-ceremony/).
+2. **For each document, load the matching keys and create a fresh witness.** Build and
+   evaluate the graph inside a helper that returns only the witness array. After that helper
+   returns, pack with `FlatScalars.packConsuming`. On a valid cache hit, the pipeline then
+   validates and memory-maps the constraints, and generates the randomized proof.
+
+Keys and cached constraints can be reused for different messages and public digests **only
+when the exact compiled relation is unchanged**. For these fixed-length circuits, changing
+message length, SHA-256 to SHA-512, policy constants or constraint layout requires matching
+artifacts. Reusing the keys does not reuse the witness or the proof. A SHA-512 document proof
+observed at about 89 seconds therefore does not include a new setup for every document; see
+the report for the separate setup and witness/cache timings.
+
+**Trade-offs and integration details.** The pipeline needs compile/witness callbacks and,
+for the cached path, disk space and a managed cache location. It rebuilds the witness graph
+for each proof and validates the cached relation; those operations still cost time. A missing,
+stale or unreadable cache can trigger compilation, increasing latency and retaining heap
+constraints during witness construction. Benchmark cache misses separately from cache hits;
+use `Groth16Pipeline.Progress` to observe which path ran.
+
+The caller must respect the lifetime boundaries: avoid capturing an outer `CircuitBuilder`
+or retaining a compiled relation in a service field or callback. The pipeline cannot release
+objects your application still references. Close loaded keys with try-with-resources, retain
+the expected exact circuit fingerprint, and follow the ceremony guide's binding-row rules
+for imported keys. Memory-mapped files also use physical memory outside the Java heap, so
+measure RSS as well as `-Xmx` and budget for concurrent proofs.
+
+See the [pipeline API walkthrough](/guides/proving/groth16/#groth16pipeline-for-very-large-circuits)
+and [memory-sizing guide](/guides/proving/performance/). The
+[SHA-2 investigation example](https://github.com/bloxbean/zeroj/blob/main/assurance/sha2-optimization/java/org/zeroj/assurance/sha2/Sha2MemoryInvestigation.java)
+implements the measured helper boundaries and cache-hit checks for public fixtures. The
+48-byte approval demo earlier on this page keeps its simpler direct flow.
+
 ### Estimated Cardano verification cost
 
 For initial planning, a simple SHA-256 proof-consuming transaction is **about 0.43 ADA**;
