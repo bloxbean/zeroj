@@ -4,7 +4,7 @@ import org.zeroj.circuit.CircuitAPI;
 import org.zeroj.circuit.Variable;
 
 /**
- * In-circuit SHA-512 (FIPS 180-4) gadget over an arbitrary scalar field.
+ * In-circuit SHA-512 (FIPS 180-4) gadget over ZeroJ's supported scalar fields.
  *
  * <p>This gadget is <b>field-agnostic</b>: all intermediate values fit in ~67 bits, which
  * is representable in both the BN254 and BLS12-381 scalar fields, so it does <i>not</i> call
@@ -75,17 +75,16 @@ public final class Sha512 {
      * SHA-512 of a byte-aligned message supplied as bits in SHA's big-endian bit order
      * (bit 0 = MSB of byte 0). {@code messageBits.length} must be a non-negative multiple of 8.
      * Every input bit is asserted boolean. Returns the 512-bit digest in the same bit order.
+     * The padded bit array must fit a Java array length; oversized inputs fail with
+     * {@link ArithmeticException} before constraints are emitted.
      */
     public static Variable[] hashBits(CircuitAPI api, Variable[] messageBits) {
         int msgLen = messageBits.length;
-        if (msgLen % 8 != 0)
-            throw new IllegalArgumentException("messageBits length must be a multiple of 8 (byte-aligned), got " + msgLen);
+        int padded = paddedBitLength(msgLen);
         for (Variable b : messageBits) api.assertBoolean(b);
 
         // --- Padding (FIPS 180-4 §5.1.2): append 1 bit, then zeros, then 128-bit length. ---
         // Total padded length is the least multiple of 1024 that fits msgLen + 1 + 128.
-        int totalLen = msgLen + 1 + 128;
-        int padded = ((totalLen + BLOCK_BITS - 1) / BLOCK_BITS) * BLOCK_BITS;
         Variable[] bits = new Variable[padded];
         Variable zero = api.constant(0);
         Variable one = api.constant(1);
@@ -119,9 +118,12 @@ public final class Sha512 {
     /**
      * SHA-512 of a message supplied as bytes (each a field element in [0,255]). Each byte is
      * range-checked to 8 bits. Returns the 64-byte digest as field elements (each in [0,255]).
+     * Message and padded bit-array lengths are checked before allocation or constraint emission.
      */
     public static Variable[] hashBytes(CircuitAPI api, Variable[] messageBytes) {
-        Variable[] msgBits = new Variable[messageBytes.length * 8];
+        int bitLength = messageBitLength(messageBytes.length);
+        paddedBitLength(bitLength);
+        Variable[] msgBits = new Variable[bitLength];
         for (int i = 0; i < messageBytes.length; i++) {
             // toBinary gives LSB-first + range-checks the byte to 8 bits; SHA wants MSB-first.
             Variable[] le = api.toBinary(messageBytes[i], 8);
@@ -136,6 +138,22 @@ public final class Sha512 {
             outBytes[i] = api.fromBinary(le);
         }
         return outBytes;
+    }
+
+    /** Checked array-length arithmetic, separate from allocation so its boundaries can be tested. */
+    static int messageBitLength(int byteLength) {
+        if (byteLength < 0) throw new IllegalArgumentException("message byte length must be non-negative");
+        return Math.multiplyExact(byteLength, 8);
+    }
+
+    /** Smallest 1024-bit multiple holding the message, one padding bit and 128-bit length. */
+    static int paddedBitLength(int messageBitLength) {
+        if (messageBitLength < 0 || messageBitLength % 8 != 0)
+            throw new IllegalArgumentException("messageBits length must be a non-negative multiple of 8 (byte-aligned), got "
+                    + messageBitLength);
+        int required = Math.addExact(messageBitLength, 129);
+        int blocks = Math.addExact(required, BLOCK_BITS - 1) / BLOCK_BITS;
+        return Math.multiplyExact(blocks, BLOCK_BITS);
     }
 
     // ---------------------------------------------------------------------
@@ -156,16 +174,19 @@ public final class Sha512 {
         Variable[] e = h[4], f = h[5], g = h[6], hh = h[7];
 
         for (int t = 0; t < 80; t++) {
-            Variable[] t1 = addMod64(api, hh, bigSigma1(api, e), ch(api, e, f, g), constWord(api, K[t]), w[t]);
-            Variable[] t2 = addMod64(api, bigSigma0(api, a), maj(api, a, b, c));
+            Variable t1 = sumWords(api, hh, bigSigma1(api, e), ch(api, e, f, g), constWord(api, K[t]), w[t]);
+            Variable t2 = sumWords(api, bigSigma0(api, a), maj(api, a, b, c));
             hh = g;
             g = f;
             f = e;
-            e = addMod64(api, d, t1);
+            // T1 has five w-bit addends; T1+d has six. Decompose the exact sum,
+            // including three carry bits, only where the next state needs bits.
+            e = lowWord(api, api.add(api.fromBinary(d), t1), 3);
             d = c;
             c = b;
             b = a;
-            a = addMod64(api, t1, t2);
+            // T1+T2 has seven w-bit addends, below 2^(w+3) and the field modulus.
+            a = lowWord(api, api.add(t1, t2), 3);
         }
 
         Variable[][] out = new Variable[8][];
@@ -213,14 +234,15 @@ public final class Sha512 {
     }
 
     /**
-     * Maj(a,b,c) = {@code a·b + c·(a⊕b)} — 3 mul/bit (vs 5 for 3×AND + 2×XOR). Equals the majority:
+     * Maj(a,b,c) = {@code ab + c·(a+b-2ab)} — two products per bit, reusing ab. Equals the majority:
      * when a=b it is a; when a≠b it is c.
      */
-    private static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
+    static Variable[] maj(CircuitAPI api, Variable[] a, Variable[] b, Variable[] c) {
         Variable[] r = new Variable[WORD_BITS];
         for (int i = 0; i < WORD_BITS; i++) {
             Variable ab = api.mul(a[i], b[i]);
-            r[i] = api.add(ab, api.mul(c[i], api.xor(a[i], b[i])));
+            Variable xor = api.sub(api.add(a[i], b[i]), api.add(ab, ab));
+            r[i] = api.add(ab, api.mul(c[i], xor));
         }
         return r;
     }
@@ -256,11 +278,20 @@ public final class Sha512 {
      * (free), then a single decomposition splits value and carry; the low 64 bits are returned.
      */
     private static Variable[] addMod64(CircuitAPI api, Variable[]... words) {
+        int carryBits = 32 - Integer.numberOfLeadingZeros(words.length - 1);
+        return lowWord(api, sumWords(api, words), carryBits);
+    }
+
+    /** Exact integer sum of already-Boolean words; callers bound the number of addends. */
+    private static Variable sumWords(CircuitAPI api, Variable[]... words) {
         Variable sum = api.constant(0);
-        for (Variable[] w : words) sum = api.add(sum, api.fromBinary(w));
-        int extra = 0;
-        while ((1 << extra) < words.length) extra++;   // ceil(log2(#addends))
-        Variable[] full = api.toBinary(sum, WORD_BITS + extra);
+        for (Variable[] word : words) sum = api.add(sum, api.fromBinary(word));
+        return sum;
+    }
+
+    /** Fully constrain the bounded sum, including carries, before retaining its low word. */
+    private static Variable[] lowWord(CircuitAPI api, Variable sum, int carryBits) {
+        Variable[] full = api.toBinary(sum, WORD_BITS + carryBits);
         Variable[] low = new Variable[WORD_BITS];
         System.arraycopy(full, 0, low, 0, WORD_BITS);
         return low;

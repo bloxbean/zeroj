@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Shared {@link ZkBytes} ↔ {@link Variable}[] conversions for the byte-oriented hash adapters
- * ({@link ZkSha512}, {@link ZkHmacSha512}, {@link ZkBlake2b}).
+ * ({@link ZkSha256}, {@link ZkSha512}, {@link ZkHmacSha512}, {@link ZkBlake2b}).
  */
 final class ZkBytesSupport {
 

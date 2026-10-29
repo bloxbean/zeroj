@@ -457,13 +457,14 @@ class PedersenHidingSafeApiTest {
 
     /**
      * The complete user-facing operation — canonicality checks and both affine public
-     * coordinates bound — not the 3,020-row gadget alone.
+     * coordinates bound — not just the low-level commitment gadget.
      *
      * <p>History: at M1 these were 2,918 / 13,460 (64/252) and 4,042 / 19,338 (252/252), equal to
      * the ADR-0051 r1 review measurements. The later value-canonicality optimization drops the
      * redundant 252-bit comparator for values narrower than 252 bits (canonical by their own range,
      * {@code 2^251 < l}), so 64/252 fell to 2,410 / 11,683; 252/252 still needs the comparator and is
-     * unchanged.
+     * unchanged at that stage. ADR-0063's direct Boolean assertions subsequently reduce the
+     * same complete relations to 1,841 / 9,976 and 3,032 / 16,308, respectively.
      */
     @Test
     @DisplayName("Complete ZkPedersen commit cost is pinned (rows and nonzeros)")
@@ -472,10 +473,10 @@ class PedersenHidingSafeApiTest {
         R1CSConstraintSystem fullValue = zkCommitCircuit(252).compileR1CS(CurveId.BLS12_381);
 
         assertAll(
-                () -> assertEquals(2_410, narrowValue.constraints().size(), "64/252 rows"),
-                () -> assertEquals(11_683, nnz(narrowValue), "64/252 nonzeros"),
-                () -> assertEquals(4_042, fullValue.constraints().size(), "252/252 rows"),
-                () -> assertEquals(19_338, nnz(fullValue), "252/252 nonzeros"));
+                () -> assertEquals(1_841, narrowValue.constraints().size(), "64/252 rows"),
+                () -> assertEquals(9_976, nnz(narrowValue), "64/252 nonzeros"),
+                () -> assertEquals(3_032, fullValue.constraints().size(), "252/252 rows"),
+                () -> assertEquals(16_308, nnz(fullValue), "252/252 nonzeros"));
     }
 
     // ------------------------------------------------------------------

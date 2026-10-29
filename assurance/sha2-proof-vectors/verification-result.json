@@ -1,0 +1,138 @@
+{
+  "completed_utc": "2026-10-29T02:47:25.888434+00:00",
+  "scope": "Public fixtures with insecure single-party development setup; no production claim",
+  "curve": "BLS12-381",
+  "snarkjs": "0.7.6",
+  "node": "v22.12.0",
+  "platform": "macOS-26.0.1-arm64-arm-64bit-Mach-O",
+  "runner_sha256": "b6f1988116c00610fa2d177aced9b85d601924c23c945ffcb67ddfd93b4dd1c0",
+  "snarkjs_cli_sha256": "6d787e37a4d1a2c6dd6032dadca09c0b3b007d4d4578bb6232a98136555d051a",
+  "npm_lock_sha256": "fff14da62399695d7e87faffe95cded85fa1b751c47fcba9deb524119eb4102e",
+  "valid_proofs_accepted": 2,
+  "invalid_statements_or_proofs_rejected": 8,
+  "artifact_sha256": {
+    "provenance.json": "b54e521a2da310cfa15006fe4e5718c99e5b7eba0683521c636a000b5be1960b",
+    "sha256-32/message.hex": "46268c8f3e4d5291cfd71ffc476063a199beff7f3a5f87a5552a6e3985eccd90",
+    "sha256-32/digest.hex": "a4889ce1982dac766afa11655c557d00bb43c0f0b893d682a4b6c045383d4281",
+    "sha256-32/result.json": "5e2f030446ca6e25d84c088fd75f5e9020d5c448f137a5fed233e91da991f9d7",
+    "sha256-32/verification_key.json": "5dc51ba5575f32b0726c1187ebd1eb6bf2ccb0745b7f8f886a58d0f02ab26c8c",
+    "sha256-32/public.json": "35accfaeed8d2e6406e4083b78a174dd6080033709f527e49c17fefc7c5bd91b",
+    "sha256-32/proof.json": "4526669c5a5fe4f46f32c6a666ea0f6ce64e7cb1bf64dd7d510e3d1195a65bc5",
+    "sha256-32/public-wrong-0.json": "242e27760a0dc558994bd494c8b59d63e253d3baf34937c5cf541362de3b79e2",
+    "sha256-32/public-wrong-1.json": "53ab6b4dc6cdd5037821e8a61d4269e5d3b1b7e0836e34eba9ba4454b9a6873b",
+    "sha256-32/proof-negated-a.json": "c8496ad4a78cbdabf447b8bbca6674efcb226b747aeba5877eccc3b78d391686",
+    "sha512-32/message.hex": "46268c8f3e4d5291cfd71ffc476063a199beff7f3a5f87a5552a6e3985eccd90",
+    "sha512-32/digest.hex": "7d70997dd79a2fb46b1b548044e2cf7385c9979b7091976a295a299a86eca618",
+    "sha512-32/result.json": "991780716cee3ecd99080d9b0713fc80654dda1a5d6b544c9574a8cbc6a7bf1d",
+    "sha512-32/verification_key.json": "c36db3cbeaaa32b55f5990684481c5840227ef9d577ce5542f0557cb579393df",
+    "sha512-32/public.json": "a892cc59bf7d6b8ef6ef3b16f733762c421ad88f35f339053760f648e4e50c45",
+    "sha512-32/proof.json": "88d2da3191abadfbaaef68b90ef3f6c5ffb7eb226c9eae07d5680eb1a7d15bf3",
+    "sha512-32/public-wrong-0.json": "9d44227eb679b307071b4ddcb25b29fe4e5b501f7ffc3ea368310c714186d249",
+    "sha512-32/public-wrong-1.json": "f440bed899569b6598c65342486a09bba517ecaf2716ef477a1d37365c7f1b18",
+    "sha512-32/public-wrong-2.json": "ec019159fab1f38caac181f6f4e5e6cd1f5b5acd093bb061ff8de8cb7dcaaaba",
+    "sha512-32/public-wrong-3.json": "7a22a92b855cb93d4a8ae933fd9af92a1371d40903288538f96f21b7af6dfbef",
+    "sha512-32/proof-negated-a.json": "66a6db82fcb485a46b4c7825ce700910b9890916834ce6c3f723a2bd67191f63"
+  },
+  "checks": [
+    {
+      "case": "sha256-32",
+      "check": "valid",
+      "expected_valid": true,
+      "exit_code": 0,
+      "expected_verifier_text": "OK!",
+      "verification_key": "sha256-32/verification_key.json",
+      "public_inputs": "sha256-32/public.json",
+      "proof": "sha256-32/proof.json"
+    },
+    {
+      "case": "sha256-32",
+      "check": "wrong-limb-0",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha256-32/verification_key.json",
+      "public_inputs": "sha256-32/public-wrong-0.json",
+      "proof": "sha256-32/proof.json"
+    },
+    {
+      "case": "sha256-32",
+      "check": "wrong-limb-1",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha256-32/verification_key.json",
+      "public_inputs": "sha256-32/public-wrong-1.json",
+      "proof": "sha256-32/proof.json"
+    },
+    {
+      "case": "sha256-32",
+      "check": "negated-a",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha256-32/verification_key.json",
+      "public_inputs": "sha256-32/public.json",
+      "proof": "sha256-32/proof-negated-a.json"
+    },
+    {
+      "case": "sha512-32",
+      "check": "valid",
+      "expected_valid": true,
+      "exit_code": 0,
+      "expected_verifier_text": "OK!",
+      "verification_key": "sha512-32/verification_key.json",
+      "public_inputs": "sha512-32/public.json",
+      "proof": "sha512-32/proof.json"
+    },
+    {
+      "case": "sha512-32",
+      "check": "wrong-limb-0",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha512-32/verification_key.json",
+      "public_inputs": "sha512-32/public-wrong-0.json",
+      "proof": "sha512-32/proof.json"
+    },
+    {
+      "case": "sha512-32",
+      "check": "wrong-limb-1",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha512-32/verification_key.json",
+      "public_inputs": "sha512-32/public-wrong-1.json",
+      "proof": "sha512-32/proof.json"
+    },
+    {
+      "case": "sha512-32",
+      "check": "wrong-limb-2",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha512-32/verification_key.json",
+      "public_inputs": "sha512-32/public-wrong-2.json",
+      "proof": "sha512-32/proof.json"
+    },
+    {
+      "case": "sha512-32",
+      "check": "wrong-limb-3",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha512-32/verification_key.json",
+      "public_inputs": "sha512-32/public-wrong-3.json",
+      "proof": "sha512-32/proof.json"
+    },
+    {
+      "case": "sha512-32",
+      "check": "negated-a",
+      "expected_valid": false,
+      "exit_code": 1,
+      "expected_verifier_text": "Invalid proof",
+      "verification_key": "sha512-32/verification_key.json",
+      "public_inputs": "sha512-32/public.json",
+      "proof": "sha512-32/proof-negated-a.json"
+    }
+  ]
+}
