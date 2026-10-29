@@ -1,5 +1,7 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import org.zeroj.api.SecureRandoms;
+
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -201,7 +203,7 @@ public final class DkgShareDelivery {
             if (!Arrays.equals(hex.parseHex(A21_PT_0), known)) {
                 throw new IllegalStateException("HPKE known-answer self-test returned a different plaintext");
             }
-            Hpke.Sealed sealed = Hpke.sealBase(pkR, SELF_TEST_INFO, new byte[0], pt, new SecureRandom());
+            Hpke.Sealed sealed = Hpke.sealBase(pkR, SELF_TEST_INFO, new byte[0], pt, SecureRandoms.create());
             if (!Arrays.equals(pt, Hpke.openBase(sealed.enc(), recipient, pkR, SELF_TEST_INFO, new byte[0], sealed.ct()))) {
                 throw new IllegalStateException("HPKE self-test returned a different plaintext");
             }

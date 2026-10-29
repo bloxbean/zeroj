@@ -1,0 +1,47 @@
+---
+import './walkthrough.css';
+---
+<figure class="zw-frame not-content wasm-modules" aria-label="Select an application capability to see the matching Java-to-Wasm modules">
+  <div class="zw">
+    <div class="zw-head"><span class="zw-eyebrow">One Java implementation · choose your download</span></div>
+    <label class="choice">Example application
+      <select aria-label="Example application" data-module-choice>
+        <option value="hash">Document hashing</option>
+        <option value="bbs">Selective-disclosure credential</option>
+        <option value="notes">Confidential notes and trustees</option>
+        <option value="all">Application using all capabilities</option>
+      </select>
+    </label>
+    <div class="zw-stage">
+      <section class="zw-actor"><div class="zw-actor-head"><span class="zw-actor-name">TypeScript / JavaScript</span></div><div class="zw-box"><strong data-wrapper>@zeroj/hash</strong><p class="zw-note">Uint8Array · bigint · Promise</p></div></section>
+      <div class="zw-wire" aria-hidden="true"><span class="arrow">→</span><span class="zw-msg">validated request</span></div>
+      <section class="zw-actor"><div class="zw-actor-head"><span class="zw-actor-name">Worker + selected image</span></div><div class="zw-box"><strong data-bundle>bundle-hash</strong><p class="zw-note" data-size>About 3.31 MiB Brotli</p></div></section>
+      <div class="zw-wire" aria-hidden="true"><span class="arrow">→</span><span class="zw-msg">Java adapter</span></div>
+      <section class="zw-actor"><div class="zw-actor-head"><span class="zw-actor-name">Existing ZeroJ library</span></div><div class="zw-box"><strong data-java>SHA-256 / SHA-512 / BLAKE2b</strong><p class="zw-note">Pure Java · no native blst</p></div></section>
+    </div>
+    <p class="caption" aria-live="polite" data-explanation>Importing the wrapper downloads no Wasm. Ordinary SHA can use WebCrypto directly.</p>
+    <div class="zw-legend">Architecture illustration. The separate local example app runs real cryptography. Sizes are experimental measurements, not download guarantees.</div>
+  </div>
+</figure>
+<script>
+ const options:Record<string,string[]>={
+  hash:['@zeroj/hash','bundle-hash','3.31','SHA-256 / SHA-512 / BLAKE2b','Importing the wrapper downloads no Wasm. Ordinary SHA can use WebCrypto directly.'],
+  bbs:['@zeroj/bbs','bundle-crypto','3.39','BBS + Pedersen','Two logical APIs can share one selected physical image and one worker.'],
+  notes:['@zeroj/confidential-notes + elgamal + threshold','bundle-confidential','3.43','Notes / ElGamal / DKG','Related verified objects stay in the same worker. The application supplies registry and transport policy.'],
+  all:['Choose any of the typed wrappers','bundle-all','3.52','All exposed capabilities','Use the optional combined image to avoid downloading several copies of the Java runtime.']
+ };
+ document.querySelectorAll<HTMLElement>('.wasm-modules').forEach(root=>{
+  root.querySelector<HTMLSelectElement>('[data-module-choice]')?.addEventListener('change',event=>{
+   const row=options[(event.currentTarget as HTMLSelectElement).value];if(!row)return;
+   for(const [selector,text] of [['wrapper',row[0]],['bundle',row[1]],['size',`About ${row[2]} MiB Brotli`],['java',row[3]],['explanation',row[4]]]){
+    const node=root.querySelector(`[data-${selector}]`);if(node)node.textContent=text??'';
+   }
+  });
+ });
+</script>
+<style>
+ .choice{display:flex;gap:1rem;flex-wrap:wrap;align-items:center;padding:1rem 1.2rem;color:var(--zw-text-2)}
+ select{max-width:100%;padding:.5rem;border:1px solid var(--sl-color-gray-4);border-radius:.4rem;color:var(--sl-color-text);background:var(--sl-color-bg)}
+ :global(.sl-markdown-content:has(.wasm-modules) .expressive-code pre){overflow-x:auto}
+ .caption{margin:0;padding:1rem 1.2rem}.wasm-modules strong{overflow-wrap:anywhere}
+</style>

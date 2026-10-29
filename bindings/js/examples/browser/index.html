@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZeroJ in your browser</title>
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"@zeroj/runtime":"/packages/runtime/dist/index.js","@zeroj/hash":"/packages/hash/dist/index.js","@zeroj/pedersen":"/packages/pedersen/dist/index.js","@zeroj/bbs":"/packages/bbs/dist/index.js","@zeroj/groth16-prover":"/packages/groth16-prover/dist/index.js","@zeroj/groth16-verifier":"/packages/groth16-verifier/dist/index.js","@zeroj/elgamal":"/packages/elgamal/dist/index.js","@zeroj/threshold":"/packages/threshold/dist/index.js","@zeroj/confidential-notes":"/packages/confidential-notes/dist/index.js"}}</script>
+<script type="module" src="./app.js"></script>
+</head>
+<body><main>
+<p class="eyebrow">ZEROJ · EXPERIMENTAL WEB SDK</p>
+<h1>Java cryptography.<br>In your browser.</h1>
+<p class="intro">These examples run locally in a worker. Each capability loads its own selected
+WebAssembly bundle only when you use it.</p>
+<section>
+<div class="number">01</div>
+<h2>Hash a document</h2>
+<p>Compare the browser's SHA-256 with the same input hashed by ZeroJ's Java code compiled to
+Wasm. BLAKE2b runs through ZeroJ too. These are ordinary hashes, not zero-knowledge proofs.</p>
+<label for="message">Public example text</label>
+<textarea id="message" rows="3">Hello from ZeroJ</textarea>
+<button id="hash">Compare hashes</button>
+<pre id="result" aria-live="polite">No Wasm has been downloaded yet.</pre>
+</section>
+<section>
+<div class="number">02</div><h2>Commit, then reveal</h2>
+<p>Keep a value hidden with a fresh blinding. Later, disclose its opening so another party can check the commitment.</p>
+<div class="flow" aria-label="Scenario flow">value + blinding → commitment → disclosed opening</div>
+<button data-scenario="pedersen">Run example</button>
+<pre id="result-pedersen" aria-live="polite">Ready. Uses disposable test data.</pre>
+</section>
+<section>
+<div class="number">03</div><h2>Show one credential claim</h2>
+<p>Issue a disposable two-claim credential, then prove “over-18” while hiding the member identifier. A fresh verifier challenge binds this presentation.</p>
+<div class="flow" aria-label="Scenario flow">issuer signs → holder selects claims → verifier checks</div>
+<button data-scenario="bbs">Run example</button>
+<pre id="result-bbs" aria-live="polite">Ready. Uses disposable test data.</pre>
+</section>
+<section>
+<div class="number">04</div><h2>Prove a private computation</h2>
+<p>Generate and verify a real BLS12-381 Groth16 proof for y = x³ + x + 5. The example uses x = 3 and a development-only key.</p>
+<div class="flow" aria-label="Scenario flow">private x → ZeroJ prover → proof + public y</div>
+<button data-scenario="groth16">Run example</button>
+<pre id="result-groth16" aria-live="polite">Ready. Uses disposable test data.</pre>
+</section>
+<section>
+<div class="number">05</div><h2>Count encrypted votes</h2>
+<p>Encrypt three sample votes and add their ciphertexts. Both trustees supply shares to decrypt only the final tally. This local example holds all keys.</p>
+<div class="flow" aria-label="Scenario flow">encrypted votes → encrypted sum → all trustees</div>
+<button data-scenario="elgamal">Run example</button>
+<pre id="result-elgamal" aria-live="polite">Ready. Uses disposable test data.</pre>
+</section>
+<section>
+<div class="number">06</div><h2>Try 2-of-3 decryption</h2>
+<p>Run seven DKG rounds locally, then decrypt with two of three participants. This demonstrates the protocol, not a distributed trust setup. Real deployments need authenticated private channels, broadcast agreement and round closure.</p>
+<div class="flow" aria-label="Scenario flow">3 participants → DKG → any 2 qualified shares</div>
+<button data-scenario="threshold">Run example</button>
+<pre id="result-threshold" aria-live="polite">Ready. Uses disposable test data.</pre>
+</section>
+<section>
+<div class="number">07</div><h2>Deliver a confidential note</h2>
+<p>Seal a value for its owner and an auditor. Each reader opens its own delivery and checks the commitment. An altered delivery must fail. Spending and ledger state rules are separate.</p>
+<div class="flow" aria-label="Scenario flow">opening → commitment + deliveries → owner / auditor</div>
+<button data-scenario="notes">Run example</button>
+<pre id="result-notes" aria-live="polite">Ready. Uses disposable test data.</pre>
+</section>
+<aside>Research software. Browser/Node Wasm secret operations are unassessed for side channels.
+Use disposable test inputs. No examples upload inputs to a server.</aside>
+</main></body></html>

@@ -1,0 +1,31 @@
+{
+  "name": "@zeroj/bundle-probe",
+  "version": "0.1.0-experimental.1",
+  "private": true,
+  "type": "module",
+  "description": "Experimental ZeroJ precompiled probe Web Image bundle",
+  "license": "SEE LICENSE IN DISTRIBUTION.md",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "DISTRIBUTION.md",
+    "third-party"
+  ],
+  "dependencies": {
+    "@zeroj/runtime": "0.1.0-experimental.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,5 +1,7 @@
 package org.zeroj.crypto.plonk;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.JacobianG1BLS381;
@@ -56,7 +58,7 @@ public final class PlonKProverBLS381 {
      */
     public static PlonKProofBLS381 prove(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
                                     MontFr381[] wireC, BigInteger[] pubInputs) {
-        return prove(pk, wireA, wireB, wireC, pubInputs, new SecureRandom());
+        return prove(pk, wireA, wireB, wireC, pubInputs, SecureRandoms.create());
     }
 
     /**
@@ -84,7 +86,7 @@ public final class PlonKProverBLS381 {
      */
     public static PlonKProofBLS381 proveCardano(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
                                            MontFr381[] wireC, BigInteger[] pubInputs) {
-        return proveCardano(pk, wireA, wireB, wireC, pubInputs, new SecureRandom());
+        return proveCardano(pk, wireA, wireB, wireC, pubInputs, SecureRandoms.create());
     }
 
     /**
@@ -111,7 +113,7 @@ public final class PlonKProverBLS381 {
      */
     public static PlonKProofBLS381 proveCardanoMpi(PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB,
                                                    MontFr381[] wireC, BigInteger[] pubInputs) {
-        return proveCardanoMpi(pk, wireA, wireB, wireC, pubInputs, new SecureRandom());
+        return proveCardanoMpi(pk, wireA, wireB, wireC, pubInputs, SecureRandoms.create());
     }
 
     /**

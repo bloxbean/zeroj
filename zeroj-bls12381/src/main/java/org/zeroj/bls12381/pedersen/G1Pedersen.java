@@ -1,5 +1,7 @@
 package org.zeroj.bls12381.pedersen;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.commitment.CommitmentError;
 import org.zeroj.api.commitment.CommitmentFormatException;
 import org.zeroj.bls12381.ec.G1Point;
@@ -336,7 +338,7 @@ public final class G1Pedersen {
     }
 
     /** Randomness for the split of the committed value in {@link #generate}. */
-    private static final ThreadLocal<SecureRandom> SPLIT_RANDOM = ThreadLocal.withInitial(SecureRandom::new);
+    private static final ThreadLocal<SecureRandom> SPLIT_RANDOM = ThreadLocal.withInitial(SecureRandoms::create);
 
     /**
      * {@code [x]·G + [r]·H} through the provider's secret-scalar method only, for canonical

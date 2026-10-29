@@ -1,5 +1,7 @@
 package org.zeroj.crypto.groth16;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.LegacyCurvePolicy;
 import org.zeroj.api.R1CSConstraint;
 import org.zeroj.api.R1CSValidation;
@@ -98,7 +100,7 @@ public final class Groth16Prover {
         BigInteger[] hCoeffs = computeH(constraints, witness, numConstraints, domainSize);
 
         // Step 2: Random blinding factors — fresh per proof; there is no unblinded path (ADR-0046)
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         BigInteger r = randomScalar(rng);
         BigInteger s = randomScalar(rng);
 

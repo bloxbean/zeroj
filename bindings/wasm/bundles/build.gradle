@@ -1,0 +1,30 @@
+dependencies {
+    implementation project(':adapter-hash')
+    implementation project(':adapter-common')
+    implementation project(':adapter-pedersen')
+    implementation project(':adapter-bbs')
+    implementation 'org.zeroj:zeroj-bbs:0.1.0'
+    compileOnly 'org.graalvm.sdk:webimage-preview:25.3.4.1'
+}
+tasks.register('classpath') {
+    dependsOn 'classes', configurations.runtimeClasspath.buildDependencies
+    doLast { layout.buildDirectory.file('classpath.txt').get().asFile.text = sourceSets.main.runtimeClasspath.asPath }
+}
+
+dependencies { implementation project(':adapter-groth16'); implementation 'org.zeroj:zeroj-crypto:0.1.0' }
+
+dependencies { implementation project(':adapter-elgamal'); implementation project(':adapter-threshold'); implementation project(':adapter-notes') }
+
+sourceSets { fixtures { java.srcDir 'src/fixtures/java' } }
+configurations.fixturesImplementation.extendsFrom configurations.implementation
+configurations.fixturesRuntimeOnly.extendsFrom configurations.runtimeOnly
+dependencies { fixturesImplementation sourceSets.main.output; fixturesImplementation 'org.zeroj:zeroj-circuit-lib:0.1.0'; fixturesImplementation 'org.zeroj:zeroj-circuit-dsl:0.1.0' }
+tasks.register('confidentialFixtures', JavaExec) {
+    group = 'verification'
+    description = 'Generate development-only Groth16 admission fixtures on the JVM (never in a consumer image).'
+    classpath = sourceSets.fixtures.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.fixtures.ConfidentialFixtures'
+    systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    maxHeapSize = '6g'
+    args rootProject.file('../js/build/confidential').absolutePath
+}

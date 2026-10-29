@@ -1,5 +1,7 @@
 package org.zeroj.bls12381.ec;
 
+import org.zeroj.api.SecureRandoms;
+
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -57,7 +59,7 @@ final class SecretLadder {
         BigInteger nextShare();
     }
 
-    private static final ThreadLocal<SecureRandom> RANDOM = ThreadLocal.withInitial(SecureRandom::new);
+    private static final ThreadLocal<SecureRandom> RANDOM = ThreadLocal.withInitial(SecureRandoms::create);
 
     /** Production source: uniform over {@code [0, r)} from {@link SecureRandom}. */
     static final ShareSource SECURE = () -> sample(RANDOM.get());
