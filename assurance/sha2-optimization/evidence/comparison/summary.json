@@ -1,0 +1,902 @@
+[
+  {
+    "profile": "6g/pure-java/sha256-1024",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 749691,
+        "candidate": 456915,
+        "reductionPercent": 39.052889790593724
+      },
+      "wires": {
+        "baseline": 2419678,
+        "candidate": 1748966,
+        "reductionPercent": 27.71906013940698
+      },
+      "qapDomain": {
+        "baseline": 1048576,
+        "candidate": 524288,
+        "reductionPercent": 50.0
+      },
+      "keyStoreBytes": {
+        "baseline": 305306890,
+        "candidate": 182034729,
+        "reductionPercent": 40.37647529015804
+      },
+      "compileMs": {
+        "baseline": 1500.489209,
+        "candidate": 1113.400958,
+        "reductionPercent": 25.797469830387843
+      },
+      "firstWitnessMs": {
+        "baseline": 213.274833,
+        "candidate": 113.971958,
+        "reductionPercent": 46.56099062564968
+      },
+      "setupMs": {
+        "baseline": 33129.722083,
+        "candidate": 25028.528875,
+        "reductionPercent": 24.45294647417825
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 4517938200,
+        "candidate": 3373909448,
+        "reductionPercent": 25.32192122504022
+      },
+      "terms": {
+        "baseline": 3510845,
+        "candidate": 2706671,
+        "reductionPercent": 22.905425901741605
+      },
+      "peakRssBytes": {
+        "baseline": 4907646976,
+        "candidate": 3827613696,
+        "reductionPercent": 22.007150988685954
+      },
+      "medianWitnessMs": {
+        "baseline": 88.3905,
+        "candidate": 52.536834,
+        "reductionPercent": 40.562804826310526
+      },
+      "medianProveMs": {
+        "baseline": 11315.966792,
+        "candidate": 8408.118416,
+        "reductionPercent": 25.696862048550273
+      },
+      "medianVerifyMs": {
+        "baseline": 285.157291,
+        "candidate": 302.622041,
+        "reductionPercent": -6.124602298876525
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "a53d3a06956c0d31a495ae953c61198610d2f03cb86f856a25ea93efa0dba914",
+      "candidate": "146719e3f777df11ec7edb646114545f86f5b309c3ba182c713843c28086b0ff"
+    }
+  },
+  {
+    "profile": "6g/pure-java/sha256-128",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 130219,
+        "candidate": 79027,
+        "reductionPercent": 39.31223554166443
+      },
+      "wires": {
+        "baseline": 425294,
+        "candidate": 308198,
+        "reductionPercent": 27.53295367439935
+      },
+      "qapDomain": {
+        "baseline": 131072,
+        "candidate": 131072,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 48152680,
+        "candidate": 35378504,
+        "reductionPercent": 26.528483980538574
+      },
+      "compileMs": {
+        "baseline": 461.994542,
+        "candidate": 240.146708,
+        "reductionPercent": 48.01957898455
+      },
+      "firstWitnessMs": {
+        "baseline": 75.96325,
+        "candidate": 31.053292,
+        "reductionPercent": 59.12063794005654
+      },
+      "setupMs": {
+        "baseline": 6946.732,
+        "candidate": 4216.562833,
+        "reductionPercent": 39.301489779654666
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 1689787720,
+        "candidate": 1572084576,
+        "reductionPercent": 6.96555801695612
+      },
+      "terms": {
+        "baseline": 608925,
+        "candidate": 467679,
+        "reductionPercent": 23.19596009360758
+      },
+      "peakRssBytes": {
+        "baseline": 1854423040,
+        "candidate": 1820557312,
+        "reductionPercent": 1.8262137208994167
+      },
+      "medianWitnessMs": {
+        "baseline": 14.362042,
+        "candidate": 10.581333,
+        "reductionPercent": 26.324313770980478
+      },
+      "medianProveMs": {
+        "baseline": 3804.668416,
+        "candidate": 3374.949125,
+        "reductionPercent": 11.294526723876263
+      },
+      "medianVerifyMs": {
+        "baseline": 320.207125,
+        "candidate": 319.379292,
+        "reductionPercent": 0.25853047461077416
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "c0410e12b882fd969cf276a93edc252a26d500e678bf5b8ac54f75e6acc8607a",
+      "candidate": "679e4b33214842eeb2bee2c3a35bed7fc342fbb2c752f981b967a022e7dac83d"
+    }
+  },
+  {
+    "profile": "6g/pure-java/sha256-32",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 42694,
+        "candidate": 25758,
+        "reductionPercent": 39.668337471307446
+      },
+      "wires": {
+        "baseline": 141470,
+        "candidate": 102694,
+        "reductionPercent": 27.409344737400154
+      },
+      "qapDomain": {
+        "baseline": 65536,
+        "candidate": 32768,
+        "reductionPercent": 50.0
+      },
+      "keyStoreBytes": {
+        "baseline": 17977255,
+        "candidate": 10588711,
+        "reductionPercent": 41.099400325578074
+      },
+      "compileMs": {
+        "baseline": 136.443959,
+        "candidate": 120.408166,
+        "reductionPercent": 11.752658833360307
+      },
+      "firstWitnessMs": {
+        "baseline": 22.704875,
+        "candidate": 18.41075,
+        "reductionPercent": 18.912788553119096
+      },
+      "setupMs": {
+        "baseline": 2546.8135,
+        "candidate": 1791.337917,
+        "reductionPercent": 29.66356126979852
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 1388435640,
+        "candidate": 1287884016,
+        "reductionPercent": 7.242080302692311
+      },
+      "terms": {
+        "baseline": 199072,
+        "candidate": 152018,
+        "reductionPercent": 23.63667416814017
+      },
+      "peakRssBytes": {
+        "baseline": 1613692928,
+        "candidate": 1563656192,
+        "reductionPercent": 3.100759452544366
+      },
+      "medianWitnessMs": {
+        "baseline": 8.946917,
+        "candidate": 3.46775,
+        "reductionPercent": 61.24083860395708
+      },
+      "medianProveMs": {
+        "baseline": 1496.970708,
+        "candidate": 1151.326709,
+        "reductionPercent": 23.089563286230984
+      },
+      "medianVerifyMs": {
+        "baseline": 280.361709,
+        "candidate": 277.533125,
+        "reductionPercent": 1.0089052496109696
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "167df95e23d7b20202c5c486b3a8b6346c58c1d2755cd8646dbae2a12890a884",
+      "candidate": "b86957cbd3602e25c64eba0fb4a09a307c1d848e01049df9571e7febcb4f77ae"
+    }
+  },
+  {
+    "profile": "6g/pure-java/sha512-1024",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 989329,
+        "candidate": 610249,
+        "reductionPercent": 38.31687942029396
+      },
+      "wires": {
+        "baseline": 3196464,
+        "candidate": 2334600,
+        "reductionPercent": 26.963044163800998
+      },
+      "qapDomain": {
+        "baseline": 1048576,
+        "candidate": 1048576,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 369567626,
+        "candidate": 274469130,
+        "reductionPercent": 25.73236650333652
+      },
+      "compileMs": {
+        "baseline": 1335.571042,
+        "candidate": 1206.238,
+        "reductionPercent": 9.683726131582294
+      },
+      "firstWitnessMs": {
+        "baseline": 127.392625,
+        "candidate": 88.949709,
+        "reductionPercent": 30.17672019867712
+      },
+      "setupMs": {
+        "baseline": 34266.002834,
+        "candidate": 31702.464416,
+        "reductionPercent": 7.481288174809708
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 2319846688,
+        "candidate": 4372713432,
+        "reductionPercent": -88.49148327857085
+      },
+      "terms": {
+        "baseline": 4679273,
+        "candidate": 3635963,
+        "reductionPercent": 22.296412284557874
+      },
+      "peakRssBytes": {
+        "baseline": 3035545600,
+        "candidate": 4641980416,
+        "reductionPercent": -52.92079341519362
+      },
+      "medianWitnessMs": {
+        "baseline": 107.73175,
+        "candidate": 64.33475,
+        "reductionPercent": 40.28246083443368
+      },
+      "medianProveMs": {
+        "baseline": 14995.514583,
+        "candidate": 12529.80025,
+        "reductionPercent": 16.443012471177965
+      },
+      "medianVerifyMs": {
+        "baseline": 279.313958,
+        "candidate": 222.756292,
+        "reductionPercent": 20.248778974375504
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "fc7fcd2a5cceb20ac717cdbd5f834e87c6588eed8e50e7e1310638edc9c42f6c",
+      "candidate": "c2844307a85ccd46a78ad5374b544c0ca7ee6f44572ff0cd97f0a1eb3973c0cf"
+    }
+  },
+  {
+    "profile": "6g/pure-java/sha512-128",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 215913,
+        "candidate": 132569,
+        "reductionPercent": 38.6007327025237
+      },
+      "wires": {
+        "baseline": 707096,
+        "candidate": 517960,
+        "reductionPercent": 26.748277461617654
+      },
+      "qapDomain": {
+        "baseline": 262144,
+        "candidate": 262144,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 83909288,
+        "candidate": 62937640,
+        "reductionPercent": 24.99323793570981
+      },
+      "compileMs": {
+        "baseline": 525.328292,
+        "candidate": 367.319875,
+        "reductionPercent": 30.078032995032366
+      },
+      "firstWitnessMs": {
+        "baseline": 66.963875,
+        "candidate": 48.347042,
+        "reductionPercent": 27.8013077946878
+      },
+      "setupMs": {
+        "baseline": 10108.063709,
+        "candidate": 6448.897167,
+        "reductionPercent": 36.20046971747871
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 2236841864,
+        "candidate": 1738339480,
+        "reductionPercent": 22.285991335505518
+      },
+      "terms": {
+        "baseline": 1019673,
+        "candidate": 789091,
+        "reductionPercent": 22.613327998289645
+      },
+      "peakRssBytes": {
+        "baseline": 2629763072,
+        "candidate": 2026373120,
+        "reductionPercent": 22.9446507339198
+      },
+      "medianWitnessMs": {
+        "baseline": 25.705959,
+        "candidate": 14.7485,
+        "reductionPercent": 42.62614361129262
+      },
+      "medianProveMs": {
+        "baseline": 5985.410542,
+        "candidate": 3945.319708,
+        "reductionPercent": 34.084392702631746
+      },
+      "medianVerifyMs": {
+        "baseline": 241.11,
+        "candidate": 212.176125,
+        "reductionPercent": 12.000279955207171
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "0b55d02ff24323a3ef5363a5c816cdf86216fb96f130930fd072ac610e861617",
+      "candidate": "233421ec194f81c02b7846d4c38a44889e20f60099038a86a8d6c5e145afbe84"
+    }
+  },
+  {
+    "profile": "6g/pure-java/sha512-32",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 106332,
+        "candidate": 64980,
+        "reductionPercent": 38.88951585599819
+      },
+      "wires": {
+        "baseline": 352560,
+        "candidate": 258760,
+        "reductionPercent": 26.60540049920581
+      },
+      "qapDomain": {
+        "baseline": 131072,
+        "candidate": 65536,
+        "reductionPercent": 50.0
+      },
+      "keyStoreBytes": {
+        "baseline": 41549352,
+        "candidate": 24817543,
+        "reductionPercent": 40.26972309941199
+      },
+      "compileMs": {
+        "baseline": 234.7265,
+        "candidate": 208.904625,
+        "reductionPercent": 11.000835014367771
+      },
+      "firstWitnessMs": {
+        "baseline": 36.7615,
+        "candidate": 28.198541,
+        "reductionPercent": 23.29327965398583
+      },
+      "setupMs": {
+        "baseline": 5502.502709,
+        "candidate": 3163.207625,
+        "reductionPercent": 42.51329272721309
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 1585335288,
+        "candidate": 1386398056,
+        "reductionPercent": 12.54859041527876
+      },
+      "terms": {
+        "baseline": 501228,
+        "candidate": 386238,
+        "reductionPercent": 22.941655294596476
+      },
+      "peakRssBytes": {
+        "baseline": 1782218752,
+        "candidate": 1647951872,
+        "reductionPercent": 7.533692474581255
+      },
+      "medianWitnessMs": {
+        "baseline": 11.269625,
+        "candidate": 7.226875,
+        "reductionPercent": 35.872977139878216
+      },
+      "medianProveMs": {
+        "baseline": 3273.071667,
+        "candidate": 1554.083208,
+        "reductionPercent": 52.519120688108046
+      },
+      "medianVerifyMs": {
+        "baseline": 255.119417,
+        "candidate": 225.101125,
+        "reductionPercent": 11.766369002011324
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "c3e5485dc7d80199523eb856cc74d61583924dbfd542c4b6aeea6b1d733ce4d5",
+      "candidate": "fcf66a3c207b2f677e8ae73c7372028486fe9c3587d6d7586ea2027543ade9ed"
+    }
+  },
+  {
+    "profile": "8g/pure-java/sha256-1024",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 749691,
+        "candidate": 456915,
+        "reductionPercent": 39.052889790593724
+      },
+      "wires": {
+        "baseline": 2419678,
+        "candidate": 1748966,
+        "reductionPercent": 27.71906013940698
+      },
+      "qapDomain": {
+        "baseline": 1048576,
+        "candidate": 524288,
+        "reductionPercent": 50.0
+      },
+      "keyStoreBytes": {
+        "baseline": 305306890,
+        "candidate": 182034729,
+        "reductionPercent": 40.37647529015804
+      },
+      "compileMs": {
+        "baseline": 1636.19825,
+        "candidate": 1012.740875,
+        "reductionPercent": 38.10402406921044
+      },
+      "firstWitnessMs": {
+        "baseline": 185.559666,
+        "candidate": 93.165833,
+        "reductionPercent": 49.79198065596863
+      },
+      "setupMs": {
+        "baseline": 35055.015583,
+        "candidate": 18723.780583,
+        "reductionPercent": 46.58744184931947
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 4854915688,
+        "candidate": 3792617576,
+        "reductionPercent": 21.88087662625543
+      },
+      "terms": {
+        "baseline": 3510845,
+        "candidate": 2706671,
+        "reductionPercent": 22.905425901741605
+      },
+      "peakRssBytes": {
+        "baseline": 5099192320,
+        "candidate": 4320919552,
+        "reductionPercent": 15.262667480641323
+      },
+      "medianWitnessMs": {
+        "baseline": 70.214625,
+        "candidate": 67.953375,
+        "reductionPercent": 3.220482912213807
+      },
+      "medianProveMs": {
+        "baseline": 11508.921041,
+        "candidate": 10685.772916,
+        "reductionPercent": 7.1522614680174845
+      },
+      "medianVerifyMs": {
+        "baseline": 323.560917,
+        "candidate": 304.385833,
+        "reductionPercent": 5.926267046647049
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "a53d3a06956c0d31a495ae953c61198610d2f03cb86f856a25ea93efa0dba914",
+      "candidate": "146719e3f777df11ec7edb646114545f86f5b309c3ba182c713843c28086b0ff"
+    }
+  },
+  {
+    "profile": "8g/pure-java/sha256-128",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 130219,
+        "candidate": 79027,
+        "reductionPercent": 39.31223554166443
+      },
+      "wires": {
+        "baseline": 425294,
+        "candidate": 308198,
+        "reductionPercent": 27.53295367439935
+      },
+      "qapDomain": {
+        "baseline": 131072,
+        "candidate": 131072,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 48152680,
+        "candidate": 35378504,
+        "reductionPercent": 26.528483980538574
+      },
+      "compileMs": {
+        "baseline": 282.25175,
+        "candidate": 254.295708,
+        "reductionPercent": 9.904647889694228
+      },
+      "firstWitnessMs": {
+        "baseline": 38.5585,
+        "candidate": 30.580167,
+        "reductionPercent": 20.69150252214169
+      },
+      "setupMs": {
+        "baseline": 5452.931917,
+        "candidate": 3871.275917,
+        "reductionPercent": 29.005606966576035
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 1811913824,
+        "candidate": 1580838688,
+        "reductionPercent": 12.753097467399199
+      },
+      "terms": {
+        "baseline": 608925,
+        "candidate": 467679,
+        "reductionPercent": 23.19596009360758
+      },
+      "peakRssBytes": {
+        "baseline": 2075738112,
+        "candidate": 1787117568,
+        "reductionPercent": 13.904477753309186
+      },
+      "medianWitnessMs": {
+        "baseline": 17.241125,
+        "candidate": 9.638125,
+        "reductionPercent": 44.09805044624407
+      },
+      "medianProveMs": {
+        "baseline": 3968.897834,
+        "candidate": 2910.446834,
+        "reductionPercent": 26.668638102313015
+      },
+      "medianVerifyMs": {
+        "baseline": 327.0575,
+        "candidate": 290.370875,
+        "reductionPercent": 11.217178936425555
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "c0410e12b882fd969cf276a93edc252a26d500e678bf5b8ac54f75e6acc8607a",
+      "candidate": "679e4b33214842eeb2bee2c3a35bed7fc342fbb2c752f981b967a022e7dac83d"
+    }
+  },
+  {
+    "profile": "8g/pure-java/sha256-32",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 42694,
+        "candidate": 25758,
+        "reductionPercent": 39.668337471307446
+      },
+      "wires": {
+        "baseline": 141470,
+        "candidate": 102694,
+        "reductionPercent": 27.409344737400154
+      },
+      "qapDomain": {
+        "baseline": 65536,
+        "candidate": 32768,
+        "reductionPercent": 50.0
+      },
+      "keyStoreBytes": {
+        "baseline": 17977255,
+        "candidate": 10588711,
+        "reductionPercent": 41.099400325578074
+      },
+      "compileMs": {
+        "baseline": 181.696083,
+        "candidate": 118.879709,
+        "reductionPercent": 34.5722224512677
+      },
+      "firstWitnessMs": {
+        "baseline": 26.7505,
+        "candidate": 16.224041,
+        "reductionPercent": 39.35051307452196
+      },
+      "setupMs": {
+        "baseline": 3367.8425,
+        "candidate": 1700.821542,
+        "reductionPercent": 49.498186390842214
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 1412557712,
+        "candidate": 1283324952,
+        "reductionPercent": 9.148848142779453
+      },
+      "terms": {
+        "baseline": 199072,
+        "candidate": 152018,
+        "reductionPercent": 23.63667416814017
+      },
+      "peakRssBytes": {
+        "baseline": 1675165696,
+        "candidate": 1541652480,
+        "reductionPercent": 7.970149837643281
+      },
+      "medianWitnessMs": {
+        "baseline": 4.871792,
+        "candidate": 4.121417,
+        "reductionPercent": 15.402443289861312
+      },
+      "medianProveMs": {
+        "baseline": 1440.59775,
+        "candidate": 1107.455083,
+        "reductionPercent": 23.125308018841473
+      },
+      "medianVerifyMs": {
+        "baseline": 280.669458,
+        "candidate": 260.1675,
+        "reductionPercent": 7.304662981890964
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "167df95e23d7b20202c5c486b3a8b6346c58c1d2755cd8646dbae2a12890a884",
+      "candidate": "b86957cbd3602e25c64eba0fb4a09a307c1d848e01049df9571e7febcb4f77ae"
+    }
+  },
+  {
+    "profile": "8g/pure-java/sha512-1024",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 989329,
+        "candidate": 610249,
+        "reductionPercent": 38.31687942029396
+      },
+      "wires": {
+        "baseline": 3196464,
+        "candidate": 2334600,
+        "reductionPercent": 26.963044163800998
+      },
+      "qapDomain": {
+        "baseline": 1048576,
+        "candidate": 1048576,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 369567626,
+        "candidate": 274469130,
+        "reductionPercent": 25.73236650333652
+      },
+      "compileMs": {
+        "baseline": 1345.677,
+        "candidate": 1505.849833,
+        "reductionPercent": -11.902769609646313
+      },
+      "firstWitnessMs": {
+        "baseline": 131.420458,
+        "candidate": 171.897,
+        "reductionPercent": -30.799270232340838
+      },
+      "setupMs": {
+        "baseline": 37884.801334,
+        "candidate": 32164.485417,
+        "reductionPercent": 15.099236938234284
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 5706087304,
+        "candidate": 4468865752,
+        "reductionPercent": 21.68248549461731
+      },
+      "terms": {
+        "baseline": 4679273,
+        "candidate": 3635963,
+        "reductionPercent": 22.296412284557874
+      },
+      "peakRssBytes": {
+        "baseline": 6372016128,
+        "candidate": 4798480384,
+        "reductionPercent": 24.69447208530354
+      },
+      "medianWitnessMs": {
+        "baseline": 117.762291,
+        "candidate": 81.132,
+        "reductionPercent": 31.105280551989257
+      },
+      "medianProveMs": {
+        "baseline": 12200.071625,
+        "candidate": 11320.236791,
+        "reductionPercent": 7.211718595135719
+      },
+      "medianVerifyMs": {
+        "baseline": 227.228917,
+        "candidate": 213.942083,
+        "reductionPercent": 5.8473341225316
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "fc7fcd2a5cceb20ac717cdbd5f834e87c6588eed8e50e7e1310638edc9c42f6c",
+      "candidate": "c2844307a85ccd46a78ad5374b544c0ca7ee6f44572ff0cd97f0a1eb3973c0cf"
+    }
+  },
+  {
+    "profile": "8g/pure-java/sha512-128",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 215913,
+        "candidate": 132569,
+        "reductionPercent": 38.6007327025237
+      },
+      "wires": {
+        "baseline": 707096,
+        "candidate": 517960,
+        "reductionPercent": 26.748277461617654
+      },
+      "qapDomain": {
+        "baseline": 262144,
+        "candidate": 262144,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 83909288,
+        "candidate": 62937640,
+        "reductionPercent": 24.99323793570981
+      },
+      "compileMs": {
+        "baseline": 452.958708,
+        "candidate": 367.442709,
+        "reductionPercent": 18.879424876847718
+      },
+      "firstWitnessMs": {
+        "baseline": 53.542083,
+        "candidate": 43.660792,
+        "reductionPercent": 18.455185988935096
+      },
+      "setupMs": {
+        "baseline": 8696.014875,
+        "candidate": 6916.513334,
+        "reductionPercent": 20.46341417970493
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 2138523624,
+        "candidate": 1929899192,
+        "reductionPercent": 9.755535532021787
+      },
+      "terms": {
+        "baseline": 1019673,
+        "candidate": 789091,
+        "reductionPercent": 22.613327998289645
+      },
+      "peakRssBytes": {
+        "baseline": 2691252224,
+        "candidate": 2214903808,
+        "reductionPercent": 17.69988006891472
+      },
+      "medianWitnessMs": {
+        "baseline": 18.219125,
+        "candidate": 15.683917,
+        "reductionPercent": 13.915091970662697
+      },
+      "medianProveMs": {
+        "baseline": 5316.368083,
+        "candidate": 5627.987625,
+        "reductionPercent": -5.861511790285112
+      },
+      "medianVerifyMs": {
+        "baseline": 217.229459,
+        "candidate": 263.358333,
+        "reductionPercent": -21.23509132341026
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "0b55d02ff24323a3ef5363a5c816cdf86216fb96f130930fd072ac610e861617",
+      "candidate": "233421ec194f81c02b7846d4c38a44889e20f60099038a86a8d6c5e145afbe84"
+    }
+  },
+  {
+    "profile": "8g/pure-java/sha512-32",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 106332,
+        "candidate": 64980,
+        "reductionPercent": 38.88951585599819
+      },
+      "wires": {
+        "baseline": 352560,
+        "candidate": 258760,
+        "reductionPercent": 26.60540049920581
+      },
+      "qapDomain": {
+        "baseline": 131072,
+        "candidate": 65536,
+        "reductionPercent": 50.0
+      },
+      "keyStoreBytes": {
+        "baseline": 41549352,
+        "candidate": 24817543,
+        "reductionPercent": 40.26972309941199
+      },
+      "compileMs": {
+        "baseline": 316.070125,
+        "candidate": 301.329875,
+        "reductionPercent": 4.663601154965214
+      },
+      "firstWitnessMs": {
+        "baseline": 46.947958,
+        "candidate": 38.330709,
+        "reductionPercent": 18.354896287502008
+      },
+      "setupMs": {
+        "baseline": 6119.308333,
+        "candidate": 4220.674208,
+        "reductionPercent": 31.02694000171734
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 1696502416,
+        "candidate": 1408777304,
+        "reductionPercent": 16.95989992624921
+      },
+      "terms": {
+        "baseline": 501228,
+        "candidate": 386238,
+        "reductionPercent": 22.941655294596476
+      },
+      "peakRssBytes": {
+        "baseline": 2027847680,
+        "candidate": 1617887232,
+        "reductionPercent": 20.21653066171124
+      },
+      "medianWitnessMs": {
+        "baseline": 13.787458,
+        "candidate": 8.110208,
+        "reductionPercent": 41.17691600583662
+      },
+      "medianProveMs": {
+        "baseline": 3429.115125,
+        "candidate": 1912.767417,
+        "reductionPercent": 44.21979585768501
+      },
+      "medianVerifyMs": {
+        "baseline": 237.241708,
+        "candidate": 264.037458,
+        "reductionPercent": -11.294704555069224
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "c3e5485dc7d80199523eb856cc74d61583924dbfd542c4b6aeea6b1d733ce4d5",
+      "candidate": "fcf66a3c207b2f677e8ae73c7372028486fe9c3587d6d7586ea2027543ade9ed"
+    }
+  }
+]

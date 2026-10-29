@@ -246,18 +246,28 @@ nonce can help a new format, but adding one to an existing digest format breaks 
 Hiding which approved record was used needs a different statement, such as private membership
 under a shared root. Issuers and outsourced provers can still know the data they handle.
 
-**Measured baseline, not a promise for this application.** The issue #111 runs below used
-32-byte preimage circuits with complete public digests, not this 48-byte approval policy.
-Pure-Java times are medians of three warm samples on a shared Apple M4 Max with Java 25.
+**Optimized reference measurements.** These runs use 32-byte preimage circuits with complete
+public digests, not this 48-byte approval policy. Each time is a pure-Java median of three proofs
+after one warmup, on a shared Apple M4 Max with Java 25.0.2 and eight visible processors.
 
-| 32-byte preimage | ZeroJ constraints | Java proof median |
-|---|---:|---:|
-| SHA-256 | 42,694 | 1.42 s |
-| SHA-512 | 106,332 | 2.45 s |
+| 32-byte preimage | ZeroJ constraints | Proof median, 6 GiB heap cap | Proof median, 8 GiB heap cap |
+|---|---:|---:|---:|
+| SHA-256 | 25,758 | 1.15 s | 1.11 s |
+| SHA-512 | 64,980 | 1.55 s | 1.91 s |
+
+Both `-Xmx6g` and `-Xmx8g` completed the full compile, witness, development-setup and proving
+pipeline. These are maximum Java heap settings, not total-process memory limits or minimum
+requirements. Timings vary with workload and host activity; a larger heap is not automatically
+faster. The same comparison also tested 128-byte and 1 KiB messages. Some individual runs had
+higher memory peaks or slower timings after optimization, so do not assume every metric improves.
+
+Rebuild circuit artifacts and generate new circuit-specific keys after upgrading. The digest
+format is unchanged, but the optimized constraint layout differs. Keep old proofs with their
+original verification keys.
 
 Larger documents, multiple hash calls and longer Merkle paths need their own measurements. See the
-[full validation report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-issue-111-validation.md)
-for the exact scope, vectors and reproducible commands.
+[optimization report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-optimization-results.md)
+for before/after results, memory measurements, validation scope and reproducible commands.
 
 ### Estimated Cardano verification cost
 
@@ -266,7 +276,8 @@ SHA-512 is **about 0.46 ADA** in the reference measurements below. These totals 
 transaction's size fee and proof-verification execution fee, with the script carried in the
 transaction. They exclude the separate transaction that creates the locked output.
 
-These are retained **local Yaci DevKit measurements from 2026-10-29**, using ZeroJ's Groth16
+These are retained **local Yaci DevKit measurements from 2026-10-29**, rechecked with
+optimized proofs under both heap caps with unchanged costs. They use ZeroJ's Groth16
 verifier, JuLC and full-digest preimage proofs. They are not a mainnet submission or a benchmark
 of this tutorial's 48-byte approval application. Use them as a starting estimate, then evaluate
 your complete validator with your target network's parameters.

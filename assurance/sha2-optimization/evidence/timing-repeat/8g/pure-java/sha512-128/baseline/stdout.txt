@@ -1,0 +1,8 @@
+sha512-128/pure-java sample=0 witness=28.517ms prove=5550.081ms verify=228.644ms
+sha512-128/pure-java sample=1 witness=17.498ms prove=5293.718ms verify=216.250ms
+sha512-128/pure-java sample=2 witness=17.388ms prove=5136.352ms verify=212.287ms
+sha512-128/pure-java sample=3 witness=17.506ms prove=5135.070ms verify=209.546ms
+sha512-128/pure-java sample=4 witness=16.949ms prove=5247.624ms verify=208.847ms
+sha512-128/pure-java sample=5 witness=17.031ms prove=5751.994ms verify=251.002ms
+sha512-128/pure-java sample=6 witness=20.146ms prove=6248.240ms verify=264.180ms
+sha512-128/pure-java sample=7 witness=21.392ms prove=6175.842ms verify=251.887ms

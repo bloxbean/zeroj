@@ -1,0 +1,21 @@
+Picked up JAVA_TOOL_OPTIONS: -Xlog:gc*:file=/private/tmp/zeroj-sha2-opt-gc-%p.log:time,uptime,pid,level,tags
+WARNING: Single-party Powers of Tau generation (BLS12-381) — for DEVELOPMENT and TESTING only. Use independently verified, hash-pinned BLS12-381 MPC ceremony outputs for production.
+WARNING: Single-party Groth16 Phase 2 setup (BLS12-381, streaming) — for DEVELOPMENT and TESTING only. Use snarkjs multi-party ceremony for production.
+       93.24 real       643.10 user         2.80 sys
+          4682776576  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              294119  page reclaims
+               22498  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                  38  signals received
+                 915  voluntary context switches
+              253029  involuntary context switches
+       6162545197094  instructions retired
+       2026908015018  cycles elapsed
+          4346171208  peak memory footprint

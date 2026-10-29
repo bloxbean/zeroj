@@ -1,0 +1,79 @@
+{
+  "algorithm" : "SHA-256",
+  "messageBytes" : 128,
+  "backend" : "pure-java",
+  "timestamp" : "2026-10-29T06:40:50.908Z",
+  "curve" : "BLS12-381",
+  "setup" : "INSECURE SINGLE-PARTY DEVELOPMENT ONLY",
+  "timingScope" : "One first-call warmup then measured samples in a fresh JVM; compile/setup are single samples",
+  "javaRuntime" : "25.0.2+12-LTS",
+  "jvmArguments" : [ "-Xmx8g", "-XX:ActiveProcessorCount=8", "--enable-native-access=ALL-UNNAMED", "-Dzeroj.allowInsecureTrustedSetup=true" ],
+  "processors" : 8,
+  "maxHeapBytes" : 8589934592,
+  "os" : "Mac OS X",
+  "architecture" : "aarch64",
+  "initialLoadAverage" : 57.40673828125,
+  "compileMs" : 282.25175,
+  "constraints" : 130219,
+  "wires" : 425294,
+  "publicInputs" : 2,
+  "terms" : {
+    "c" : 96713,
+    "b" : 180819,
+    "a" : 331393,
+    "total" : 608925
+  },
+  "pressureModeEntered" : false,
+  "fingerprintMs" : 33.813,
+  "r1csCanonicalSha256" : "c0410e12b882fd969cf276a93edc252a26d500e678bf5b8ac54f75e6acc8607a",
+  "fingerprint" : "c130219-w425294-p2-rc0410e12b882fd969cf276a93edc252a26d500e678bf5b8ac54f75e6acc8607a",
+  "firstWitnessMs" : 38.5585,
+  "setupMs" : 5452.931917,
+  "qapDomain" : 131072,
+  "keyStoreBytes" : 48152680,
+  "samples" : [ {
+    "verifyMs" : 370.434416,
+    "warmup" : true,
+    "witnessMs" : 15.134375,
+    "sample" : 0,
+    "proveMs" : 4625.692375,
+    "proofSha256" : "7aceec64005e564ee4165422619c7a5f94c2463da329ff5c0dffc5680ed6d44f"
+  }, {
+    "verifyMs" : 326.040791,
+    "warmup" : false,
+    "witnessMs" : 26.43525,
+    "sample" : 1,
+    "proveMs" : 3968.897834,
+    "proofSha256" : "76a4e67ea1bc5ceba8186f423abb992dacf424245d7efed74e4f82508ce2fa28"
+  }, {
+    "verifyMs" : 333.9875,
+    "warmup" : false,
+    "witnessMs" : 17.241125,
+    "sample" : 2,
+    "proveMs" : 4010.90575,
+    "proofSha256" : "e00af4984f25b81868c330d8a55c4756a8518173a93eca7964a7694e5b6fd915"
+  }, {
+    "verifyMs" : 327.0575,
+    "warmup" : false,
+    "witnessMs" : 16.240125,
+    "sample" : 3,
+    "proveMs" : 3898.593083,
+    "proofSha256" : "1843f720b86904287cec88922977baddb96a0bea97bd963aeda9357fe86404c9"
+  } ],
+  "randomizedProofsVerified" : 4,
+  "changedDigestLimbsRejected" : 2,
+  "canonicalNegatedARejected" : true,
+  "verificationKeySha256" : "d3ea6b69a58682c75c42c7f13546345fcbe30f2ee215eda8e34dd40cda55ed34",
+  "status" : "passed",
+  "sampledHeapPeakBytes" : 1811913824,
+  "heapSamplingIntervalMs" : 20,
+  "heapPoolPeakUsedBytes" : {
+    "G1 Eden Space" : 1413480448,
+    "G1 Old Gen" : 418385248,
+    "G1 Survivor Space" : 58486032
+  },
+  "memoryScope" : "Sampled simultaneous heap usage can miss short peaks; pool peaks occur at different times and must not be summed as a measured peak. OS peak RSS is recorded separately by runner.",
+  "gcCollections" : 18,
+  "gcTimeMs" : 162,
+  "finalLoadAverage" : 68.615234375
+}

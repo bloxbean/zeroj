@@ -1,0 +1,20 @@
+WARNING: Single-party Powers of Tau generation (BLS12-381) — for DEVELOPMENT and TESTING only. Use independently verified, hash-pinned BLS12-381 MPC ceremony outputs for production.
+WARNING: Single-party Groth16 Phase 2 setup (BLS12-381, streaming) — for DEVELOPMENT and TESTING only. Use snarkjs multi-party ceremony for production.
+       25.91 real       170.39 user         0.75 sys
+          2026373120  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              125238  page reclaims
+                3848  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                  23  signals received
+                 135  voluntary context switches
+               57672  involuntary context switches
+       1803931167513  instructions retired
+        583301107486  cycles elapsed
+          1941637232  peak memory footprint

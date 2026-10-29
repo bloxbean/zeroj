@@ -4,6 +4,10 @@ This note supports the planning estimates in the SHA-256 approval tutorial. It
 imports two retained **2026-10-29 local Yaci DevKit** research results; it does not
 claim a new ledger run of issue #111 or of the tutorial's approval circuit.
 
+The [optimization report](sha2-optimization-results.md#fresh-cardano-regression)
+adds four fresh local spends with optimized proofs at 6/8 GiB heap caps. Costs
+matched the table below. This note preserves the original baseline provenance.
+
 ## Provenance and scope
 
 The adjacent [JSON extract](sha2-cardano-cost-baseline.json) preserves the original

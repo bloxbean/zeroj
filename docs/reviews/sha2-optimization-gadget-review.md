@@ -12,7 +12,9 @@ and `Sha2OptimizationTest`, against the pre-optimization commit `3f1570f` and
 4.1, 6.2.2 and 6.4.2. **No blocking correctness or soundness finding identified
 in these gadget changes.** Approval remains conditional on the overall change's
 standard-vector, independent compiled-relation, proof, full-build and performance
-gates. This source review does not assert those pending runs have passed.
+gates. This source review covers the implementation; the subsequently completed
+checks and measured performance trade-offs are in the
+[results report](sha2-optimization-results.md).
 
 Reviewed source SHA-256 identities:
 

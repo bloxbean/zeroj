@@ -1,0 +1,25 @@
+VM settings:
+    Max. Heap Size: 6.00G
+    Using VM: OpenJDK 64-Bit Server VM
+
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+        9.09 real         4.22 user         0.27 sys
+           297041920  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               26443  page reclaims
+                  10  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                  58  messages sent
+                  77  messages received
+                  14  signals received
+                 724  voluntary context switches
+               18344  involuntary context switches
+         35462606427  instructions retired
+         15840107933  cycles elapsed
+           271385584  peak memory footprint

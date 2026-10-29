@@ -1,0 +1,51 @@
+{
+  "command": [
+    "/usr/bin/time",
+    "-l",
+    "/Users/satya/.sdkman/candidates/java/25.0.2-librca/bin/java",
+    "-Xmx6g",
+    "-XX:ActiveProcessorCount=8",
+    "--enable-native-access=ALL-UNNAMED",
+    "-Dzeroj.allowInsecureTrustedSetup=true",
+    "-cp",
+    "/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-crypto-blst/build/classes/java/sha2Optimization:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-crypto-blst/build/resources/sha2Optimization:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-crypto/build/libs/zeroj-crypto-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-verifier-groth16/build/libs/zeroj-verifier-groth16-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-blst/build/libs/zeroj-blst-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-circuit-lib/build/libs/zeroj-circuit-lib-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-codec/build/libs/zeroj-codec-0.1.0-pre13.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-annotations/2.18.2/985d77751ebc7fce5db115a986bc9aa82f973f4a/jackson-annotations-2.18.2.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-core/2.18.2/fb64ccac5c27dca8819418eb4e443a9f496d9ee7/jackson-core-2.18.2.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-databind/2.18.2/deef8697b92141fb6caf7aa86966cff4eec9b04f/jackson-databind-2.18.2.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-bls12381/build/libs/zeroj-bls12381-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-circuit-annotation-api/build/libs/zeroj-circuit-annotation-api-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-circuit-dsl/build/libs/zeroj-circuit-dsl-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-backend-spi/build/libs/zeroj-backend-spi-0.1.0-pre13.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-api/build/libs/zeroj-api-0.1.0-pre13.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/co.nstant.in/cbor/0.9/6fdebc091a3b58c996018ab2cbb395917de0034/cbor-0.9.jar:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-crypto-blst/build/classes/java/main:/Users/satya/work/bloxbean/zeroj-sha2-111/zeroj-crypto-blst/build/resources/main",
+    "org.zeroj.assurance.sha2.Sha2OptimizationBenchmark",
+    "SHA-512",
+    "128",
+    "3",
+    "/Users/satya/work/bloxbean/zeroj-sha2-111/assurance/sha2-optimization/build/comparison/6g/pure-java/sha512-128/candidate/artifacts",
+    "pure-java"
+  ],
+  "algorithm": "SHA-512",
+  "messageBytes": 128,
+  "heap": "6g",
+  "backend": "pure-java",
+  "timestamp": "2026-10-29T06:36:40.877065+00:00",
+  "initialLoadAverage": [
+    43.5693359375,
+    32.65966796875,
+    26.1005859375
+  ],
+  "exitCode": 0,
+  "wallSecondsIncludingStartupAndChecks": 25.925574166234583,
+  "peakRssBytes": 2026373120,
+  "passed": true,
+  "effectiveControlsMatch": true,
+  "artifactSha256": {
+    "artifacts/digest.hex": "61c6c94564960e0b38293c433539a6e840dc2931a85a8aec00e99f11da97a91e",
+    "artifacts/message.hex": "5a0e4061e553c86bdac91a0991e6a5c6aa9f35ab680bafd92bc63b80d160d74b",
+    "artifacts/proof-0.json": "e25fdc6e42a2cbeea64ec2ec10027c0aa21cb8b5b11c967a0145e2c809e1b0d1",
+    "artifacts/proof-1.json": "79e2f67ec08b5ee7ad7dbd33c74a2e168f0ce0dfdf85712394720a1e70517147",
+    "artifacts/proof-2.json": "5dbe7674c84c7b0ca97c57294d22743e35d8dddacd92f389d7bccc3fd05042bf",
+    "artifacts/proof-3.json": "6d436c2544d5f154e9608e605d89e42d028e6a4256d2df5454a8bad1a7bf5d7d",
+    "artifacts/proof-negated-a.json": "710cf2c19c72f00befb772f91531540f22cbac3d454e7691efbeffebf2f35b02",
+    "artifacts/proof.json": "6d436c2544d5f154e9608e605d89e42d028e6a4256d2df5454a8bad1a7bf5d7d",
+    "artifacts/public-wrong-0.json": "2f9eeca247669c868021d2f027f73bd4f9f8e51eb01d3289374b11bb4b29fb0f",
+    "artifacts/public-wrong-1.json": "99f700a1874693de67160fe2a59726af01ee8c5771eee0317346028ad97f124a",
+    "artifacts/public-wrong-2.json": "5f9f22016a6227949aa0c8eb7acf29813d16e894ec584fc36085ec5b030cf136",
+    "artifacts/public-wrong-3.json": "11404aa1485b88ee7d392044fa4c20bc810f9f6f3c8ab88f237a024dafec1b73",
+    "artifacts/public.json": "965cb633d6a7b2cebbf1e2f8bc8ee32dfee4f85e092b4bc1a2df67e3836a557c",
+    "artifacts/result.json": "8f326b70e579c9ccd9da00ad0e3f43e4fa30b66f3e40265e50f2ada48902b454",
+    "artifacts/verification_key.json": "8e8c215ec0167a940df359f75268b81a771b8d944350424c754f64791f422879"
+  }
+}

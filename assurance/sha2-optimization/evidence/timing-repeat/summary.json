@@ -1,0 +1,77 @@
+[
+  {
+    "profile": "8g/pure-java/sha512-128",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 215913,
+        "candidate": 132569,
+        "reductionPercent": 38.6007327025237
+      },
+      "wires": {
+        "baseline": 707096,
+        "candidate": 517960,
+        "reductionPercent": 26.748277461617654
+      },
+      "qapDomain": {
+        "baseline": 262144,
+        "candidate": 262144,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 83909288,
+        "candidate": 62937640,
+        "reductionPercent": 24.99323793570981
+      },
+      "compileMs": {
+        "baseline": 448.904458,
+        "candidate": 489.439916,
+        "reductionPercent": -9.029863098396774
+      },
+      "firstWitnessMs": {
+        "baseline": 47.93425,
+        "candidate": 48.841167,
+        "reductionPercent": -1.8920020653290681
+      },
+      "setupMs": {
+        "baseline": 8264.526625,
+        "candidate": 8004.27,
+        "reductionPercent": 3.1490808464786135
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 2455713184,
+        "candidate": 1939756968,
+        "reductionPercent": 21.01044288729119
+      },
+      "terms": {
+        "baseline": 1019673,
+        "candidate": 789091,
+        "reductionPercent": 22.613327998289645
+      },
+      "peakRssBytes": {
+        "baseline": 3140665344,
+        "candidate": 2331181056,
+        "reductionPercent": 25.774293002801386
+      },
+      "medianWitnessMs": {
+        "baseline": 17.498167,
+        "candidate": 15.950291,
+        "reductionPercent": 8.845932262504974
+      },
+      "medianProveMs": {
+        "baseline": 5293.718,
+        "candidate": 4778.572791,
+        "reductionPercent": 9.731255216088208
+      },
+      "medianVerifyMs": {
+        "baseline": 216.250083,
+        "candidate": 227.485416,
+        "reductionPercent": -5.195527716861048
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "0b55d02ff24323a3ef5363a5c816cdf86216fb96f130930fd072ac610e861617",
+      "candidate": "233421ec194f81c02b7846d4c38a44889e20f60099038a86a8d6c5e145afbe84"
+    }
+  }
+]

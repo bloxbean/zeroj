@@ -1,0 +1,4 @@
+sha512-128/blst sample=0 witness=47.393ms prove=2581.993ms verify=261.113ms
+sha512-128/blst sample=1 witness=20.031ms prove=1814.276ms verify=246.377ms
+sha512-128/blst sample=2 witness=21.277ms prove=1835.025ms verify=246.545ms
+sha512-128/blst sample=3 witness=19.952ms prove=1702.435ms verify=233.944ms

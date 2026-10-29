@@ -1,0 +1,77 @@
+[
+  {
+    "profile": "6g/pure-java/sha512-1024",
+    "status": "passed",
+    "metrics": {
+      "constraints": {
+        "baseline": 989329,
+        "candidate": 610249,
+        "reductionPercent": 38.31687942029396
+      },
+      "wires": {
+        "baseline": 3196464,
+        "candidate": 2334600,
+        "reductionPercent": 26.963044163800998
+      },
+      "qapDomain": {
+        "baseline": 1048576,
+        "candidate": 1048576,
+        "reductionPercent": 0.0
+      },
+      "keyStoreBytes": {
+        "baseline": 369567626,
+        "candidate": 274469130,
+        "reductionPercent": 25.73236650333652
+      },
+      "compileMs": {
+        "baseline": 2003.719333,
+        "candidate": 1519.032834,
+        "reductionPercent": 24.189340843176854
+      },
+      "firstWitnessMs": {
+        "baseline": 200.414708,
+        "candidate": 169.872917,
+        "reductionPercent": 15.239296209737251
+      },
+      "setupMs": {
+        "baseline": 37702.611792,
+        "candidate": 30951.262792,
+        "reductionPercent": 17.90684697719681
+      },
+      "sampledHeapPeakBytes": {
+        "baseline": 3927046360,
+        "candidate": 4253299160,
+        "reductionPercent": -8.307841825427298
+      },
+      "terms": {
+        "baseline": 4679273,
+        "candidate": 3635963,
+        "reductionPercent": 22.296412284557874
+      },
+      "peakRssBytes": {
+        "baseline": 4682776576,
+        "candidate": 4880072704,
+        "reductionPercent": -4.213229582875577
+      },
+      "medianWitnessMs": {
+        "baseline": 98.830167,
+        "candidate": 63.675333,
+        "reductionPercent": 35.57095476728275
+      },
+      "medianProveMs": {
+        "baseline": 12369.496417,
+        "candidate": 11020.785834,
+        "reductionPercent": 10.903520543863054
+      },
+      "medianVerifyMs": {
+        "baseline": 259.122083,
+        "candidate": 227.538084,
+        "reductionPercent": 12.188848836939915
+      }
+    },
+    "r1csCanonicalSha256": {
+      "baseline": "fc7fcd2a5cceb20ac717cdbd5f834e87c6588eed8e50e7e1310638edc9c42f6c",
+      "candidate": "c2844307a85ccd46a78ad5374b544c0ca7ee6f44572ff0cd97f0a1eb3973c0cf"
+    }
+  }
+]

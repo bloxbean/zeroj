@@ -1,0 +1,49 @@
+{
+  "command": [
+    "/usr/bin/time",
+    "-l",
+    "/Users/satya/.sdkman/candidates/java/25.0.2-librca/bin/java",
+    "-Xmx6g",
+    "-XX:ActiveProcessorCount=8",
+    "--enable-native-access=ALL-UNNAMED",
+    "-Dzeroj.allowInsecureTrustedSetup=true",
+    "-cp",
+    "/private/tmp/zeroj-sha2-baseline-112/zeroj-crypto-blst/build/classes/java/sha2Optimization:/private/tmp/zeroj-sha2-baseline-112/zeroj-crypto-blst/build/resources/sha2Optimization:/private/tmp/zeroj-sha2-baseline-112/zeroj-crypto/build/libs/zeroj-crypto-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-verifier-groth16/build/libs/zeroj-verifier-groth16-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-blst/build/libs/zeroj-blst-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-circuit-lib/build/libs/zeroj-circuit-lib-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-codec/build/libs/zeroj-codec-0.1.0-pre13.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-annotations/2.18.2/985d77751ebc7fce5db115a986bc9aa82f973f4a/jackson-annotations-2.18.2.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-core/2.18.2/fb64ccac5c27dca8819418eb4e443a9f496d9ee7/jackson-core-2.18.2.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-databind/2.18.2/deef8697b92141fb6caf7aa86966cff4eec9b04f/jackson-databind-2.18.2.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-bls12381/build/libs/zeroj-bls12381-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-circuit-annotation-api/build/libs/zeroj-circuit-annotation-api-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-circuit-dsl/build/libs/zeroj-circuit-dsl-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-backend-spi/build/libs/zeroj-backend-spi-0.1.0-pre13.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-api/build/libs/zeroj-api-0.1.0-pre13.jar:/Users/satya/.gradle/caches/modules-2/files-2.1/co.nstant.in/cbor/0.9/6fdebc091a3b58c996018ab2cbb395917de0034/cbor-0.9.jar:/private/tmp/zeroj-sha2-baseline-112/zeroj-crypto-blst/build/classes/java/main:/private/tmp/zeroj-sha2-baseline-112/zeroj-crypto-blst/build/resources/main",
+    "org.zeroj.assurance.sha2.Sha2OptimizationBenchmark",
+    "SHA-256",
+    "128",
+    "3",
+    "/Users/satya/work/bloxbean/zeroj-sha2-111/assurance/sha2-optimization/build/blst-comparison/6g/blst/sha256-128/baseline/artifacts",
+    "blst"
+  ],
+  "algorithm": "SHA-256",
+  "messageBytes": 128,
+  "heap": "6g",
+  "backend": "blst",
+  "timestamp": "2026-10-29T06:55:46.339601+00:00",
+  "initialLoadAverage": [
+    25.041015625,
+    38.39794921875,
+    39.3349609375
+  ],
+  "exitCode": 0,
+  "wallSecondsIncludingStartupAndChecks": 11.530982208903879,
+  "peakRssBytes": 1816494080,
+  "passed": true,
+  "effectiveControlsMatch": true,
+  "artifactSha256": {
+    "artifacts/digest.hex": "1d3d1ea48185530789b8971bbe8bcac88c8d30f995fb056a7ebc31dd91ab1480",
+    "artifacts/message.hex": "5a0e4061e553c86bdac91a0991e6a5c6aa9f35ab680bafd92bc63b80d160d74b",
+    "artifacts/proof-0.json": "7af372be73e78623363dfd0717966607d2272b0796e2da5e00d02991288e045e",
+    "artifacts/proof-1.json": "2461e720fe11df2aace3afd5016ff85816bcc41f6d2c945be3124ec38b1f314f",
+    "artifacts/proof-2.json": "49308adbe328277aa106f32344e62eadeb160e49743d843ab15e290a7cf97d63",
+    "artifacts/proof-3.json": "849b3cc20031469459184dc52b5c8d347d6d54fa357bbbe443345f624339f6c1",
+    "artifacts/proof-negated-a.json": "b3de02717bf8b2ede284dac12136cb84d8da0c9805ba687b795946d3a5b9b4b2",
+    "artifacts/proof.json": "849b3cc20031469459184dc52b5c8d347d6d54fa357bbbe443345f624339f6c1",
+    "artifacts/public-wrong-0.json": "5cd82e64eca3c877429f06482881a538ba5abaad18a1c3fe6ad3b6bc480d3c76",
+    "artifacts/public-wrong-1.json": "97d2cc43920509f37c563c59fc76cc12762cd3c1c0a3921e75b2c972dc298d46",
+    "artifacts/public.json": "75927f02a34f70dc3060af98328af48d66e5802fad5f3bfe9a416358dbc6f7b8",
+    "artifacts/result.json": "d2c34f2a35ac9f0188e96b8a8d6e4b772448ad8e28ad4284beeb4fc29af3a194",
+    "artifacts/verification_key.json": "5ff59d377409a4bb93c6f63bb820eaec787393ffc56ba38ea185bc5b8836323b"
+  }
+}

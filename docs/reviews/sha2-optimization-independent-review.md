@@ -183,3 +183,35 @@ Reviewed final additional test identities (SHA-256):
 | `ZkJmtOperationCircuitTest.java` | `abb1800aca3c593ee175adf97d6ebcf92391cc8ff493c779e7c6b3f2183aab43` |
 | `ZkMpfOperationCircuitTest.java` | `2f2868a825267984433bef04c6e1bd01c56f445da0bc5ce4e67b94db155a3a46` |
 | `ZkMpfTransitionCircuitTest.java` | `3643d217392b7f8271c9a54ca43c69f197a89c2e54f81f781d121481591f5e2b` |
+
+## Final retained-evidence and report audit
+
+The completed results report, evidence README, four benchmark summaries and oracle
+verdict sets, Cardano records/provenance, and updated tutorial were independently
+reviewed. No defect was identified in this final evidence/report check.
+
+- All **861** retained-manifest entries and **628** per-process artifact hashes
+  matched. The four summaries recomputed exactly from their underlying records.
+- All **44 benchmark JVMs** reported the requested effective 6/8 GiB maximum heap
+  and eight processors. Their verification-key hashes were distinct. The recorded
+  candidate production-source and harness hashes still matched the current files.
+- Oracle records contain exactly **184 accepted randomized proofs and 180 rejected
+  invalid fixtures: 364 passing checks**, using pinned snarkjs 0.7.6. Message digests
+  and complete public limbs were independently recomputed from the retained fixtures.
+- Structural, proof-time, other-stage, memory and native-provider tables match the
+  raw summaries and their stated rounding. The primary 11/12 pure-Java and 7/8 native
+  improvement counts are correct. Original timing and memory regressions remain
+  visible alongside separate repeats; no universal performance improvement is claimed.
+- The **four additional Cardano JVMs** have matching heap settings, confirmed-spend
+  records, eight rejected VM negatives each and signed-invalid-submission records.
+  Reported budgets/fees match the Haskell records; retained transaction/script byte
+  lengths match the tables. Proof inputs match the optimized benchmark artifacts.
+  Current verifier-library, validator and codec source hashes match provenance.
+- Tutorial measurements contain ZeroJ numbers, distinguish the measured 32-byte
+  preimage from the 48-byte approval policy, and retain local-devnet, development-
+  setup, security and performance limits. Relative evidence/report links resolve.
+
+This was a read-only consistency and source/provenance audit by an AI reviewer,
+not an external cryptographic audit or a rerun of proof generation, independent
+verification, ledger submissions or browser layout inspection. No heavy workload
+was launched for this final check.

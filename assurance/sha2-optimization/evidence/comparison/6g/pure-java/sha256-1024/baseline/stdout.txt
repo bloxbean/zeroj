@@ -1,0 +1,4 @@
+sha256-1024/pure-java sample=0 witness=104.344ms prove=11678.712ms verify=302.128ms
+sha256-1024/pure-java sample=1 witness=88.391ms prove=11315.967ms verify=285.157ms
+sha256-1024/pure-java sample=2 witness=102.853ms prove=10916.841ms verify=279.677ms
+sha256-1024/pure-java sample=3 witness=59.312ms prove=12108.299ms verify=320.749ms

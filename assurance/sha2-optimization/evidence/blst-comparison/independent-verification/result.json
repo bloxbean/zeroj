@@ -1,0 +1,1030 @@
+{
+  "cliSha256": "6d787e37a4d1a2c6dd6032dadca09c0b3b007d4d4578bb6232a98136555d051a",
+  "version": "snarkjs@0.7.6",
+  "checks": [
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-128/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-128/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-32/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha256-32/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-128/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "6g/blst/sha512-32/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-128/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-128/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-32/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha256-32/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-128/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/baseline",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof-0.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof-1.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof-2.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof-3.json",
+      "public": "public.json",
+      "expectedValid": true,
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-0.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-1.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-2.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof.json",
+      "public": "public-wrong-3.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    },
+    {
+      "case": "8g/blst/sha512-32/candidate",
+      "proof": "proof-negated-a.json",
+      "public": "public.json",
+      "expectedValid": false,
+      "passed": true,
+      "exitCode": 1
+    }
+  ]
+}

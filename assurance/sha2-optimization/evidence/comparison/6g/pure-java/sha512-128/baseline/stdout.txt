@@ -1,0 +1,4 @@
+sha512-128/pure-java sample=0 witness=34.140ms prove=6688.452ms verify=275.472ms
+sha512-128/pure-java sample=1 witness=27.918ms prove=5839.574ms verify=256.416ms
+sha512-128/pure-java sample=2 witness=25.706ms prove=6136.421ms verify=241.110ms
+sha512-128/pure-java sample=3 witness=25.683ms prove=5985.411ms verify=233.545ms
