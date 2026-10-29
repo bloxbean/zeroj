@@ -1,0 +1,18 @@
+[package]
+name = "zeroj-dalek-harness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "ADR-0061 M2: runs dalek bulletproofs 5.0.0 against proofs from the ZeroJ group-generic Python code (test only)"
+
+[dependencies]
+bulletproofs = "=5.0.0"
+curve25519-dalek = "=4.1.3"
+merlin = "=3.0.0"
+rand_core = "=0.6.4"
+rand_chacha = "=0.3.1"
+hex = "=0.4.3"
+serde_json = "1"
+
+[profile.release]
+debug = false

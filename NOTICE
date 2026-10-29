@@ -101,6 +101,10 @@ Test data only (in no published artifact):
       (NIST terms for non-SRD data)
   zeroj-circuit-lib/src/test/resources/poseidon-sage/
       Grain LFSR code ported from hadeshash (MIT licence)
+  zeroj-test-vectors/src/main/resources/test-vectors/cfrg-drafts-03/
+      draft-irtf-cfrg-fiat-shamir-03 and draft-irtf-cfrg-sigma-protocols-03
+      test vectors from mmaker/draft-irtf-cfrg-sigma-protocols (IETF Trust
+      terms, BCP 78); zeroj-test-vectors is never published
 
 ==========================================================================
 Apache License, Version 2.0

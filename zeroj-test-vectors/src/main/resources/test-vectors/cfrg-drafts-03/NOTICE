@@ -1,0 +1,73 @@
+Third-party notice: CFRG Fiat-Shamir and sigma-protocol test vectors
+=====================================================================
+
+The four JSON files in this directory are copied, unchanged, from the repository
+
+  https://github.com/mmaker/draft-irtf-cfrg-sigma-protocols
+  (commit 91cc933051af88b58e350af78a8ea961c56a30c6, directory poc/vectors/)
+
+They are not ZeroJ's work and are not covered by ZeroJ's own licence. They are the test vectors
+published with two IRTF Crypto Forum Research Group (CFRG) Internet-Drafts:
+
+  - draft-irtf-cfrg-fiat-shamir-03, "Fiat-Shamir Transformation"
+    (M. Orrù, 17 August 2026), Appendix B
+    https://datatracker.ietf.org/doc/draft-irtf-cfrg-fiat-shamir/
+
+  - draft-irtf-cfrg-sigma-protocols-03, "Sigma Proofs for Linear Relations"
+    (M. Orrù, C. Yun, 17 August 2026), Appendix A.3
+    https://datatracker.ietf.org/doc/draft-irtf-cfrg-sigma-protocols/
+
+Credit for the vectors belongs to the drafts' authors and the contributors to their repository.
+
+
+Source
+------
+
+They were copied from the drafts' source repository, which both drafts name as their source:
+
+  Repository: https://github.com/mmaker/draft-irtf-cfrg-sigma-protocols
+  Commit:     91cc933051af88b58e350af78a8ea961c56a30c6 (2026-08-17), tagged
+              draft-irtf-cfrg-fiat-shamir-03 and draft-irtf-cfrg-sigma-protocols-03
+  Path:       poc/vectors/
+
+  File                                          SHA-256
+  fiatShamirCodecVectors.json                   97d85f96e252111fd01e4147d9ebc48c80203e5783fef1eea2204211d847c821
+  fiatShamirShake128Vectors.json                f04cdf455b60239d20392813ffd5dd8d079fb1c0d5b0e07de3e50899bd6f6502
+  sigma-proofs_Shake128_BLS12381.json           e9f942c2d76f2086793b771fbb32cc8452e51dcf274cf163258d36b8d9906e94
+  sigma-proofs-invalid_Shake128_BLS12381.json   1da51dc890c0d9fe550d14c9f0f71c5175c5c5b6c6a698ef53074bb4c58bc740
+
+No other file from that repository is included, and no code from it is part of ZeroJ.
+
+
+Terms
+-----
+
+The drafts carry this copyright notice:
+
+  Copyright (c) 2026 IETF Trust and the persons identified as the document authors. All rights
+  reserved.
+
+  This document is subject to BCP 78 and the IETF Trust's Legal Provisions Relating to IETF
+  Documents (https://trustee.ietf.org/license-info) in effect on the date of publication of
+  this document.
+
+The source repository's LICENSE.md refers to its CONTRIBUTING.md, which states that all material
+in the repository is a Contribution to the IETF Standards Process under BCP 78, BCP 79 and the
+IETF Trust Legal Provisions (TLP), including the TLP rules on code components (a Simplified BSD
+License):
+
+  https://github.com/mmaker/draft-irtf-cfrg-sigma-protocols/blob/91cc933051af88b58e350af78a8ea961c56a30c6/LICENSE.md
+  https://github.com/mmaker/draft-irtf-cfrg-sigma-protocols/blob/91cc933051af88b58e350af78a8ea961c56a30c6/CONTRIBUTING.md
+
+The files are subject to those terms. This notice grants no rights of its own; see the documents
+above for the terms that apply.
+
+
+Use in ZeroJ
+------------
+
+The vectors are test data only. ZeroJ's tests read them to check its transcript layer (the
+SHAKE128 duplex sponge, its codecs and the sigma-proofs_Shake128_BLS12381 encodings) against the
+drafts (ADR-0061, invariant I12; docs/specs/bulletproof-range-bls12-381-g1-v1.md section 10). The
+zeroj-test-vectors module is never published, so these files are not part of any ZeroJ release
+artifact.

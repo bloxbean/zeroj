@@ -28,7 +28,8 @@ public final class CommitmentAcceptance {
      * Otherwise returns the first failure:
      * <ul>
      *   <li>a {@link CommitmentFormatException} from decoding, or from the opening check with a
-     *       reason other than {@code INVALID_CONFIGURATION} → its reason;</li>
+     *       reason other than {@code INVALID_CONFIGURATION} or {@code INVALID_STATEMENT} → its
+     *       reason;</li>
      *   <li>{@code MISSING} → {@code PROVENANCE_MISSING}; {@code MISMATCH} →
      *       {@code PROVENANCE_MISMATCH};</li>
      *   <li>{@code false} → {@code OPENING_MISMATCH}.</li>
@@ -36,7 +37,10 @@ public final class CommitmentAcceptance {
      *
      * <p>Every other throwable propagates unchanged, including any exception from the provenance
      * callback and an {@code INVALID_CONFIGURATION} from the opening check (a verifier
-     * misconfiguration, not a data verdict). No path turns a failure into acceptance.
+     * misconfiguration, not a data verdict). A {@code CommitmentFormatException} with
+     * {@code INVALID_STATEMENT} propagates unchanged from every step: it is a prover refusal, never a
+     * verdict on received data, so it never becomes a {@link CommitmentCheck} (spec §11, §12.1). No
+     * path turns a failure into acceptance.
      *
      * @throws NullPointerException if an argument is null, or the provenance callback returns null
      * @throws IOException          if the opening check throws it
@@ -53,6 +57,9 @@ public final class CommitmentAcceptance {
         try {
             commitment = CommitmentEnvelope.decode(envelope, expected);
         } catch (CommitmentFormatException e) {
+            if (e.reason() == CommitmentError.INVALID_STATEMENT) {
+                throw e;
+            }
             return CommitmentCheck.rejected(e.reason());
         }
 
@@ -73,7 +80,8 @@ public final class CommitmentAcceptance {
         try {
             matches = opening.matches(commitment);
         } catch (CommitmentFormatException e) {
-            if (e.reason() == CommitmentError.INVALID_CONFIGURATION) {
+            if (e.reason() == CommitmentError.INVALID_CONFIGURATION
+                    || e.reason() == CommitmentError.INVALID_STATEMENT) {
                 throw e;
             }
             return CommitmentCheck.rejected(e.reason());
