@@ -96,13 +96,11 @@ Test data only (in no published artifact):
       BBS draft-10 fixtures from decentralized-identity/bbs-signature
       (Apache License 2.0; the values are also in the IETF draft)
   zeroj-circuit-lib/src/test/resources/standard-vectors/
-      RFC 9180 HPKE (IETF Trust), Project Wycheproof (Apache License 2.0)
-      and zcash-test-vectors (MIT licence) vectors
+      RFC 9180 HPKE (IETF Trust), Project Wycheproof (Apache License 2.0),
+      zcash-test-vectors (MIT licence) and NIST CAVP SHA-2 vectors
+      (NIST terms for non-SRD data)
   zeroj-circuit-lib/src/test/resources/poseidon-sage/
       Grain LFSR code ported from hadeshash (MIT licence)
-  zeroj-test-vectors/src/main/resources/test-vectors/cfrg-drafts-03/
-      CFRG Fiat-Shamir and sigma-protocol draft vectors (IETF Trust)
-      (arrives with ADR-0061, PR #105)
 
 ==========================================================================
 Apache License, Version 2.0

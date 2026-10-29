@@ -32,8 +32,12 @@ When converting between formats, swap the two components.
 ## Source
 
 The format follows go-ethereum's precompile tests,
-`core/vm/testdata/precompiles/bn256Pairing.json`. The vectors are **not** copied from that file:
-checked on 2026-10-25 against go-ethereum `master` (`2006f0836b30b8f689cd1df5620a9f64421c9f84`;
-the file last changed in `a3cd8a040a`, 2020), only `empty_input` appears there (as `empty_data`).
-The other three cases are built from the standard BN254 generators, and where they came from is
-not recorded. They contain no third-party material, so this directory has no `NOTICE`.
+`core/vm/testdata/precompiles/bn256Pairing.json`. A comparison on 2026-10-25 against go-ethereum
+`master` (`2006f0836b30b8f689cd1df5620a9f64421c9f84`; the file last changed in `a3cd8a040a`,
+2020) found only `empty_input` there (as `empty_data`).
+
+The other three cases use the standard BN254 generators, but their origin is not recorded.
+This comparison does not establish who created the vectors or whether they were copied from
+another source or revision. Their provenance and any applicable third-party attribution remain
+unresolved; the absence of a `NOTICE` must not be read as evidence of ZeroJ authorship or an
+absence of third-party material.
