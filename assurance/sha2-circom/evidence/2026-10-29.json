@@ -1,0 +1,654 @@
+{
+  "completed_utc": "2026-10-29T02:53:12.765077+00:00",
+  "git_head": "d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40",
+  "curve": "BLS12-381",
+  "circom": "2.2.3",
+  "snarkjs": "0.7.6",
+  "dependencies": {
+    "circomlib": "35e54ea21da3e8762557234298dbb553c175ea8d",
+    "sha512": "be9f01d870c40c3fe4e0ff27c93232d205bc46f7"
+  },
+  "node": "v22.12.0",
+  "java": {
+    "available_processors": 4,
+    "os_arch": "aarch64",
+    "java_runtime_version": "25.0.2+12-LTS",
+    "java_vm": "OpenJDK 64-Bit Server VM",
+    "max_heap_bytes": 4294967296
+  },
+  "platform": "macOS-26.0.1-arm64-arm-64bit-Mach-O",
+  "fixture_sha256": "bc19af461d0ca94d5f4b94228da209fbb3b6e1112cc123fde047deff7063371e",
+  "nist_source": {
+    "cases_verified": 21,
+    "source": "https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/shs/shabytetestvectors.zip",
+    "zip_sha256": "929ef80b7b3418aca026643f6f248815913b60e01741a44bba9e118067f4c9b8",
+    "fixture_sha256": "bc19af461d0ca94d5f4b94228da209fbb3b6e1112cc123fde047deff7063371e"
+  },
+  "source_sha256": {
+    "zeroj-circuit-lib/src/test/resources/standard-vectors/nist-sha2-selected.json": "bc19af461d0ca94d5f4b94228da209fbb3b6e1112cc123fde047deff7063371e",
+    "assurance/sha2-circom/build/cases.json": "0a9820a71fd6b33dc2333da2983c2847342f202351677afb03a9720a26759b61",
+    "assurance/sha2-circom/java/org/zeroj/assurance/sha2/Sha2InteropExport.java": "a3831ed39913354bf34e6318dcc1d2f9024ef924adac3c3f8d5964703ff02e76",
+    "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/hash/Sha256.java": "6e08a9d8c3b436479d102fb55e7b057378899d671b743654544e8740f258dabe",
+    "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/hash/Sha512.java": "4a7d277b547796a1910c2ac67f340217c63fc1f92c52cf58ab21289613454aa8",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/BitDecomposition.java": "1b235f46a7303d24e780308bc4aafb81b981231cfe7f4a937a3bb990c9b832f9",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/CircuitAPI.java": "5e76f160ae5608daafb3802a3de0097aa41372ef802dfcbd2a173234c48d6a32",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/CircuitAPIImpl.java": "60a33271ceee5da33130d0c45531096e0bce7d04afe66f94bd9583492762526b",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/CircuitBuilder.java": "5efcd6089f3b4d03da52bb1a591d7dccad0536839df22a6a57d373dfb33c8d22",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/CircuitDefinition.java": "ce5f621f5daae57e0011f164a0374de0b5498ca1fabd0ecf98694089df962876",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/CircuitSpec.java": "24b5c8d8663994181d408684ba5c8609bf676edc03a13c6c2d5e96e75edb5306",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/ConstraintGraph.java": "1bb37df473ebdd03e8010c2130122332486372e390e28d00c456da3688775d05",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/FieldConfig.java": "a5927c5dd15a1c4eaf040d0bfbc32cb1a95378219d2cece1a12106554509a2f7",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/Gate.java": "f3bd89daf9e0c782debc296cc5c623703b294cb51455b4ceb218ef9be3451885",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/Signal.java": "4bf5593f016b4b89276e46447654430fb7ed4087c9cf1b7a947381617b22590d",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/SignalBuilder.java": "273be00af8d36ed88109a1d974b219d6e012952a60d27f6c77e16511e82f4f18",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/Variable.java": "c4412a0809799990cafb3606edde38dcf80fd7e65cc0eea801311521044f7451",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/WitnessCalculator.java": "93422c072da73b979555570bb98ea31409b3d88a0a6eabd8e93fc2299b2d5a2b",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/halo2/Halo2CircuitSystem.java": "9f6f4e0f9d8c704fd20fae2124b771c75f9135d2f1c70e9a8f7fde5859be3498",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/halo2/Halo2Compiler.java": "e5233b737be35cf419fd0345b4f06e2a7762fe2a0d8e453f0035223dbdb6712c",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/plonk/PlonKCompiler.java": "dcd01a1887a0ccbba29332615b7fbacd6b4d7b2bb78a585175b2d9dbd50ea838",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/plonk/PlonKConstraintSystem.java": "403d9be4491a81580b464adab304b8e008b729d0acae53200c9e3d3cfc5c4bc4",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/r1cs/LinearInliningPolicy.java": "33a58c8b61dca4ec2f786804efc346655b93b1218e56e0548d0abd940633f5d4",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/r1cs/R1CSCompiler.java": "d8cd25806dac828a2487306b914580e6ec13225dd6df6355f486f8c17d0e78f5",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/r1cs/R1CSConstraintSystem.java": "b9625426a5ddcf1cf962509d2fc521c433e5dee47dae9b1cb889b0504033cf6f",
+    "zeroj-circuit-dsl/src/main/java/org/zeroj/circuit/r1cs/R1CSSerializer.java": "2ad3b8011b2a589ef3a3e0384af0cfcebc80e8f896517cf0dfb08f90780afa27",
+    "zeroj-integration-tests/src/test/java/org/zeroj/examples/dsl/common/WitnessExporter.java": "8f74ecad6ec8727b75fa5945ece4328c6cf911a391963a2a245916e2c87ac2de"
+  },
+  "harness_sha256": {
+    "assurance/sha2-circom/run.py": "26f04a6f978b5b30e9ef1bf9f1e3abf4c454267ff334b502667c1aa3368e30cd",
+    "assurance/sha2-circom/export.gradle": "3200df237ac956066506afb97ba82a1318bcfef7cef07508a7294859a0a7d23a",
+    "assurance/sha2-circom/bootstrap.sh": "9401c45cd60d8e0da2b091c171410c4f66507cc8b09bdaa26e11d17e52d7c39e",
+    "assurance/sha2-circom/verify-nist-source.py": "458d68d0fe86fa8bb6d295850a746e52c620b820a5d16ddf37a0643160e4dfed",
+    "assurance/sha2-circom/package.json": "35424c44aca0e06281a70e1478937bdde8d0d5348ae91b6e4dd3a6d9b24533ee",
+    "assurance/sha2-circom/package-lock.json": "fff14da62399695d7e87faffe95cded85fa1b751c47fcba9deb524119eb4102e",
+    "assurance/sha2-circom/circuits/sha256.circom": "6a4b99c66f8cc90f769c4f9d5b2b1034eeaa0cda58ae748cd6fcc73a94572a9f",
+    "assurance/sha2-circom/circuits/sha512.circom": "e241e902746fb46ce1f818f98076d863e31ca4679053d8863aa8164891910760"
+  },
+  "counts": {
+    "fixtures": 25,
+    "positive_r1cs_checks": 75,
+    "compiled_witness_rejections": 60,
+    "circom_generator_rejections": 8
+  },
+  "scope": "Independent compiled-relation checks, no proof/setup or production security claim. Timings are one-shot shared-host diagnostics; Circom timings include process/file overhead.",
+  "format": "zeroj-sha2-circom-assurance-summary-v1",
+  "source_identity_note": "git_head is the parent commit; source_sha256 identifies the tested working-tree sources.",
+  "reproduce": [
+    "bash assurance/sha2-circom/bootstrap.sh",
+    "python3 assurance/sha2-circom/run.py all"
+  ],
+  "full_generated_result_sha256": "d4f804d4c684a763b87f34cdb759e8eb06ce04fcc2074c9f0e3983f050e81c96",
+  "passed_cases": [
+    {
+      "id": "nist-sha256-0",
+      "digest_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "406a1e105deb043e7160f0b09f657c28ec54db4d49a8a3860141ec881e2a6d2c",
+        "zeroj_bytes": "716dfc0719a7faa780131d72ff23cefc48a59f0d7b34095bf9ef6ec7db568fce",
+        "zeroj_bits": "33b0c5a6c8b2efaf70c5ae9dcd6a524e3bebb7f7fd5681ad8e7174622ffbb9f0"
+      }
+    },
+    {
+      "id": "nist-sha256-1",
+      "digest_hex": "28969cdfa74a12c82f3bad960b0b000aca2ac329deea5c2328ebc6f2ba9802c1",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "cfadb7b9fc9aedbce55353cd46306d11606f7d1cab74104e9707ab210e3af437",
+        "zeroj_bytes": "4f3d27dbabcfe26e635855a5324ec3f884b7bbde79a44ad8eac33a8dab9b7ccc",
+        "zeroj_bits": "731b93b699962c09805e536094a7ba2014ed80cac8f2f1e08e43b3b5df9645e2"
+      }
+    },
+    {
+      "id": "nist-sha256-3",
+      "digest_hex": "dff2e73091f6c05e528896c4c831b9448653dc2ff043528f6769437bc7b975c2",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "493a51a7cf41b44b28928503b099e25b2594e48f9ed989ca32f0393923ebba69",
+        "zeroj_bytes": "46cbaa38f26f7b3260f10fbea28074c14f7562ab566c21f5cf2d9471a8577b61",
+        "zeroj_bits": "224ed5e11e272b82e8c1a8120b2721414109aec2e4b73872431218a782ae6ff7"
+      }
+    },
+    {
+      "id": "nist-sha256-32",
+      "digest_hex": "4f44c1c7fbebb6f9601829f3897bfd650c56fa07844be76489076356ac1886a4",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "f3af8e2aa32ca62f93a30e13c0ad337f3e3fe892b3ad51a0b8311f0988267f88",
+        "zeroj_bytes": "19a1e71f1c2615698ec5e138ad51751329aac88c19ffef0f787139608117947d",
+        "zeroj_bits": "7b52d7d903ac45338d60e45814e81ffa2395278d0f804adec60e21d85b278e34"
+      }
+    },
+    {
+      "id": "nist-sha256-55",
+      "digest_hex": "6595a2ef537a69ba8583dfbf7f5bec0ab1f93ce4c8ee1916eff44a93af5749c4",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "a179427d1d7bef6c2fbe6c79a5e497fc8b09622fc5c930f0baf646fa88e4fbbb",
+        "zeroj_bytes": "824d81a3a55464c1359333e0163b79e46ee932e954b74105bccf0eb9eeefa388",
+        "zeroj_bits": "0c5ccf3c672635157702bdd3aa2b08f008d7c091c7ecf16e9bbe32c6faa342e9"
+      }
+    },
+    {
+      "id": "nist-sha256-56",
+      "digest_hex": "cfb88d6faf2de3a69d36195acec2e255e2af2b7d933997f348e09f6ce5758360",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "20f1ad7f2589da2a98e2a8008d6923033f3988b3867b136b09d78c224ae943cc",
+        "zeroj_bytes": "deef5b15fd410b371453e32f5104f50a99ee4bb094f54ccad21d6e52b97ab450",
+        "zeroj_bits": "7220bff5f4d444a10e35e720282f294c3cee862928e267b1073ef4dc8ee5ab48"
+      }
+    },
+    {
+      "id": "nist-sha256-63",
+      "digest_hex": "18041bd4665083001fba8c5411d2d748e8abbfdcdfd9218cb02b68a78e7d4c23",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "7d0b4db457fc52b7a7415f60d20488a0a19a03ec614ad1967a545a3043417f47",
+        "zeroj_bytes": "e9704679d481de7e6060f18b929e24185f5d1e731a2ddc54fc9fe80da251ae67",
+        "zeroj_bits": "b55cae9c8ac00454c2832c2bd230cdfcdb8d0d4b25d4544622ecd11900d460e6"
+      }
+    },
+    {
+      "id": "nist-sha256-64",
+      "digest_hex": "42e61e174fbb3897d6dd6cef3dd2802fe67b331953b06114a65c772859dfc1aa",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "7a63716bfa0398e42b63012b9f4af6a10048a8c121caf8170878c71c4adc6109",
+        "zeroj_bytes": "a03c3ffaa09f484cb10ba6d36f487a6d85d783936ef959925b693969ce29f71a",
+        "zeroj_bits": "e0b0c6255d88e6bbab5c688efc6bfcdb02947ecbd95dc6246d156875a1181a65"
+      }
+    },
+    {
+      "id": "nist-sha512-0",
+      "digest_hex": "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "f6011cb97fb4cc3c5bd72e824343d5518522ecaa1e3fc07e2fffeefa496f9071",
+        "zeroj_bytes": "1c8d48bdf136bdac07aef2585a132f252a403328cdc3d509c99bb37cb9dfc4b3",
+        "zeroj_bits": "679bce674bf8f1482f9cddf14e5ee94f5ca822c605a8c8b4e203b5607c4792ee"
+      }
+    },
+    {
+      "id": "nist-sha512-1",
+      "digest_hex": "3831a6a6155e509dee59a7f451eb35324d8f8f2df6e3708894740f98fdee23889f4de5adb0c5010dfb555cda77c8ab5dc902094c52de3278f35a75ebc25f093a",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "6c9aac4b627ccb33d7010b4202debb4aa04ff2da428ee12e1a067373402d141f",
+        "zeroj_bytes": "dd97fe931d8a8c4b59feac9bbec84f9bd0b4ca183168c0269a93d73c2bbeda81",
+        "zeroj_bits": "84823ad1c274e6590d81ad7627c8c943554ff0fc6b5600c8ae5b9fd88e1426fc"
+      }
+    },
+    {
+      "id": "nist-sha512-3",
+      "digest_hex": "7952585e5330cb247d72bae696fc8a6b0f7d0804577e347d99bc1b11e52f384985a428449382306a89261ae143c2f3fb613804ab20b42dc097e5bf4a96ef919b",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "3d515e5abf43acb1e7b12beb42208bdd3b66a1eed87446c2bb3bf53e23a547e2",
+        "zeroj_bytes": "bfefa59d2510930930b9f14b39651f85d5c6e4fc9ed5bcdf61f63c93f1ed6dd5",
+        "zeroj_bits": "f5991c4987c10c9f3671348b25496639e02a2ddcc155696db1d34f1152000979"
+      }
+    },
+    {
+      "id": "nist-sha512-32",
+      "digest_hex": "4551def2f9127386eea8d4dae1ea8d8e49b2add0509f27ccbce7d9e950ac7db01d5bca579c271b9f2d806730d88f58252fd0c2587851c3ac8a0e72b4e1dc0da6",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "462644b83aaddca47157211937bfc75e49dac89a577a94df12a1b5e591498913",
+        "zeroj_bytes": "236c7cab65dbd4610ab0923d32b50e10d299055afba2809ebf85372ce63b773a",
+        "zeroj_bits": "02c5e56c37e19b46de23f4609de7ff4a69e63f1de84993c8e682274ae7434a83"
+      }
+    },
+    {
+      "id": "nist-sha512-55",
+      "digest_hex": "c83aca6147bfcbbc72c377efa8d53654ba0830c5a6a89e1d2a19b713e68fb534640deb833ca512247166dd273b5897e57d526f88eef58f6ff97baee0b4ee5644",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "95518a45498cf3c5ef94ff55b447868f207e215eeec50e786678b2b242441f65",
+        "zeroj_bytes": "40b7c7a655a89cf812cb8a01c4abffbb2b4c631d76a761b4bbd34099b5261198",
+        "zeroj_bits": "c2a2bedfab973e30c108e7317bdef57b9cb5cee73a7a8a46285d6dd81d08d616"
+      }
+    },
+    {
+      "id": "nist-sha512-56",
+      "digest_hex": "52992d45a88221d972958e9f2854adaa9a21d2bf7051e1f1019ae78004da50c5b55c144a02afffe539d753949a2b056534f5b4c21f248a05baa52a6c38c7f5dd",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "9b60a6332c8d6293a41aae59518a2b47e1298644098ddd3aea487ccff0d7ae10",
+        "zeroj_bytes": "001f8a73db171cd729b3cb275de7f766a62564a3098f284a27cb1ae16ae934a0",
+        "zeroj_bits": "6cd8856303f0e176ed1cbbbadd61af8f4bd166a22e5646ab9f94c3505f462dae"
+      }
+    },
+    {
+      "id": "nist-sha512-63",
+      "digest_hex": "f33428d8fc67aa2cc1adcb2822f37f29cbd72abff68190483e415824f0bcecd447cb4f05a9c47031b9c50e0411c552f31cd04c30cea2bc64bcf825a5f8a66028",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "2d7d8da6a25f74444c1e86e5314f75716755e757a81b33ab6f330e8e807f9705",
+        "zeroj_bytes": "18e2ab16ffdbcbad4816db3d97f8e437d3d3038e0bfd22ec2e252491bfcf22e5",
+        "zeroj_bits": "4f963c5b58467719d94449673eb5157a3ad338b0c24480eab6061c9dac755692"
+      }
+    },
+    {
+      "id": "nist-sha512-64",
+      "digest_hex": "046e46623912b3932b8d662ab42583423843206301b58bf20ab6d76fd47f1cbbcf421df536ecd7e56db5354e7e0f98822d2129c197f6f0f222b8ec5231f3967d",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "1a7a0cf1d6365432ce3d17050baf71b76947c5d0d529544f82e573cc78b24e71",
+        "zeroj_bytes": "57f1b174f83be12c4a55c038ebe73ccc2892bf58ad0c40b1144bf22e9e0e942f",
+        "zeroj_bits": "9056f7e7fd7113afa62d0f3b3ce71097c42075eb54e66abe19246b112179a924"
+      }
+    },
+    {
+      "id": "nist-sha512-65",
+      "digest_hex": "bae7c5d590bf25a493d8f48b8b4638ccb10541c67996e47287b984322009d27d1348f3ef2999f5ee0d38e112cd5a807a57830cdc318a1181e6c4653cdb8cf122",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "eee98e8e30ae49d46c87b1b5b5396397d2cdaf4c885cca34d99bb02c60118f9d",
+        "zeroj_bytes": "38621e90a7697f221dd4df45f9ae5438e713cd5b5ada061a9efdcdf500314ea7",
+        "zeroj_bits": "0f7699cf5738b37d489edb6aa6d5edd8fa4eb900dfd1da951d534d215bad1354"
+      }
+    },
+    {
+      "id": "nist-sha512-111",
+      "digest_hex": "3b26c5170729d0814153becb95f1b65cd42f9a6d0649d914e4f69d938b5e9dc041cd0f5c8da0b484d7c7bc7b1bdefb08fe8b1bfedc81109345bc9e9a399feedf",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "cbeeb32276f11cbb0f13b1d759c2dd56e72bb0c0cffcba2dcc9a87788b4b55c9",
+        "zeroj_bytes": "e9cc6175c582571d2199866a50558433fc92b6145e4a145664af91cf4b85a767",
+        "zeroj_bits": "071aa2d77eca432d91981edf65ac2e88e8b41c07ac6bc32a827f86eac248c5a8"
+      }
+    },
+    {
+      "id": "nist-sha512-112",
+      "digest_hex": "c00926a374cde55b8fbd77f50da1363da19744d3f464e07ce31794c5a61b6f9c85689fa1cfe136553527fd876be91673c2cac2dd157b2defea360851b6d92cf4",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "43549680ccd5e134e7d77fb3b76d227637583588baa6d9bdb227aa0d9a357283",
+        "zeroj_bytes": "a044193d0d615e6d08a35b3b8da5bb56fdd25596ded58aa2bc21dbe87c4a3c88",
+        "zeroj_bits": "068212ff8af359052e998536dc491cea64d87136f8e3f4156e13c18040191ee7"
+      }
+    },
+    {
+      "id": "nist-sha512-127",
+      "digest_hex": "6e56f77f6883d0bd4face8b8d557f144661989f66d51b1fe4b8fc7124d66d9d20218616fea1bcf86c08d63bf8f2f21845a3e519083b937e70aa7c358310b5a7c",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "8720aa0f8357a69ceb5c327b58484cbfeaf5889a8d8142d489a06ce1d83abee9",
+        "zeroj_bytes": "fa70b4de87848f0c7f4d88339076c35ed067c9cfd48234fe9a2cb7b838a5b245",
+        "zeroj_bits": "8650a693e28f31838a0800a6e4df180027f561cc3b347eedc8e8be6e002818b5"
+      }
+    },
+    {
+      "id": "nist-sha512-128",
+      "digest_hex": "a21b1077d52b27ac545af63b32746c6e3c51cb0cb9f281eb9f3580a6d4996d5c9917d2a6e484627a9d5a06fa1b25327a9d710e027387fc3e07d7c4d14c6086cc",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "e134feda9607050b33032c03b188e6941e839a4d0e3a464894c3d95961361340",
+        "zeroj_bytes": "77618d9a0db8487d3394d217ad0619dfbddfcfca3c1817ddbe0d8794be0db1a7",
+        "zeroj_bits": "1fed431dc544090db10f2ad2024dbe6db47fc62a5d7f8e012e644bb860199b94"
+      }
+    },
+    {
+      "id": "pattern-sha256-32",
+      "digest_hex": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "f3af8e2aa32ca62f93a30e13c0ad337f3e3fe892b3ad51a0b8311f0988267f88",
+        "zeroj_bytes": "19a1e71f1c2615698ec5e138ad51751329aac88c19ffef0f787139608117947d",
+        "zeroj_bits": "7b52d7d903ac45338d60e45814e81ffa2395278d0f804adec60e21d85b278e34"
+      }
+    },
+    {
+      "id": "pattern-sha256-128",
+      "digest_hex": "471fb943aa23c511f6f72f8d1652d9c880cfa392ad80503120547703e56a2be5",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "37313a39ca1ba9860499be9ed44d0ffd166f51bb5ec87d88103a552a8b9393ac",
+        "zeroj_bytes": "d9be4bbca2d40a354453bdc5963c9490f51f280062408573c4e52eaa9d43b5d3",
+        "zeroj_bits": "b636664b06c6d83f12c712ba87e8a30ea97f1f54be1f10da22c11206f600c683"
+      }
+    },
+    {
+      "id": "pattern-sha512-32",
+      "digest_hex": "3d94eea49c580aef816935762be049559d6d1440dede12e6a125f1841fff8e6fa9d71862a3e5746b571be3d187b0041046f52ebd850c7cbd5fde8ee38473b649",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "462644b83aaddca47157211937bfc75e49dac89a577a94df12a1b5e591498913",
+        "zeroj_bytes": "236c7cab65dbd4610ab0923d32b50e10d299055afba2809ebf85372ce63b773a",
+        "zeroj_bits": "02c5e56c37e19b46de23f4609de7ff4a69e63f1de84993c8e682274ae7434a83"
+      }
+    },
+    {
+      "id": "pattern-sha512-128",
+      "digest_hex": "1dffd5e3adb71d45d2245939665521ae001a317a03720a45732ba1900ca3b8351fc5c9b4ca513eba6f80bc7b1d1fdad4abd13491cb824d61b08d8c0e1561b3f7",
+      "positive_r1cs_checks": [
+        "circom-o2",
+        "zeroj-bytes",
+        "zeroj-bits"
+      ],
+      "r1cs_sha256": {
+        "circom_o2": "e134feda9607050b33032c03b188e6941e839a4d0e3a464894c3d95961361340",
+        "zeroj_bytes": "77618d9a0db8487d3394d217ad0619dfbddfcfca3c1817ddbe0d8794be0db1a7",
+        "zeroj_bits": "1fed431dc544090db10f2ad2024dbe6db47fc62a5d7f8e012e644bb860199b94"
+      }
+    }
+  ],
+  "profiles": [
+    {
+      "id": "pattern-sha256-32",
+      "message_bytes": 32,
+      "public_digest_limbs_128bit": 2,
+      "circom_o2": {
+        "constraints": 29636,
+        "wires": 29325,
+        "r1cs_sha256": "f3af8e2aa32ca62f93a30e13c0ad337f3e3fe892b3ad51a0b8311f0988267f88",
+        "witness_sha256": "2a01f69d22b4618ace458482b9b0498d9ab578a8007b43d78cfcc0b2b96034a1",
+        "symbols_sha256": "5794533b05de7f39003e2ce5f9931071a3a52c244ae2d9c24cdaff39468f26cd",
+        "substitutions_sha256": "36adb38656bb56df57fbb580b8f2c9037299c5e3281557f8ed8f91dbd0d43070",
+        "mutated_input_kind": "byte",
+        "mutated_input_signal": "main.message[0]",
+        "mutated_input_wire": 3,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "byte-256",
+          "negative-input"
+        ],
+        "rejected_generator_inputs": [
+          "byte-256",
+          "negative-byte"
+        ]
+      },
+      "zeroj_bytes": {
+        "constraints": 42694,
+        "wires": 141470,
+        "r1cs_sha256": "19a1e71f1c2615698ec5e138ad51751329aac88c19ffef0f787139608117947d",
+        "witness_sha256": "ef7b85466cbdbb107bbaf4848569ffb2570685801b978cb64e5f6f5a8bc0bb67",
+        "first_private_wire": 3,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "byte-256",
+          "negative-input"
+        ]
+      },
+      "zeroj_bits": {
+        "constraints": 42662,
+        "wires": 141822,
+        "r1cs_sha256": "7b52d7d903ac45338d60e45814e81ffa2395278d0f804adec60e21d85b278e34",
+        "witness_sha256": "5f5f909d29e4311115c28bc0d25d789a00062cab574ee09119a400806b77980a",
+        "first_private_wire": 3,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "nonboolean",
+          "negative-input"
+        ]
+      }
+    },
+    {
+      "id": "pattern-sha256-128",
+      "message_bytes": 128,
+      "public_digest_limbs_128bit": 2,
+      "circom_o2": {
+        "constraints": 90633,
+        "wires": 89698,
+        "r1cs_sha256": "37313a39ca1ba9860499be9ed44d0ffd166f51bb5ec87d88103a552a8b9393ac",
+        "witness_sha256": "571eced19f826a0069101bbea1f9e4daadfae405f8edeb2a9b66916f22c546f7",
+        "symbols_sha256": "cae702a877c08681c9fbd055deb6136bf38262e32abe3dbcb374f9f79d5077e8",
+        "substitutions_sha256": "84ceecd70b64714175fd749ef393146e7eba5c43ca61efd2cba43976d37cd173",
+        "mutated_input_kind": "retained-decomposition-bit",
+        "mutated_input_signal": "main.bytes[0].out[0]",
+        "mutated_input_wire": 3,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "nonboolean",
+          "negative-input"
+        ],
+        "rejected_generator_inputs": [
+          "byte-256",
+          "negative-byte"
+        ]
+      },
+      "zeroj_bytes": {
+        "constraints": 130219,
+        "wires": 425294,
+        "r1cs_sha256": "d9be4bbca2d40a354453bdc5963c9490f51f280062408573c4e52eaa9d43b5d3",
+        "witness_sha256": "2eb5982f31d589ef3d87b8dbb8bf6e5fcc97116dd867ad5397eab2591cf343bc",
+        "first_private_wire": 3,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "byte-256",
+          "negative-input"
+        ]
+      },
+      "zeroj_bits": {
+        "constraints": 130091,
+        "wires": 425454,
+        "r1cs_sha256": "b636664b06c6d83f12c712ba87e8a30ea97f1f54be1f10da22c11206f600c683",
+        "witness_sha256": "170f03b79c70cdd264bdd17d4a2a2750048b9855fb4db19c96964f153fd13e3d",
+        "first_private_wire": 3,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "nonboolean",
+          "negative-input"
+        ]
+      }
+    },
+    {
+      "id": "pattern-sha512-32",
+      "message_bytes": 32,
+      "public_digest_limbs_128bit": 4,
+      "circom_o2": {
+        "constraints": 74952,
+        "wires": 74561,
+        "r1cs_sha256": "462644b83aaddca47157211937bfc75e49dac89a577a94df12a1b5e591498913",
+        "witness_sha256": "f1d6b8a01eec1f663ba28c9459fb2816aec96dd91d3bbce25b9c77c377e5bb5c",
+        "symbols_sha256": "16baed0f407499621699bb7a8dee8ca8e135254e3cd03f191f9762301719c6bc",
+        "substitutions_sha256": "c6f685f377265f42d23331c5c603b56ceaa0e9996e6c0026d9488dd18629fe23",
+        "mutated_input_kind": "retained-decomposition-bit",
+        "mutated_input_signal": "main.bytes[0].out[0]",
+        "mutated_input_wire": 5,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "digest-2",
+          "digest-3",
+          "nonboolean",
+          "negative-input"
+        ],
+        "rejected_generator_inputs": [
+          "byte-256",
+          "negative-byte"
+        ]
+      },
+      "zeroj_bytes": {
+        "constraints": 106332,
+        "wires": 352560,
+        "r1cs_sha256": "236c7cab65dbd4610ab0923d32b50e10d299055afba2809ebf85372ce63b773a",
+        "witness_sha256": "71b9f15114cd6d27ca4acbda83662db39101bcd69a25c967ed3eb6bfe2c17646",
+        "first_private_wire": 5,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "digest-2",
+          "digest-3",
+          "byte-256",
+          "negative-input"
+        ]
+      },
+      "zeroj_bits": {
+        "constraints": 106300,
+        "wires": 353328,
+        "r1cs_sha256": "02c5e56c37e19b46de23f4609de7ff4a69e63f1de84993c8e682274ae7434a83",
+        "witness_sha256": "4d92d173d225f36337548af6b556991a00f3bcf69b30f22d48f1da284002f7c8",
+        "first_private_wire": 5,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "digest-2",
+          "digest-3",
+          "nonboolean",
+          "negative-input"
+        ]
+      }
+    },
+    {
+      "id": "pattern-sha512-128",
+      "message_bytes": 128,
+      "public_digest_limbs_128bit": 4,
+      "circom_o2": {
+        "constraints": 152453,
+        "wires": 151670,
+        "r1cs_sha256": "e134feda9607050b33032c03b188e6941e839a4d0e3a464894c3d95961361340",
+        "witness_sha256": "b7b5663749d1c3eef20d7a4c095b174a806694a324c5105c2f62bd671622281a",
+        "symbols_sha256": "aba43b9f66a56d3d5acebaddfd6925e95a012f568e4cc99d25b69df4e92dd1f9",
+        "substitutions_sha256": "5b7ea573ab9242f69bb07734b844bb763aefd214b522236558b97d8bb645edf6",
+        "mutated_input_kind": "retained-decomposition-bit",
+        "mutated_input_signal": "main.bytes[0].out[0]",
+        "mutated_input_wire": 5,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "digest-2",
+          "digest-3",
+          "nonboolean",
+          "negative-input"
+        ],
+        "rejected_generator_inputs": [
+          "byte-256",
+          "negative-byte"
+        ]
+      },
+      "zeroj_bytes": {
+        "constraints": 215913,
+        "wires": 707096,
+        "r1cs_sha256": "77618d9a0db8487d3394d217ad0619dfbddfcfca3c1817ddbe0d8794be0db1a7",
+        "witness_sha256": "a8359363cf9a22790e8f1cb824b108263d3725ca06be8569dc50442e6964ae0f",
+        "first_private_wire": 5,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "digest-2",
+          "digest-3",
+          "byte-256",
+          "negative-input"
+        ]
+      },
+      "zeroj_bits": {
+        "constraints": 215785,
+        "wires": 707672,
+        "r1cs_sha256": "1fed431dc544090db10f2ad2024dbe6db47fc62a5d7f8e012e644bb860199b94",
+        "witness_sha256": "7efb6a9215fe511349d7e9accf666f89044c242c92be6258b7d37e05b414034c",
+        "first_private_wire": 5,
+        "rejected_compiled_mutations": [
+          "digest-0",
+          "digest-1",
+          "digest-2",
+          "digest-3",
+          "nonboolean",
+          "negative-input"
+        ]
+      }
+    }
+  ]
+}

@@ -419,7 +419,7 @@ once, after a deadline" is your application's rule: decrypting running totals le
 recover individual messages by differencing.
 :::
 
-## Real-world crypto: Cardano key derivation
+## Real-world crypto: standard digests and Cardano key derivation
 
 These gadgets reproduce standard wallet primitives *inside* a circuit, so a proof can show "I know
 the root key behind this Cardano address" without revealing it. They're bit-oriented and
@@ -428,11 +428,19 @@ independent of the circuit field, so they run on BLS12-381 Groth16, but they are
 | Gadget | Adapter | What it's for | Measured size |
 |--------|---------|---------------|---------------|
 | BLAKE2b (RFC 7693) | `ZkBlake2b.hash224` / `hash256` / `hash` | Cardano key hashes (blake2b-224) | 76,832 constraints per block |
+| SHA-256 (FIPS 180-4) | `ZkSha256.hash` | Existing document and governance digests; experimental, external review pending | ~43,000 constraints for a 32-byte message with all digest bytes bound |
 | SHA-512 (FIPS 180-4) | `ZkSha512.hash` | Building block for HMAC and BIP32 | ~109,000 constraints per block |
 | HMAC-SHA512 (RFC 2104) | `ZkHmacSha512.hmac` | BIP32-Ed25519 child derivation | ~454,000 constraints at the BIP32 input shape |
 | GF(2²⁵⁵−19) field, Ed25519 points | `Fe25519`, `Ed25519Point` (no `Zk*` adapter) | Non-native Ed25519 arithmetic, fixed-base scalar multiplication | Building blocks |
 | BIP32-Ed25519 | `Bip32Ed25519` (no `Zk*` adapter) | Hardened and soft child-key derivation, Icarus style | Building block |
 | CIP-1852 derivation | `ZkCip1852.paymentKeyHash`, `leafKeyHash` | Root key → `m/1852'/1815'/account'/role/index` → 28-byte payment key hash | On the order of 19 million constraints for the full path |
+
+SHA-256 returns the complete 32-byte digest; SHA-512 returns 64 bytes. Both constrain
+byte ranges, padding and the fixed message length. Bind the output to the expected digest;
+a hash alone does not authenticate a document issuer. The lower-level `Sha256`/`Sha512`
+byte and bit APIs support empty messages; symbolic `ZkBytes` requires a nonempty input.
+See [ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md)
+for SHA-256 and the additional SHA-512 assurance.
 
 Sizes are ZeroJ's own measurements from the gadget design work
 ([ADR-0027](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0027-real-world-crypto-gadgets-sha512-hmac-blake2b-ed25519.md),
@@ -468,6 +476,7 @@ authorization or replay rules.
 | Encrypted DKG share delivery (`dkg-share-delivery-hpke-v1`) | X25519 HPKE | Experimental; Assumption A1 and the delivery contract await external review |
 | Confidential notes (`confidential-note-jubjub-v1`) | Jubjub | Experimental; secret operations offline or isolated only; assumptions A1–A3 await external review |
 | BLAKE2b, CIP-1852 derivation | Field-agnostic | Ready on BLS12-381 Groth16 |
+| SHA-256 | Field-agnostic | Experimental building block; external review pending |
 | SHA-512, HMAC-SHA512, BIP32-Ed25519 | Field-agnostic | Ready as building blocks |
 | Poseidon MPF/JMT authenticated state | BLS12-381 Poseidon profile | Experimental (separate modules) |
 
@@ -483,7 +492,7 @@ The authoritative, detailed table is in the
 4. **Use `ZkUInt` for every quantity,** with the tightest honest width.
 5. **Bind every witness-supplied curve point** with `witnessAffine`, and pick the EdDSA entry
    point that matches who controls the key.
-6. **Reach for SHA-512, HMAC, BLAKE2b, or Ed25519 only when a protocol demands them.** They cost
+6. **Reach for SHA-256, SHA-512, HMAC, BLAKE2b, or Ed25519 when interoperability requires them.** They cost
    orders of magnitude more than Poseidon.
 7. **Match off-circuit and in-circuit hashing exactly.** Same parameters, same argument order,
    same path-bit convention, or honest proofs will fail.

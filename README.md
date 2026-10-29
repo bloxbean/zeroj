@@ -57,7 +57,7 @@ remaining production gates are tracked in
 - **CircuitSpec Java DSL** (recommended) — define circuits as reusable Java classes with `CircuitSpec`
 - **Inline lambda DSL** — quick prototyping with `CircuitBuilder.define(api -> ...)`
 - **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`)
-- **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, plus operation-specific Poseidon MPF/JMT circuits in their authenticated-state modules; see the [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md) gadget table and [large-state guide](docs/merkle/practical-large-state-guide.md)
+- **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-256 / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, plus operation-specific Poseidon MPF/JMT circuits in their authenticated-state modules; see the [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md) gadget table and [large-state guide](docs/merkle/practical-large-state-guide.md)
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
@@ -264,7 +264,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-crypto-blst`](zeroj-crypto-blst/) | **Opt-in blst prover backend** — thin bridge wiring `zeroj-blst`'s native MSM into the `zeroj-crypto` prover SPI (keeps `zeroj-crypto` pure-Java by default; pure Java matches blst at large sizes since ADR-0033/0034) |
 | [`zeroj-tools`](zeroj-tools/) | Reusable operator tools and the `zeroj-ceremony` CLI — snarkjs-compatible Groth16 phase-2 contributor (`ZkeyContributor`), hash-to-G2 challenge derivation; embeddable in coordinator services and wallets |
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
-| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit Blake2b / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
+| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit Blake2b / SHA-256 / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
 | [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
 #### Explicit Opt-In Product Modules

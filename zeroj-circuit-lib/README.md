@@ -11,14 +11,14 @@ or Jubjub-style primitives.
 
 | Area | Key Types |
 |------|-----------|
-| Hashes | `Poseidon`, `PoseidonN`, optimized `FastPoseidonBls12381T3`, `MiMC`, `MiMCSponge`, `Blake2b`, `Sha512`, `HmacSha512` |
+| Hashes | `Poseidon`, `PoseidonN`, optimized `FastPoseidonBls12381T3`, `MiMC`, `MiMCSponge`, `Blake2b`, `Sha256`, `Sha512`, `HmacSha512` |
 | Cardano key derivation | `Cip1852Derivation`, `Bip32Ed25519`, `Ed25519Point`, `Fe25519` — in-circuit root key → payment key hash |
 | Merkle proofs | `Merkle`, `SignalMerkle` |
 | Comparisons | `Comparators`, `SignalComparators` |
 | Binary gadgets | `Binary`, `SignalBinary`, `AliasCheck` |
 | Selection | `Mux` |
 | Signal helpers | `SignalPoseidon`, `SignalMiMC` |
-| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
+| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha256`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
 | Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `PedersenBytesCommitment`, `PedersenScalarCommitment`, `PedersenVectorBoundPolicy`, opening codecs, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
@@ -60,13 +60,15 @@ final proof, verification key data, and public inputs.
 | EdDSA-Jubjub | `InCircuitEdDSAJubjub`, `EdDSAJubjub`, `JubjubSigner` | `ZkEdDSAJubjub` | BLS12-381 scalar field only | Verification ready pending external review; legacy signing offline-only; fixed-limb hedged profile remains an unapproved candidate | Two in-circuit entry points are named for their key-trust model. `JubjubSigners.validatedDedicatedHostJavaRequired` deliberately fails closed until ADR-0039 M4–M8 pass. Specs: [`jubjub-eddsa-v1`](../docs/specs/jubjub-eddsa-v1.md), [hedged candidate](../docs/specs/jubjub-eddsa-hedged-v1-candidate.md). |
 | Poseidon parameters and off-circuit hashing | `PoseidonParams*`, `PoseidonHash`, `PoseidonGrainLFSR`, `PoseidonParameterFingerprint` | Used by `ZkPoseidon*`, `ZkMerkle`, and the separate MPF/JMT modules | BN254 T3, BLS12-381 T3, BLS12-381 T5 presets exist | Ready when matched to the circuit field and gadget shape | `PoseidonHash` is host-side hashing for expected roots/test vectors, not a circuit constraint by itself. `FastPoseidonBls12381T3` is the equivalence-tested optimized **host-side** path used for off-circuit roots and witnesses; circuit constraints still use the Poseidon gadget. |
 
-**Real-world crypto (Cardano key derivation).** These gadgets reproduce standard wallet/key
-primitives *inside* the circuit, so a proof can attest to Cardano key ownership without revealing the
-seed. They compose into `Cip1852Derivation` (root key → address payment key hash).
+**Real-world crypto (standard digests and Cardano key derivation).** These gadgets reproduce
+standard primitives inside the circuit. SHA-256 supports interoperability with existing document
+digests. The SHA-512/HMAC/Ed25519/BLAKE2b family composes into `Cip1852Derivation`
+(root key → address payment key hash).
 
 | Gadget | DSL APIs | Symbolic APIs | Field / curve status | Cardano status | Notes |
 |--------|----------|---------------|----------------------|----------------|-------|
 | BLAKE2b | `Blake2b` | `ZkBlake2b` | Field-agnostic (bit-oriented) | Ready on BLS12-381 Groth16 | RFC 7693. `ZkBlake2b.hash224` is the Cardano address key-hash function (blake2b-224); 256 also available. |
+| SHA-256 | `Sha256.hashBytes`, `hashBits` | `ZkSha256.hash` | Field-agnostic over supported scalar fields | Experimental building block; external review pending | Full FIPS 180-4 digest, constrained bytes/bits and fixed message length. [ADR-0063](../docs/adr/0063-sha256-gadget-and-sha2-assurance.md). |
 | SHA-512 | `Sha512` | `ZkSha512` | Field-agnostic (bit-oriented) | Ready as a building block | FIPS 180-4. Used inside HMAC and BIP32 key derivation. |
 | HMAC-SHA512 | `HmacSha512` | `ZkHmacSha512` | Field-agnostic | Ready as a building block | RFC 2104, built on `Sha512`. Used by BIP32-Ed25519 derivation. |
 | Ed25519 base field | `Fe25519` | — | Emulated GF(2²⁵⁵−19) | Building block | Non-native field arithmetic (5×51-bit limbs) underpinning Ed25519. |
@@ -206,10 +208,35 @@ var root = ZkMerkle.computeRootPoseidon(
         siblings,
         pathBits);
 var pedersen = ZkPedersen.commit(zk, value, blinding); // blinding: 252-bit secret ZkUInt
+var standardDigest = ZkSha256.hash(zk, message); // ZkBytes → complete 32-byte ZkBytes
 ```
 
 These adapters delegate to the existing `Signal*` and in-circuit gadgets and
 validate that their inputs belong to the supplied `ZkContext`.
+
+### Standard SHA-2 digests
+
+`Sha256.hashBytes(api, bytes)` and `Sha512.hashBytes(api, bytes)` constrain each input
+byte to 0..255 and return the complete 32-/64-byte digest. Their `hashBits` entry points
+accept byte-aligned messages in MSB-first bit order and constrain every input bit.
+Padding and the message-length suffix are inside the circuit. Length is fixed when
+the circuit is defined; this is not a streaming or secret-length API.
+
+For symbolic circuits use `ZkSha256.hash(zk, message)` or `ZkSha512.hash(zk, message)`
+and bind the result with `digest.assertEqual(expectedDigest)`. `ZkBytes` currently
+requires a nonempty vector; the lower-level hash APIs also support empty messages.
+The gadgets return values without deciding which are public. For Cardano applications,
+pack the complete digest into a small number of public scalars (for example two/four
+big-endian 128-bit limbs), constraining that packing in the circuit. Do not reduce a
+whole digest modulo Fr or drop bits to save public-input cost.
+
+SHA proves a relation about the exact bytes. An issuer's authenticity, application
+authorization, replay protection and the privacy of a low-entropy public digest need
+separate application design. These APIs inherit the DSL's side-channel/security limits.
+See [ADR-0063](../docs/adr/0063-sha256-gadget-and-sha2-assurance.md), the
+[validation and performance report](../docs/reviews/sha2-issue-111-validation.md),
+[SHA-512 review](../docs/reviews/sha512-issue-111.md) and the optional
+[Circom assurance runner](../assurance/sha2-circom/README.md) for validation evidence.
 
 Curve and parameter guidance:
 
