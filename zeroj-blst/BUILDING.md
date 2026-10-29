@@ -63,10 +63,12 @@ match it, or carries the JNI symbols of the former `foundation.icon:blst-java` b
 |---|---|
 | `ubuntu-22.04` | linux / amd64 |
 | `ubuntu-22.04-arm` | linux / aarch64 |
-| `macos-14` | mac / aarch64 |
+| `macos-15` | mac / aarch64 |
 
 Linux runners are pinned to **22.04** (glibc 2.35) so the shared libraries load on older distros.
-macOS is **arm64-only**: GitHub retired the free Intel runner. There is no Windows or macOS x86_64
+macOS is **arm64-only**: GitHub retired the free Intel runner. `build-blst.sh` sets
+`MACOSX_DEPLOYMENT_TARGET=11.0` (override it in the environment), so the dylib's minimum macOS is 11.0
+rather than the build host's version. There is no Windows or macOS x86_64
 library; `BlstFfm` rejects those platforms and the pure-Java provider applies.
 
 Each `build` job removes the committed library, runs `build-blst.sh` and uploads `libblst.*` as

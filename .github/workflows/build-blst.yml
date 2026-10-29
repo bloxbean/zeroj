@@ -31,7 +31,7 @@ jobs:
           - runner: ubuntu-22.04-arm   # linux / aarch64
             os: linux
             arch: aarch64
-          - runner: macos-14           # mac / aarch64 (macOS = arm64 only; Intel retired)
+          - runner: macos-15           # mac / aarch64 (macOS = arm64 only; Intel retired)
             os: mac
             arch: aarch64
     runs-on: ${{ matrix.runner }}
