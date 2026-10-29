@@ -266,7 +266,8 @@ format is unchanged, but the optimized constraint layout differs. Keep old proof
 original verification keys.
 
 **Document-sized messages.** A follow-up used the same machine, pure-Java prover and full
-public digest at 2, 4, 8 and 16 KiB (one KiB is 1,024 bytes). These are proof-time medians;
+public digest at 2, 4, 8 and 16 KiB (one KiB is 1,024 bytes). This original measurement
+used the compatibility API path. These are proof-time medians;
 compilation, witness generation and one-time development setup are separate.
 
 | Hash | Message | Proof seconds, 6 GiB heap | Proof seconds, 8 GiB heap |
@@ -285,6 +286,16 @@ measure this pipeline's memory use, not an intrinsic hash-size limit. The 16 KiB
 success at 8 GiB used about 365 seconds for development setup, a 2.61 GiB key store and
 10.88 GiB peak total-process RSS. A heap cap is not a physical-RAM budget. More heap was
 not consistently faster, and these shared-machine timings are not latency guarantees.
+
+**Memory-conscious pipeline follow-up.** A separate test of the existing `Groth16Pipeline`
+completed full 16 KiB SHA-256 and SHA-512 proofs at both 6 GiB and 8 GiB heap caps, with the
+same constraints. It releases the circuit graph before setup and loads cached constraints
+after witness generation, avoiding the earlier memory overlap. Each profile used one warmup
+and one measured proof, so its timings should not be substituted into the median table above.
+Total-process RSS was about 9.28–12.62 GiB; these results do not establish operation on a
+6 GB or 8 GB physical machine. See the
+[setup-memory report](https://github.com/bloxbean/zeroj/blob/main/docs/reviews/sha2-setup-memory-investigation.md)
+for the working example, measurements, independent checks and remaining limits.
 
 This hashes the exact file bytes; it does not parse a PDF/JSON document or prove predicates
 about extracted fields. Additional application logic, multiple hash calls and Merkle paths

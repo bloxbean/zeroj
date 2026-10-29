@@ -1,5 +1,11 @@
 # SHA-2 document-size measurements — PR #112
 
+> Follow-up: the [setup-memory investigation](sha2-setup-memory-investigation.md)
+> measures the same 16 KiB relations through the existing `Groth16Pipeline` and
+> completes both SHA-256 and SHA-512 at 6/8 GiB heap caps. The original compatibility
+> path and its three setup OOMs remain documented below; the new one-sample timing
+> observations are a separate campaign, not replacements for these medians.
+
 Date: 2026-10-29. This extends the [optimization results](sha2-optimization-results.md)
 with the requested 2, 4, 8 and 16 KiB messages. A KiB is 1,024 bytes, so the exact
 input lengths are 2,048, 4,096, 8,192 and 16,384 bytes. The complete matrix and

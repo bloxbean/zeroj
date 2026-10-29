@@ -198,3 +198,52 @@ The oracle does not silently classify skipped failures as passes. If no complete
 case exists, it records skips and fails with “No successful cases found.” Any
 alternate packed/native/cached proving experiment must be labeled separately with
 its own source identities and independent checks.
+
+## Setup-memory investigation
+
+The separate [memory report](../../docs/reviews/sha2-setup-memory-investigation.md)
+tracks issue #113. This harness reuses the existing `Groth16Pipeline`: release the
+circuit graph before development setup, generate the witness later in a helper,
+pack it after releasing its graph, and validate/map the exact-bound constraint
+cache after witness generation. Production cryptographic code is unchanged.
+
+Run these experiments sequentially, each with a fresh ignored output directory:
+
+```sh
+# Reproduce the three original 16 KiB setup failures with exception stacks.
+python3 -B assurance/sha2-optimization/memory.py oom --checkout . \
+  --output assurance/sha2-optimization/build/memory-oom
+
+# Separate diagnostic: four full-GC live histograms per algorithm, with controlled roots.
+python3 -B assurance/sha2-optimization/memory.py live-set --checkout . --heaps 6g \
+  --output assurance/sha2-optimization/build/memory-live-set
+
+# Four fresh JVMs: SHA-256/SHA-512 at 6/8 GiB, full 16 KiB statements.
+python3 -B assurance/sha2-optimization/memory.py pipeline --checkout . \
+  --output assurance/sha2-optimization/build/memory-pipeline
+
+python3 -B assurance/sha2-optimization/run.py verify \
+  assurance/sha2-optimization/build/memory-pipeline \
+  --snarkjs assurance/sha2-circom/node_modules/snarkjs/build/cli.cjs
+```
+
+The default pipeline uses **one warmup and one measured proof**, establishing
+feasibility rather than a stable latency estimate. `--samples 3` expands this.
+`--length 32` is a small controller/proof smoke test; the default is 16,384 bytes.
+Both hashes at that length must match the original document campaign's pinned
+canonical relation fingerprints. Cache misses fail the pipeline experiment.
+
+Live-set mode requires `jcmd` beside the Java executable. Its four snapshots retain
+(1) graph + CSR + boxed witness, (2) CSR + boxed witness, (3) CSR only and (4) neither.
+Each requests full GC; shared objects and release order affect attribution. This
+measures controlled retained sets, not natural JIT liveness or pipeline latency.
+Controller failures and incomplete captures are reported separately from process
+success. No heap dumps are needed, and histogram logs remain local.
+
+`oom` mode omits fail-fast JVM exit solely to obtain an exception stack. Its expected
+OOMs count as completed diagnostic experiments, never successful proof pipelines.
+Other modes retain fail-fast OOM and atomic substage checkpoints. Pipeline totals
+include checkpoint overhead; individual witness/packing/proof/verification timers
+exclude it. Cache mapping includes validation, and proving includes closing the
+mapped-constraint arena. Setup includes writing/hashing the cache. RSS is for the
+whole process and can exceed `-Xmx`; there is no physical-memory confinement here.
