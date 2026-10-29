@@ -53,6 +53,12 @@ case "${BLST_TARGET_ARCH:-$uname_m}" in
 esac
 CC="${CC:-cc}"
 export CC
+# macOS: record the oldest supported macOS (11.0, the first on Apple silicon) as the library's minimum,
+# not the build host's version, so the dylib loads on every arm64 Mac whatever runner builds it. clang
+# reads this for both the blst compile and the link below.
+if [ "$OS" = mac ]; then
+  export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+fi
 
 echo ">> Building libblst $BLST_TAG ($BLST_COMMIT) for $OS/$ARCH"
 git clone --depth 1 -b "$BLST_TAG" https://github.com/supranational/blst "$WORK/blst"
