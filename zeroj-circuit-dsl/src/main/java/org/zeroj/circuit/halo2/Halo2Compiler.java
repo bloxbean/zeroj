@@ -63,6 +63,10 @@ public final class Halo2Compiler {
                         rows.add(new GateRow(ONE, negOne, ZERO, ZERO, ZERO,
                                 left.id(), right.id(), dummyWire));
 
+                case Gate.AssertBoolean(var value) ->
+                        rows.add(new GateRow(negOne, ZERO, ZERO, ONE, ZERO,
+                                value.id(), value.id(), dummyWire));
+
                 case Gate.LinComb(var out, var terms) -> {
                     if (terms.isEmpty()) {
                         // output = 0

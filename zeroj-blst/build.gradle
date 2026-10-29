@@ -2,12 +2,11 @@ plugins {
     id 'java-library'
 }
 
-description = 'ZeroJ BLS12-381 operations via blst native library (JNI/SWIG)'
+description = 'ZeroJ BLS12-381 operations via the source-built blst native library (FFM)'
 
 dependencies {
     api project(':zeroj-api')
     api project(':zeroj-bls12381')
-    api 'foundation.icon:blst-java:0.3.2'
 
     // ADR-0060 M3: the commitment-profiles-v1 §13 G1 vectors, run through the blst provider by the
     // shared runner in zeroj-bls12381's test fixtures (test classpath only, never published).

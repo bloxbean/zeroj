@@ -322,7 +322,7 @@ public final class InCircuitJubjub {
      * an off-circuit point baked in at compile time. Uses a simple
      * double-and-add over the bit decomposition of {@code k}.
      *
-     * <p>Cost: 1,506 constraints for a 252-bit scalar, measured and pinned by
+     * <p>Cost: 1,254 constraints for a 252-bit scalar, measured and pinned by
      * {@code WindowedFixedBaseTest}. The implementation is windowed — see
      * {@link #scalarMulFixedBaseWindowed} for why the table selection is nearly free.
      *
@@ -343,8 +343,8 @@ public final class InCircuitJubjub {
                             + " (Jubjub scalar field is 252-bit; 255 tolerates slight overprovisioning)");
         }
         // Windowed table (ADR-0016 section 3 / ADR-0037 Decision 7 item 3): one addition per
-        // 3-bit window instead of one per bit. Measured 1,506 constraints for a 252-bit
-        // scalar against 2,513 for the bit-by-bit form.
+        // 3-bit window instead of one per bit. Measured 1,254 constraints for a 252-bit
+        // scalar against 2,261 for the bit-by-bit form.
         //
         // The windowed path builds its own per-window tables, so the bit-indexed
         // table[i] = [2^i]·basePoint this method used to precompute here was dead: 252

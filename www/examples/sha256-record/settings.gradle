@@ -1,0 +1,3 @@
+rootProject.name = 'sha256-record-tutorial'
+// Use this checkout, including the new SHA-256 gadget, rather than a published release.
+includeBuild('../../..')

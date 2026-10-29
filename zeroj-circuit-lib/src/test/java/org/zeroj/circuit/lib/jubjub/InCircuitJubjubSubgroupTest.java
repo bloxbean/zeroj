@@ -158,7 +158,7 @@ class InCircuitJubjubSubgroupTest {
     void subgroupAssertionCost() {
         var circuit = subgroupCircuit();
         var system = circuit.compileR1CS(CurveId.BLS12_381);
-        assertEquals(5_556, system.constraints().size(), "well-formedness + [l]P = O rows");
+        assertEquals(5_304, system.constraints().size(), "well-formedness + [l]P = O rows");
     }
 
     // ------------------------------------------------------------------

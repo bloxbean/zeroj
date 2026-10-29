@@ -13,9 +13,12 @@ import java.util.Objects;
  * Default provider backed by ZeroJ's pure Java BLS12-381 implementation.
  *
  * <p>This provider is correctness-first and portable. Its secret-scalar methods use the
- * module's fixed-schedule Java ladders, but they do not provide a full JVM constant-time
- * guarantee. Production secret-bearing workloads should prefer a native provider with an
- * audited side-channel contract, such as {@code zeroj-blst}.</p>
+ * module's split, fixed-schedule Java ladders (ADR-0062 D1, r4): the scalar is split into two fresh
+ * uniform shares, so neither the operation count nor the ladders' identity handling depends on it,
+ * including for small or near-{@code r} secrets. They do not provide a JVM constant-time guarantee
+ * (per-bit Java branch, {@code BigInteger}, field reductions, JIT and GC remain variable-time). No ZeroJ provider, including {@code zeroj-blst}, has an evidenced side-channel
+ * contract (ADR-0062 D2), so secret-bearing generation is offline/isolated only on every
+ * provider.</p>
  */
 public final class PureJavaBls12381Provider implements Bls12381Provider {
     public static final PureJavaBls12381Provider INSTANCE = new PureJavaBls12381Provider();
@@ -49,22 +52,26 @@ public final class PureJavaBls12381Provider implements Bls12381Provider {
                 .scalarMul(reduceScalar(scalar));
     }
 
+    /**
+     * Split, fixed-schedule ladders (ADR-0062 D1). {@link G1Point#ctScalarMul} validates the point
+     * (on the curve, in the subgroup) and rejects anything else, so it is checked exactly once.
+     */
     @Override
     public G1Point g1SecretScalarMul(G1Point point, BigInteger scalar) {
-        return Bls12381Codecs.requireValid(point)
+        return Objects.requireNonNull(point, "point required")
                 .ctScalarMul(reduceScalar(scalar));
     }
 
+    /** As {@link #g1SecretScalarMul}, over G2. */
     @Override
     public G2Point g2SecretScalarMul(G2Point point, BigInteger scalar) {
-        return Bls12381Codecs.requireValid(point)
+        return Objects.requireNonNull(point, "point required")
                 .ctScalarMul(reduceScalar(scalar));
     }
 
     @Override
     public boolean pairingProductIsIdentity(G1Point[] g1Points, G2Point[] g2Points) {
-        Objects.requireNonNull(g1Points, "g1Points required");
-        Objects.requireNonNull(g2Points, "g2Points required");
+        Bls12381Provider.requirePairingProductInput(g1Points, g2Points);
         for (G1Point point : g1Points) {
             Bls12381Codecs.requireValid(point);
         }

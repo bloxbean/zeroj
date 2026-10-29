@@ -1,0 +1,115 @@
+---
+import './walkthrough.css';
+import { recordCases, shortDigest } from './sha2-record-data';
+const initial = recordCases[0];
+const steps = ['Register', 'Keep private', 'Prove', 'Check trust', 'Learned'];
+---
+
+<figure class="zw-frame not-content" aria-label="A private approval record, from Web2 issuer to proof verification">
+  <div class="zw zsha-record" data-total="5" data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">SHA-256 approval · <b data-counter>1 / 5</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="Whose view">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Holder's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+    <div class="zsha-options" role="group" aria-label="Try a record scenario">
+      {recordCases.map((item, i) => <button type="button" class="zw-btn" data-case={item.id} aria-pressed={i === 0}>{item.label}</button>)}
+    </div>
+    <div class="zw-stage">
+      <section class="zw-actor" data-hl="1,4" aria-label="Issuer registry">
+        <div class="zw-actor-head"><span class="zw-actor-name">Web2 issuer</span><span class="zw-actor-sub">trusted registry</span></div>
+        <div class="zw-box">
+          <span class="zw-box-title">An approval service</span>
+          <p class="zw-note">Checks a record, gives it to its holder, and registers its SHA-256 digest.</p>
+        </div>
+        <div class="zw-row" data-kind="public" data-hl="1,4">
+          <span class="k">registered digest</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap" title={initial.digest}>{shortDigest(initial.digest)}</span>
+        </div>
+        <p class="zw-note">The verifier gets this from the issuer's registry, never from an unchecked claim.</p>
+      </section>
+      <div class="zw-wire" data-hl="2" aria-hidden="true"><span class="arrow">→</span><span class="zw-wire-line"></span><span class="zw-msg">reference</span></div>
+      <section class="zw-actor" data-hl="2-3" aria-label="Holder and local prover">
+        <div class="zw-actor-head"><span class="zw-actor-name">Holder</span><span class="zw-actor-sub">local prover</span></div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">subject reference</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-field="subject">{initial.subject}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">record status</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real" data-field="status">{initial.status}</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-row" data-kind="secret">
+          <span class="k">nonce bytes</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em>
+          <span class="v"><span class="real">32 private bytes</span><span class="mask">████████</span></span>
+        </div>
+        <div class="zw-box" data-show="3-5" data-off>
+          <span class="zw-box-title">Circuit checks</span>
+          <span class="zw-note">Exact bytes → SHA-256; version 1; program 7; approved status.</span>
+          <span class="zw-check" data-field="proof">{initial.proof}</span>
+        </div>
+      </section>
+      <div class="zw-wire" data-hl="4" aria-hidden="true"><span class="arrow">→</span><span class="zw-wire-line"></span><span class="zw-msg">proof + digest</span></div>
+      <section class="zw-actor" data-hl="4-5" aria-label="Application verifier">
+        <div class="zw-actor-head"><span class="zw-actor-name">Application</span><span class="zw-actor-sub">verifier</span></div>
+        <div class="zw-row" data-kind="public">
+          <span class="k">claimed digest</span><em class="zw-tag">PUBLIC</em>
+          <span class="v wrap" data-field="digest" title={initial.digest}>{shortDigest(initial.digest)}</span>
+        </div>
+        <div class="zw-box" data-show="4-5" data-off>
+          <span class="zw-box-title">Two separate questions</span>
+          <span class="zw-note">Does the proof verify with our key? Is this the digest our registry trusts?</span>
+          <span class="zw-check" data-field="verdict" aria-live="polite">Accepted</span>
+        </div>
+        <p class="zw-note" data-show="5" data-off>The subject and nonce are hidden. An accepted proof reveals approval for program 7. This public digest can link repeated uses.</p>
+      </section>
+    </div>
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1"><p class="zw-narr-title">1. Give the digest a trusted origin</p><p>A digest is a fingerprint of bytes. The registry is what connects that fingerprint to an issuer's record.</p></div>
+      <div data-show="2" data-off><p class="zw-narr-title">2. Keep the record with the holder</p><p>The holder supplies the complete 48-byte record to a local prover. Switch to Public view to see what the verifier does not receive.</p></div>
+      <div data-show="3" data-off><p class="zw-narr-title">3. Prove the policy and the hash together</p><p data-field="why">{initial.why}</p></div>
+      <div data-show="4" data-off><p class="zw-narr-title">4. A valid proof still needs a trust check</p><p data-field="why">{initial.why}</p></div>
+      <div data-show="5" data-off><p class="zw-narr-title">5. Learn one fact, not the whole record</p><p>The runnable tutorial checks this in Java. A Cardano application must additionally bind the statement to its transaction and trusted on-chain state.</p></div>
+    </div>
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Approval proof steps">{steps.map((step, i) => <li><button type="button" data-goto={i + 1}><span>{i + 1}</span>{step}</button></li>)}</ol>
+      <div class="zw-ctrl"><button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button><button type="button" class="zw-btn" data-play aria-pressed="false">Play</button><button type="button" class="zw-btn" data-next aria-label="Next step">→</button></div>
+    </div>
+    <div class="zw-legend"><span><em class="zw-tag secret">SECRET</em> private witness</span><span><em class="zw-tag public">PUBLIC</em> visible statement</span><span>Illustration of public test fixtures; no browser proof runs.</span></div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  import { recordCases, shortDigest } from './sha2-record-data';
+  document.querySelectorAll<HTMLElement>('.zsha-record').forEach((root) => {
+    initWalkthrough(root);
+    root.querySelectorAll<HTMLButtonElement>('[data-case]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const item = recordCases.find((row) => row.id === button.dataset.case);
+        if (!item) return;
+        root.querySelectorAll('[data-case]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        for (const [field, value] of Object.entries({ subject: item.subject, status: item.status,
+          digest: shortDigest(item.digest), proof: item.proof, why: item.why,
+          verdict: item.accepted ? 'Accepted' : item.valid ? 'Rejected: digest is not trusted' : 'Rejected: circuit has no valid proof' })) {
+          root.querySelectorAll<HTMLElement>(`[data-field="${field}"]`).forEach((el) => { el.textContent = value; });
+        }
+        root.querySelector('[data-field="digest"]')?.setAttribute('title', item.digest);
+        root.querySelector('[data-field="proof"]')?.classList.toggle('no', !item.valid);
+        root.querySelector('[data-field="verdict"]')?.classList.toggle('no', !item.accepted);
+        // Click a step button so the shared engine also stops any active autoplay.
+        root.querySelector<HTMLButtonElement>(`[data-goto="${item.valid ? 4 : 3}"]`)?.click();
+      });
+    });
+  });
+</script>
+
+<style>
+  .zsha-options { display: flex; flex-wrap: wrap; gap: 0.45em; padding: 0.8em 1em 0; }
+  .zsha-options button[aria-pressed='true'] { border-color: var(--zw-public); color: var(--zw-public); background: color-mix(in srgb, var(--zw-public) 8%, transparent); }
+</style>

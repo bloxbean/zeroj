@@ -345,12 +345,13 @@ class ZkElGamalTest {
                 () -> assertEquals(PIN_DLEQ, dleq.constraints().size(), "dleq rows"));
     }
 
-    // Measured 2026-10-05. The width-1 path selects [m]·G; wider messages use the windowed
-    // fixed-base multiplication over the message's own decomposition. DLEQ equals the usecase
-    // prototype's trustee-dleq circuit (6,546), the same relation.
-    private static final int PIN_W1 = 6_558;
-    private static final int PIN_W16 = 6_650;
-    private static final int PIN_W64 = 6_938;
-    private static final int PIN_WITNESSED = 12_105;
-    private static final int PIN_DLEQ = 6_546;
+    // Remeasured 2026-10-29 after ADR-0063 direct Boolean assertions. The width-1 path
+    // selects [m]·G; wider messages use the windowed fixed-base multiplication over the
+    // message's own decomposition. DLEQ retains the trustee-dleq prototype's relation;
+    // its previous 6,546 rows become 6,294 without dropping Boolean checks.
+    private static final int PIN_W1 = 6_305;
+    private static final int PIN_W16 = 6_382;
+    private static final int PIN_W64 = 6_622;
+    private static final int PIN_WITNESSED = 11_600;
+    private static final int PIN_DLEQ = 6_294;
 }

@@ -150,8 +150,14 @@ public final class MontFr381 {
         return pow(modulus().subtract(BigInteger.TWO));
     }
 
-    /** Exponentiation with BigInteger exponent (fixed bit-length loop). */
+    /**
+     * Square-and-multiply exponentiation, MSB first. The loop length is the exponent's bit length,
+     * so the schedule depends on {@code exp}; use it with public exponents only.
+     *
+     * @throws IllegalArgumentException if {@code exp} is negative (ADR-0062 D8)
+     */
     public MontFr381 pow(BigInteger exp) {
+        if (exp.signum() < 0) throw new IllegalArgumentException("Exponent must be non-negative");
         if (exp.signum() == 0) return ONE;
         MontFr381 result = ONE;
         MontFr381 base = this;

@@ -10,8 +10,7 @@ import org.julclang.testkit.TestDataBuilder;
 import org.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import supranational.blst.P1_Affine;
-import supranational.blst.P2_Affine;
+import org.zeroj.bls12381.Bls12381Codecs;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -152,7 +151,7 @@ class CircomToOnChainE2ETest extends ContractTest {
         if (p.isInfinity()) { byte[] r = new byte[FP]; r[0] = (byte) 0xC0; return r; }
         byte[] u = new byte[FP * 2];
         writeFp(u, 0, p.xBigInt()); writeFp(u, FP, p.yBigInt());
-        return new P1_Affine(u).compress();
+        return Bls12381Codecs.g1ToCompressed(Bls12381Codecs.g1FromUncompressed(u));
     }
 
     private static byte[] g2Compress(JacobianG2BLS381.AffineG2 p) {
@@ -160,7 +159,7 @@ class CircomToOnChainE2ETest extends ContractTest {
         byte[] u = new byte[FP * 4];
         writeFp(u, 0, p.x().imBigInt()); writeFp(u, FP, p.x().reBigInt());
         writeFp(u, FP * 2, p.y().imBigInt()); writeFp(u, FP * 3, p.y().reBigInt());
-        return new P2_Affine(u).compress();
+        return Bls12381Codecs.g2ToCompressed(Bls12381Codecs.g2FromUncompressed(u));
     }
 
     private static void writeFp(byte[] buf, int off, BigInteger v) {

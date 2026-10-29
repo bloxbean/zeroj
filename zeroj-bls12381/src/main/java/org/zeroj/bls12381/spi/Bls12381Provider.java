@@ -67,7 +67,41 @@ public interface Bls12381Provider {
         throw new UnsupportedOperationException(id() + " does not declare a secret-scalar G2 multiplication contract");
     }
 
+    /**
+     * Whether {@code ∏ e(g1Points[i], g2Points[i])} is the identity of GT.
+     *
+     * <p>Every provider implements the same contract (ADR-0062 D7, I7, I8):</p>
+     * <ul>
+     *   <li>null arrays, arrays of different length, and <b>empty arrays</b> are rejected with an
+     *       exception; an empty product is not accepted as a successful check, so a verifier that
+     *       builds its arrays dynamically fails closed;</li>
+     *   <li>every point is validated (on curve, in the prime-order subgroup) and an invalid point
+     *       is rejected with an exception;</li>
+     *   <li>a pair with an identity component contributes 1, so an all-identity input returns
+     *       {@code true}. Callers that must not accept identity inputs check for them first.</li>
+     * </ul>
+     *
+     * <p>{@link #requirePairingProductInput} performs the array checks for implementations.</p>
+     */
     boolean pairingProductIsIdentity(G1Point[] g1Points, G2Point[] g2Points);
+
+    /**
+     * Array checks shared by every {@link #pairingProductIsIdentity} implementation: non-null, equal
+     * length, and non-empty (ADR-0062 D7). Point validation stays with the implementation.
+     *
+     * @throws NullPointerException if either array is null
+     * @throws IllegalArgumentException if the lengths differ or the input is empty
+     */
+    static void requirePairingProductInput(G1Point[] g1Points, G2Point[] g2Points) {
+        Objects.requireNonNull(g1Points, "g1Points required");
+        Objects.requireNonNull(g2Points, "g2Points required");
+        if (g1Points.length != g2Points.length) {
+            throw new IllegalArgumentException("Pairing point arrays must have the same length");
+        }
+        if (g1Points.length == 0) {
+            throw new IllegalArgumentException("Pairing product input must not be empty");
+        }
+    }
 
     default boolean g1IsValid(G1Point point) {
         return point != null && point.isValid();

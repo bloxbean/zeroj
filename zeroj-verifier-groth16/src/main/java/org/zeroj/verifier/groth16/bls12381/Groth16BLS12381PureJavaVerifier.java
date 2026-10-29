@@ -109,8 +109,16 @@ public class Groth16BLS12381PureJavaVerifier implements ZkVerifier {
         requireFp(label + ".y", coords.get(1));
         requireFp(label + ".z", coords.get(2));
 
-        BigInteger z = coords.size() > 2 ? coords.get(2) : BigInteger.ONE;
-        G1Point point = G1Point.fromProjective(coords.get(0), coords.get(1), z);
+        // ADR-0062 D5: one accepted encoding per point. z = 0 keeps its infinity message; any
+        // other z != 1 is a rescaled projective encoding of the same point and is rejected.
+        BigInteger z = coords.get(2);
+        if (z.signum() == 0) {
+            throw new IllegalArgumentException(label + " must not be point at infinity");
+        }
+        if (!z.equals(BigInteger.ONE)) {
+            throw new IllegalArgumentException(label + " must be affine (z = 1)");
+        }
+        G1Point point = G1Point.fromProjective(coords.get(0), coords.get(1), BigInteger.ONE);
         requireValidNonInfinity(label, point);
         return point;
     }
@@ -123,11 +131,18 @@ public class Groth16BLS12381PureJavaVerifier implements ZkVerifier {
         requireFp2(label + ".y", coords.get(1));
         requireFp2(label + ".z", coords.get(2));
 
-        var z = coords.size() > 2 ? coords.get(2) : List.of(BigInteger.ONE, BigInteger.ZERO);
+        // ADR-0062 D5: see toG1.
+        var z = coords.get(2);
+        if (z.get(0).signum() == 0 && z.get(1).signum() == 0) {
+            throw new IllegalArgumentException(label + " must not be point at infinity");
+        }
+        if (!z.get(0).equals(BigInteger.ONE) || z.get(1).signum() != 0) {
+            throw new IllegalArgumentException(label + " must be affine (z = (1, 0))");
+        }
         G2Point point = G2Point.fromProjective(
                 coords.get(0).get(0), coords.get(0).get(1),
                 coords.get(1).get(0), coords.get(1).get(1),
-                z.get(0), z.get(1));
+                BigInteger.ONE, BigInteger.ZERO);
         requireValidNonInfinity(label, point);
         return point;
     }

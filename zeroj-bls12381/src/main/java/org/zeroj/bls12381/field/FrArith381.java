@@ -8,6 +8,11 @@ package org.zeroj.bls12381.field;
  * locals and write the result at the end, so the output may alias an input. Byte-for-byte port of
  * {@link MontFr381}'s CIOS multiply + add/sub; {@link MontFr381} stays the bit-identical oracle
  * (see {@code FrArith381Test}).</p>
+ *
+ * <p><b>Precondition:</b> every input must be a canonical Montgomery element (limbs encode a value
+ * {@code < r}). The operations do not check this; a non-canonical input can produce a
+ * non-canonical or wrong result. Build elements only through {@link MontFr381} or from outputs of
+ * this class (ADR-0062 D8).</p>
  */
 public final class FrArith381 {
 

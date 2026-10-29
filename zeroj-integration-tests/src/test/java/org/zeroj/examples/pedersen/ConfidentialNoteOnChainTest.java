@@ -152,28 +152,32 @@ class ConfidentialNoteOnChainTest extends ContractTest {
     //  Rejected before a proof exists
     // ------------------------------------------------------------------
 
-    /** Reference-circuit cost pin, after the narrow-value comparator optimization (was 8,755). */
+    /**
+     * Reference-circuit cost pin: narrow-value comparator removal reduced 8,755 rows to 7,231;
+     * ADR-0063 direct Boolean assertions reduce the same optimized relation to 5,524.
+     */
     @Test
     @DisplayName("Reference circuit cost is pinned")
     void referenceCircuitCostPinned() {
-        assertEquals(7_231, r1cs.constraints().size(), "rows");
+        assertEquals(5_524, r1cs.constraints().size(), "rows");
         assertEquals(8_192, keys.domain(), "evaluation domain");
     }
 
     /**
-     * Keys for the circuit as it was before the narrow-value comparator optimization must not be
-     * usable with the optimized circuit. The pre-optimization shape is rebuilt at the gadget level
-     * (an explicit 252-bit {@code < l} comparator on each 64-bit amount). Both ZeroJ guards refuse
-     * the mix: the key's wire count rejects the new witness, and the pipeline fingerprint
-     * ({@code c<rows>-w<wires>-p<public>}) differs, so a stored key bundle fails fast.
+     * Keys for the comparator-bearing circuit must not be usable with the optimized circuit.
+     * The earlier gadget-level relation is rebuilt with an explicit 252-bit {@code < l} comparator
+     * on each 64-bit amount, using the current compiler and direct Boolean assertions. This is not
+     * the byte-identical historical R1CS. The key's wire count must reject the new witness, and the
+     * dimension component of the pipeline fingerprint ({@code c<rows>-w<wires>-p<public>}) must
+     * differ. Production pipeline fingerprints also bind the exact R1CS content.
      */
     @Test
-    @DisplayName("Keys for the pre-optimization circuit are refused, not silently reused")
+    @DisplayName("Keys for the comparator-bearing circuit are refused by the optimized circuit")
     void staleKeysRefused() {
         CircuitBuilder legacy = legacyTransferCircuit();
         R1CSConstraintSystem legacyR1cs = legacy.compileR1CS(CurveId.BLS12_381);
-        assertEquals(8_755, legacyR1cs.constraints().size(),
-                "the legacy rebuild must match the pre-optimization reference circuit");
+        assertEquals(6_289, legacyR1cs.constraints().size(),
+                "earlier comparator-bearing relation rebuilt with direct Boolean assertions");
         Groth16Keys legacyKeys = Groth16Keys.setupInMemory(legacyR1cs.constraints(), legacyR1cs.numWires(),
                 legacyR1cs.numPublicInputs(), BigInteger.valueOf(0x01dL));
         BigInteger[] newWitness = circuit.calculateWitness(witness(input, out1, out2), CurveId.BLS12_381);
@@ -187,7 +191,7 @@ class ConfidentialNoteOnChainTest extends ContractTest {
                 "a stored bundle for the old circuit must fail the pipeline fingerprint check");
     }
 
-    /** The reference circuit as {@code ZkPedersen} emitted it before the optimization. */
+    /** Earlier comparator-bearing gadget relation, compiled with the current Boolean lowering. */
     private static CircuitBuilder legacyTransferCircuit() {
         return CircuitBuilder.create("confidential-note-legacy")
                 .publicVar("inU").publicVar("inV")

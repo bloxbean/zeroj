@@ -2,8 +2,10 @@ package org.zeroj.onchain.julc.groth16.codec;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import supranational.blst.P1_Affine;
-import supranational.blst.P2_Affine;
+import org.zeroj.bls12381.Bls12381Codecs;
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.G2Point;
+import org.zeroj.bls12381.field.Fp;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -11,15 +13,18 @@ import java.util.List;
 
 /**
  * Converts snarkjs JSON decimal coordinate format to BLS12-381 compressed bytes
- * suitable for Cardano on-chain use (UPLC BLS12-381 builtins).
+ * suitable for Cardano on-chain use (UPLC BLS12-381 builtins). Points are validated with the
+ * pure-Java checked decoders (ADR-0062 D3); only affine {@code z = 1} encodings and the
+ * canonical {@code z = 0} identity are accepted (D5). {@link #parseProof} and the
+ * {@code alpha/beta/gamma/delta} points of {@link #parseVk} reject the identity (ADR-0025,
+ * ADR-0045 V2); {@code IC} entries pass it through as the compressed identity for the verifier
+ * to reject (ADR-0045 V3).
  * <p>
  * snarkjs format: {@code [x_decimal, y_decimal, "1"]} (projective affine)
  * Cardano format: compressed BLS point bytes (48 for G1, 96 for G2)
  */
 public final class SnarkjsToCardano {
 
-    private static final BigInteger BLS12_381_P = new BigInteger(
-            "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787");
     private static final int FP_SIZE = 48;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -32,9 +37,18 @@ public final class SnarkjsToCardano {
      * @return 48-byte compressed G1 point
      */
     public static byte[] g1Compress(List<BigInteger> coords) {
-        byte[] uncompressed = g1ToUncompressed(coords);
-        var affine = new P1_Affine(uncompressed);
-        return affine.compress();
+        if (coords.size() != 3) {
+            throw new IllegalArgumentException("G1 point must have 3 coordinates");
+        }
+        if (coords.get(2).signum() == 0) {
+            // Only the canonical identity [0, 1, 0]; any other z = 0 triple is malformed.
+            if (coords.get(0).signum() != 0 || !coords.get(1).equals(BigInteger.ONE)) {
+                throw new IllegalArgumentException("G1 identity must be encoded as [0, 1, 0]");
+            }
+            return Bls12381Codecs.g1ToCompressed(G1Point.INFINITY);
+        }
+        // Checked decode (coordinates < p, on curve, in subgroup), then the canonical compression.
+        return Bls12381Codecs.g1ToCompressed(Bls12381Codecs.g1FromUncompressed(g1ToUncompressed(coords)));
     }
 
     /**
@@ -44,9 +58,18 @@ public final class SnarkjsToCardano {
      * @return 96-byte compressed G2 point
      */
     public static byte[] g2Compress(List<List<BigInteger>> coords) {
-        byte[] uncompressed = g2ToUncompressed(coords);
-        var affine = new P2_Affine(uncompressed);
-        return affine.compress();
+        if (coords.size() != 3 || coords.stream().anyMatch(c -> c.size() != 2)) {
+            throw new IllegalArgumentException("G2 point must have 3 coordinates of 2 elements");
+        }
+        if (coords.get(2).get(0).signum() == 0 && coords.get(2).get(1).signum() == 0) {
+            // Only the canonical identity [[0, 0], [1, 0], [0, 0]].
+            if (!coords.get(0).equals(List.of(BigInteger.ZERO, BigInteger.ZERO))
+                    || !coords.get(1).equals(List.of(BigInteger.ONE, BigInteger.ZERO))) {
+                throw new IllegalArgumentException("G2 identity must be encoded as [[0, 0], [1, 0], [0, 0]]");
+            }
+            return Bls12381Codecs.g2ToCompressed(G2Point.INFINITY);
+        }
+        return Bls12381Codecs.g2ToCompressed(Bls12381Codecs.g2FromUncompressed(g2ToUncompressed(coords)));
     }
 
     /**
@@ -56,10 +79,10 @@ public final class SnarkjsToCardano {
      */
     public static VkCompressed parseVk(String vkJson) throws Exception {
         JsonNode root = MAPPER.readTree(vkJson);
-        byte[] alpha = g1Compress(parseG1(root.get("vk_alpha_1")));
-        byte[] beta = g2Compress(parseG2(root.get("vk_beta_2")));
-        byte[] gamma = g2Compress(parseG2(root.get("vk_gamma_2")));
-        byte[] delta = g2Compress(parseG2(root.get("vk_delta_2")));
+        byte[] alpha = g1CompressNonIdentity(parseG1(root.get("vk_alpha_1")), "vk_alpha_1");
+        byte[] beta = g2CompressNonIdentity(parseG2(root.get("vk_beta_2")), "vk_beta_2");
+        byte[] gamma = g2CompressNonIdentity(parseG2(root.get("vk_gamma_2")), "vk_gamma_2");
+        byte[] delta = g2CompressNonIdentity(parseG2(root.get("vk_delta_2")), "vk_delta_2");
 
         JsonNode icNode = root.get("IC");
         List<byte[]> ic = new ArrayList<>();
@@ -74,10 +97,27 @@ public final class SnarkjsToCardano {
      */
     public static ProofCompressed parseProof(String proofJson) throws Exception {
         JsonNode root = MAPPER.readTree(proofJson);
-        byte[] piA = g1Compress(parseG1(root.get("pi_a")));
-        byte[] piB = g2Compress(parseG2(root.get("pi_b")));
-        byte[] piC = g1Compress(parseG1(root.get("pi_c")));
+        byte[] piA = g1CompressNonIdentity(parseG1(root.get("pi_a")), "pi_a");
+        byte[] piB = g2CompressNonIdentity(parseG2(root.get("pi_b")), "pi_b");
+        byte[] piC = g1CompressNonIdentity(parseG1(root.get("pi_c")), "pi_c");
         return new ProofCompressed(piA, piB, piC);
+    }
+
+    /** {@link #g1Compress} for a point that must not be the identity (proof and VK header points). */
+    private static byte[] g1CompressNonIdentity(List<BigInteger> coords, String name) {
+        if (coords.size() == 3 && coords.get(2).signum() == 0) {
+            throw new IllegalArgumentException(name + " must not be the point at infinity");
+        }
+        return g1Compress(coords);
+    }
+
+    /** {@link #g2Compress} for a point that must not be the identity (proof and VK header points). */
+    private static byte[] g2CompressNonIdentity(List<List<BigInteger>> coords, String name) {
+        if (coords.size() == 3 && coords.get(2).size() == 2
+                && coords.get(2).get(0).signum() == 0 && coords.get(2).get(1).signum() == 0) {
+            throw new IllegalArgumentException(name + " must not be the point at infinity");
+        }
+        return g2Compress(coords);
     }
 
     /**
@@ -110,18 +150,14 @@ public final class SnarkjsToCardano {
         byte[] result = new byte[FP_SIZE * 2]; // 96 bytes
         if (z.signum() == 0) return result;
 
-        BigInteger xAff, yAff;
-        if (z.equals(BigInteger.ONE)) {
-            xAff = x;
-            yAff = y;
-        } else {
-            BigInteger zInv = z.modInverse(BLS12_381_P);
-            xAff = x.multiply(zInv).mod(BLS12_381_P);
-            yAff = y.multiply(zInv).mod(BLS12_381_P);
+        // ADR-0062 D5: snarkjs emits affine points (z = 1); a rescaled projective encoding is
+        // rejected rather than normalised, as in the off-chain verifiers.
+        if (!z.equals(BigInteger.ONE)) {
+            throw new IllegalArgumentException("G1 point must be affine (z = 1)");
         }
 
-        writeFp(result, 0, xAff);
-        writeFp(result, FP_SIZE, yAff);
+        writeFp(result, 0, x);
+        writeFp(result, FP_SIZE, y);
         return result;
     }
 
@@ -143,8 +179,7 @@ public final class SnarkjsToCardano {
         if (zc0.signum() == 0 && zc1.signum() == 0) return result;
 
         if (!zc0.equals(BigInteger.ONE) || zc1.signum() != 0) {
-            throw new UnsupportedOperationException(
-                    "G2 point with non-trivial z requires Fp2 inversion (snarkjs always outputs z=[1,0])");
+            throw new IllegalArgumentException("G2 point must be affine (z = (1, 0))");
         }
 
         // blst ordering: imaginary (c1) first, then real (c0)
@@ -159,6 +194,10 @@ public final class SnarkjsToCardano {
      * Write a field element as 48-byte big-endian into buffer at offset.
      */
     static void writeFp(byte[] buf, int offset, BigInteger value) {
+        // Reject rather than truncate: a value >= p (or wider than 48 bytes) is not a coordinate.
+        if (value.signum() < 0 || value.compareTo(Fp.P) >= 0) {
+            throw new IllegalArgumentException("Coordinate must be in [0, p)");
+        }
         byte[] bytes = value.toByteArray();
         int srcStart = Math.max(0, bytes.length - FP_SIZE);
         int count = Math.min(bytes.length, FP_SIZE);

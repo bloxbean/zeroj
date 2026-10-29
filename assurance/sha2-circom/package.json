@@ -1,0 +1,7 @@
+{
+  "name": "zeroj-sha2-circom-assurance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Optional SHA-2 constraint interoperability checks; no setup or prover service",
+  "dependencies": {"snarkjs": "0.7.6"}
+}

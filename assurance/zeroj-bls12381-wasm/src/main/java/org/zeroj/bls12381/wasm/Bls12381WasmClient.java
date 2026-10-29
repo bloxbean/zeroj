@@ -3,6 +3,7 @@ package org.zeroj.bls12381.wasm;
 import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
+import org.zeroj.bls12381.spi.Bls12381Provider;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Memory;
 import com.dylibso.chicory.wasm.Parser;
@@ -85,11 +86,7 @@ public final class Bls12381WasmClient {
     }
 
     public boolean pairingProductIsIdentity(G1Point[] g1Points, G2Point[] g2Points) {
-        Objects.requireNonNull(g1Points, "g1Points required");
-        Objects.requireNonNull(g2Points, "g2Points required");
-        if (g1Points.length != g2Points.length) {
-            throw new IllegalArgumentException("Arrays must have equal length");
-        }
+        Bls12381Provider.requirePairingProductInput(g1Points, g2Points);
         ByteBuffer request = ByteBuffer
                 .allocate(4 + g1Points.length * (Bls12381Codecs.G1_UNCOMPRESSED_BYTES + Bls12381Codecs.G2_UNCOMPRESSED_BYTES))
                 .order(ByteOrder.LITTLE_ENDIAN);

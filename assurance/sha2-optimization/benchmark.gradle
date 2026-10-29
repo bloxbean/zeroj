@@ -1,0 +1,33 @@
+// Optional source set only. The identical external harness can compile against two checkouts.
+gradle.projectsEvaluated {
+    def bench = gradle.rootProject.project(':zeroj-crypto-blst')
+    def harness = new File(gradle.startParameter.projectProperties['sha2Harness'])
+    def manifest = new File(gradle.startParameter.projectProperties['sha2LaunchManifest'])
+    def sources = bench.sourceSets.create('sha2Optimization') {
+        java.srcDirs = [new File(harness, 'java')]
+        compileClasspath += bench.sourceSets.main.output
+        runtimeClasspath += bench.sourceSets.main.output
+    }
+    bench.configurations.named(sources.implementationConfigurationName) {
+        extendsFrom bench.configurations.implementation, bench.configurations.api
+    }
+    [':zeroj-circuit-lib', ':zeroj-codec', ':zeroj-verifier-groth16'].each {
+        bench.dependencies.add(sources.implementationConfigurationName, gradle.rootProject.project(it))
+    }
+    bench.dependencies.add(sources.implementationConfigurationName,
+            'com.fasterxml.jackson.core:jackson-databind:2.18.2')
+    def launcher = bench.javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    bench.tasks.register('sha2OptimizationPrepare') {
+        dependsOn bench.tasks.named(sources.classesTaskName), bench.tasks.named('classes'), sources.runtimeClasspath
+        doLast {
+            manifest.parentFile.mkdirs()
+            manifest.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+                java: launcher.get().executablePath.asFile.absolutePath,
+                classpath: sources.runtimeClasspath.asPath,
+                main: 'org.zeroj.assurance.sha2.Sha2OptimizationBenchmark'
+            ])) + '\n'
+        }
+    }
+}
