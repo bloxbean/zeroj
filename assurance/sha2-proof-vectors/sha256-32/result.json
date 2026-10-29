@@ -1,0 +1,56 @@
+{
+  "case" : "sha256-32",
+  "timestamp" : "2026-10-29T02:45:13.709769Z",
+  "curve" : "BLS12-381",
+  "backend" : "pure-java",
+  "setup" : "INSECURE SINGLE-PARTY DEVELOPMENT ONLY",
+  "timingScope" : "Shared-host diagnostic: first call plus three warm samples; key stays open; no timing gate",
+  "javaRuntime" : "25.0.2+12-LTS",
+  "os" : "Mac OS X",
+  "architecture" : "aarch64",
+  "processors" : 16,
+  "maxHeapBytes" : 12884901888,
+  "initialSystemLoadAverage" : 14.5517578125,
+  "compileMs" : 198.200667,
+  "constraints" : 42694,
+  "wires" : 141470,
+  "publicInputs" : 2,
+  "r1csSha256" : "19a1e71f1c2615698ec5e138ad51751329aac88c19ffef0f787139608117947d",
+  "firstWitnessMs" : 33.945375,
+  "setupMs" : 2604.617916,
+  "qapDomain" : 65536,
+  "keyStoreBytes" : 17977255,
+  "rows" : [ {
+    "proofSha256" : "52c5d7c6f6fad0af408f39ab738ee1d2f34e0622813f38316ea4294b26c1e637",
+    "verifyMs" : 361.475584,
+    "iteration" : 0,
+    "warmup" : true,
+    "witnessMs" : 10.277875,
+    "proveMs" : 1713.111208
+  }, {
+    "proofSha256" : "3dd905dbbbe00bbdc70e96f3356091749f6a84bd4ff29509a7d00d6d1a387a15",
+    "verifyMs" : 326.795583,
+    "iteration" : 1,
+    "warmup" : false,
+    "witnessMs" : 4.466333,
+    "proveMs" : 1420.823875
+  }, {
+    "proofSha256" : "74a25556d499f2400e2c51023d7a1f944462ac42e9f7061c826c67139d033ad5",
+    "verifyMs" : 324.407041,
+    "iteration" : 2,
+    "warmup" : false,
+    "witnessMs" : 4.938125,
+    "proveMs" : 1438.424666
+  }, {
+    "proofSha256" : "4526669c5a5fe4f46f32c6a666ea0f6ce64e7cb1bf64dd7d510e3d1195a65bc5",
+    "verifyMs" : 317.316792,
+    "iteration" : 3,
+    "warmup" : false,
+    "witnessMs" : 4.491709,
+    "proveMs" : 1390.911041
+  } ],
+  "randomizedProofsVerified" : 4,
+  "changedDigestLimbsRejected" : 2,
+  "canonicalNegatedARejected" : true,
+  "verificationKeySha256" : "5dc51ba5575f32b0726c1187ebd1eb6bf2ccb0745b7f8f886a58d0f02ab26c8c"
+}

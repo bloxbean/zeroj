@@ -1,0 +1,415 @@
+{
+  "date": "2026-10-29",
+  "baseline_commit": "3f1570f",
+  "old_source": "Existing strict profile pins at the baseline commit; not remeasured in this run.",
+  "candidate_source": "27 compiled candidate profiles measured by temporary test instrumentation; all strict assertions restored with these values.",
+  "change": "ADR-0063 direct Boolean assertion lowering. Template names and public/private input arities unchanged; canonical R1CS hashes and circuit-specific keys change.",
+  "validation": "Final ./gradlew build --continue --max-workers=2 passed with strict profile pins and all default security tests (2026-10-29).",
+  "profiles": [
+    {
+      "template": "zeroj-jmt-v1-inclusion-s0-p1",
+      "public_inputs": 1,
+      "private_inputs": 65,
+      "before": {
+        "rows": 2095,
+        "wires": 5605,
+        "sha256": "cb968f54bbd422a39df7f3a886e24cf98ab8103c3bd4daf44ca49c11b77a570e"
+      },
+      "after": {
+        "rows": 1455,
+        "wires": 3685,
+        "sha256": "2ddf135b6d5d26e388a91e4d201b417c2fecf5f9fd611caae53ebd4ec7e5dbd5"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-inclusion-s8-p1",
+      "public_inputs": 1,
+      "private_inputs": 105,
+      "before": {
+        "rows": 10069,
+        "wires": 51614,
+        "sha256": "3f967bc5a1376ccbbddab7b1fe3fdf183e400be82d0171ef1342536fde18b73d"
+      },
+      "after": {
+        "rows": 9421,
+        "wires": 49670,
+        "sha256": "9360d19c096cf77c21c7ee39d2984a0f33db553d8f70bac3a238d517a30e3c2d"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-inclusion-s64-p1",
+      "public_inputs": 1,
+      "private_inputs": 385,
+      "before": {
+        "rows": 65901,
+        "wires": 373670,
+        "sha256": "725996176f225f33ebbdb794902537c3bdd602c91cdaf257f3c5eb2fab79d6dd"
+      },
+      "after": {
+        "rows": 65197,
+        "wires": 371558,
+        "sha256": "a7652a1fa5a258d1fc298ae7786b4210db4e7c4fdbbf98f0ba547bfeb13b2438"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-non-inclusion-empty-s8-p1",
+      "public_inputs": 1,
+      "private_inputs": 104,
+      "before": {
+        "rows": 9829,
+        "wires": 50200,
+        "sha256": "15641ab6baa108f80628a28dbd80f2e25e1b5f00e927e048e1d8c5d41dd58479"
+      },
+      "after": {
+        "rows": 9181,
+        "wires": 48256,
+        "sha256": "0ac2610d8bdc2f4adc61f7e56e975f7598803747d907d620c76be78f1b13a636"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-non-inclusion-different-leaf-s8-p1",
+      "public_inputs": 1,
+      "private_inputs": 169,
+      "before": {
+        "rows": 11976,
+        "wires": 55678,
+        "sha256": "6d94a186f0dcd5870c53d892c49b847cbd1b4afcbf9c5c4a9642e460b1314fad"
+      },
+      "after": {
+        "rows": 10688,
+        "wires": 51814,
+        "sha256": "f67f396078671118260f22e1ed823aae14224254b56af616b5a3705846ba4e76"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-value-update-s8-p2",
+      "public_inputs": 2,
+      "private_inputs": 106,
+      "before": {
+        "rows": 18067,
+        "wires": 98541,
+        "sha256": "8b6cb5d8bf0ebb0fa69bf5850275351ff8a35e3bcb7c0559762d71540740d7fc"
+      },
+      "after": {
+        "rows": 17419,
+        "wires": 96597,
+        "sha256": "eff1da1a8093956f247c2011f9e34b1c8c9dcfc18d5f5a6811924c206ee1a627"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-insert-empty-s8-p2",
+      "public_inputs": 2,
+      "private_inputs": 105,
+      "before": {
+        "rows": 17822,
+        "wires": 97120,
+        "sha256": "639686883abdd97d3c5e37c143b0864fc3864903e2b53fc39f01eba9a87754b5"
+      },
+      "after": {
+        "rows": 17174,
+        "wires": 95176,
+        "sha256": "ca6dcee1a07d90b20676ec432db79807ec6d361faaa3604444e693c49ee71fe6"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-insert-different-leaf-s8-p2",
+      "public_inputs": 2,
+      "private_inputs": 170,
+      "before": {
+        "rows": 86602,
+        "wires": 489835,
+        "sha256": "61e34677efabf68c59a7ec58bb91165a8368f777fee1b8217806dd448e1c2b27"
+      },
+      "after": {
+        "rows": 85146,
+        "wires": 485464,
+        "sha256": "4f8e96a33cac777f9c782c99f742b7f32aa8f1d711acda700edc7e567a33effa"
+      }
+    },
+    {
+      "template": "zeroj-jmt-v1-tombstone-update-s8-p3",
+      "public_inputs": 3,
+      "private_inputs": 105,
+      "before": {
+        "rows": 18067,
+        "wires": 98541,
+        "sha256": "a24c44d57e1be2b2ea1cfc2250ba7b88ad199dd9b617659e289b89b2df9074ff"
+      },
+      "after": {
+        "rows": 17419,
+        "wires": 96597,
+        "sha256": "e2e242ea426a5db45ddad220a342664f8d85ac76df14c4f5d0cfa42b0d6b979b"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s0-p1",
+      "public_inputs": 1,
+      "private_inputs": 65,
+      "before": {
+        "rows": 3575,
+        "wires": 14831,
+        "sha256": "72bbab48083b0f44e347a21b7310c948e8f2f558d68260b3848400d4cee16e07"
+      },
+      "after": {
+        "rows": 3051,
+        "wires": 13259,
+        "sha256": "29b7aa4d9c198c94017a26432008ac9ad6feb8eb2010a3047033661a9d884847"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s1-p1",
+      "public_inputs": 1,
+      "private_inputs": 71,
+      "before": {
+        "rows": 9699,
+        "wires": 48429,
+        "sha256": "2ce7c0a3ba476fe849ef1add054223e957ba7c62ecd615115d706f6f77033caf"
+      },
+      "after": {
+        "rows": 8921,
+        "wires": 46095,
+        "sha256": "c163d744f308044b5aaea66b301be2e42bec907d14d3bef0e560f3dacd98cadb"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s3-p1",
+      "public_inputs": 1,
+      "private_inputs": 83,
+      "before": {
+        "rows": 21433,
+        "wires": 115559,
+        "sha256": "022a7ee4f514c07b285f35c1430774b145fc7ca67e779d51c4af688953585ee6"
+      },
+      "after": {
+        "rows": 20163,
+        "wires": 111749,
+        "sha256": "14b8718f15e8181e9d24eb02a781e523181cb3fa941b8d0ad54adb967f042647"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s8-p1",
+      "public_inputs": 1,
+      "private_inputs": 113,
+      "before": {
+        "rows": 50768,
+        "wires": 283384,
+        "sha256": "e3a9fe7f2bcce454395a5bb0f2fac12e3fd99065d6b6c82325d7cdce16c1b74c"
+      },
+      "after": {
+        "rows": 48268,
+        "wires": 275884,
+        "sha256": "ff0c5c68e02fd7418d014fc1ec74d89626611d9aedad1907f8dc8fba25e0e2a5"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s9-p1",
+      "public_inputs": 1,
+      "private_inputs": 119,
+      "before": {
+        "rows": 56635,
+        "wires": 316949,
+        "sha256": "540279f349be215c837245a888934dd507bbfecf21c4a66146a3febcd33d427d"
+      },
+      "after": {
+        "rows": 53889,
+        "wires": 308711,
+        "sha256": "dd69a34951612ab67283ecf6ffbd6c5cdf47003db3bdb2ecc6b0da2f72eb3b7d"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s12-p1",
+      "public_inputs": 1,
+      "private_inputs": 137,
+      "before": {
+        "rows": 74236,
+        "wires": 417644,
+        "sha256": "84975e990f84da821650147a9e6b8f5fdd2b67b20ce06c31ecb490411915bf00"
+      },
+      "after": {
+        "rows": 70752,
+        "wires": 407192,
+        "sha256": "baa1ce903d9bf95a669477dd7032187a663e0f8c0e5b5c05d872f9e80b41d9b9"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-inclusion-s64-p1",
+      "public_inputs": 1,
+      "private_inputs": 449,
+      "before": {
+        "rows": 379321,
+        "wires": 2163024,
+        "sha256": "9505d73edcbb136c0783636eb45158b8a2b625bf05b6427716071a264ce5a17a"
+      },
+      "after": {
+        "rows": 363045,
+        "wires": 2114196,
+        "sha256": "3517e47361e51c47c5ca190c494b15fd6278da49f1818da55a4e6ebb7d9a07a4"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-non-inclusion-empty-s8-p1",
+      "public_inputs": 1,
+      "private_inputs": 112,
+      "before": {
+        "rows": 47397,
+        "wires": 269978,
+        "sha256": "e59025c48cf71b4fb17ce03045944307e43687f60b4dab61916b2f414dcdc46d"
+      },
+      "after": {
+        "rows": 45165,
+        "wires": 263282,
+        "sha256": "aea0fbe7a19badb27df3db6dd8851681464b55d8e897344de2226eee20ad2a0a"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-non-inclusion-different-leaf-s8-p1",
+      "public_inputs": 1,
+      "private_inputs": 178,
+      "before": {
+        "rows": 54766,
+        "wires": 291445,
+        "sha256": "1184ef318658e8b63d752b0e05fb1ab1339a1438adcc689fee6e244484849873"
+      },
+      "after": {
+        "rows": 50881,
+        "wires": 279787,
+        "sha256": "22c45307ee886d545013d6ce0f38b6d0ed32ff0c43233cf7cb1b759b2c3f196c"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-value-update-s8-p2",
+      "public_inputs": 2,
+      "private_inputs": 114,
+      "before": {
+        "rows": 82651,
+        "wires": 517099,
+        "sha256": "b133da39b0a2ae11788284cb1e526efa072f3c30072ef631bf1816622468f8d4"
+      },
+      "after": {
+        "rows": 80119,
+        "wires": 509503,
+        "sha256": "2bdcd87c53a3ad649cb27c28a3c4caf1d66c5efc37044cd69e737ed991ebb4e0"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-insert-empty-s8-p2",
+      "public_inputs": 2,
+      "private_inputs": 113,
+      "before": {
+        "rows": 81449,
+        "wires": 510025,
+        "sha256": "1345f5ee54f5840e9c01b127acdf85c8c85e62885c5c324409738446ed0334cc"
+      },
+      "after": {
+        "rows": 78917,
+        "wires": 502429,
+        "sha256": "48a0267e615a670218de76bb08304699efd4b263bdfc67896acd7ddffc12002c"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-insert-different-leaf-s8-p2",
+      "public_inputs": 2,
+      "private_inputs": 179,
+      "before": {
+        "rows": 105646,
+        "wires": 640109,
+        "sha256": "22d88dda857cf61a9292939517d433db71ea0f71460239b5751d0da1022fc15e"
+      },
+      "after": {
+        "rows": 100973,
+        "wires": 626087,
+        "sha256": "d096de1decc20bb4df12da79a54aa8facc61462e1031bd03ead0b5bbd1c4576d"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-value-update-s9-p2",
+      "public_inputs": 2,
+      "private_inputs": 120,
+      "before": {
+        "rows": 92353,
+        "wires": 578994,
+        "sha256": "8cfc8421c8941127149b8743205e0190438d21e7f53213a1e8b9be06b280c85a"
+      },
+      "after": {
+        "rows": 89571,
+        "wires": 570648,
+        "sha256": "dd4ef446732a67c57a8cf97d3f320eca6d76f227ad42625b5f80770c2bd1eb04"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-insert-empty-s9-p2",
+      "public_inputs": 2,
+      "private_inputs": 119,
+      "before": {
+        "rows": 91151,
+        "wires": 571920,
+        "sha256": "e89dc5b3d7a2cd7d5c4ddf5d0ffa616cff7077c06079d0d9b9c3bcc444e85b28"
+      },
+      "after": {
+        "rows": 88369,
+        "wires": 563574,
+        "sha256": "d8d132110e41bfc6b646f2775d4ad7d1abb18fd631760a8f76b4ba82eb870ca2"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-insert-different-leaf-s9-p2",
+      "public_inputs": 2,
+      "private_inputs": 185,
+      "before": {
+        "rows": 115348,
+        "wires": 702004,
+        "sha256": "dae03019cfae6005e4f30674cd3dd13dc1d0131e7afb9f63ebd3f88668e3cd01"
+      },
+      "after": {
+        "rows": 110425,
+        "wires": 687232,
+        "sha256": "1627ee290b5f9f09056152fd1a9eb222d1d2e1f0fef421a8b101a772cd09b899"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-value-update-s12-p2",
+      "public_inputs": 2,
+      "private_inputs": 138,
+      "before": {
+        "rows": 121459,
+        "wires": 764679,
+        "sha256": "cd8fbba73ebd8a3799eb5648fd91399fd38fbe8932c273f9dba40fadeef006c6"
+      },
+      "after": {
+        "rows": 117927,
+        "wires": 754083,
+        "sha256": "65f6458656d08bf960e76dcd211457341a099cc0ec687b3afb6362a5e45becaa"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-insert-empty-s12-p2",
+      "public_inputs": 2,
+      "private_inputs": 137,
+      "before": {
+        "rows": 120257,
+        "wires": 757605,
+        "sha256": "c94630baec3eab8ee27d3d282598a9d4f1cf162a576a4c44bcf143104afc716a"
+      },
+      "after": {
+        "rows": 116725,
+        "wires": 747009,
+        "sha256": "53ee3e54949d973a1e0ae1e7af7c7d7c1cd80020ecb5afdc9221500f0e9585c1"
+      }
+    },
+    {
+      "template": "zeroj-mpf-v1-insert-different-leaf-s12-p2",
+      "public_inputs": 2,
+      "private_inputs": 203,
+      "before": {
+        "rows": 144454,
+        "wires": 887689,
+        "sha256": "4c6c2150d1be5a60c6a8a10055202cad02663b177393de7bdd55e7877db2d6f5"
+      },
+      "after": {
+        "rows": 138781,
+        "wires": 870667,
+        "sha256": "4e923b71ad150c2f7cd3a50b51e3df22a6b3276a09b486cd2158d32be13ae3c1"
+      }
+    }
+  ]
+}

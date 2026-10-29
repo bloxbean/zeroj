@@ -1,13 +1,12 @@
 package org.zeroj.onchain.julc.groth16.codec;
 
+import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.crypto.groth16.Groth16ProofBLS381;
 import org.zeroj.crypto.groth16.Groth16Keys;
 import org.zeroj.crypto.setup.Groth16SetupBLS381;
 import org.zeroj.onchain.julc.groth16.validator.Groth16BLS12381Verifier;
-import supranational.blst.P1_Affine;
-import supranational.blst.P2_Affine;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -44,7 +43,8 @@ public final class ProverToCardano {
         byte[] uncompressed = new byte[FP_SIZE * 2]; // 96 bytes
         writeFp(uncompressed, 0, point.xBigInt());
         writeFp(uncompressed, FP_SIZE, point.yBigInt());
-        return new P1_Affine(uncompressed).compress();
+        // Checked decode (on curve, in subgroup), then the canonical ZCash compression.
+        return Bls12381Codecs.g1ToCompressed(Bls12381Codecs.g1FromUncompressed(uncompressed));
     }
 
     /**
@@ -64,7 +64,7 @@ public final class ProverToCardano {
         writeFp(uncompressed, FP_SIZE, point.x().reBigInt());
         writeFp(uncompressed, FP_SIZE * 2, point.y().imBigInt());
         writeFp(uncompressed, FP_SIZE * 3, point.y().reBigInt());
-        return new P2_Affine(uncompressed).compress();
+        return Bls12381Codecs.g2ToCompressed(Bls12381Codecs.g2FromUncompressed(uncompressed));
     }
 
     /**

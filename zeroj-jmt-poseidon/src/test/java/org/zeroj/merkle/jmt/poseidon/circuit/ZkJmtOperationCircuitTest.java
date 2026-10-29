@@ -343,34 +343,36 @@ class ZkJmtOperationCircuitTest {
                 "valid rows must be one prefix; a later valid row cannot follow padding");
     }
 
+    // Template names identify semantic/schema versions. ADR-0063 direct Boolean lowering
+    // changes the exact R1CS pins and requires fresh circuit-specific keys.
     @Test
     void templateIdsDigestsAndConstraintProfilesArePinned() {
-        assertProfile("inclusion", 0, 1, 2_095, 5_605, 65,
-                "cb968f54bbd422a39df7f3a886e24cf98ab8103c3bd4daf44ca49c11b77a570e",
+        assertProfile("inclusion", 0, 1, 1_455, 3_685, 65,
+                "2ddf135b6d5d26e388a91e4d201b417c2fecf5f9fd611caae53ebd4ec7e5dbd5",
                 PoseidonJmtCircuitTemplates::inclusion);
-        assertProfile("inclusion", 8, 1, 10_069, 51_614, 105,
-                "3f967bc5a1376ccbbddab7b1fe3fdf183e400be82d0171ef1342536fde18b73d",
+        assertProfile("inclusion", 8, 1, 9_421, 49_670, 105,
+                "9360d19c096cf77c21c7ee39d2984a0f33db553d8f70bac3a238d517a30e3c2d",
                 PoseidonJmtCircuitTemplates::inclusion);
-        assertProfile("inclusion", 64, 1, 65_901, 373_670, 385,
-                "725996176f225f33ebbdb794902537c3bdd602c91cdaf257f3c5eb2fab79d6dd",
+        assertProfile("inclusion", 64, 1, 65_197, 371_558, 385,
+                "a7652a1fa5a258d1fc298ae7786b4210db4e7c4fdbbf98f0ba547bfeb13b2438",
                 PoseidonJmtCircuitTemplates::inclusion);
-        assertProfile("non-inclusion-empty", 8, 1, 9_829, 50_200, 104,
-                "15641ab6baa108f80628a28dbd80f2e25e1b5f00e927e048e1d8c5d41dd58479",
+        assertProfile("non-inclusion-empty", 8, 1, 9_181, 48_256, 104,
+                "0ac2610d8bdc2f4adc61f7e56e975f7598803747d907d620c76be78f1b13a636",
                 PoseidonJmtCircuitTemplates::nonInclusionEmpty);
-        assertProfile("non-inclusion-different-leaf", 8, 1, 11_976, 55_678, 169,
-                "6d94a186f0dcd5870c53d892c49b847cbd1b4afcbf9c5c4a9642e460b1314fad",
+        assertProfile("non-inclusion-different-leaf", 8, 1, 10_688, 51_814, 169,
+                "f67f396078671118260f22e1ed823aae14224254b56af616b5a3705846ba4e76",
                 PoseidonJmtCircuitTemplates::nonInclusionDifferentLeaf);
-        assertProfile("value-update", 8, 2, 18_067, 98_541, 106,
-                "8b6cb5d8bf0ebb0fa69bf5850275351ff8a35e3bcb7c0559762d71540740d7fc",
+        assertProfile("value-update", 8, 2, 17_419, 96_597, 106,
+                "eff1da1a8093956f247c2011f9e34b1c8c9dcfc18d5f5a6811924c206ee1a627",
                 PoseidonJmtCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 8, 2, 17_822, 97_120, 105,
-                "639686883abdd97d3c5e37c143b0864fc3864903e2b53fc39f01eba9a87754b5",
+        assertProfile("insert-empty", 8, 2, 17_174, 95_176, 105,
+                "ca6dcee1a07d90b20676ec432db79807ec6d361faaa3604444e693c49ee71fe6",
                 PoseidonJmtCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 8, 2, 86_602, 489_835, 170,
-                "61e34677efabf68c59a7ec58bb91165a8368f777fee1b8217806dd448e1c2b27",
+        assertProfile("insert-different-leaf", 8, 2, 85_146, 485_464, 170,
+                "4f8e96a33cac777f9c782c99f742b7f32aa8f1d711acda700edc7e567a33effa",
                 PoseidonJmtCircuitTemplates::insertDifferentLeaf);
-        assertProfile("tombstone-update", 8, 3, 18_067, 98_541, 105,
-                "a24c44d57e1be2b2ea1cfc2250ba7b88ad199dd9b617659e289b89b2df9074ff",
+        assertProfile("tombstone-update", 8, 3, 17_419, 96_597, 105,
+                "e2e242ea426a5db45ddad220a342664f8d85ac76df14c4f5d0cfa42b0d6b979b",
                 PoseidonJmtCircuitTemplates::tombstoneUpdate);
     }
 

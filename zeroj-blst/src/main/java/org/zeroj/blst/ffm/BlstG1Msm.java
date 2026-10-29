@@ -14,8 +14,9 @@ import java.math.BigInteger;
  * pure Java.
  *
  * <p>Points are supplied as 96-byte big-endian uncompressed encodings (x‖y; infinity = the
- * {@code 0x40} flag byte); the result is the same encoding. Scalars are reduced/encoded little-endian
- * (blst convention). All marshalling happens in a confined {@link Arena} per call.</p>
+ * {@code 0x40} flag byte); the result is the same encoding. Scalars are reduced mod {@code r} and
+ * encoded as 32 little-endian bytes (blst convention). All marshalling happens in a confined
+ * {@link Arena} per call.</p>
  */
 public final class BlstG1Msm {
 
@@ -25,6 +26,8 @@ public final class BlstG1Msm {
     private static final long P1 = 144;         // sizeof(blst_p1)        = 3 * fp(48)
     private static final long SCALAR = 32;
     private static final long NBITS = 255;      // BLS12-381 Fr
+    /** blst limb structs hold 64-bit limbs; allocate them 8-byte aligned rather than relying on malloc. */
+    private static final long LIMB_ALIGN = 8;
 
     private static final ValueLayout.OfByte BYTE = ValueLayout.JAVA_BYTE;
     private static final ValueLayout.OfLong I64 = ValueLayout.JAVA_LONG;
@@ -45,24 +48,43 @@ public final class BlstG1Msm {
     private static final MethodHandle P1_MULT = BlstFfm.downcall(
             "blst_p1_mult", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS, I64));
 
-    /** Diagnostic single scalar-mul {@code scalar·point} via blst (isolates conversion from pippenger). */
+    private static final MethodHandle IN_G1 = BlstFfm.downcall(
+            "blst_p1_affine_in_g1", FunctionDescriptor.of(ValueLayout.JAVA_BOOLEAN, ValueLayout.ADDRESS));
+
+    /**
+     * Single scalar multiplication {@code [scalar mod r]·point} via {@code blst_p1_mult}.
+     *
+     * <p>The scalar is reduced mod {@code r} first, like {@code Bls12381Provider.g1ScalarMul}. The
+     * point must be a 96-byte uncompressed encoding; it is checked to be on the curve but
+     * <b>not</b> to be in the subgroup (see {@link #msmValidated}).</p>
+     */
     public static byte[] singleMul(byte[] uncompressedPoint, BigInteger scalar) {
+        BlstMsmInputs.requireLength(uncompressedPoint, 96, 0);
+        byte[] le = new byte[32];
+        BlstMsmInputs.scalarLe(scalar, le);
+        return singleMulCore(uncompressedPoint, le, false);
+    }
+
+    private static byte[] singleMulCore(byte[] encoded, byte[] le, boolean validateBase) {
+        BlstMsmInputs.requireUncompressedFlags(encoded, 0);
         try (Arena a = Arena.ofConfined()) {
-            MemorySegment in = a.allocate(P1_AFFINE);
-            MemorySegment.copy(uncompressedPoint, 0, in, BYTE, 0, 96);
-            MemorySegment aff = a.allocate(P1_AFFINE);
+            MemorySegment in = a.allocate(P1_AFFINE, LIMB_ALIGN);
+            MemorySegment.copy(encoded, 0, in, BYTE, 0, 96);
+            MemorySegment aff = a.allocate(P1_AFFINE, LIMB_ALIGN);
             int err = (int) DESERIALIZE.invoke(aff, in);
             if (err != 0) throw new IllegalArgumentException("deserialize err=" + err);
-            MemorySegment jac = a.allocate(P1);
+            if (validateBase && !(boolean) IN_G1.invoke(aff)) {
+                throw new IllegalArgumentException("Point 0 is not in the G1 subgroup");
+            }
+            MemorySegment jac = a.allocate(P1, LIMB_ALIGN);
             FROM_AFFINE.invoke(jac, aff);
-            byte[] le = leBytes32(scalar);
             MemorySegment sc = a.allocate(SCALAR);
             MemorySegment.copy(le, 0, sc, BYTE, 0, 32);
-            MemorySegment ret = a.allocate(P1);
+            MemorySegment ret = a.allocate(P1, LIMB_ALIGN);
             P1_MULT.invoke(ret, jac, sc, NBITS);
-            MemorySegment retAff = a.allocate(P1_AFFINE);
+            MemorySegment retAff = a.allocate(P1_AFFINE, LIMB_ALIGN);
             TO_AFFINE.invoke(retAff, ret);
-            MemorySegment out = a.allocate(P1_AFFINE);
+            MemorySegment out = a.allocate(P1_AFFINE, LIMB_ALIGN);
             AFFINE_SERIALIZE.invoke(out, retAff);
             byte[] r = new byte[96];
             MemorySegment.copy(out, BYTE, 0, r, 0, 96);
@@ -85,22 +107,49 @@ public final class BlstG1Msm {
     }
 
     /**
-     * {@code Σ scalars[i] · points[i]} → 96-byte uncompressed result.
+     * {@code Σ (scalars[i] mod r) · points[i]} → 96-byte uncompressed result.
+     *
+     * <p>Each scalar is reduced mod {@code r}. Each point must be a 96-byte uncompressed encoding
+     * without the compression or sort flag; blst checks that it is on the curve. Bases are
+     * <b>not</b> subgroup-checked on this hot path, so the caller must supply validated points or
+     * use {@link #msmValidated} (ADR-0062 D4). With a base outside the subgroup the result is
+     * undefined: for fewer than 32 points a small-order base can corrupt the whole sum, not just add
+     * a torsion component.</p>
      *
      * @param uncompressedPoints {@code n} points, each 96 bytes (big-endian x‖y, {@code 0x40} = infinity)
-     * @param scalars            {@code n} scalars
+     * @param scalars            exactly {@code n} scalars
+     * @throws IllegalArgumentException if the lengths differ or an encoding is malformed
      */
     public static byte[] msm(byte[][] uncompressedPoints, BigInteger[] scalars) {
-        return msm(uncompressedPoints.length,
-                (i, dst) -> System.arraycopy(uncompressedPoints[i], 0, dst, 0, 96), scalars);
+        return msmPoints(uncompressedPoints, scalars, false);
     }
 
     /**
-     * {@code Σ scalars[i] · point_i} over {@code n} encoder-supplied points with boxed scalars —
-     * delegates to the scalar-encoder core.
+     * {@link #msm(byte[][], BigInteger[])} that also checks every base is in the G1 subgroup
+     * ({@code blst_p1_affine_in_g1}) and rejects it otherwise. Use it for untrusted bases.
+     */
+    public static byte[] msmValidated(byte[][] uncompressedPoints, BigInteger[] scalars) {
+        return msmPoints(uncompressedPoints, scalars, true);
+    }
+
+    private static byte[] msmPoints(byte[][] uncompressedPoints, BigInteger[] scalars, boolean validateBases) {
+        BlstMsmInputs.requireSameLength(uncompressedPoints.length, scalars);
+        for (int i = 0; i < uncompressedPoints.length; i++) {
+            BlstMsmInputs.requireLength(uncompressedPoints[i], 96, i);
+        }
+        return msmCore(uncompressedPoints.length,
+                (i, dst) -> System.arraycopy(uncompressedPoints[i], 0, dst, 0, 96),
+                (i, dst) -> BlstMsmInputs.scalarLe(scalars[i], dst), validateBases);
+    }
+
+    /**
+     * {@code Σ (scalars[i] mod r) · point_i} over {@code n} encoder-supplied points with boxed
+     * scalars. Requires {@code scalars.length == n}. Bases are caller-validated (see
+     * {@link #msm(byte[][], BigInteger[])}).
      */
     public static byte[] msm(int n, G1Encoder points, BigInteger[] scalars) {
-        return msm(n, points, (i, dst) -> leBytes32Into(scalars[i], dst));
+        BlstMsmInputs.requireSameLength(n, scalars);
+        return msmCore(n, points, (i, dst) -> BlstMsmInputs.scalarLe(scalars[i], dst), false);
     }
 
     /**
@@ -108,50 +157,72 @@ public final class BlstG1Msm {
      * uncompressed result. Streaming variant (ADR-0033 M2 / ADR-0034 M3): each point and scalar is
      * encoded into one reusable buffer straight into the native arrays — no {@code byte[][]} of
      * encodings, no per-scalar byte arrays on heap.
+     *
+     * <p>Precondition: every scalar is canonical ({@code < r}, 32 bytes little-endian) and every
+     * point is a validated subgroup element. A non-canonical scalar or a flagged encoding is
+     * rejected (ADR-0062 D4); subgroup membership is the caller's responsibility.</p>
      */
     public static byte[] msm(int n, G1Encoder points, ScalarEncoder scalars) {
+        return msmCore(n, points, scalars, false);
+    }
+
+    private static byte[] msmCore(int n, G1Encoder points, ScalarEncoder scalars, boolean validateBases) {
+        if (n < 0) throw new IllegalArgumentException("n must be non-negative");
         if (n == 0) return infinity();
         byte[] buf = new byte[96];
         byte[] sbuf = new byte[32];
-        if (n == 1) { // pippenger is batch-only
-            points.encode(0, buf);
-            scalars.encode(0, sbuf);
-            return singleMul(buf, beFromLe(sbuf));
-        }
         try (Arena a = Arena.ofConfined()) {
-            // Deserialize each point into a contiguous internal blst_p1_affine array.
-            MemorySegment pts = a.allocate(P1_AFFINE * n);
-            MemorySegment inBuf = a.allocate(P1_AFFINE);
+            // Deserialize each point into a contiguous internal blst_p1_affine array, with its
+            // scalar alongside. Identity bases contribute nothing and are dropped (ADR-0062 F11):
+            // for fewer than 32 points blst 0.3.15 precomputes window tables that load each affine
+            // base with Z = 1, so an identity base (all-zero affine) corrupts the whole result.
+            MemorySegment pts = a.allocate(P1_AFFINE * n, LIMB_ALIGN);
+            MemorySegment scal = a.allocate(SCALAR * n);
+            MemorySegment inBuf = a.allocate(P1_AFFINE, LIMB_ALIGN);
+            int m = 0;
             for (int i = 0; i < n; i++) {
                 points.encode(i, buf);
-                MemorySegment.copy(buf, 0, inBuf, BYTE, 0, 96);
-                int err = (int) DESERIALIZE.invoke(pts.asSlice(i * P1_AFFINE, P1_AFFINE), inBuf);
-                if (err != 0) throw new IllegalArgumentException("blst_p1_deserialize failed at " + i + " (err=" + err + ")");
-            }
-
-            // Contiguous little-endian scalars.
-            MemorySegment scal = a.allocate(SCALAR * n);
-            for (int i = 0; i < n; i++) {
                 scalars.encode(i, sbuf);
-                MemorySegment.copy(sbuf, 0, scal, BYTE, i * SCALAR, 32);
+                BlstMsmInputs.requireUncompressedFlags(buf, i);
+                BlstMsmInputs.requireCanonicalScalar(sbuf, i);
+                MemorySegment.copy(buf, 0, inBuf, BYTE, 0, 96);
+                MemorySegment slot = pts.asSlice(m * P1_AFFINE, P1_AFFINE);
+                int err = (int) DESERIALIZE.invoke(slot, inBuf);
+                if (err != 0) throw new IllegalArgumentException("blst_p1_deserialize failed at " + i + " (err=" + err + ")");
+                if ((buf[0] & 0x40) != 0) continue; // a well-formed identity encoding
+                if (validateBases && !(boolean) IN_G1.invoke(slot)) {
+                    throw new IllegalArgumentException("Point " + i + " is not in the G1 subgroup");
+                }
+                MemorySegment.copy(sbuf, 0, scal, BYTE, m * SCALAR, 32);
+                m++;
             }
+            if (m == 0) return infinity();
+            if (m == 1) { // pippenger is batch-only
+                byte[] base = new byte[96];
+                AFFINE_SERIALIZE.invoke(inBuf, pts.asSlice(0, P1_AFFINE));
+                MemorySegment.copy(inBuf, BYTE, 0, base, 0, 96);
+                byte[] le = new byte[32];
+                MemorySegment.copy(scal, BYTE, 0, le, 0, 32);
+                return singleMulCore(base, le, false);
+            }
+            final int count = m;
 
             // points[]/scalars[] are arrays of n pointers into the contiguous buffers.
-            MemorySegment ptsPtr = a.allocate(ValueLayout.ADDRESS, n);
-            MemorySegment scalPtr = a.allocate(ValueLayout.ADDRESS, n);
-            for (int i = 0; i < n; i++) {
+            MemorySegment ptsPtr = a.allocate(ValueLayout.ADDRESS, count);
+            MemorySegment scalPtr = a.allocate(ValueLayout.ADDRESS, count);
+            for (int i = 0; i < count; i++) {
                 ptsPtr.setAtIndex(ValueLayout.ADDRESS, i, pts.asSlice(i * P1_AFFINE, P1_AFFINE));
                 scalPtr.setAtIndex(ValueLayout.ADDRESS, i, scal.asSlice(i * SCALAR, SCALAR));
             }
 
-            long scratchBytes = (long) SCRATCH_SIZEOF.invoke((long) n);
-            MemorySegment scratch = a.allocate(Math.max(8, scratchBytes));
-            MemorySegment ret = a.allocate(P1);
-            PIPPENGER.invoke(ret, ptsPtr, (long) n, scalPtr, NBITS, scratch);
+            long scratchBytes = (long) SCRATCH_SIZEOF.invoke((long) count);
+            MemorySegment scratch = a.allocate(Math.max(8, scratchBytes), LIMB_ALIGN);
+            MemorySegment ret = a.allocate(P1, LIMB_ALIGN);
+            PIPPENGER.invoke(ret, ptsPtr, (long) count, scalPtr, NBITS, scratch);
 
-            MemorySegment retAff = a.allocate(P1_AFFINE);
+            MemorySegment retAff = a.allocate(P1_AFFINE, LIMB_ALIGN);
             TO_AFFINE.invoke(retAff, ret);
-            MemorySegment out = a.allocate(P1_AFFINE);
+            MemorySegment out = a.allocate(P1_AFFINE, LIMB_ALIGN);
             AFFINE_SERIALIZE.invoke(out, retAff);
 
             byte[] result = new byte[96];
@@ -168,27 +239,5 @@ public final class BlstG1Msm {
         byte[] b = new byte[96];
         b[0] = 0x40;
         return b;
-    }
-
-    /** 32-byte little-endian encoding of {@code v mod 2^256} (blst scalar convention). */
-    private static byte[] leBytes32(BigInteger v) {
-        byte[] be = v.toByteArray();
-        byte[] le = new byte[32];
-        for (int i = 0; i < be.length && i < 32; i++) le[i] = be[be.length - 1 - i];
-        return le;
-    }
-
-    /** {@link #leBytes32} into a reusable buffer (all 32 bytes written). */
-    static void leBytes32Into(BigInteger v, byte[] dst) {
-        java.util.Arrays.fill(dst, (byte) 0);
-        byte[] be = v.toByteArray();
-        for (int i = 0; i < be.length && i < 32; i++) dst[i] = be[be.length - 1 - i];
-    }
-
-    /** LE 32 bytes → non-negative BigInteger (single-mul edge). */
-    static BigInteger beFromLe(byte[] le32) {
-        byte[] be = new byte[32];
-        for (int i = 0; i < 32; i++) be[i] = le32[31 - i];
-        return new BigInteger(1, be);
     }
 }

@@ -38,13 +38,6 @@ Licensed under the Apache License, Version 2.0
 https://github.com/supranational/blst
 
 --------------------------------------------------------------------------
-blst-java — Java Bindings for blst
---------------------------------------------------------------------------
-Copyright (c) 2022 ICON Foundation
-Licensed under the Apache License, Version 2.0
-https://github.com/icon-project/blst-java
-
---------------------------------------------------------------------------
 Jackson — JSON Processing
 --------------------------------------------------------------------------
 Copyright (c) 2007-2024 Tatu Saloranta and contributors

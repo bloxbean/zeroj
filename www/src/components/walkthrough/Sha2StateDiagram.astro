@@ -1,0 +1,72 @@
+---
+import './walkthrough.css';
+const steps = ['Commit state', 'Prove the rule', 'Bind the transaction'];
+---
+
+<figure class="zw-frame not-content" aria-label="Private SHA-256 application state with a stale-proof rejection">
+  <div class="zw zsha-state" data-total="3" data-view="insider">
+    <div class="zw-head">
+      <span class="zw-eyebrow">Private state · design sketch · <b data-counter>1 / 3</b></span>
+      <div class="zw-tools">
+        <div class="zw-seg" role="group" aria-label="State visibility">
+          <button type="button" data-view-btn="insider" aria-pressed="true">Operator's view</button>
+          <button type="button" data-view-btn="public" aria-pressed="false">Public view</button>
+        </div>
+        <button type="button" class="zw-btn" data-present aria-pressed="false">Present</button>
+      </div>
+    </div>
+    <div class="zw-stage">
+      <section class="zw-actor" data-hl="1,3" aria-label="Consumed state UTxO">
+        <div class="zw-actor-head"><span class="zw-actor-name">Current UTxO</span></div>
+        <div class="zw-row" data-kind="public"><span class="k">commitment / version</span><em class="zw-tag">PUBLIC</em><span class="v">C7 / 7</span></div>
+        <div class="zw-box"><span class="zw-box-title">One state identity</span><p class="zw-note">A uniquely controlled state token identifies the application state being consumed.</p></div>
+      </section>
+      <div class="zw-wire" data-hl="2" aria-hidden="true"><span class="arrow">→</span><span class="zw-wire-line"></span><span class="zw-msg">old commitment</span></div>
+      <section class="zw-actor" data-hl="2" aria-label="Private transition witness">
+        <div class="zw-actor-head"><span class="zw-actor-name">Private rule</span></div>
+        <div class="zw-row" data-kind="secret"><span class="k">internal credits</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em><span class="v"><span class="real">60 − 15 = 45</span><span class="mask">████████</span></span></div>
+        <div class="zw-row" data-kind="secret"><span class="k">old / fresh nonce</span><em class="zw-tag"><span class="vis">SECRET</span><span class="hid">HIDDEN</span></em><span class="v"><span class="real">r7 / r8</span><span class="mask">████████</span></span></div>
+        <div class="zw-box" data-show="2-3" data-off><span class="zw-box-title">Circuit must enforce</span><span class="zw-note">Both SHA-256 openings, bounded arithmetic, authorized action and state identity/version.</span></div>
+      </section>
+      <div class="zw-wire" data-hl="3" aria-hidden="true"><span class="arrow">→</span><span class="zw-wire-line"></span><span class="zw-msg">proof + C8</span></div>
+      <section class="zw-actor" data-hl="3" aria-label="Continuing state UTxO">
+        <div class="zw-actor-head"><span class="zw-actor-name">Next UTxO</span></div>
+        <div class="zw-row" data-kind="public"><span class="k">proposed commitment / version</span><em class="zw-tag">PUBLIC</em><span class="v">C8 / 8</span></div>
+        <div class="zw-box" data-show="3" data-off><span class="zw-box-title">Validator must enforce</span><span class="zw-note">Consumed commitment matches the proof; exactly one authorized continuation; state token, value and action bindings.</span><span class="zw-check" data-state-verdict aria-live="polite">Accept: proof starts at C7</span></div>
+      </section>
+    </div>
+    <label class="zsha-stale"><input type="checkbox" data-stale /> Try a proof for an older state, C6</label>
+    <div class="zw-narr" aria-live="polite">
+      <div data-show="1"><p class="zw-narr-title">1. Publish a commitment to private state</p><p>C7 stands for SHA-256 of an unambiguous encoding of the domain, state identity, version, private state and nonce. These are symbolic labels, not sample hash outputs.</p></div>
+      <div data-show="2" data-off><p class="zw-narr-title">2. Prove an authorized transition</p><p>The prover checks the old and new openings and the application rule. Private amounts need range constraints; a hash alone does not enforce a balance equation.</p></div>
+      <div data-show="3" data-off><p class="zw-narr-title">3. Check the actual transaction</p><p data-state-explanation>The consumed UTxO holds C7. The validator checks the proof for that exact state and binds C8 to the continuing output. A copied proof cannot authorize a different action.</p></div>
+    </div>
+    <div class="zw-foot">
+      <ol class="zw-steps" aria-label="Private state steps">{steps.map((step, i) => <li><button type="button" data-goto={i + 1}><span>{i + 1}</span>{step}</button></li>)}</ol>
+      <div class="zw-ctrl"><button type="button" class="zw-btn" data-prev aria-label="Previous step">←</button><button type="button" class="zw-btn" data-play aria-pressed="false">Play</button><button type="button" class="zw-btn" data-next aria-label="Next step">→</button></div>
+    </div>
+    <div class="zw-legend"><span>Design sketch, not a shipped SHA-2 state validator. Ledger values and transaction links remain public.</span></div>
+  </div>
+</figure>
+
+<script>
+  import { initWalkthrough } from './engine';
+  document.querySelectorAll<HTMLElement>('.zsha-state').forEach((root) => {
+    initWalkthrough(root);
+    root.querySelector<HTMLInputElement>('[data-stale]')?.addEventListener('change', (event) => {
+      const stale = (event.currentTarget as HTMLInputElement).checked;
+      const verdict = root.querySelector<HTMLElement>('[data-state-verdict]');
+      const explanation = root.querySelector<HTMLElement>('[data-state-explanation]');
+      if (verdict) { verdict.textContent = stale ? 'Reject: proof starts at C6, not C7' : 'Accept: proof starts at C7'; verdict.classList.toggle('no', stale); }
+      if (explanation) explanation.textContent = stale
+        ? 'The current UTxO commits to C7, but this proof starts at C6. Even a mathematically valid proof for C6 cannot advance the current state. The C7 UTxO remains unspent.'
+        : 'The consumed UTxO holds C7. The validator checks the proof for that exact state and binds C8 to the continuing output. A copied proof cannot authorize a different action.';
+      root.querySelector<HTMLButtonElement>('[data-goto="3"]')?.click();
+    });
+  });
+</script>
+
+<style>
+  .zsha-stale { display: flex; align-items: center; gap: 0.6em; margin: 0; padding: 0.7em 1.1em; color: var(--zw-text-2); font-size: 0.9em; }
+  .zsha-stale input { accent-color: var(--zw-public); }
+</style>

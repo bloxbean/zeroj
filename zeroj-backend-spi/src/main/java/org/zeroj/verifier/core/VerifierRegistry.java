@@ -39,13 +39,16 @@ public class VerifierRegistry {
     }
 
     /**
-     * Find a verifier that supports the given proof system and curve.
+     * Find a verifier that supports the given proof system and curve, in registration order,
+     * skipping backends that are not {@linkplain ZkVerifier#isAvailable() available} on this
+     * platform (e.g. the blst verifier where no {@code libblst} is bundled, ADR-0062).
      *
-     * @return the verifier, or empty if no backend supports this combination
+     * @return the verifier, or empty if no available backend supports this combination
      */
     public Optional<ZkVerifier> find(ProofSystemId proofSystem, CurveId curve) {
         return verifiers.stream()
                 .filter(v -> v.descriptor().supports(proofSystem, curve))
+                .filter(ZkVerifier::isAvailable)
                 .findFirst();
     }
 

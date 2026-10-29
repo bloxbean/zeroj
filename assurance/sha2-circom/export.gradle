@@ -1,0 +1,24 @@
+// Opt-in only: ./gradlew -I assurance/sha2-circom/export.gradle :zeroj-circuit-lib:sha2InteropExport
+// No default project, product dependency, publication or test task is changed.
+gradle.projectsEvaluated {
+    def lib = gradle.rootProject.project(':zeroj-circuit-lib')
+    def assurance = gradle.rootProject.file('assurance/sha2-circom')
+    lib.sourceSets.create('sha2Assurance') {
+        java.srcDirs = [new File(assurance, 'java'),
+                        gradle.rootProject.file('zeroj-integration-tests/src/test/java')]
+        java.include '**/Sha2InteropExport.java', '**/WitnessExporter.java'
+        compileClasspath += lib.sourceSets.main.output + lib.configurations.testRuntimeClasspath
+        runtimeClasspath += lib.sourceSets.main.output + lib.configurations.testRuntimeClasspath
+    }
+    lib.tasks.register('sha2InteropExport', JavaExec) {
+        group = 'verification'
+        description = 'Export SHA-2 byte/bit R1CS and witnesses for optional independent Circom assurance.'
+        dependsOn lib.tasks.named('sha2AssuranceClasses')
+        classpath = lib.sourceSets.sha2Assurance.runtimeClasspath
+        mainClass = 'org.zeroj.assurance.sha2.Sha2InteropExport'
+        args new File(assurance, 'build/cases.json').absolutePath,
+             new File(assurance, 'build/zeroj').absolutePath
+        maxHeapSize = '4g'
+        jvmArgs '-XX:ActiveProcessorCount=4'
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "baseline_git_commit": "d0b1f3279cebc801ebed50bd9847cbd9d6e2ee40",
+  "note": "New issue-111 implementation was uncommitted at execution; exact gadget/test hashes identify the measured source.",
+  "generator_command": "./gradlew :zeroj-integration-tests:heavyTest --tests '*Sha2Groth16Test' --max-workers=2 --console=plain",
+  "gradle_result": "BUILD SUCCESSFUL in 30s; both tests passed",
+  "development_setup_only": true,
+  "cpu_model": "Apple M4 Max",
+  "source_sha256": {
+    "zeroj-integration-tests/src/test/java/org/zeroj/it/sha2/Sha2Groth16Test.java": "7240c4beb11cfff5cbb1e7c8b2d47c1fa2b0f8f0277349512f19fdfff546eb34",
+    "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/hash/Sha256.java": "6e08a9d8c3b436479d102fb55e7b057378899d671b743654544e8740f258dabe",
+    "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/hash/Sha512.java": "4a7d277b547796a1910c2ac67f340217c63fc1f92c52cf58ab21289613454aa8"
+  },
+  "raw_gradle_log_sha256": "443b97469e795f6610080a5d7d3997f571a3505a720fe6fab3abd6d55e188d9f"
+}

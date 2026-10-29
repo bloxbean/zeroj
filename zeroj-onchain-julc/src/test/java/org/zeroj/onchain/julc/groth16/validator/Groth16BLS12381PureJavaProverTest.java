@@ -13,8 +13,7 @@ import org.julclang.testkit.ContractTest;
 import org.julclang.testkit.TestDataBuilder;
 import org.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
 import org.junit.jupiter.api.Test;
-import supranational.blst.P1_Affine;
-import supranational.blst.P2_Affine;
+import org.zeroj.bls12381.Bls12381Codecs;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -136,7 +135,7 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
         byte[] u = new byte[FP_SIZE * 2];
         writeFp(u, 0, p.xBigInt());
         writeFp(u, FP_SIZE, p.yBigInt());
-        return new P1_Affine(u).compress();
+        return Bls12381Codecs.g1ToCompressed(Bls12381Codecs.g1FromUncompressed(u));
     }
 
     private static byte[] g2Compress(JacobianG2BLS381.AffineG2 p) {
@@ -144,7 +143,7 @@ class Groth16BLS12381PureJavaProverTest extends ContractTest {
         byte[] u = new byte[FP_SIZE * 4];
         writeFp(u, 0, p.x().imBigInt()); writeFp(u, FP_SIZE, p.x().reBigInt());
         writeFp(u, FP_SIZE * 2, p.y().imBigInt()); writeFp(u, FP_SIZE * 3, p.y().reBigInt());
-        return new P2_Affine(u).compress();
+        return Bls12381Codecs.g2ToCompressed(Bls12381Codecs.g2FromUncompressed(u));
     }
 
     private static void writeFp(byte[] buf, int offset, BigInteger value) {

@@ -11,8 +11,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.stream.Stream;
 
@@ -59,18 +57,6 @@ class Bls12381HashToCurveTest {
     }
 
     @Test
-    void expandMessageXmd_usesOversizeDstReduction() {
-        byte[] msg = "abc".getBytes(StandardCharsets.US_ASCII);
-        byte[] oversizedDst = ("QUUX-V01-CS02-with-expander-SHA256-128-long-DST-" + "1".repeat(256))
-                .getBytes(StandardCharsets.US_ASCII);
-        byte[] reducedDst = sha256(concat("H2C-OVERSIZE-DST-".getBytes(StandardCharsets.US_ASCII), oversizedDst));
-
-        assertArrayEquals(
-                Bls12381Hash.expandMessageXmdSha256(msg, reducedDst, 32),
-                Bls12381Hash.expandMessageXmdSha256(msg, oversizedDst, 32));
-    }
-
-    @Test
     void expandMessageXofShake256_matchesRfc9380Vector() {
         byte[] msg = "abc".getBytes(StandardCharsets.US_ASCII);
         byte[] dst = "QUUX-V01-CS02-with-expander-SHAKE256".getBytes(StandardCharsets.US_ASCII);
@@ -78,6 +64,29 @@ class Bls12381HashToCurveTest {
         assertArrayEquals(
                 hexToBytes("b39e493867e2767216792abce1f2676c197c0692aed061560ead251821808e07"),
                 Bls12381Hash.expandMessageXofShake256(msg, dst, 32));
+    }
+
+    /**
+     * ADR-0062 PR review: known answers for the RFC 9380 §5.3.3 oversize-DST reduction on the XOF
+     * path ({@code k = 128}, so the DST is reduced to {@code SHAKE256("H2C-OVERSIZE-DST-" ‖ DST, 32)}).
+     * Computed independently with Python {@code hashlib.shake_256} (standard library only); the
+     * 255-byte case pins that the reduction starts at 256 bytes.
+     */
+    @Test
+    void expandMessageXofShake256_oversizeDstMatchesIndependentHashlib() {
+        byte[] dst = new byte[296];
+        for (int i = 0; i < dst.length; i++) {
+            dst[i] = (byte) (7 * i + 3);
+        }
+        byte[] abc = "abc".getBytes(StandardCharsets.US_ASCII);
+        assertArrayEquals(hexToBytes("d39556b6208583a8649771c980f70e2e6fb5e024f3338b507226c638d0143e8c"
+                        + "32529088d67f610170a4111603c874fadd9c882ba69cb4aaf14ba28df9ac8a4281ed35e98268727401848cb058924081"),
+                Bls12381Hash.expandMessageXofShake256(abc, dst, 80));
+        assertArrayEquals(hexToBytes("0f1ff7361831120b28b8eba31b2e6792507aa30a7a590c669b01abf2bf024af1"
+                        + "5fd5d822399ff75aefc3b9eb0779388207dbd86365e241f72b7cede8a66bb6f8ee3aea45d150ccfe2218258940860bf1"),
+                Bls12381Hash.expandMessageXofShake256(new byte[0], dst, 80));
+        assertArrayEquals(hexToBytes("51ee5e7fb19df4f3039f6ddb6dd7dbda4c16865c1d8aef63013f91883abf07bb"),
+                Bls12381Hash.expandMessageXofShake256(abc, Arrays.copyOf(dst, 255), 32));
     }
 
     @Test
@@ -134,20 +143,6 @@ class Bls12381HashToCurveTest {
 
     private static Fp fp(String hex) {
         return Fp.of(new BigInteger(hex, 16));
-    }
-
-    private static byte[] sha256(byte[] input) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(input);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static byte[] concat(byte[] left, byte[] right) {
-        byte[] out = Arrays.copyOf(left, left.length + right.length);
-        System.arraycopy(right, 0, out, left.length, right.length);
-        return out;
     }
 
     private static byte[] hexToBytes(String hex) {

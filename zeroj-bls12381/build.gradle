@@ -45,6 +45,15 @@ tasks.register('g1PedersenBenchmark', JavaExec) {
     mainClass = 'org.zeroj.bls12381.pedersen.G1PedersenBenchmark'
 }
 
+// ADR-0062 D1: secret-ladder timing record (bit-length / Hamming-weight sweep). Records only.
+// Run: ./gradlew :zeroj-bls12381:secretLadderTimingRecord
+tasks.register('secretLadderTimingRecord', JavaExec) {
+    group = 'verification'
+    description = 'ADR-0062: pure-Java secret-ladder timing record (records only).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bls12381.ec.SecretLadderTimingRecord'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {

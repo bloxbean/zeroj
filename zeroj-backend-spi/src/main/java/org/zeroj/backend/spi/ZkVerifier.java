@@ -29,4 +29,14 @@ public interface ZkVerifier {
      * Describes what this verifier supports (proof system + curve).
      */
     BackendDescriptor descriptor();
+
+    /**
+     * Whether this backend can run on this platform at all, e.g. whether its native library is
+     * bundled for it. {@link org.zeroj.verifier.core.VerifierRegistry#find} skips unavailable
+     * backends. It must not be used to hide a failure on a supported platform (such as a native
+     * library failing its integrity check): that backend stays available and reports the error.
+     */
+    default boolean isAvailable() {
+        return true;
+    }
 }

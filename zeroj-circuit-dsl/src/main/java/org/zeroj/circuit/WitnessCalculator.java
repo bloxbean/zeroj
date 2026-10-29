@@ -196,6 +196,13 @@ public final class WitnessCalculator {
                     }
                 }
 
+                case Gate.AssertBoolean(var input) -> {
+                    BigInteger value = witness.get(input.id());
+                    if (!value.equals(BigInteger.ZERO) && !value.equals(BigInteger.ONE)) {
+                        throw new ArithmeticException("Constraint violation: non-Boolean wire " + input.id());
+                    }
+                }
+
                 case Gate.BitDecompose(var outputs, var input, var nBits) -> {
                     var val = witness.get(input.id());
                     for (int i = 0; i < nBits; i++) {

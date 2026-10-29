@@ -26,34 +26,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ZkMpfTransitionCircuitTest {
 
+    // Template names identify semantic/schema versions. ADR-0063 direct Boolean lowering
+    // changes the exact R1CS pins and requires fresh circuit-specific keys.
     @Test
     void transitionTemplateIdentitiesAndReleaseProfilesArePinned() {
-        assertProfile("value-update", 8, 82_651, 517_099, 114,
-                "b133da39b0a2ae11788284cb1e526efa072f3c30072ef631bf1816622468f8d4",
+        assertProfile("value-update", 8, 80_119, 509_503, 114,
+                "2bdcd87c53a3ad649cb27c28a3c4caf1d66c5efc37044cd69e737ed991ebb4e0",
                 PoseidonMpfCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 8, 81_449, 510_025, 113,
-                "1345f5ee54f5840e9c01b127acdf85c8c85e62885c5c324409738446ed0334cc",
+        assertProfile("insert-empty", 8, 78_917, 502_429, 113,
+                "48a0267e615a670218de76bb08304699efd4b263bdfc67896acd7ddffc12002c",
                 PoseidonMpfCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 8, 105_646, 640_109, 179,
-                "22d88dda857cf61a9292939517d433db71ea0f71460239b5751d0da1022fc15e",
+        assertProfile("insert-different-leaf", 8, 100_973, 626_087, 179,
+                "d096de1decc20bb4df12da79a54aa8facc61462e1031bd03ead0b5bbd1c4576d",
                 PoseidonMpfCircuitTemplates::insertDifferentLeaf);
-        assertProfile("value-update", 9, 92_353, 578_994, 120,
-                "8cfc8421c8941127149b8743205e0190438d21e7f53213a1e8b9be06b280c85a",
+        assertProfile("value-update", 9, 89_571, 570_648, 120,
+                "dd4ef446732a67c57a8cf97d3f320eca6d76f227ad42625b5f80770c2bd1eb04",
                 PoseidonMpfCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 9, 91_151, 571_920, 119,
-                "e89dc5b3d7a2cd7d5c4ddf5d0ffa616cff7077c06079d0d9b9c3bcc444e85b28",
+        assertProfile("insert-empty", 9, 88_369, 563_574, 119,
+                "d8d132110e41bfc6b646f2775d4ad7d1abb18fd631760a8f76b4ba82eb870ca2",
                 PoseidonMpfCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 9, 115_348, 702_004, 185,
-                "dae03019cfae6005e4f30674cd3dd13dc1d0131e7afb9f63ebd3f88668e3cd01",
+        assertProfile("insert-different-leaf", 9, 110_425, 687_232, 185,
+                "1627ee290b5f9f09056152fd1a9eb222d1d2e1f0fef421a8b101a772cd09b899",
                 PoseidonMpfCircuitTemplates::insertDifferentLeaf);
-        assertProfile("value-update", 12, 121_459, 764_679, 138,
-                "cd8fbba73ebd8a3799eb5648fd91399fd38fbe8932c273f9dba40fadeef006c6",
+        assertProfile("value-update", 12, 117_927, 754_083, 138,
+                "65f6458656d08bf960e76dcd211457341a099cc0ec687b3afb6362a5e45becaa",
                 PoseidonMpfCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 12, 120_257, 757_605, 137,
-                "c94630baec3eab8ee27d3d282598a9d4f1cf162a576a4c44bcf143104afc716a",
+        assertProfile("insert-empty", 12, 116_725, 747_009, 137,
+                "53ee3e54949d973a1e0ae1e7af7c7d7c1cd80020ecb5afdc9221500f0e9585c1",
                 PoseidonMpfCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 12, 144_454, 887_689, 203,
-                "4c6c2150d1be5a60c6a8a10055202cad02663b177393de7bdd55e7877db2d6f5",
+        assertProfile("insert-different-leaf", 12, 138_781, 870_667, 203,
+                "4e923b71ad150c2f7cd3a50b51e3df22a6b3276a09b486cd2158d32be13ae3c1",
                 PoseidonMpfCircuitTemplates::insertDifferentLeaf);
     }
 

@@ -6,7 +6,8 @@ import org.zeroj.backend.spi.ZkVerifier;
 import org.zeroj.codec.SnarkjsJsonCodec;
 import org.zeroj.codec.SnarkjsProof;
 import org.zeroj.codec.SnarkjsVerificationKey;
-import supranational.blst.*;
+import org.zeroj.blst.ffm.BlstCurve;
+import org.zeroj.blst.ffm.BlstPlatform;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -14,8 +15,9 @@ import java.util.List;
 /**
  * Groth16 verifier for BLS12-381 curve using the blst native library.
  *
- * <p>Uses {@code foundation.icon:blst-java} for pairing arithmetic.
- * Same approach as julc-bls but focused on Groth16 verification.</p>
+ * <p>Uses the source-built {@code libblst} through the FFM binding {@link BlstCurve} for point
+ * validation and pairing arithmetic (ADR-0062 D3). Accepts and rejects exactly what
+ * {@link Groth16BLS12381PureJavaVerifier} does.</p>
  *
  * <p>Verification: e(A, B) * e(-alpha, beta) * e(-vk_x, gamma) * e(-C, delta) == 1</p>
  */
@@ -40,6 +42,17 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
         return DESCRIPTOR;
     }
 
+    /**
+     * False where no {@code libblst} is bundled (e.g. Intel macOS, Windows), so
+     * {@code VerifierRegistry} picks the pure-Java verifier, which has the same accept/reject
+     * semantics. A bundled library that fails to load stays available and reports
+     * {@code INTERNAL_ERROR} instead of falling back silently.
+     */
+    @Override
+    public boolean isAvailable() {
+        return BlstPlatform.isSupported();
+    }
+
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
         try {
@@ -58,51 +71,28 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
                         "Groth16 BLS12-381 public inputs must be canonical scalars in [0, r)");
             }
 
-            // Parse points from snarkjs JSON to blst format
-            var piA = decodeG1("proof.pi_a", proof.piA());
-            var piB = decodeG2("proof.pi_b", proof.piB());
-            var piC = decodeG1("proof.pi_c", proof.piC());
+            // Parse and validate points (canonical affine, on curve, in subgroup, not infinity)
+            byte[] piA = decodeG1("proof.pi_a", proof.piA());
+            byte[] piB = decodeG2("proof.pi_b", proof.piB());
+            byte[] piC = decodeG1("proof.pi_c", proof.piC());
 
-            var alpha = decodeG1("vk.alpha", vk.vkAlpha1());
-            var beta = decodeG2("vk.beta", vk.vkBeta2());
-            var gamma = decodeG2("vk.gamma", vk.vkGamma2());
-            var delta = decodeG2("vk.delta", vk.vkDelta2());
+            byte[] alpha = decodeG1("vk.alpha", vk.vkAlpha1());
+            byte[] beta = decodeG2("vk.beta", vk.vkBeta2());
+            byte[] gamma = decodeG2("vk.gamma", vk.vkGamma2());
+            byte[] delta = decodeG2("vk.delta", vk.vkDelta2());
 
             // Compute vk_x = IC[0] + sum(pub_i * IC[i+1])
-            P1 vkX = new P1(decodeG1("vk.IC[0]", vk.ic().get(0)));
+            byte[] vkX = decodeG1("vk.IC[0]", vk.ic().get(0));
             for (int i = 0; i < publicInputs.size(); i++) {
-                var icPoint = new P1(decodeG1("vk.IC[" + (i + 1) + "]", vk.ic().get(i + 1)));
-                vkX.add(icPoint.mult(publicInputs.get(i)).to_affine());
+                byte[] icPoint = decodeG1("vk.IC[" + (i + 1) + "]", vk.ic().get(i + 1));
+                vkX = BlstCurve.g1Add(vkX, BlstCurve.g1Mul(icPoint, publicInputs.get(i)));
             }
 
-            // Negate A for the pairing check: e(A, B) = e(alpha, beta) * e(vk_x, gamma) * e(C, delta)
-            // => e(-A, B) * e(alpha, beta) * e(vk_x, gamma) * e(C, delta) should be... no.
-            // Standard check: e(A, B) * e(-alpha, beta) * e(-vk_x, gamma) * e(-C, delta) == 1
-
-            // Negate the points that need negation
-            var negAlpha = new P1(alpha);
-            negAlpha.neg();
-
-            var negVkX = vkX.dup();
-            negVkX.neg();
-
-            var negC = new P1(piC);
-            negC.neg();
-
-            // Compute multi-pairing
-            var pairingAB = new PT(piA, piB);
-            var pairingAlphaBeta = new PT(negAlpha.to_affine(), beta);
-            var pairingVkxGamma = new PT(negVkX.to_affine(), gamma);
-            var pairingCDelta = new PT(negC.to_affine(), delta);
-
-            // Multiply all miller loop results
-            var mlResult = pairingAB.dup();
-            mlResult.mul(pairingAlphaBeta);
-            mlResult.mul(pairingVkxGamma);
-            mlResult.mul(pairingCDelta);
-
-            // Final verification
-            boolean valid = PT.finalverify(mlResult, new PT(new P1_Affine(), new P2_Affine()));
+            // Standard check: e(A, B) * e(-alpha, beta) * e(-vk_x, gamma) * e(-C, delta) == 1.
+            // A pair whose G1 point is the identity (vk_x can be) contributes 1.
+            boolean valid = BlstCurve.pairingProductIsOne(
+                    new byte[][]{piA, BlstCurve.g1Negate(alpha), BlstCurve.g1Negate(vkX), BlstCurve.g1Negate(piC)},
+                    new byte[][]{piB, beta, gamma, delta});
 
             if (valid) {
                 return VerificationResult.cryptoValid();
@@ -115,6 +105,12 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
             return VerificationResult.error(
                     VerificationResult.ReasonCode.INTERNAL_ERROR,
                     "Verification error: " + e.getMessage());
+        } catch (LinkageError e) {
+            // No bundled libblst for this platform (or it failed its integrity check): report it
+            // instead of throwing an Error out of the ZkVerifier contract (ADR-0062 M6 review).
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.INTERNAL_ERROR,
+                    "blst native library unavailable: " + e);
         }
     }
 
@@ -128,20 +124,13 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
     }
 
     /**
-     * Decode and validate a snarkjs G1 point [x, y, z] (projective, decimal strings).
+     * Decode and validate a snarkjs G1 point [x, y, z] (decimal strings) into its 96-byte
+     * uncompressed encoding.
      */
-    private P1_Affine decodeG1(String label, List<BigInteger> coords) {
+    private static byte[] decodeG1(String label, List<BigInteger> coords) {
         byte[] encoded = decodeG1Bytes(label, coords);
-        P1_Affine point;
-        try {
-            point = new P1_Affine(encoded);
-        } catch (RuntimeException invalidEncoding) {
-            // blst-java 0.3.2 reports native deserialization failures as RuntimeException.
-            // This boundary consumes only the validated-length public point encoding.
-            throw new IllegalArgumentException(label + " is not a valid blst point", invalidEncoding);
-        }
-        requireValidNonInfinity(label, point);
-        return point;
+        requireValidNonInfinity(label, BlstCurve.g1Status(encoded));
+        return encoded;
     }
 
     private static byte[] decodeG1Bytes(String label, List<BigInteger> coords) {
@@ -155,43 +144,30 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
         requireFp(label + ".y", y);
         requireFp(label + ".z", z);
 
-        // Convert from projective to affine
-        if (z.equals(BigInteger.ZERO)) {
+        // ADR-0062 D5: one accepted encoding per point. z = 0 keeps its infinity message; any
+        // other z != 1 is a rescaled projective encoding of the same point and is rejected.
+        if (z.signum() == 0) {
             throw new IllegalArgumentException(label + " must not be point at infinity");
         }
-
-        BigInteger xAffine, yAffine;
-        if (z.equals(BigInteger.ONE)) {
-            xAffine = x;
-            yAffine = y;
-        } else {
-            var zInv = z.modInverse(BLS12_381_P);
-            xAffine = x.multiply(zInv).mod(BLS12_381_P);
-            yAffine = y.multiply(zInv).mod(BLS12_381_P);
+        if (!z.equals(BigInteger.ONE)) {
+            throw new IllegalArgumentException(label + " must be affine (z = 1)");
         }
 
         // Serialize as uncompressed: 96 bytes = x (48 bytes) + y (48 bytes), big-endian
         var result = new byte[FP_SIZE * 2];
-        writeFp(result, 0, xAffine);
-        writeFp(result, FP_SIZE, yAffine);
+        writeFp(result, 0, x);
+        writeFp(result, FP_SIZE, y);
         return result;
     }
 
     /**
-     * Decode a snarkjs G2 point [[x_c0,x_c1],[y_c0,y_c1],[z_c0,z_c1]] to blst uncompressed bytes.
+     * Decode and validate a snarkjs G2 point [[x_c0,x_c1],[y_c0,y_c1],[z_c0,z_c1]] into its
+     * 192-byte uncompressed encoding.
      */
-    private P2_Affine decodeG2(String label, List<List<BigInteger>> coords) {
+    private static byte[] decodeG2(String label, List<List<BigInteger>> coords) {
         byte[] encoded = decodeG2Bytes(label, coords);
-        P2_Affine point;
-        try {
-            point = new P2_Affine(encoded);
-        } catch (RuntimeException invalidEncoding) {
-            // blst-java 0.3.2 reports native deserialization failures as RuntimeException.
-            // This boundary consumes only the validated-length public point encoding.
-            throw new IllegalArgumentException(label + " is not a valid blst point", invalidEncoding);
-        }
-        requireValidNonInfinity(label, point);
-        return point;
+        requireValidNonInfinity(label, BlstCurve.g2Status(encoded));
+        return encoded;
     }
 
     private static byte[] decodeG2Bytes(String label, List<List<BigInteger>> coords) {
@@ -216,42 +192,27 @@ public class Groth16BLS12381Verifier implements ZkVerifier {
             throw new IllegalArgumentException(label + " must not be point at infinity");
         }
 
-        BigInteger xc0Affine, xc1Affine, yc0Affine, yc1Affine;
-        if (zIsOne) {
-            xc0Affine = xc0;
-            xc1Affine = xc1;
-            yc0Affine = yc0;
-            yc1Affine = yc1;
-        } else {
-            // Fp2 inversion needed — complex, but snarkjs always outputs z=[1,0]
-            throw new UnsupportedOperationException("Non-trivial z coordinate in G2 not supported");
+        if (!zIsOne) {
+            throw new IllegalArgumentException(label + " must be affine (z = (1, 0))");
         }
 
         // blst G2 serialization: 192 bytes = x_c1 (48) + x_c0 (48) + y_c1 (48) + y_c0 (48)
         // Note: blst uses c1 first (imaginary), then c0 (real) for Fp2
         var result = new byte[FP_SIZE * 4];
-        writeFp(result, 0, xc1Affine);
-        writeFp(result, FP_SIZE, xc0Affine);
-        writeFp(result, FP_SIZE * 2, yc1Affine);
-        writeFp(result, FP_SIZE * 3, yc0Affine);
+        writeFp(result, 0, xc1);
+        writeFp(result, FP_SIZE, xc0);
+        writeFp(result, FP_SIZE * 2, yc1);
+        writeFp(result, FP_SIZE * 3, yc0);
         return result;
     }
 
-    private static void requireValidNonInfinity(String label, P1_Affine point) {
-        if (point.is_inf()) {
-            throw new IllegalArgumentException(label + " must not be point at infinity");
-        }
-        if (!point.on_curve() || !point.in_group()) {
-            throw new IllegalArgumentException(label + " must be on curve and in subgroup");
-        }
-    }
-
-    private static void requireValidNonInfinity(String label, P2_Affine point) {
-        if (point.is_inf()) {
-            throw new IllegalArgumentException(label + " must not be point at infinity");
-        }
-        if (!point.on_curve() || !point.in_group()) {
-            throw new IllegalArgumentException(label + " must be on curve and in subgroup");
+    private static void requireValidNonInfinity(String label, BlstCurve.PointStatus status) {
+        switch (status) {
+            case VALID -> { }
+            case IDENTITY -> throw new IllegalArgumentException(label + " must not be point at infinity");
+            case BAD_ENCODING -> throw new IllegalArgumentException(label + " is not a valid blst point");
+            case NOT_ON_CURVE, NOT_IN_SUBGROUP ->
+                    throw new IllegalArgumentException(label + " must be on curve and in subgroup");
         }
     }
 

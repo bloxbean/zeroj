@@ -284,21 +284,21 @@ class JubjubVerifierM3Test {
         var strictSystem = strictCircuit().compileR1CS(CurveId.BLS12_381);
         int registered = registeredSystem.constraints().size();
         int strict = strictSystem.constraints().size();
-        assertEquals(8_962, registered,
-                "verifyWithRegisteredKey = verifyCore (8,929) + [8]pk != O (33). Down from "
-                        + "19,000 before the M5 work; the ADR target was ~8k.");
-        assertEquals(14_500, strict,
-                "verifyStrict adds the in-circuit [l]pk == O subgroup check. Down from 27,569; "
-                        + "the ADR target was ~14k.");
+        assertEquals(7_690, registered,
+                "verifyWithRegisteredKey = verifyCore (7,657) + [8]pk != O (33). ADR-0063 "
+                        + "direct Boolean assertions reduce the previous 8,962 rows.");
+        assertEquals(12_976, strict,
+                "verifyStrict retains the in-circuit [l]pk == O subgroup check. ADR-0063 "
+                        + "direct Boolean assertions reduce the previous 14,500 rows.");
         assertTrue(strict - registered > 5_000,
                 "the variable-base subgroup check should dominate the difference");
-        assertEquals(364_342, registeredSystem.constraints().stream()
+        assertEquals(360_526, registeredSystem.constraints().stream()
                         .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum(),
                 "registered-key verifier sparse-matrix nonzeros");
-        assertEquals(705_251, strictSystem.constraints().stream()
+        assertEquals(700_679, strictSystem.constraints().stream()
                         .mapToLong(c -> (long) c.a().size() + c.b().size() + c.c().size()).sum(),
                 "strict verifier sparse-matrix nonzeros");
-        assertEquals(16_384, Integer.highestOneBit(registered - 1) << 1);
+        assertEquals(8_192, Integer.highestOneBit(registered - 1) << 1);
         assertEquals(16_384, Integer.highestOneBit(strict - 1) << 1);
     }
 
@@ -309,9 +309,9 @@ class JubjubVerifierM3Test {
         var plonk = circuit.compilePlonK(CurveId.BLS12_381);
         var halo2 = circuit.compileHalo2(CurveId.BLS12_381);
 
-        assertEquals(32_563, plonk.numGates(),
+        assertEquals(28_747, plonk.numGates(),
                 "PLONK includes three public-input anchor rows");
-        assertEquals(32_560, halo2.numRows());
+        assertEquals(28_744, halo2.numRows());
         assertEquals(plonk.numPublicInputs(),
                 plonk.numGates() - halo2.numRows());
         assertEquals(plonk.domainSize(), halo2.domainSize());

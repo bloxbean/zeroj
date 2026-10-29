@@ -15,6 +15,9 @@ dependencies {
 
     implementation 'com.dylibso.chicory:runtime:1.7.5'
     implementation 'com.dylibso.chicory:wasm:1.7.5'
+
+    // ADR-0062 I8: the shared provider conformance corpus
+    testImplementation testFixtures(project(':zeroj-bls12381'))
 }
 
 tasks.register('buildBls12381Wasm', Exec) {

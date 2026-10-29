@@ -95,6 +95,11 @@ public final class PlonKCompiler {
                             left.id(), right.id(), dummyWire));
                 }
 
+                case Gate.AssertBoolean(var value) ->
+                        rows.add(new PlonKConstraintSystem.GateRow(
+                                negOne, ZERO, ZERO, ONE, ZERO,
+                                value.id(), value.id(), dummyWire));
+
                 case Gate.LinComb(var out, var terms) -> {
                     if (terms.isEmpty()) {
                         // output = 0: qO=1, qC=0 → c = 0

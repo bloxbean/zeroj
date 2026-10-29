@@ -149,3 +149,17 @@ until the audit gate clears.
 - gnark `emulated` field / circom bigint — prior art for hint-based non-native reduction and the
   integer-identity discipline.
 - RFC 8032 / zkcrypto — Ed25519 fixed-base windowing references.
+
+## Follow-up: direct Boolean assertions (ADR-0063, 2026-10-29)
+
+[ADR-0063](0063-sha256-gadget-and-sha2-assurance.md#optimization-extension-2026-10-29-pr-112)
+records a compiler-wide follow-up introduced alongside SHA-2 optimization.
+`Gate.AssertBoolean` lowers the existing Boolean relation directly to `b*(b-1)=0`
+in one R1CS row; PlonK and Halo2 enforce the same polynomial, and all witness
+calculators reject non-bits. It adds no hint and does not weaken the Boolean
+relation. The change affects Boolean-using circuits beyond SHA, including MPF/JMT
+and confidential-note circuits. Rebuild affected circuit artifacts and regenerate
+circuit-specific keys; downstream exhaustive visitors of the public sealed `Gate`
+interface must handle the new subtype. See the
+[migration notes](../migration/0063-sha2-boolean-optimization.md) for compatibility
+and deployment boundaries. Existing audit and maturity gates remain unchanged.

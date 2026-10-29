@@ -16,6 +16,13 @@ import java.math.BigInteger;
  *
  * <p>The Ate loop parameter is x = -0xd201000000010000 (negative, 64-bit).
  * This is the BLS parameter that determines the curve security.</p>
+ *
+ * <p><b>This class validates nothing</b> (ADR-0062 D7). {@link G1Point} and {@link G2Point} are raw
+ * coordinate records, and the methods here accept any coordinates: an off-curve or
+ * non-subgroup point is evaluated as if it were valid and yields a meaningless result. Callers
+ * must validate untrusted points first, with {@code Bls12381Codecs.requireValid} or the checked
+ * decoders, or use a {@code Bls12381Provider}, whose {@code pairingProductIsIdentity} validates
+ * and rejects empty input.</p>
  */
 public final class BLS12381Pairing {
 
@@ -30,24 +37,16 @@ public final class BLS12381Pairing {
     /** The Ate loop is negative for BLS12-381. */
     private static final boolean ATE_LOOP_NEGATIVE = true;
 
-    // Frobenius constants: xi^((p-1)/3) and xi^((p-1)/2)
-    // These are used for the Frobenius endomorphism on G2 twist points.
-    // Precomputed for BLS12-381.
-    private static final Fp2 FROBENIUS_COEFF_X = Fp2.of(
-            Fp.ZERO,
-            Fp.of(new BigInteger(
-                    "1a0111ea397fe699ec02408663d4de85aa0d857d89759ad4897d29650fb85f9b409427eb4f49fffd8bfd00000000aaac", 16))
-    );
-    private static final Fp2 FROBENIUS_COEFF_Y = Fp2.of(
-            Fp.of(new BigInteger(
-                    "06af0e0437ff400b6831e36d6bd17ffe48395dabc2d3435e77f76e17009241c5ee67992f72ec05f4c81084fbede3cc09", 16)),
-            Fp.of(new BigInteger(
-                    "135203e60180a68ee2e9c448d77a2cd91c3dedd930b1cf60ef396489f61eb45e304466cf3e67fa0af1ee7b04121bdea2", 16))
-    );
-
     /**
      * Check if a product of pairings equals one.
      * Used for PlonK KZG verification: e(A, B) * e(C, D) == 1
+     *
+     * <p>Raw primitive: no point is validated (see the class Javadoc). Pairs with an identity
+     * component contribute 1. An empty product is 1, so {@code pairingCheck([], [])} returns
+     * {@code true}; that is mathematically correct, but a verifier that builds its arrays
+     * dynamically must reject empty input itself or use the provider method, which does.</p>
+     *
+     * @throws IllegalArgumentException if the arrays differ in length
      */
     public static boolean pairingCheck(G1Point[] ps, G2Point[] qs) {
         if (ps.length != qs.length) throw new IllegalArgumentException("Arrays must have equal length");
@@ -65,6 +64,12 @@ public final class BLS12381Pairing {
 
     /**
      * Miller loop for the optimal Ate pairing on BLS12-381.
+     *
+     * <p>Raw primitive: no point is validated (see the class Javadoc). Returns 1 if either point is
+     * the identity.</p>
+     *
+     * @throws IllegalArgumentException if the loop reaches {@code T = ±Q}, which cannot happen for
+     *         {@code Q} in the prime-order subgroup
      */
     public static Fp12 millerLoop(G1Point p, G2Point q) {
         if (p.isInfinity() || q.isInfinity()) return Fp12.ONE;
@@ -134,9 +139,11 @@ public final class BLS12381Pairing {
      * <p>BLS12-381 M-twist sparse positions: c0.c0 (constant), c0.c1 (P_x), c1.c1 (P_y).</p>
      */
     private static Fp12 lineFuncAdd(G2Point t, G2Point q, G1Point p) {
+        // At every addition step T = [m]Q with 2 <= m < |x| < r, so T = ±Q (equal x) is impossible
+        // for Q of prime order r. The former vertical-line branch here also mishandled T = Q (a
+        // tangent, not a vertical line), so it is a hard failure instead (ADR-0062 D7).
         if (t.x().equals(q.x())) {
-            var px = Fp2.of(p.x(), Fp.ZERO);
-            return new Fp12(new Fp6(Fp2.ZERO, px.sub(t.x()), Fp2.ZERO), Fp6.ZERO);
+            throw new IllegalArgumentException("Miller loop reached T = ±Q: Q is not in the G2 subgroup");
         }
 
         var lambda = q.y().sub(t.y()).mul(q.x().sub(t.x()).inv());
