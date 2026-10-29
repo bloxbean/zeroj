@@ -1,0 +1,63 @@
+Third-party notice: Poseidon parameter generation script (hadeshash)
+====================================================================
+
+generate_parameters_grain.sage in this directory is copied from the repository
+
+  https://extgit.isec.tugraz.at/krypto/hadeshash
+  (commit 208b5a164c6a252b137997694d90931b2bb851c5, 2023-05-02, file
+  code/generate_parameters_grain.sage)
+
+It is unchanged except that trailing whitespace was removed from three blank lines (53, 70 and
+314). generate_parameters_grain.sage.py is the file SageMath's preparser produced from it, so it is
+derived from the same work. Neither file is ZeroJ's work.
+
+The script is by the authors of the Poseidon hash function: L. Grassi, D. Khovratovich,
+C. Rechberger, A. Roy and M. Schofnegger, "Poseidon: A New Hash Function for Zero-Knowledge Proof
+Systems" (USENIX Security 2021). Credit for it belongs to them and to Graz University of
+Technology.
+
+  File                                  SHA-256
+  generate_parameters_grain.sage        c38bbe7e23f6b6869ce750810dda221426c2070bf27887bbae6ff60d49176878
+  generate_parameters_grain.sage.py     535f34952a4f01cffa979fc1e8432b74bd621c4e099f1d5038c48e8999e42d83
+
+  The upstream file at the pinned commit has SHA-256
+  8d692787eee9dbd3ff8aab083a0ffc35c118d9ac70466d3feb179d2b0eaa1630.
+
+
+Licence
+-------
+
+hadeshash is under the MIT licence. Its LICENSE file at the pinned commit
+(https://extgit.isec.tugraz.at/krypto/hadeshash/-/blob/208b5a164c6a252b137997694d90931b2bb851c5/LICENSE)
+reads, verbatim:
+
+  Copyright (c) 2019 Graz University of Technology
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the ""Software""), to deal in
+  the Software without restriction, including without limitation the rights to
+  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+  of the Software, and to permit persons to whom the Software is furnished to do
+  so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+
+Use in ZeroJ
+------------
+
+The script is the reference that ZeroJ's Poseidon round constants and MDS matrices are checked
+against (see README.md here and ADR-0015). It is not executed by ZeroJ code.
+
+This directory is in src/main/resources of zeroj-circuit-lib, so both files ship in the published
+zeroj-circuit-lib jar, together with this NOTICE, which carries the copyright and permission
+notice that the MIT licence requires. The root NOTICE lists this material.
