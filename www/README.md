@@ -24,6 +24,12 @@ npm run build      # static site + AI artifacts + link/anchor/token/checksum ver
 No Java build, Gradle, Yaci DevKit or snarkjs is needed to build the site. The build reads a few
 files from the repository (see below), so run it from a full checkout.
 
+The optional SHA-256 approval tutorial includes a runnable Java 25 example. From the repository
+root, run `./gradlew -p www/examples/sha256-record run --max-workers=2`. Its composite build uses
+this checkout's libraries and stays outside the default library and site builds. It generates
+development-only proofs for public fixtures and checks both valid and invalid scenarios; see
+`src/content/docs/tutorials/sha256-record.mdx` for the trust boundaries.
+
 ## Layout
 
 | Path | What it is |

@@ -1,0 +1,184 @@
+{
+  "scope": "Extract of prior local DevKit research records; not a new run of issue #111 or the approval tutorial. Full signed transactions and harness are not included in this extract.",
+  "source_project": "sha2-groth16-cardano-poc",
+  "source_file_sha256": {
+    "benchmarks/cardano/zeroj-sha256-32/result.json": "0ab44092273a1084a8d57daf714b5519b83ef868d5e41d403c46ce4b457c9438",
+    "benchmarks/cardano/zeroj-sha512-32/result.json": "3e6957aa7f7322b102efbc20412d47513bc20d68900defacfa6c7053fc2ca8c8",
+    "benchmarks/protocol-parameter-comparison.json": "6a63b63aca5028e9b6a5e1f9860b1048a4071883ca08e237a2444980cad065b6",
+    "benchmarks/cardano/provenance.json": "5fc1b90a19ddf2a4c91305645b6c4e78d87a841d1454a3e164518ba98459109c"
+  },
+  "toolchain": {
+    "zeroj_source_commit": "c98f45a433fd198017995d8e2dbdbc82d25af422",
+    "zeroj_bls12381_dependency": "0.1.0-pre13-23c445a-SNAPSHOT",
+    "julc_dependency": "0.1.0-pre20-c3a31c2-SNAPSHOT",
+    "julc_source_commit": "c3a31c2a1a74b5de8d3f604f17b597c76395b664",
+    "ccl_dependency": "0.8.0-pre7",
+    "source_file_sha256": {
+      "cardano/src/main/resources/vendor/zeroj/Groth16BLS12381Lib.java": "e5dfd326c4af0bb667570f1417535fba0152592947ef193b93b0f7eb52ad1ed6",
+      "cardano/src/main/resources/vendor/zeroj/Groth16BLS12381Verifier.java": "8859a67a2ef1606ce99975d442985aef18240dd6a825762632d4156454871050",
+      "cardano/src/main/java/org/zeroj/onchain/julc/groth16/codec/SnarkjsToCardano.java": "dab25a0151263cb4614461d245f610c42c45f59a7fcffefa28af465a1f3f3a63"
+    }
+  },
+  "protocol_comparison": {
+    "compared_utc": "2026-10-29T02:01:12.698514+00:00",
+    "source": "https://api.koios.rest/api/v1/epoch_params?order=epoch_no.desc&limit=1",
+    "epoch": 664,
+    "checks": {
+      "protocol_major": {
+        "mainnet": 11,
+        "devkit": 11,
+        "equal": true
+      },
+      "protocol_minor": {
+        "mainnet": 0,
+        "devkit": 0,
+        "equal": true
+      },
+      "max_tx_size": {
+        "mainnet": 16384,
+        "devkit": 16384,
+        "equal": true
+      },
+      "max_tx_ex_steps": {
+        "mainnet": 10000000000,
+        "devkit": "10000000000",
+        "equal": true
+      },
+      "max_tx_ex_mem": {
+        "mainnet": 16500000,
+        "devkit": "16500000",
+        "equal": true
+      },
+      "max_block_ex_steps": {
+        "mainnet": 20000000000,
+        "devkit": "20000000000",
+        "equal": true
+      },
+      "max_block_ex_mem": {
+        "mainnet": 72000000,
+        "devkit": "72000000",
+        "equal": true
+      },
+      "price_step": {
+        "mainnet": 7.21e-05,
+        "devkit": 7.21e-05,
+        "equal": true
+      },
+      "price_mem": {
+        "mainnet": 0.0577,
+        "devkit": 0.0577,
+        "equal": true
+      },
+      "min_fee_a": {
+        "mainnet": 44,
+        "devkit": 44,
+        "equal": true
+      },
+      "min_fee_b": {
+        "mainnet": 155381,
+        "devkit": 155381,
+        "equal": true
+      },
+      "min_fee_ref_script_cost_per_byte": {
+        "mainnet": 15,
+        "devkit": 15,
+        "equal": true
+      },
+      "PlutusV3_cost_model": {
+        "mainnet_count": 350,
+        "devkit_count": 350,
+        "equal": true
+      }
+    },
+    "all_equal": true,
+    "scope": "Comparison of retained snapshots, not a new fetch or mainnet submission."
+  },
+  "results": [
+    {
+      "case": "test-vectors/zeroj/sha256-32",
+      "timestamp": "2026-10-29T01:07:52.443198Z",
+      "artifact_sha256": {
+        "proof.json": "618aa120e83bb03f905b3fd8d734fcebd8570e08aa4122ca1cb5ee62a0ffca11",
+        "public.json": "35accfaeed8d2e6406e4083b78a174dd6080033709f527e49c17fefc7c5bd91b",
+        "verification_key.json": "a663e64e2674bbfa1c357db0f6752e160c9439af2c1868e2acadfa8586c24c2a"
+      },
+      "poseidon_control": false,
+      "public_inputs": 2,
+      "compressed_proof_bytes": 192,
+      "non_digest_infrastructure_fixture": false,
+      "template_flat_bytes": 1197,
+      "applied_flat_bytes": 1727,
+      "script_cbor_bytes": 1733,
+      "vm_positive_and_seven_negative_checks_passed": true,
+      "cpu_steps": 2191936964,
+      "memory_units": 167718,
+      "transaction_bytes": 2399,
+      "execution_fee_lovelace": 167716,
+      "declared_cpu_steps": 2191936964,
+      "declared_memory_units": 167718,
+      "fee_lovelace": 433097,
+      "lock_transaction_fee_lovelace": 177117,
+      "lock_transaction_bytes": 393,
+      "linear_size_fee_lovelace": 260937,
+      "tx_hash": "71330c894ffe347c3ce4ee09b8c3e95fc7218fc323cf6cef2d74bbf550341090",
+      "lock_tx_hash": "7b0c79f58082d29b5ed6d79644e0e2d8c7569e85f49e6bb93b5f86113db9c5e2",
+      "confirmed": true,
+      "java_remote_haskell_budgets_identical": true,
+      "signed_invalid_proof_rejected": true,
+      "signed_wrong_digest_rejected": true,
+      "scope": "Local DevKit; dev-only setup; cryptographic preimage verifier, no application authorization or replay protection",
+      "calculated_min_fee_lovelace": 428653,
+      "actual_minus_calculated_min_fee_lovelace": 4444,
+      "vm_positive_and_eight_negative_checks_passed": true,
+      "vm_negative_check_count": 8,
+      "vm_extra_checks_timestamp": "2026-10-29T01:14:31.272752Z",
+      "vm_extra_checks_path": "benchmarks/cardano/vm-extra/zeroj-sha256-32",
+      "declared_units_decoded_from_signed_transaction": true,
+      "vkey_witness_count": 1,
+      "plutus_v3_script_witness_count": 1
+    },
+    {
+      "case": "test-vectors/zeroj/sha512-32",
+      "timestamp": "2026-10-29T01:10:44.694059Z",
+      "artifact_sha256": {
+        "proof.json": "d8ab3362cd98f987aeaecad6d65508afa2a9c20224d71aa5e2e900a0531f190f",
+        "public.json": "a892cc59bf7d6b8ef6ef3b16f733762c421ad88f35f339053760f648e4e50c45",
+        "verification_key.json": "3ad574b56ffcf41dc8fd7df6622b2c81471c399b674d1238a7ca1231173c1fe3"
+      },
+      "poseidon_control": false,
+      "public_inputs": 4,
+      "compressed_proof_bytes": 192,
+      "non_digest_infrastructure_fixture": false,
+      "template_flat_bytes": 1197,
+      "applied_flat_bytes": 1827,
+      "script_cbor_bytes": 1833,
+      "vm_positive_and_seven_negative_checks_passed": true,
+      "cpu_steps": 2471295658,
+      "memory_units": 225480,
+      "transaction_bytes": 2499,
+      "execution_fee_lovelace": 191191,
+      "declared_cpu_steps": 2471295658,
+      "declared_memory_units": 225480,
+      "fee_lovelace": 460972,
+      "lock_transaction_fee_lovelace": 180285,
+      "lock_transaction_bytes": 465,
+      "linear_size_fee_lovelace": 265337,
+      "calculated_min_fee_lovelace": 456528,
+      "actual_minus_calculated_min_fee_lovelace": 4444,
+      "tx_hash": "8f74d463246f127c75cb2ab91c944a2d573dc3f31b2a1d975afd4ce6b0440a65",
+      "lock_tx_hash": "fbb53e7904079984ca910db3b12149b8412d43150e729ebc62ef4a8b8a4bfb0f",
+      "confirmed": true,
+      "java_remote_haskell_budgets_identical": true,
+      "signed_invalid_proof_rejected": true,
+      "signed_wrong_digest_rejected": true,
+      "scope": "Local DevKit; dev-only setup; cryptographic preimage verifier, no application authorization or replay protection",
+      "vm_positive_and_eight_negative_checks_passed": true,
+      "vm_negative_check_count": 8,
+      "vm_extra_checks_timestamp": "2026-10-29T01:14:35.573129Z",
+      "vm_extra_checks_path": "benchmarks/cardano/vm-extra/zeroj-sha512-32",
+      "declared_units_decoded_from_signed_transaction": true,
+      "vkey_witness_count": 1,
+      "plutus_v3_script_witness_count": 1
+    }
+  ]
+}

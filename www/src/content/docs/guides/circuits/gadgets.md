@@ -421,8 +421,8 @@ recover individual messages by differencing.
 
 ## Real-world crypto: standard digests and Cardano key derivation
 
-These gadgets reproduce standard wallet primitives *inside* a circuit, so a proof can show "I know
-the root key behind this Cardano address" without revealing it. They're bit-oriented and
+These gadgets reproduce standard digest and wallet primitives *inside* a circuit, so a proof can
+bind an existing document hash or show knowledge of a Cardano root key. They're bit-oriented and
 independent of the circuit field, so they run on BLS12-381 Groth16, but they are **large**.
 
 | Gadget | Adapter | What it's for | Measured size |
@@ -435,13 +435,6 @@ independent of the circuit field, so they run on BLS12-381 Groth16, but they are
 | BIP32-Ed25519 | `Bip32Ed25519` (no `Zk*` adapter) | Hardened and soft child-key derivation, Icarus style | Building block |
 | CIP-1852 derivation | `ZkCip1852.paymentKeyHash`, `leafKeyHash` | Root key → `m/1852'/1815'/account'/role/index` → 28-byte payment key hash | On the order of 19 million constraints for the full path |
 
-SHA-256 returns the complete 32-byte digest; SHA-512 returns 64 bytes. Both constrain
-byte ranges, padding and the fixed message length. Bind the output to the expected digest;
-a hash alone does not authenticate a document issuer. The lower-level `Sha256`/`Sha512`
-byte and bit APIs support empty messages; symbolic `ZkBytes` requires a nonempty input.
-See [ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md)
-for SHA-256 and the additional SHA-512 assurance.
-
 Sizes are ZeroJ's own measurements from the gadget design work
 ([ADR-0027](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0027-real-world-crypto-gadgets-sha512-hmac-blake2b-ed25519.md),
 [ADR-0028](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0028-dsl-optimization-and-hint-soundness.md))
@@ -450,6 +443,23 @@ the account, role, and index as Java constants or as `ZkBytes` circuit inputs; w
 inputs, one circuit and one setup cover every address of a root key. A proof of this size needs
 the large-circuit proving path in [Performance & large circuits](/guides/proving/performance/).
 See [Account recovery](/use-cases/account-recovery/) for the application built on it.
+
+### Standard SHA-2 digests
+
+SHA-256 returns the complete 32-byte digest; SHA-512 returns 64 bytes. Both constrain
+byte ranges, padding and the fixed message length. Bind the output to the expected digest;
+a hash alone does not authenticate a document issuer. The lower-level `Sha256`/`Sha512`
+byte and bit APIs support empty messages; symbolic `ZkBytes` requires a nonempty input.
+
+Use `Sha256.hashBytes(api, bytes)` / `Sha512.hashBytes(api, bytes)` for byte arrays;
+`hashBits` takes byte-aligned MSB-first bits. Symbolic circuits use
+`ZkSha256.hash(zk, message)` / `ZkSha512.hash(zk, message)` and bind the returned `ZkBytes`.
+For a compact public statement, constrain packing into two/four big-endian 128-bit limbs.
+
+Start with the illustrated [SHA-256 approval tutorial](/tutorials/sha256-record/) and
+[Web2 use cases](/use-cases/sha2-web2/). See
+[ADR-0063](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0063-sha256-gadget-and-sha2-assurance.md)
+for the construction and independent SHA-2 assurance.
 
 ## Status at a glance
 
