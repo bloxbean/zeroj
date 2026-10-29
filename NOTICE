@@ -38,13 +38,6 @@ Licensed under the Apache License, Version 2.0
 https://github.com/supranational/blst
 
 --------------------------------------------------------------------------
-blst-java — Java Bindings for blst
---------------------------------------------------------------------------
-Copyright (c) 2022 ICON Foundation
-Licensed under the Apache License, Version 2.0
-https://github.com/icon-project/blst-java
-
---------------------------------------------------------------------------
 Jackson — JSON Processing
 --------------------------------------------------------------------------
 Copyright (c) 2007-2024 Tatu Saloranta and contributors
@@ -83,8 +76,36 @@ Licensed under the MIT License
 https://github.com/bloxbean/julc
 
 ==========================================================================
+Third-Party Material in the Source Tree
+==========================================================================
+
+Some files in this repository are copied from other projects. Each of
+these directories has a NOTICE file with the source, the pinned revision,
+credits, the licence and the SHA-256 of every copied file.
+
+Shipped in a published artifact:
+
+  zeroj-circuit-lib/src/main/resources/poseidon/
+      Poseidon parameter-generation script from hadeshash
+      (Graz University of Technology; MIT licence). It ships in the
+      zeroj-circuit-lib jar together with its NOTICE.
+
+Test data only (in no published artifact):
+
+  zeroj-bbs/src/test/resources/cfrg-bbs/
+      BBS draft-10 fixtures from decentralized-identity/bbs-signature
+      (Apache License 2.0; the values are also in the IETF draft)
+  zeroj-circuit-lib/src/test/resources/standard-vectors/
+      RFC 9180 HPKE (IETF Trust), Project Wycheproof (Apache License 2.0),
+      zcash-test-vectors (MIT licence) and NIST CAVP SHA-2 vectors
+      (NIST terms for non-SRD data)
+  zeroj-circuit-lib/src/test/resources/poseidon-sage/
+      Grain LFSR code ported from hadeshash (MIT licence)
+
+==========================================================================
 Apache License, Version 2.0
 ==========================================================================
 
-A copy of the Apache License, Version 2.0 is available at:
+A copy of the Apache License, Version 2.0 is in licenses/Apache-2.0.txt,
+and is available at:
 https://www.apache.org/licenses/LICENSE-2.0

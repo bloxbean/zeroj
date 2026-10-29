@@ -130,10 +130,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-22.04      # glibc 2.35 baseline, as build-blst.yml
             os: linux
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-22.04-arm  # same glibc 2.35 baseline as build-blst.yml
             os: linux
             arch: aarch64
           - runner: macos-14
@@ -144,12 +144,26 @@ jobs:
         with:
           persist-credentials: false
       - name: Build libblst from source
-        run: zeroj-blst/scripts/build-blst.sh
+        # Pinned by commit hash inside the script (ADR-0062 D6). The committed library is removed
+        # first, so a failed build can never upload it.
+        run: |
+          rm -f zeroj-blst/src/main/resources/org/zeroj/blst/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          zeroj-blst/scripts/build-blst.sh
+      - name: Set up GraalVM 25
+        uses: graalvm/setup-graalvm@0426e2e191540e8514dff98dc52a5f5146a2a276 # v1.6.6
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+      - name: Load and test the freshly built library on its own platform
+        # The publish job runs on linux/amd64 only, so this is the one place each library is
+        # executed before release: binding, provider, provenance and native-image metadata tests.
+        run: ./gradlew :zeroj-blst:test --no-daemon --console=plain
       - name: Upload native library
         uses: actions/upload-artifact@v4
         with:
           name: blst-native-${{ matrix.os }}-${{ matrix.arch }}
-          path: zeroj-blst/src/main/resources/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          path: zeroj-blst/src/main/resources/org/zeroj/blst/native/${{ matrix.os }}/${{ matrix.arch }}/libblst.*
+          if-no-files-found: error
           retention-days: 1
 
   # ================================================================
@@ -211,15 +225,43 @@ jobs:
 
       - name: Place native libraries in resource directories
         run: |
-          # blst (source-built, replaces the committed dev binaries in the released jars)
+          # blst (source-built, replaces the committed dev binaries in the released jars).
+          # ADR-0062 D6: fail closed. A missing or empty artifact must stop the release, never
+          # leave the committed development binary in the published jar.
+          set -euo pipefail
+          NATIVE=zeroj-blst/src/main/resources/org/zeroj/blst/native
           for target in linux/amd64 linux/aarch64 mac/aarch64; do
             os=${target%/*}; arch=${target#*/}
-            mkdir -p "zeroj-blst/src/main/resources/native/$target"
-            cp "blst-native-$os-$arch"/* "zeroj-blst/src/main/resources/native/$target/" || true
+            ext=$([ "$os" = mac ] && echo dylib || echo so)
+            src="blst-native-$os-$arch/libblst.$ext"
+            if [ ! -s "$src" ]; then
+              echo "::error::missing or empty source-built blst artifact: $src"
+              exit 1
+            fi
+            dest="$NATIVE/$target/libblst.$ext"
+            mkdir -p "$(dirname "$dest")"
+            cp "$src" "$dest"
+            cmp -s "$src" "$dest"
           done
+          # The loader refuses any library whose SHA-256 is not in this manifest (ADR-0062 I4).
+          zeroj-blst/scripts/update-blst-manifest.sh
+          cp "$NATIVE/libblst.sha256" blst-native-sha256.txt
 
-          echo "=== blst native libraries ==="
-          find zeroj-blst/src/main/resources/native -type f
+          echo "=== blst native libraries (SHA-256) ==="
+          cat blst-native-sha256.txt
+          {
+            echo "### Bundled source-built libblst (SHA-256)"
+            echo '```'
+            cat blst-native-sha256.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload blst checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: blst-native-checksums
+          path: blst-native-sha256.txt
+          if-no-files-found: error
 
       # No Gradle cache here: a cache restored from another run could change what runs next to the
       # signing key and the Central token.
@@ -227,7 +269,7 @@ jobs:
         run: ./gradlew build --stacktrace
 
       - name: Assert the default graph has no assurance/benchmark/removed-provider edge
-        run: ./gradlew verifyDefaultModuleSurface --stacktrace
+        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine --stacktrace
 
       # Learns the artifactIds this build owns; unsigned, its staged files are discarded.
       - name: Discover the Maven publications
@@ -417,12 +459,51 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Check out first: on a fresh runner, checkout deletes everything already in the workspace,
+      # including anything downloaded before it.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: zeroj-blst/scripts
+
       - name: Download ceremony CLI distributables
         uses: actions/download-artifact@v4
         with:
           pattern: ceremony-cli-*
           path: dist
           merge-multiple: true
+
+      # ADR-0062 D6: the SHA-256 of every bundled libblst is attached and recorded in the notes.
+      - name: Download blst checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: blst-native-checksums
+          path: dist
+
+      # Fail closed if any ceremony-cli.yml asset is missing: fail_on_unmatched_files only checks that
+      # dist/* matches something, which the checksum file alone satisfies.
+      - name: Require the ceremony CLI distributables
+        run: |
+          set -euo pipefail
+          missing=0
+          for asset in linux-x86_64.zip linux-arm64.zip macos-arm64.zip windows-x86_64.zip all.jar; do
+            if ! compgen -G "dist/zeroj-ceremony-*-$asset" > /dev/null; then
+              echo "::error::missing ceremony CLI asset dist/zeroj-ceremony-*-$asset"; missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then ls -la dist; exit 1; fi
+
+      - name: Release notes for the bundled native libraries
+        run: |
+          set -euo pipefail
+          tag=$(sed -n 's/^DEFAULT_BLST_TAG="\(.*\)"/\1/p' zeroj-blst/scripts/build-blst.sh)
+          commit=$(sed -n 's/^DEFAULT_BLST_COMMIT="\([0-9a-f]*\)".*/\1/p' zeroj-blst/scripts/build-blst.sh)
+          {
+            echo "### Bundled source-built libblst (supranational/blst $tag, commit $commit)"
+            echo '```'
+            cat dist/blst-native-sha256.txt
+            echo '```'
+          } > blst-notes.md
 
       # Creates the release for the tag, or adds the assets if it already exists. Do not pre-create a
       # draft release for the tag: the action publishes an existing draft.
@@ -431,6 +512,8 @@ jobs:
         with:
           name: ${{ needs.validate.outputs.version }}
           files: dist/*
+          body_path: blst-notes.md
+          append_body: true
           fail_on_unmatched_files: true
           prerelease: ${{ needs.validate.outputs.is_final != 'true' }}
           # Latest is decided by semantic version and date, so a maintenance release does not take

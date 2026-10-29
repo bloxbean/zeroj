@@ -23,6 +23,9 @@ public sealed interface Gate {
     /** Equality constraint: left == right. */
     record AssertEq(Variable left, Variable right) implements Gate {}
 
+    /** Boolean constraint: value * (value - 1) = 0; no auxiliary output or hint. */
+    record AssertBoolean(Variable value) implements Gate {}
+
     /** Conditional selection: output = cond ? ifTrue : ifFalse. */
     record Select(Variable output, Variable cond, Variable ifTrue, Variable ifFalse) implements Gate {}
 

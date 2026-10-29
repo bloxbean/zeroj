@@ -1,0 +1,154 @@
+{
+  "source": "https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/shs/shabytetestvectors.zip",
+  "zip_sha256": "929ef80b7b3418aca026643f6f248815913b60e01741a44bba9e118067f4c9b8",
+  "notes": "Selected byte-aligned CAVP SHA ShortMsg cases. Len=0 Msg=00 denotes the empty message. These tests do not constitute CAVP validation.",
+  "cases": [
+    {
+      "algorithm": "sha256",
+      "length_bytes": 0,
+      "message_hex": "",
+      "digest_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 1,
+      "message_hex": "d3",
+      "digest_hex": "28969cdfa74a12c82f3bad960b0b000aca2ac329deea5c2328ebc6f2ba9802c1",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 3,
+      "message_hex": "b4190e",
+      "digest_hex": "dff2e73091f6c05e528896c4c831b9448653dc2ff043528f6769437bc7b975c2",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 32,
+      "message_hex": "09fc1accc230a205e4a208e64a8f204291f581a12756392da4b8c0cf5ef02b95",
+      "digest_hex": "4f44c1c7fbebb6f9601829f3897bfd650c56fa07844be76489076356ac1886a4",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 55,
+      "message_hex": "3ebfb06db8c38d5ba037f1363e118550aad94606e26835a01af05078533cc25f2f39573c04b632f62f68c294ab31f2a3e2a1a0d8c2be51",
+      "digest_hex": "6595a2ef537a69ba8583dfbf7f5bec0ab1f93ce4c8ee1916eff44a93af5749c4",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 56,
+      "message_hex": "2d52447d1244d2ebc28650e7b05654bad35b3a68eedc7f8515306b496d75f3e73385dd1b002625024b81a02f2fd6dffb6e6d561cb7d0bd7a",
+      "digest_hex": "cfb88d6faf2de3a69d36195acec2e255e2af2b7d933997f348e09f6ce5758360",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 63,
+      "message_hex": "e2f76e97606a872e317439f1a03fcd92e632e5bd4e7cbc4e97f1afc19a16fde92d77cbe546416b51640cddb92af996534dfd81edb17c4424cf1ac4d75aceeb",
+      "digest_hex": "18041bd4665083001fba8c5411d2d748e8abbfdcdfd9218cb02b68a78e7d4c23",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha256",
+      "length_bytes": 64,
+      "message_hex": "5a86b737eaea8ee976a0a24da63e7ed7eefad18a101c1211e2b3650c5187c2a8a650547208251f6d4237e661c7bf4c77f335390394c37fa1a9f9be836ac28509",
+      "digest_hex": "42e61e174fbb3897d6dd6cef3dd2802fe67b331953b06114a65c772859dfc1aa",
+      "source_file": "shabytetestvectors/SHA256ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 0,
+      "message_hex": "",
+      "digest_hex": "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 1,
+      "message_hex": "21",
+      "digest_hex": "3831a6a6155e509dee59a7f451eb35324d8f8f2df6e3708894740f98fdee23889f4de5adb0c5010dfb555cda77c8ab5dc902094c52de3278f35a75ebc25f093a",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 3,
+      "message_hex": "0a55db",
+      "digest_hex": "7952585e5330cb247d72bae696fc8a6b0f7d0804577e347d99bc1b11e52f384985a428449382306a89261ae143c2f3fb613804ab20b42dc097e5bf4a96ef919b",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 32,
+      "message_hex": "8ccb08d2a1a282aa8cc99902ecaf0f67a9f21cffe28005cb27fcf129e963f99d",
+      "digest_hex": "4551def2f9127386eea8d4dae1ea8d8e49b2add0509f27ccbce7d9e950ac7db01d5bca579c271b9f2d806730d88f58252fd0c2587851c3ac8a0e72b4e1dc0da6",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 55,
+      "message_hex": "ec2a92e47f692b53c1355475c71ceff0b0952a8b3541b2938270247d44e7c5cc04e17236b353da028674eab4047d89ec5dad868cfd91ce",
+      "digest_hex": "c83aca6147bfcbbc72c377efa8d53654ba0830c5a6a89e1d2a19b713e68fb534640deb833ca512247166dd273b5897e57d526f88eef58f6ff97baee0b4ee5644",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 56,
+      "message_hex": "c99e31ad4e23ac68e15e605d0b02437f8147c44f5445a55b68a10905276cce8676481c33e8cd3efe322bb13fe0107bb546ccbec7b8b38d10",
+      "digest_hex": "52992d45a88221d972958e9f2854adaa9a21d2bf7051e1f1019ae78004da50c5b55c144a02afffe539d753949a2b056534f5b4c21f248a05baa52a6c38c7f5dd",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 63,
+      "message_hex": "ebb3e2ad7803508ba46e81e220b1cff33ea8381504110e9f8092ef085afef84db0d436931d085d0e1b06bd218cf571c79338da31a83b4cb1ec6c06d6b98768",
+      "digest_hex": "f33428d8fc67aa2cc1adcb2822f37f29cbd72abff68190483e415824f0bcecd447cb4f05a9c47031b9c50e0411c552f31cd04c30cea2bc64bcf825a5f8a66028",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 64,
+      "message_hex": "c1ca70ae1279ba0b918157558b4920d6b7fba8a06be515170f202fafd36fb7f79d69fad745dba6150568db1e2b728504113eeac34f527fc82f2200b462ecbf5d",
+      "digest_hex": "046e46623912b3932b8d662ab42583423843206301b58bf20ab6d76fd47f1cbbcf421df536ecd7e56db5354e7e0f98822d2129c197f6f0f222b8ec5231f3967d",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 65,
+      "message_hex": "d3ddddf805b1678a02e39200f6440047acbb062e4a2f046a3ca7f1dd6eb03a18be00cd1eb158706a64af5834c68cf7f105b415194605222c99a2cbf72c50cb14bf",
+      "digest_hex": "bae7c5d590bf25a493d8f48b8b4638ccb10541c67996e47287b984322009d27d1348f3ef2999f5ee0d38e112cd5a807a57830cdc318a1181e6c4653cdb8cf122",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 111,
+      "message_hex": "324533e685f1852e358eea8ea8b81c288b3f3beb1f2bc2b8d3fdbac318382e3d7120de30c9c237aa0a34831deb1e5e060a7969cd3a9742ec1e64b354f7eb290cba1c681c66cc7ea994fdf5614f604d1a2718aab581c1c94931b1387e4b7dc73635bf3a7301174075fa70a9227d85d3",
+      "digest_hex": "3b26c5170729d0814153becb95f1b65cd42f9a6d0649d914e4f69d938b5e9dc041cd0f5c8da0b484d7c7bc7b1bdefb08fe8b1bfedc81109345bc9e9a399feedf",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 112,
+      "message_hex": "518985977ee21d2bf622a20567124fcbf11c72df805365835ab3c041f4a9cd8a0ad63c9dee1018aa21a9fa3720f47dc48006f1aa3dba544950f87e627f369bc2793ede21223274492cceb77be7eea50e5a509059929a16d33a9f54796cde5770c74bd3ecc25318503f1a41976407aff2",
+      "digest_hex": "c00926a374cde55b8fbd77f50da1363da19744d3f464e07ce31794c5a61b6f9c85689fa1cfe136553527fd876be91673c2cac2dd157b2defea360851b6d92cf4",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 127,
+      "message_hex": "c13e6ca3abb893aa5f82c4a8ef754460628af6b75af02168f45b72f8f09e45ed127c203bc7bb80ff0c7bd96f8cc6d8110868eb2cfc01037d8058992a6cf2effcbfe498c842e53a2e68a793867968ba18efc4a78b21cdf6a11e5de821dcabab14921ddb33625d48a13baffad6fe8272dbdf4433bd0f7b813c981269c388f001",
+      "digest_hex": "6e56f77f6883d0bd4face8b8d557f144661989f66d51b1fe4b8fc7124d66d9d20218616fea1bcf86c08d63bf8f2f21845a3e519083b937e70aa7c358310b5a7c",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    },
+    {
+      "algorithm": "sha512",
+      "length_bytes": 128,
+      "message_hex": "fd2203e467574e834ab07c9097ae164532f24be1eb5d88f1af7748ceff0d2c67a21f4e4097f9d3bb4e9fbf97186e0db6db0100230a52b453d421f8ab9c9a6043aa3295ea20d2f06a2f37470d8a99075f1b8a8336f6228cf08b5942fc1fb4299c7d2480e8e82bce175540bdfad7752bc95b577f229515394f3ae5cec870a4b2f8",
+      "digest_hex": "a21b1077d52b27ac545af63b32746c6e3c51cb0cb9f281eb9f3580a6d4996d5c9917d2a6e484627a9d5a06fa1b25327a9d710e027387fc3e07d7c4d14c6086cc",
+      "source_file": "shabytetestvectors/SHA512ShortMsg.rsp"
+    }
+  ]
+}

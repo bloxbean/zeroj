@@ -78,9 +78,23 @@ public final class Bls12381Hash {
         return Bls12381HashToCurve.encodeToG2XofShake256(message, dst);
     }
 
+    private static void requireNonEmptyDst(byte[] dst) {
+        Objects.requireNonNull(dst, "dst required");
+        if (dst.length == 0) {
+            throw new IllegalArgumentException("DST must be non-empty (RFC 9380 section 3.1)");
+        }
+    }
+
+    /**
+     * RFC 9380 §5.3.1 {@code expand_message_xmd} with SHA-256. A DST longer than 255 octets is
+     * reduced as in §5.3.3.
+     *
+     * @throws IllegalArgumentException if {@code dst} is empty (RFC 9380 §3.1: tags MUST be
+     *         non-empty; ADR-0062 D10) or {@code lenInBytes} is outside {@code [0, 8160]}
+     */
     public static byte[] expandMessageXmdSha256(byte[] message, byte[] dst, int lenInBytes) {
         Objects.requireNonNull(message, "message required");
-        Objects.requireNonNull(dst, "dst required");
+        requireNonEmptyDst(dst);
         if (lenInBytes < 0 || lenInBytes > 255 * SHA256_BYTES) {
             throw new IllegalArgumentException("Invalid expand_message_xmd length: " + lenInBytes);
         }
@@ -109,9 +123,20 @@ public final class Bls12381Hash {
         return Arrays.copyOf(uniform, lenInBytes);
     }
 
+    /**
+     * RFC 9380 §5.3.2 {@code expand_message_xof} with SHAKE256.
+     *
+     * <p>A DST longer than 255 octets is reduced to {@code SHAKE256("H2C-OVERSIZE-DST-" || DST, 32)}
+     * (§5.3.3 with {@code k = 128}, i.e. {@code ceil(2k/8) = 32} octets). That is the security level
+     * of the BLS12-381 suites and of the BBS SHAKE-256 ciphersuite, which are this method's only
+     * callers; a suite with a different {@code k} needs a different reduction.</p>
+     *
+     * @throws IllegalArgumentException if {@code dst} is empty (RFC 9380 §3.1; ADR-0062 D10) or
+     *         {@code lenInBytes} is outside {@code [0, 65535]}
+     */
     public static byte[] expandMessageXofShake256(byte[] message, byte[] dst, int lenInBytes) {
         Objects.requireNonNull(message, "message required");
-        Objects.requireNonNull(dst, "dst required");
+        requireNonEmptyDst(dst);
         if (lenInBytes < 0 || lenInBytes > 0xffff) {
             throw new IllegalArgumentException("Invalid expand_message_xof length: " + lenInBytes);
         }

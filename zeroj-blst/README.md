@@ -4,24 +4,43 @@ BLS12-381 native operations via [supranational/blst](https://github.com/supranat
 standalone "blst for the JVM" module. Usable on its own (verifiers, BBS, or downstream projects like
 julc) without depending on the ZeroJ prover.
 
-It hosts **two** bindings during an in-progress migration:
+All native code is the source-built `libblst` (pinned commit, see below), called through Java 25
+**FFM** (Panama): no JNI and no third-party wrapper or binary
+([ADR-0062](../docs/adr/0062-bls12381-independent-review-and-remediation.md) D3 removed the former
+`foundation.icon:blst-java` JNI binding).
 
-| binding | package | used for | mechanism |
-|---|---|---|---|
-| **FFM binding** (ADR-0029) | `blst.ffm.*` | native MSM (`blst_p1s/p2s_mult_pippenger`) for the ~5× Groth16 prover backend | Java 25 **FFM** (Panama) — no JNI, no third-party wrapper |
-| `Bls12381Provider` / pairing | `blst.*` | pairing for Groth16 verification + BBS | `foundation.icon:blst-java` (JNI/SWIG) |
+| binding | package | used for |
+|---|---|---|
+| MSM (ADR-0029) | `blst.ffm.BlstG1Msm` / `BlstG2Msm` | native MSM (`blst_p1s/p2s_mult_pippenger`) for the Groth16 prover backend |
+| curve + pairing (ADR-0062) | `blst.ffm.BlstCurve` | validated point arithmetic and multi-pairing for the Groth16 verifier and BBS |
+| provider | `blst.BlstBls12381Provider` | the `Bls12381Provider` SPI over `BlstCurve` |
 
-The FFM binding is the new, preferred path (native-image-friendlier, source-built `libblst`). The
-JNI provider remains for pairing/BBS until it is migrated to FFM too (the "full swap").
+Platforms: linux amd64/aarch64 and macOS aarch64. macOS x86_64 is not supported (the former JNI
+binary covered it; Intel macOS runners are retired); use the pure-Java provider there.
 
 ## Native library — built from source
 
-supranational publishes **no precompiled binaries**, so `zeroj-blst` **builds `libblst` from source**
-(no third-party binary), pinned to **v0.3.15**, and bundles the shared libraries as jar resources.
-The FFM loader (`BlstFfm`) extracts the matching one per platform at runtime.
+supranational publishes **no precompiled binaries**, so `zeroj-blst` **builds `libblst` from
+source**, pinned to **v0.3.15** by commit hash, and bundles the shared libraries as jar resources.
+The FFM loader (`BlstFfm`) loads only the bundled library for the host, and only if its SHA-256
+matches the bundled manifest `libblst.sha256`; no system property or `java.library.path` lookup is
+used, and an unsupported OS/arch is rejected.
 
 - **Local build / testing + CI + release:** see **[`BUILDING.md`](BUILDING.md)**.
-- Provenance note: [`src/main/resources/native/README.md`](src/main/resources/native/README.md).
+- Provenance note: [`src/main/resources/org/zeroj/blst/native/README.md`](src/main/resources/org/zeroj/blst/native/README.md).
+
+## Validation and side channels
+
+Every `BlstCurve` method validates its point inputs (length, no compression/sort flag, coordinates
+`< p`, on the curve, in the subgroup) and checks every `BLST_ERROR`; scalars are reduced mod `r`.
+The MSM hot path is caller-validated; `msmValidated` checks the bases (ADR-0062 D4).
+
+No ZeroJ provider has an evidenced side-channel contract. `BlstBls12381Provider` has a dedicated
+secret-scalar path (fixed-width scalar, `nbits = 255`, no zero-scalar early return; the byte
+array and native scalar buffer are zeroed, but the `BigInteger` intermediates are immutable and
+cannot be), but ZeroJ has not evaluated blst's scalar multiplication for side channels
+(ADR-0062 D2, Q2). Secret-bearing generation is offline/isolated only, whichever provider is
+selected.
 
 ## Key types
 
@@ -29,8 +48,8 @@ The FFM loader (`BlstFfm`) extracts the matching one per platform at runtime.
 |------|-------------|
 | `ffm.BlstFfm` | FFM loader — extracts + maps `libblst`, binds `blst_*` downcalls |
 | `ffm.BlstG1Msm` / `ffm.BlstG2Msm` | batched G1/G2 MSM via `blst_p1s/p2s_mult_pippenger` |
+| `ffm.BlstCurve` | validated G1/G2 arithmetic, point status, multi-pairing |
 | `BlstBls12381Provider` | native-backed `Bls12381Provider` (pairing, point ops) |
-| `BlstPairing` | multi-pairing / point validation |
 
 ## Consumers
 

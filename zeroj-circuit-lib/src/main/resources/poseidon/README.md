@@ -12,6 +12,10 @@ script, and conformance is verified byte-for-byte against its output.
 - Pinned commit: `208b5a164c6a252b137997694d90931b2bb851c5` (2023-05-02)
 - Paper: Grassi, Khovratovich, Rechberger, Roy, Schofnegger — *Poseidon: A New
   Hash Function for Zero-Knowledge Proof Systems* (USENIX Security 2021).
+- Licence: MIT, Copyright (c) 2019 Graz University of Technology. The script is
+  a copy (trailing whitespace removed on three blank lines) and ships in the
+  `zeroj-circuit-lib` jar, so the licence text and credits are in
+  [`NOTICE`](NOTICE) next to it.
 
 ## Reproducing ZeroJ's Poseidon parameters
 

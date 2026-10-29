@@ -271,4 +271,12 @@ class Bls12381WasmClientTest {
     private interface SectionWriter {
         void write(ByteArrayOutputStream out);
     }
+
+    /** ADR-0062 D7 / I7: an empty product is rejected on every provider, including the oracle. */
+    @Test
+    void pairingProductRejectsEmptyInput() {
+        var provider = WasmBls12381Provider.createDefault();
+        assertThrows(IllegalArgumentException.class,
+                () -> provider.pairingProductIsIdentity(new G1Point[0], new G2Point[0]));
+    }
 }

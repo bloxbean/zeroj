@@ -371,13 +371,13 @@ class PedersenHomomorphicApiTest {
 
         // witnessAffine (5 rows) + [l]·P (EdDSA's verifyStrict − verifyWithRegisteredKey gap)
         // + the local Z ≠ 0 guard of isIdentity. The low-level, self-validating entry point on
-        // raw coordinates is pinned at 5,556 in InCircuitJubjubSubgroupTest.
+        // raw coordinates is pinned at 5,304 in InCircuitJubjubSubgroupTest.
         assertAll(
-                () -> assertEquals(5_547, subgroupOnEstablished.constraints().size(), "subgroup assertion rows"),
-                () -> assertEquals(341_190, nnz(subgroupOnEstablished), "subgroup assertion nonzeros"),
-                () -> assertEquals(5_547, witnessed.constraints().size(), "witnessInSubgroup rows"),
-                () -> assertEquals(7_284, transfer.constraints().size(), "2-in/1-out + fee transfer rows"),
-                () -> assertEquals(35_244, nnz(transfer), "2-in/1-out + fee transfer nonzeros"));
+                () -> assertEquals(5_294, subgroupOnEstablished.constraints().size(), "subgroup assertion rows"),
+                () -> assertEquals(340_431, nnz(subgroupOnEstablished), "subgroup assertion nonzeros"),
+                () -> assertEquals(5_294, witnessed.constraints().size(), "witnessInSubgroup rows"),
+                () -> assertEquals(5_545, transfer.constraints().size(), "2-in/1-out + fee transfer rows"),
+                () -> assertEquals(30_027, nnz(transfer), "2-in/1-out + fee transfer nonzeros"));
     }
 
     // ------------------------------------------------------------------

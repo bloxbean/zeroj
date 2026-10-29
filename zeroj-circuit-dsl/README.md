@@ -7,6 +7,19 @@ This module lets application code define circuits in Java, calculate witnesses
 in-process, and compile the same circuit definition to R1CS, PlonK, or Halo2
 shapes. It is proof-system agnostic at the circuit-definition layer.
 
+## Boolean assertion migration (PR #112)
+
+`assertBoolean` now emits an explicit `Gate.AssertBoolean` instead of a multiplication
+temporary followed by a zero assertion. R1CS enforces `b * (b - 1) = 0` in one row;
+PlonK and Halo2 enforce the same equation. Booleanity, range checks and witness rejection
+are preserved. See [ADR-0063](../docs/adr/0063-sha256-gadget-and-sha2-assurance.md).
+
+This changes compiled shapes and fingerprints for Boolean-using circuits, including
+circuits outside SHA. Recompile and regenerate the circuit-specific setup/key artifacts;
+do not use cached keys from the old shape. Downstream exhaustive switches over the public
+sealed `Gate` interface must handle the new subtype. Existing R1CS/proof wire formats
+remain unchanged; old proofs can still be verified with their original matching keys.
+
 ## What It Provides
 
 | Type | Purpose |

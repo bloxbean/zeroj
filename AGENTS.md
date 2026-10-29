@@ -230,6 +230,28 @@ Use as applicable:
 
 Do not derive all expected values using the code under test.
 
+### Third-party test data and attribution
+
+Every directory that holds material copied from someone else (test vectors, fixtures, reference
+scripts) must contain a plain-text `NOTICE` file that states:
+- that the files are copied, and from where: repository or document, pinned commit or revision,
+  and path;
+- credit to the original authors;
+- the copyright holder and the licence or terms, quoted, with links;
+- the SHA-256 of each copied file;
+- any change made (filtered, re-serialised, ported), or that the files are unchanged;
+- what ZeroJ uses them for, and whether they ship in any published artifact.
+
+Rules:
+- When the terms require the licence text to accompany copies (MIT, BSD, Apache-2.0), include it:
+  in the `NOTICE` for short licences, or by reference to `licenses/` for Apache-2.0.
+- Material in `src/main/resources` of a published module ships in its jar. Its `NOTICE` must sit
+  next to it, and the root `NOTICE` must list it.
+- Never copy material whose terms do not allow redistribution, or whose terms are unknown. Record
+  the question and ask the maintainer.
+- Vectors that ZeroJ generates itself need no `NOTICE`. Give them a `README.md` naming the
+  generator, its inputs and the tool versions.
+
 ## Build
 
 Use the Gradle wrapper:

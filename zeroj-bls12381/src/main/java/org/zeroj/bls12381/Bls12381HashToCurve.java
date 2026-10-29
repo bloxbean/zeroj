@@ -148,11 +148,21 @@ final class Bls12381HashToCurve {
         return clearG2(isoMapG2(simpleSwuG2(u0)));
     }
 
-    private static G1Point clearG1(G1Point point) {
+    /** RFC 9380 {@code map_to_curve} for G1 (SSWU then 11-isogeny); package-private test seam. */
+    static G1Point mapToCurveG1(Fp u) {
+        return isoMapG1(simpleSwuG1(u));
+    }
+
+    /** RFC 9380 {@code map_to_curve} for G2 (SSWU then 3-isogeny); package-private test seam. */
+    static G2Point mapToCurveG2(Fp2 u) {
+        return isoMapG2(simpleSwuG2(u));
+    }
+
+    static G1Point clearG1(G1Point point) {
         return Bls12381Codecs.requireValid(point.scalarMul(G1_H_EFF));
     }
 
-    private static G2Point clearG2(G2Point point) {
+    static G2Point clearG2(G2Point point) {
         return Bls12381Codecs.requireValid(point.scalarMul(G2_H_EFF));
     }
 

@@ -51,9 +51,9 @@ dependencies {
     api "org.julclang:julc-ledger-api:${julcVersion}"
     annotationProcessor "org.julclang:julc-annotation-processor:${julcVersion}"
 
-    // ZeroJ — blst for point compression in SnarkjsToCardano / ProverToCardano
+    // ZeroJ — point compression in SnarkjsToCardano / ProverToCardano uses the pure-Java codecs
+    // (ADR-0062 D3: no native dependency)
     api project(':zeroj-api')
-    implementation project(':zeroj-blst')
     implementation "com.bloxbean.cardano:cardano-client-crypto:${rootProject.ext.cclVersion}"
 
     // Pure Java prover and BLS point types — used by ProverToCardano to compress prover output
@@ -77,6 +77,9 @@ dependencies {
     // Test — off-chain BBS (build real presentations to differential-test the on-chain BBS gadgets).
     // Test-scope only: the on-chain BBS gadgets themselves have no zeroj-bbs dependency.
     testImplementation project(':zeroj-bbs')
+
+    // Test — ADR-0060 M4: the independent G1 Pedersen vectors, run through PedersenG1Lib in the VM.
+    testImplementation project(':zeroj-test-vectors')
 }
 
 test {

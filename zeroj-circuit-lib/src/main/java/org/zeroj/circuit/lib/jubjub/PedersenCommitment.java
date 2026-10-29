@@ -1,8 +1,12 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import org.zeroj.api.commitment.CommitmentError;
+import org.zeroj.api.commitment.CommitmentFormatException;
 import org.zeroj.circuit.lib.poseidon.PoseidonHash;
 import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -66,8 +70,17 @@ import java.util.Objects;
  *
  * <p><b>Do not expose secret-bearing commitment generation to an untrusted timing observer or a
  * co-resident adversary.</b> {@link #verify(JubjubPoint, BigInteger, BigInteger)} is different:
- * an opening supplied for verification is public to that verifier, so it deliberately uses the
- * faster variable-length public-scalar path.
+ * an opening supplied for verification is disclosed to that verifier, so it deliberately uses the
+ * faster variable-length public-scalar path. Disclosed is not public: run it on variable-time
+ * arithmetic only if the opening is already public, or no party from whom it is still secret can
+ * observe the verifier's timing; otherwise verify offline or in an isolated process
+ * ({@code commitment-profiles-v1} §6.2, ADR-0059 A2).
+ *
+ * <h2>Strict entry points (ADR-0059)</h2>
+ * {@link #commitScalar}, {@link #verifyScalar} and {@link #decode} implement the strict paths of
+ * {@code docs/specs/commitment-profiles-v1.md} §12.3: no scalar is reduced, and every rejection is a
+ * {@link CommitmentFormatException} carrying its error class. The legacy {@link #commit} and
+ * {@link #verify} keep reducing their inputs mod {@code l}.
  *
  * @see <a href="../../../../../../../../../docs/adr/0038-jubjub-dsl-remediation-plan.md">ADR-0038</a>
  */
@@ -117,6 +130,82 @@ public final class PedersenCommitment {
         return vG.add(rH).normalized();
     }
 
+    /**
+     * Strict generation for {@code pedersen-jubjub-v1} ({@code commitment-profiles-v1} §12.3):
+     * {@code C = [value]·G + [blinding]·H} with both scalars already canonical.
+     *
+     * <p>Checks, in order: nulls; {@code value} in {@code [0, l)}; {@code blinding} in
+     * {@code [0, l)} ({@code NON_CANONICAL_SCALAR}). Nothing is reduced, and invalid input does no
+     * curve work. Generation then runs through the same two blinded fixed schedules as
+     * {@link #commit}, under the same execution restriction: offline or in an isolated process.
+     *
+     * @throws NullPointerException      if an argument is null
+     * @throws CommitmentFormatException ({@code NON_CANONICAL_SCALAR}) if a scalar is not canonical
+     */
+    public static PedersenScalarCommitment commitScalar(BigInteger value, BigInteger blinding) {
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(blinding, "blinding");
+        BigInteger m = PedersenStrict.canonical(value, "value");
+        BigInteger r = PedersenStrict.canonical(blinding, "blinding");
+        return new PedersenScalarCommitment(commit(m, r));
+    }
+
+    /**
+     * Strict disclosed verification (class V1, {@code commitment-profiles-v1} §6.2, §12.3):
+     * {@code true} iff {@code commitment == [value]·G + [blinding]·H}.
+     *
+     * <p>Checks, in order: nulls; {@code value}, then {@code blinding}, in {@code [0, l)}
+     * ({@code NON_CANONICAL_SCALAR}); then the equation. Uses the variable-time public-scalar path:
+     * <b>only</b> where the opening is already public or no party from whom it is still secret can
+     * observe this verifier's timing. To check an opening that must stay private, recompute with
+     * {@link #commitScalar} offline and compare encodings (class V2).
+     *
+     * @throws NullPointerException      if an argument is null
+     * @throws CommitmentFormatException ({@code NON_CANONICAL_SCALAR}) if a scalar is not canonical
+     */
+    public static boolean verifyScalar(PedersenScalarCommitment commitment, BigInteger value, BigInteger blinding) {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(blinding, "blinding");
+        BigInteger m = PedersenStrict.canonical(value, "value");
+        BigInteger r = PedersenStrict.canonical(blinding, "blinding");
+        return verify(commitment.point(), m, r);
+    }
+
+    /** Largest amount-bound width for Jubjub: {@code ⌊log₂ l⌋} ({@code commitment-profiles-v1} §7). */
+    static final int MAX_AMOUNT_BITS = JubjubCurve.SUBGROUP_ORDER.bitLength() - 1;
+
+    /**
+     * {@link #verifyScalar(PedersenScalarCommitment, BigInteger, BigInteger)} with the application
+     * amount bound (check 2): additionally requires {@code value < 2^amountBits}.
+     *
+     * <p>Checks, in order: nulls; {@code amountBits} in {@code [1, 251]}
+     * ({@code INVALID_CONFIGURATION}); {@code value}, then {@code blinding}, in {@code [0, l)}
+     * ({@code NON_CANONICAL_SCALAR}); {@code value < 2^amountBits} ({@code OUT_OF_RANGE}); then the
+     * equation. The bound may reject a valid residue; it never applies to the blinding.
+     *
+     * @throws NullPointerException      if an argument is null
+     * @throws CommitmentFormatException with the class of the first failure
+     */
+    public static boolean verifyScalar(PedersenScalarCommitment commitment, BigInteger value, BigInteger blinding,
+                                       int amountBits) {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(blinding, "blinding");
+        if (amountBits < 1 || amountBits > MAX_AMOUNT_BITS) {
+            throw new CommitmentFormatException(CommitmentError.INVALID_CONFIGURATION,
+                    "amountBits must be in [1, " + MAX_AMOUNT_BITS + "]");
+        }
+        BigInteger m = PedersenStrict.canonical(value, "value");
+        BigInteger r = PedersenStrict.canonical(blinding, "blinding");
+        // m is non-negative here, so m < 2^k iff bitLength(m) ≤ k.
+        if (m.bitLength() > amountBits) {
+            throw new CommitmentFormatException(CommitmentError.OUT_OF_RANGE,
+                    "value must be below 2^" + amountBits);
+        }
+        return verify(commitment.point(), m, r);
+    }
+
     /** Bytes drawn per blinding by {@link #randomBlinding(SecureRandom)}. */
     static final int BLINDING_SAMPLE_BYTES = 64;
 
@@ -162,16 +251,19 @@ public final class PedersenCommitment {
      * {@code ZkPedersenCommitment.fromVerifierCheckedPublic} discharges that constructor's
      * subgroup obligation with this method.
      *
+     * <p>Rejections are {@link CommitmentFormatException} (an {@link IllegalArgumentException})
+     * carrying {@code MALFORMED_ENCODING} for an encoding defect and {@code NOT_IN_SUBGROUP} for a
+     * valid curve point outside the subgroup ({@code commitment-profiles-v1} §10). A null array
+     * keeps throwing a plain {@link IllegalArgumentException}, as before.
+     *
      * @throws IllegalArgumentException if the bytes are not a canonical encoding of a point in
      *         the prime-order subgroup
      */
     public static JubjubPoint decode(byte[] encoded) {
-        JubjubPoint point = JubjubPoint.fromBytes(encoded);
-        if (!point.isInSubgroup()) {
-            throw new IllegalArgumentException(
-                    "Pedersen commitment is not in the prime-order subgroup");
+        if (encoded == null) {
+            throw new IllegalArgumentException("Encoded point must be " + JubjubCurve.COMPRESSED_POINT_BYTES + " bytes");
         }
-        return point;
+        return PedersenStrict.decodePoint(encoded);
     }
 
     /**
@@ -180,9 +272,161 @@ public final class PedersenCommitment {
      * <p>The opening is disclosed to the verifier, so this uses the faster public-scalar path.
      * It shares canonicalisation with {@link #commit(BigInteger, BigInteger)}, preserving the
      * exact residue-mod-l semantics without paying the secret-scalar schedule.
+     *
+     * <p><b>Timing rule (class V1, ADR-0059 A2).</b> Disclosed is not public: use this
+     * variable-time check only where the opening is already public or no party from whom it is
+     * still secret can observe the verifier's timing; otherwise verify offline or in an isolated
+     * process. The strict form is
+     * {@link #verifyScalar(PedersenScalarCommitment, BigInteger, BigInteger)}.
      */
     public static boolean verify(JubjubPoint commitment, BigInteger value, BigInteger blinding) {
         return commitPublic(value, blinding).projectiveEquals(commitment);
+    }
+
+    // ---- pedersen-jubjub-bytes-v1 (ADR-0058, docs/specs/pedersen-jubjub-bytes-v1.md) ----
+
+    /**
+     * Commits to the exact octets of {@code payload}:
+     * {@code C = [HashBytesToScalar(payload)]·G + [r]·H} ({@code pedersen-jubjub-bytes-v1}).
+     *
+     * <p>Every octet is significant; nothing is normalized or decoded, and an empty array is a
+     * valid payload. Unlike {@link #commit}, the blinding must already be canonical,
+     * {@code 0 ≤ r < l}; use {@link #randomBlinding(SecureRandom)}. The payload is read once and
+     * not copied or retained; the caller must not modify it during the call.
+     *
+     * <p><b>Same execution restriction as {@link #commit}</b>: the payload, the derived scalar and
+     * {@code r} are secret, the hash reduction and curve arithmetic use variable-time
+     * {@link BigInteger}, and generation must run offline or in an isolated process. Both scalars
+     * go through {@code commit}'s two blinded fixed schedules.
+     *
+     * @throws NullPointerException      if an argument is null
+     * @throws CommitmentFormatException ({@code NON_CANONICAL_SCALAR}) if {@code blinding} is not in
+     *                                   {@code [0, l)}
+     * @throws IllegalStateException     if SHA-256 is unavailable
+     */
+    public static PedersenBytesCommitment commitBytes(byte[] payload, BigInteger blinding) {
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        blinding = requireCanonicalBlinding(blinding);
+        return commitHashed(PedersenBytesHash.hashToScalar(payload), blinding);
+    }
+
+    /**
+     * {@link #commitBytes(byte[], BigInteger)} over a stream that must hold exactly
+     * {@code length} octets, read once through a bounded buffer.
+     *
+     * <p>After {@code length} octets one more read checks for end of stream: an extra octet, or
+     * end of stream before {@code length}, fails with {@link IOException} and produces no
+     * commitment. At most {@code length + 1} octets are read. The stream is never closed, reset or
+     * retried; the caller owns it, its deadlines and its limits, and the end-of-stream check can
+     * block. All arguments are validated before the first read.
+     *
+     * @throws CommitmentFormatException {@code NON_CANONICAL_SCALAR} if {@code blinding} is not in
+     *         {@code [0, l)}, then {@code LENGTH_OUT_OF_RANGE} if {@code length} is not in
+     *         {@code [0, 2^61 − 256]}
+     * @throws IOException              on truncation, excess input or a read failure
+     */
+    public static PedersenBytesCommitment commitBytes(InputStream payload, long length, BigInteger blinding)
+            throws IOException {
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        blinding = requireCanonicalBlinding(blinding);
+        requirePayloadBound(length, "length");
+        return commitHashed(PedersenBytesHash.hashToScalar(payload, length, true), blinding);
+    }
+
+    /**
+     * {@link #commitBytes(byte[], BigInteger)} over a stream of unknown length, read to end of
+     * stream in one pass. The stream may hold at most {@code maxBytes} octets; if it holds more,
+     * the call fails with {@link IOException} after reading {@code maxBytes + 1} octets. The same
+     * octets give the same commitment as the array and declared-length forms. Ownership and
+     * blocking behaviour are as for {@link #commitBytes(InputStream, long, BigInteger)}.
+     *
+     * @throws CommitmentFormatException {@code NON_CANONICAL_SCALAR} if {@code blinding} is not in
+     *         {@code [0, l)}, then {@code LENGTH_OUT_OF_RANGE} if {@code maxBytes} is not in
+     *         {@code [0, 2^61 − 256]}
+     * @throws IOException              on excess input or a read failure
+     */
+    public static PedersenBytesCommitment commitBytesToEnd(InputStream payload, long maxBytes, BigInteger blinding)
+            throws IOException {
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        blinding = requireCanonicalBlinding(blinding);
+        requirePayloadBound(maxBytes, "maxBytes");
+        return commitHashed(PedersenBytesHash.hashToScalar(payload, maxBytes, false), blinding);
+    }
+
+    /**
+     * Verifies a <b>disclosed</b> byte opening: {@code true} iff
+     * {@code commitment == [HashBytesToScalar(payload)]·G + [r]·H}.
+     *
+     * <p>Like {@link #verify}, this uses the faster public-scalar path, because the payload and
+     * blinding are disclosed to the verifier. Disclosed is not public (class V1, ADR-0059 A2): use
+     * it only where the opening is already public or no party from whom it is still secret can
+     * observe the verifier's timing. To check a payload or opening that must stay private,
+     * recompute with {@link #commitBytes(byte[], BigInteger)} offline or in an isolated process and
+     * compare commitments instead. The same rule applies to both stream forms.
+     *
+     * <p>A {@code true} result says the opening matches the point. It does not say under which
+     * profile or in which context the point was issued: the same point also has a numeric opening.
+     *
+     * @throws CommitmentFormatException ({@code NON_CANONICAL_SCALAR}) if {@code blinding} is not in
+     *         {@code [0, l)}
+     */
+    public static boolean verifyBytes(PedersenBytesCommitment commitment, byte[] payload, BigInteger blinding) {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        blinding = requireCanonicalBlinding(blinding);
+        return verify(commitment.point(), PedersenBytesHash.hashToScalar(payload), blinding);
+    }
+
+    /**
+     * {@link #verifyBytes(PedersenBytesCommitment, byte[], BigInteger)} over a stream holding
+     * exactly {@code length} octets, with the stream rules of
+     * {@link #commitBytes(InputStream, long, BigInteger)}. Truncation, excess input and read
+     * failures throw {@link IOException}; they never return {@code true}. Same timing rule and
+     * error classes ({@code NON_CANONICAL_SCALAR}, then {@code LENGTH_OUT_OF_RANGE}).
+     */
+    public static boolean verifyBytes(PedersenBytesCommitment commitment, InputStream payload, long length,
+                                      BigInteger blinding) throws IOException {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        blinding = requireCanonicalBlinding(blinding);
+        requirePayloadBound(length, "length");
+        return verify(commitment.point(), PedersenBytesHash.hashToScalar(payload, length, true), blinding);
+    }
+
+    /**
+     * {@link #verifyBytes(PedersenBytesCommitment, byte[], BigInteger)} over a stream read to end of
+     * stream, holding at most {@code maxBytes} octets, with the stream rules of
+     * {@link #commitBytesToEnd(InputStream, long, BigInteger)}. Same timing rule and error classes
+     * ({@code NON_CANONICAL_SCALAR}, then {@code LENGTH_OUT_OF_RANGE}).
+     */
+    public static boolean verifyBytesToEnd(PedersenBytesCommitment commitment, InputStream payload, long maxBytes,
+                                           BigInteger blinding) throws IOException {
+        Objects.requireNonNull(commitment, "commitment");
+        Objects.requireNonNull(payload, "payload");
+        Objects.requireNonNull(blinding, "blinding");
+        blinding = requireCanonicalBlinding(blinding);
+        requirePayloadBound(maxBytes, "maxBytes");
+        return verify(commitment.point(), PedersenBytesHash.hashToScalar(payload, maxBytes, false), blinding);
+    }
+
+    private static PedersenBytesCommitment commitHashed(BigInteger scalar, BigInteger blinding) {
+        return new PedersenBytesCommitment(commit(scalar, blinding));
+    }
+
+    private static BigInteger requireCanonicalBlinding(BigInteger blinding) {
+        return PedersenStrict.canonical(blinding, "blinding");
+    }
+
+    private static void requirePayloadBound(long bound, String name) {
+        if (bound < 0 || bound > PedersenBytesHash.MAX_PAYLOAD_BYTES) {
+            throw new CommitmentFormatException(CommitmentError.LENGTH_OUT_OF_RANGE,
+                    name + " must be in [0, " + PedersenBytesHash.MAX_PAYLOAD_BYTES + "]");
+        }
     }
 
     private static JubjubPoint commitPublic(BigInteger value, BigInteger blinding) {

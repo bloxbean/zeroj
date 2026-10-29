@@ -12,6 +12,7 @@ import org.zeroj.bls12381.field.Fp;
 import org.zeroj.bls12381.field.Fp2;
 import org.zeroj.codec.SnarkjsJsonCodec;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -54,6 +55,52 @@ class Groth16AdversarialEnvelopeParityTest {
             for (String slot : List.of("vk_beta_2", "vk_gamma_2", "vk_delta_2"))
                 check(proof, replaceArray(vk, slot, bad), false, slot + bad);
         }
+    }
+
+    /**
+     * ADR-0062 D5 / I6: a proof point has exactly one accepted encoding, affine with z = 1. A
+     * rescaled projective encoding (λx, λy, λ) of the same valid point used to verify on the
+     * pure-Java verifier (G1 and G2) and the blst verifier (G1): proof-byte malleability for any
+     * application that keys replay protection or nullifiers on proof bytes. The same rule applies
+     * to verification-key points.
+     */
+    @Test void rescaledProjectiveEncodingsAreRejectedAtEveryPosition() throws Exception {
+        String proof = load("proof.json"), vk = load("verification_key.json");
+        check(proof, vk, true, "canonical control");
+        var p = SnarkjsJsonCodec.parseProof(proof);
+        var k = SnarkjsJsonCodec.parseVerificationKey(vk);
+        for (BigInteger lambda : List.of(BigInteger.valueOf(7), Fp.P.subtract(BigInteger.ONE))) {
+            check(replaceArray(proof, "pi_a", rescaleG1(p.piA(), lambda)), vk, false, "pi_a λ=" + lambda);
+            check(replaceArray(proof, "pi_c", rescaleG1(p.piC(), lambda)), vk, false, "pi_c λ=" + lambda);
+            check(proof, replaceArray(vk, "vk_alpha_1", rescaleG1(k.vkAlpha1(), lambda)), false, "alpha λ=" + lambda);
+            var ic = k.ic();
+            var entries = new ArrayList<String>();
+            for (int i = 0; i < ic.size(); i++) entries.add(i == 0 ? rescaleG1(ic.get(0), lambda) : ic.get(i).toString());
+            check(proof, replaceArray(vk, "IC", "[" + String.join(",", entries) + "]"), false, "IC[0] λ=" + lambda);
+        }
+        for (Fp2 lambda : List.of(Fp2.of(Fp.of(7), Fp.ZERO), Fp2.of(Fp.of(2), Fp.of(3)), Fp2.of(Fp.ZERO, Fp.ONE))) {
+            check(replaceArray(proof, "pi_b", rescaleG2(p.piB(), lambda)), vk, false, "pi_b λ=" + lambda);
+            check(proof, replaceArray(vk, "vk_beta_2", rescaleG2(k.vkBeta2(), lambda)), false, "beta λ=" + lambda);
+            check(proof, replaceArray(vk, "vk_gamma_2", rescaleG2(k.vkGamma2(), lambda)), false, "gamma λ=" + lambda);
+            check(proof, replaceArray(vk, "vk_delta_2", rescaleG2(k.vkDelta2(), lambda)), false, "delta λ=" + lambda);
+        }
+    }
+
+    private static String rescaleG1(List<BigInteger> point, BigInteger lambda) {
+        assertEquals(BigInteger.ONE, point.get(2));
+        return "[\"" + point.get(0).multiply(lambda).mod(Fp.P) + "\",\""
+                + point.get(1).multiply(lambda).mod(Fp.P) + "\",\"" + lambda + "\"]";
+    }
+
+    private static String rescaleG2(List<List<BigInteger>> point, Fp2 lambda) {
+        assertEquals(List.of(BigInteger.ONE, BigInteger.ZERO), point.get(2));
+        Fp2 x = Fp2.of(Fp.of(point.get(0).get(0)), Fp.of(point.get(0).get(1))).mul(lambda);
+        Fp2 y = Fp2.of(Fp.of(point.get(1).get(0)), Fp.of(point.get(1).get(1))).mul(lambda);
+        return "[" + fp2Json(x) + "," + fp2Json(y) + "," + fp2Json(lambda) + "]";
+    }
+
+    private static String fp2Json(Fp2 v) {
+        return "[\"" + v.c0().value() + "\",\"" + v.c1().value() + "\"]";
     }
 
     private void check(String proof, String vk, boolean expected, String label) throws Exception {

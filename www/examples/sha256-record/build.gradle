@@ -1,0 +1,17 @@
+plugins { id 'application' }
+
+repositories { mavenCentral() }
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+
+dependencies {
+    // The composite build substitutes these with the projects in this checkout.
+    implementation 'org.zeroj:zeroj-circuit-lib:local'
+    implementation 'org.zeroj:zeroj-crypto:local'
+    implementation 'org.zeroj:zeroj-codec:local'
+    implementation 'org.zeroj:zeroj-verifier-groth16:local'
+}
+
+application {
+    mainClass = 'org.zeroj.docs.sha2.ApprovedRecordDemo'
+    applicationDefaultJvmArgs = ['-Dzeroj.allowInsecureTrustedSetup=true', '-Xmx4g']
+}

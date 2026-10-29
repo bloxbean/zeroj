@@ -1,0 +1,2660 @@
+{
+  "schema": "zeroj-commitment-vectors-v1",
+  "profileId": "pedersen-bls12-381-g1-v1",
+  "spec": [
+    {
+      "path": "docs/specs/commitment-profiles-v1.md",
+      "revision": "r7",
+      "date": "2026-10-22",
+      "sha256": "5f1d4c26e9d5025f818e20884632d678a5a12b5b3e84cd07a8a258effeb97025"
+    },
+    {
+      "path": "docs/specs/pedersen-bls12-381-g1-v1.md",
+      "revision": "r2",
+      "date": "2026-10-22",
+      "sha256": "efa0aa106343161dbd6abf6d8525fdc21832983adfc2d454727e14c58683d26f"
+    }
+  ],
+  "generator": {
+    "script": "zeroj-bls12381/src/test/resources/pedersen-g1-reference/emit_g1_commitment_vectors_v1.py",
+    "scriptSha256": "02a73223b85a4e580594a252e5b9beb489c41287ea7ef432d7c6d3fe23716d23",
+    "python": "CPython 3.13.5"
+  },
+  "positive": [
+    {
+      "name": "decode-point-identity",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "identity": "true"
+      }
+    },
+    {
+      "name": "decode-point-base-g",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      },
+      "expected": {
+        "xHex": "00453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "yHex": "0ab307006d17731edfeef508a959c6c43f6ad8f72d27af8aa0645356ffe864fd0ced6dfa806e5b2b63c8850f7cfb691c"
+      }
+    },
+    {
+      "name": "decode-point-base-h",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "92e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65"
+      },
+      "expected": {
+        "xHex": "12e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65",
+        "yHex": "01e0f1bf4e0e4e344cb2779b2dc6adec8b0b07caf8a9812c3b6f4b056af2d0fda0e7b05ffb16008ca855ffe55686184e"
+      }
+    },
+    {
+      "name": "decode-point-minus-g-sort-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "a0453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      },
+      "expected": {
+        "xHex": "00453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "yHex": "0f4e0ae9cc68737b6b2cb2ad99f1e613250c728dc65d6334c6cc7f49f6c8912711be920430e5a4d456367af08304418f"
+      }
+    },
+    {
+      "name": "decode-point-minus-h",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "b2e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65"
+      },
+      "expected": {
+        "xHex": "12e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65",
+        "yHex": "1820202aeb719865fe69301b1584feead96c43b9fadb91932bc1879b8bbe25267dc44f9eb63dff7311a9001aa979925d"
+      }
+    },
+    {
+      "name": "decode-point-commitment-12345-67890",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      },
+      "expected": {
+        "xHex": "0c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "yHex": "0c8fc0620ee33b431343dc145ae8bea08c5943054d9a6704b5dffb358331198e1daac14536fede90600395545cdf38c9"
+      }
+    },
+    {
+      "name": "decode-point-commitment-qm1-qm1",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650"
+      },
+      "expected": {
+        "xHex": "030c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650",
+        "yHex": "07e8229e97db4bd2dde39c0c160d2162540a00d5d9aa86da7e70d241eaed0bac8daf1e6c303f0069815304402c07a329"
+      }
+    },
+    {
+      "name": "commit-zero-zero",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "commit-one-zero",
+      "operation": "commit",
+      "input": {
+        "value": "1",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      }
+    },
+    {
+      "name": "commit-zero-one",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "1"
+      },
+      "expected": {
+        "pointHex": "92e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65"
+      }
+    },
+    {
+      "name": "commit-qm1-qm1",
+      "operation": "commit",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+      },
+      "expected": {
+        "pointHex": "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650"
+      }
+    },
+    {
+      "name": "commit-12345-67890",
+      "operation": "commit",
+      "input": {
+        "value": "12345",
+        "blinding": "67890"
+      },
+      "expected": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "commit-zero-qm1",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+      },
+      "expected": {
+        "pointHex": "b2e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65"
+      }
+    },
+    {
+      "name": "commit-qm1-zero",
+      "operation": "commit",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "a0453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      }
+    },
+    {
+      "name": "commit-two-zero",
+      "operation": "commit",
+      "input": {
+        "value": "2",
+        "blinding": "0"
+      },
+      "expected": {
+        "pointHex": "a445979b583f68537772b627145fb7fd139fa5cb013e0aa72b2f6cc0f54c9d10c2f492c1983c10a49aab24073cf8d79f"
+      }
+    },
+    {
+      "name": "commit-negated-12345-67890",
+      "operation": "commit",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581172168",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581116623"
+      },
+      "expected": {
+        "pointHex": "ac5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "commit-2pow64m1-12345",
+      "operation": "commit",
+      "input": {
+        "value": "18446744073709551615",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "ad424df7fc6fdaf276c9682663a66497f142f2f6c7e393f8257c4a6f332ada03e329a692bf78ee2f9ba60df667be0b23"
+      }
+    },
+    {
+      "name": "commit-2pow254m1-12345",
+      "operation": "commit",
+      "input": {
+        "value": "28948022309329048855892746252171976963317496166410141009864396001978282409983",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "b038931a975162817d2ea47849c499697195a1c5bcb01847bc8eb569c3d624ef62e0c7e01a9d3e32868ba10589c8a38e"
+      }
+    },
+    {
+      "name": "commit-2pow254-12345",
+      "operation": "commit",
+      "input": {
+        "value": "28948022309329048855892746252171976963317496166410141009864396001978282409984",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "a397142a075c8f4ca4e6255c5c7db7c77c045e078ac387dcf0901d180025d0a7b4be9be6695b9a66a2df8138ef2be5c5"
+      }
+    },
+    {
+      "name": "commit-qm1-12345",
+      "operation": "commit",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "12345"
+      },
+      "expected": {
+        "pointHex": "b03decd06e077f874dfe91d24981009af6d9d57389c36596ee9ecf97fc83d3e61c69ec07751791f08091a6add98ba128"
+      }
+    },
+    {
+      "name": "verify-identity-zero-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "value": "0",
+        "blinding": "0"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-base-g-one-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "value": "1",
+        "blinding": "0"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-base-h-zero-one",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "92e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65",
+        "value": "0",
+        "blinding": "1"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-12345-67890",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-qm1-qm1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-zero-qm1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "b2e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65",
+        "value": "0",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-qm1-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "a0453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "0"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-1-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "9219e2dad7270f9174877b12bb4d59a31bd46ce8dff7eabb706a1988f5ec2af182e5a33a50856d505564b6c85978a2e5",
+        "value": "1",
+        "blinding": "12345",
+        "amountBits": "1"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-64-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "ad424df7fc6fdaf276c9682663a66497f142f2f6c7e393f8257c4a6f332ada03e329a692bf78ee2f9ba60df667be0b23",
+        "value": "18446744073709551615",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-252-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8a0b7118e51ad0eff11adfe02d56528adf050d78d81f038c3fac0e28850d56d50abe7d1a5bab2f4b0907b0b97556f670",
+        "value": "7237005577332262213973186563042994240829374041602535252466099000494570602495",
+        "blinding": "12345",
+        "amountBits": "252"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-253-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "b68c2b6a603d8a6883113cf85ca8cc493a95aa1f6c2f4bf5dbf170fceb346bfe9aa25d0ecb2f9881f7f10ce8f3758ab9",
+        "value": "14474011154664524427946373126085988481658748083205070504932198000989141204991",
+        "blinding": "12345",
+        "amountBits": "253"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-254-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "b038931a975162817d2ea47849c499697195a1c5bcb01847bc8eb569c3d624ef62e0c7e01a9d3e32868ba10589c8a38e",
+        "value": "28948022309329048855892746252171976963317496166410141009864396001978282409983",
+        "blinding": "12345",
+        "amountBits": "254"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-64-zero",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "9145ec8aa2deafe9b35fc375c0ced290f3f32a385a5b69b76efea3846171668816af20f400a312946448120525884708",
+        "value": "0",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-amount-bits-254-qm1-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "89e68e72f1d98851bbd4b3e758332314409fe9436dcb34db1ee980ecc7cca8e6ce4bc2cbe366b35da224af8fb5500840",
+        "value": "7",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "amountBits": "254"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-bytes-commitment-abc-as-scalar-opening-of-s",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "94e23b529d2a86b229f833cfb07a6089733e8d060b4fac3b7c8758d29625bf49eb14efe23b2ba49200aea17a3ce502eb",
+        "value": "425016933681726855004915202875618514367841089254790273686098534787449164925",
+        "blinding": "12345"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "encode-opening-zero-zero",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "0",
+        "blinding": "0"
+      },
+      "expected": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "decode-opening-zero-zero",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "value": "0",
+        "blinding": "0"
+      }
+    },
+    {
+      "name": "encode-opening-12345-67890",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "12345",
+        "blinding": "67890"
+      },
+      "expected": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000030390000000000000000000000000000000000000000000000000000000000010932"
+      }
+    },
+    {
+      "name": "decode-opening-12345-67890",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000030390000000000000000000000000000000000000000000000000000000000010932"
+      },
+      "expected": {
+        "value": "12345",
+        "blinding": "67890"
+      }
+    },
+    {
+      "name": "encode-opening-qm1-qm1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+      },
+      "expected": {
+        "openingHex": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff0000000073eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000"
+      }
+    },
+    {
+      "name": "decode-opening-qm1-qm1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff0000000073eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000"
+      },
+      "expected": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184512"
+      }
+    },
+    {
+      "name": "encode-opening-1-2",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "1",
+        "blinding": "2"
+      },
+      "expected": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002"
+      }
+    },
+    {
+      "name": "decode-opening-1-2",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002"
+      },
+      "expected": {
+        "value": "1",
+        "blinding": "2"
+      }
+    },
+    {
+      "name": "encode-opening-2pow254-0",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "28948022309329048855892746252171976963317496166410141009864396001978282409984",
+        "blinding": "0"
+      },
+      "expected": {
+        "openingHex": "40000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "decode-opening-2pow254-0",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "40000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "value": "28948022309329048855892746252171976963317496166410141009864396001978282409984",
+        "blinding": "0"
+      }
+    },
+    {
+      "name": "envelope-encode-identity",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "envelope-decode-identity",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "expected": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "envelope-encode-commitment-12345-67890",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "envelope-decode-commitment-12345-67890",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "expected": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "envelope-encode-base-g",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763180453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      }
+    },
+    {
+      "name": "envelope-decode-base-g",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763180453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "expected": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      }
+    },
+    {
+      "name": "envelope-encode-commitment-qm1-qm1",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650"
+      },
+      "expected": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650"
+      }
+    },
+    {
+      "name": "envelope-decode-commitment-qm1-qm1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "expected": {
+        "pointHex": "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650"
+      }
+    },
+    {
+      "name": "relation-add-wraparound",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "815e124abee667b28bfda846333429d555ee38d301953aaf097b7a4b760b70a90646241481312b6e7aedb78c25571960",
+          "8326045c1d14e133ba31484b52503b396471ebc3fe3ec01d136a1acd57c7005549cf3b882f43bd56e4bc4fa29f34c9e6"
+        ]
+      },
+      "expected": {
+        "pointHex": "a13b7cafe7b2aa869606366c42e099d0f2095c6d3dd0142d6346e7598cfe0467d22a244a56bd10324960ec830c68442c"
+      }
+    },
+    {
+      "name": "relation-subtract",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "a13b7cafe7b2aa869606366c42e099d0f2095c6d3dd0142d6346e7598cfe0467d22a244a56bd10324960ec830c68442c",
+          "8326045c1d14e133ba31484b52503b396471ebc3fe3ec01d136a1acd57c7005549cf3b882f43bd56e4bc4fa29f34c9e6"
+        ]
+      },
+      "expected": {
+        "pointHex": "815e124abee667b28bfda846333429d555ee38d301953aaf097b7a4b760b70a90646241481312b6e7aedb78c25571960"
+      }
+    },
+    {
+      "name": "relation-subtract-to-negative",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+        ]
+      },
+      "expected": {
+        "pointHex": "ac5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "relation-negate",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+        ]
+      },
+      "expected": {
+        "pointHex": "ac5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "relation-negate-base-g",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+        ]
+      },
+      "expected": {
+        "pointHex": "a0453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      }
+    },
+    {
+      "name": "relation-negate-identity",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "expected": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "relation-add-identity",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+          "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "expected": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "relation-add-identity-first",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+        ]
+      },
+      "expected": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "relation-add-doubling",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+        ]
+      },
+      "expected": {
+        "pointHex": "a52456cddf5901d01ef5b638aadb3152358c0f01ee973ee3e09818f30b19fec70a44a7272533efa58438cc9990b77d3a"
+      }
+    },
+    {
+      "name": "relation-add-inverse-to-identity",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+          "ac5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+        ]
+      },
+      "expected": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "relation-subtract-self-to-identity",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+        ]
+      },
+      "expected": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "relation-add-g-h",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+          "92e04e91b89753df710400b28abb7d8aa6a0958a6d90e418a405af12559419d772eb1111aafc6b64875b9a2256b6ab65"
+        ]
+      },
+      "expected": {
+        "pointHex": "a30c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650"
+      }
+    },
+    {
+      "name": "verify-relation-result-1-12",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "a13b7cafe7b2aa869606366c42e099d0f2095c6d3dd0142d6346e7598cfe0467d22a244a56bd10324960ec830c68442c",
+        "value": "1",
+        "blinding": "12"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-relation-result-negated-12345-67890",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "ac5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581172168",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581116623"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "verify-relation-result-doubling",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "a52456cddf5901d01ef5b638aadb3152358c0f01ee973ee3e09818f30b19fec70a44a7272533efa58438cc9990b77d3a",
+        "value": "24690",
+        "blinding": "135780"
+      },
+      "expected": {
+        "result": "true"
+      }
+    },
+    {
+      "name": "public-delta-bits-1-plus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "1"
+      },
+      "expected": {
+        "pointHex": "874a1abb0ca8f1bdabc26429d084f8f4cead907977468ea175d6a5b918d65b6888acc7f9870bb4f2bb132b6fe5bf2726"
+      }
+    },
+    {
+      "name": "public-delta-bits-1-minus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-1",
+        "deltaBits": "1"
+      },
+      "expected": {
+        "pointHex": "92aa342c37b60231f7863ddd328b760b7391e4ff176aa4759d4f07da765977806a234109ca9ff68312c9858bdb23845f"
+      }
+    },
+    {
+      "name": "public-delta-bits-64-plus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "18446744073709551615",
+        "deltaBits": "64"
+      },
+      "expected": {
+        "pointHex": "a37cc70ee5d69360756f716c56df7289c8f8cde4382da7192c90be50a07baf35c176832fb05588bfe58a5912e49b762c"
+      }
+    },
+    {
+      "name": "public-delta-bits-64-minus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-18446744073709551615",
+        "deltaBits": "64"
+      },
+      "expected": {
+        "pointHex": "a8735319de6971bdc6d53da6b048c092734bbbb61d2df35f28ae7b81a4c86ee612cb77325aee45252c801d363df21816"
+      }
+    },
+    {
+      "name": "public-delta-bits-252-plus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "7237005577332262213973186563042994240829374041602535252466099000494570602495",
+        "deltaBits": "252"
+      },
+      "expected": {
+        "pointHex": "96b6b47d8309dd2bb9e024e4eef8a8e3e14f41548fa5de2963df670c3729584a9c96524a8b07acb03a3a1473a4b75e87"
+      }
+    },
+    {
+      "name": "public-delta-bits-252-minus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-7237005577332262213973186563042994240829374041602535252466099000494570602495",
+        "deltaBits": "252"
+      },
+      "expected": {
+        "pointHex": "acec81a9ba02246dbb1566ca36bacdb44057a176fa993476ed818bc4492ccc2237caf4dc7a711d7fd9c947fff168f620"
+      }
+    },
+    {
+      "name": "public-delta-bits-253-plus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "14474011154664524427946373126085988481658748083205070504932198000989141204991",
+        "deltaBits": "253"
+      },
+      "expected": {
+        "pointHex": "8bb9d69633a9956db35feeae0c8c0d03e554b12237542a22e609a16366f5bcb0a31da4f2746078d1d0116a236fcde887"
+      }
+    },
+    {
+      "name": "public-delta-bits-253-minus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-14474011154664524427946373126085988481658748083205070504932198000989141204991",
+        "deltaBits": "253"
+      },
+      "expected": {
+        "pointHex": "87abb4e7e187e88b924c59a9a07f3b788692b105c46d2282d4d93a3e0bcbf7177708e9aff8b6278dadc079b0b454afeb"
+      }
+    },
+    {
+      "name": "public-delta-zero",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "0",
+        "deltaBits": "64"
+      },
+      "expected": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4"
+      }
+    },
+    {
+      "name": "public-delta-plus-1",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "1"
+      },
+      "expected": {
+        "pointHex": "874a1abb0ca8f1bdabc26429d084f8f4cead907977468ea175d6a5b918d65b6888acc7f9870bb4f2bb132b6fe5bf2726"
+      }
+    },
+    {
+      "name": "public-delta-minus-1",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-1",
+        "deltaBits": "1"
+      },
+      "expected": {
+        "pointHex": "92aa342c37b60231f7863ddd328b760b7391e4ff176aa4759d4f07da765977806a234109ca9ff68312c9858bdb23845f"
+      }
+    },
+    {
+      "name": "public-delta-wrap-qm1-plus-1",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8ebef97c45166556f1e6c3248fb660d1a1b799f9a62c619e74da8c19d1a92167f38f0f8b54c7acfe1e72eba9eefc9e0c",
+        "delta": "1",
+        "deltaBits": "1"
+      },
+      "expected": {
+        "pointHex": "b1c4e2d5d1debbd0e6067e5c2226771beddbbe6ec441a82a5fa755fe4c16a9958d7438e269f7c24bbfc8e9a7c1b2ec0c"
+      }
+    },
+    {
+      "name": "public-delta-wrap-zero-minus-1",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "b1c4e2d5d1debbd0e6067e5c2226771beddbbe6ec441a82a5fa755fe4c16a9958d7438e269f7c24bbfc8e9a7c1b2ec0c",
+        "delta": "-1",
+        "deltaBits": "1"
+      },
+      "expected": {
+        "pointHex": "8ebef97c45166556f1e6c3248fb660d1a1b799f9a62c619e74da8c19d1a92167f38f0f8b54c7acfe1e72eba9eefc9e0c"
+      }
+    },
+    {
+      "name": "public-delta-wrap-qm1-plus-2pow253m1",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "830c22c1792dae9774b23f9c31801a964094bef7734745f4012b4e5c133a5d608636f1e020d68cb2688ad276369b8650",
+        "delta": "14474011154664524427946373126085988481658748083205070504932198000989141204991",
+        "deltaBits": "253"
+      },
+      "expected": {
+        "pointHex": "8cd540ecc16be89a7a7e41592ba3b1fbbbd998800218d136e59aaa069690f0d86566fb750bb4b7507570e848b43d2d7a"
+      }
+    },
+    {
+      "name": "public-delta-identity-plus-5",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "delta": "5",
+        "deltaBits": "8"
+      },
+      "expected": {
+        "pointHex": "b48a014e49025e04fde340fa54ae7ae3250f89988dc337d3f287e03f43fbc036f5cea9e0125db6a4e951b853b934444e"
+      }
+    },
+    {
+      "name": "public-delta-identity-minus-5",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "delta": "-5",
+        "deltaBits": "8"
+      },
+      "expected": {
+        "pointHex": "948a014e49025e04fde340fa54ae7ae3250f89988dc337d3f287e03f43fbc036f5cea9e0125db6a4e951b853b934444e"
+      }
+    },
+    {
+      "name": "public-delta-to-identity",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "b68004aa2ae462ab644d0bd299b31f8cc0c9fd788bd303d4f6732200f6280459295b036c2518204d87e93f170bd70c75",
+        "delta": "-1000",
+        "deltaBits": "16"
+      },
+      "expected": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "verify-public-delta-result-wrap",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "b1c4e2d5d1debbd0e6067e5c2226771beddbbe6ec441a82a5fa755fe4c16a9958d7438e269f7c24bbfc8e9a7c1b2ec0c",
+        "value": "0",
+        "blinding": "67890"
+      },
+      "expected": {
+        "result": "true"
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "verify-amount-bits-1-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "87fe02577e99d3055360a1c99f1e041572a84ad111bc93fbe8e9d3654b79ba0ac5a01d389d5646ed22af32e31cad2b17",
+        "value": "2",
+        "blinding": "12345",
+        "amountBits": "1"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-64-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "972a3296bd2d3f42fd64f47f7c11d0e81b9d80a8b5cb68fa8084b721985c4288895b4f15edd84d67b0fe8b0f7a6ae8c4",
+        "value": "18446744073709551616",
+        "blinding": "12345",
+        "amountBits": "64"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-252-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "a386f82cc72224d20dbeded5bf3cb2fa4f53d2ed31130bd374fd7a6c3b8fc8d9b5c1e6c63797afc6267d8904050477b3",
+        "value": "7237005577332262213973186563042994240829374041602535252466099000494570602496",
+        "blinding": "12345",
+        "amountBits": "252"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-253-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "af496180f38d7160fd8d818c740dedd414c8ac3e6e7e2b1e8713e686f69802e85abc5d44e008e23b37223d6f42f56136",
+        "value": "14474011154664524427946373126085988481658748083205070504932198000989141204992",
+        "blinding": "12345",
+        "amountBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-254-overflow",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "a397142a075c8f4ca4e6255c5c7db7c77c045e078ac387dcf0901d180025d0a7b4be9be6695b9a66a2df8138ef2be5c5",
+        "value": "28948022309329048855892746252171976963317496166410141009864396001978282409984",
+        "blinding": "12345",
+        "amountBits": "254"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "verify-amount-bits-0",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "0"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-255",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "255"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "-1"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-int-max",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "2147483647"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-int-min",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "-2147483648"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-amount-bits-256",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "256"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-wrong-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12346",
+        "blinding": "67890"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-wrong-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67891"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-swapped-value-blinding",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "67890",
+        "blinding": "12345"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-negated-point",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "ac5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "67890"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-swapped-bases-point",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "83651b3617f759046ac84b1c9bad714212fe7ff73a4c5a21aa730764eaf220ad5de9d80c1c87141d95fbddd8bf6111df",
+        "value": "12345",
+        "blinding": "67890"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-identity-wrong-opening",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "value": "1",
+        "blinding": "0"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-amount-bits-64-wrong-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12346",
+        "blinding": "67890",
+        "amountBits": "64"
+      },
+      "error": "OPENING_MISMATCH"
+    },
+    {
+      "name": "verify-value-12345-plus-q-not-reduced",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581196858",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-67890-plus-q-not-reduced",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581252403"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-minus-qm1-not-reduced",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "value": "-52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        "blinding": "0"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-value-q",
+      "operation": "commit",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-q",
+      "operation": "commit",
+      "input": {
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184513"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-q",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-q",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184513"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-value-q",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-q",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184513"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-value-q-plus-1",
+      "operation": "commit",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184514",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-q-plus-1",
+      "operation": "commit",
+      "input": {
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184514"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-q-plus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184514",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-q-plus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184514"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-value-q-plus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184514",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-q-plus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "12345",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184514"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-value-minus-1",
+      "operation": "commit",
+      "input": {
+        "value": "-1",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-minus-1",
+      "operation": "commit",
+      "input": {
+        "value": "12345",
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-value-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "-1",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-blinding-minus-1",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12345",
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-value-minus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "-1",
+        "blinding": "67890"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "encode-opening-blinding-minus-1",
+      "operation": "encodeOpening",
+      "input": {
+        "value": "12345",
+        "blinding": "-1"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-value-2pow256",
+      "operation": "commit",
+      "input": {
+        "value": "115792089237316195423570985008687907853269984665640564039457584007913129639936",
+        "blinding": "0"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "commit-blinding-minus-q",
+      "operation": "commit",
+      "input": {
+        "value": "0",
+        "blinding": "-52435875175126190479447740508185965837690552500527637822603658699938581184513"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-value-q",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff000000010000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-q",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000000173eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-value-q-plus-1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff000000020000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-q-plus-1",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000000173eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000002"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-value-all-ones",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-blinding-all-ones",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "decode-opening-length-0",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": ""
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-32",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-63",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-65",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-96",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-128",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-63-order-before-scalars",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff0000000173eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-opening-length-65-order-before-scalars",
+      "operation": "decodeOpening",
+      "input": {
+        "openingHex": "000000000000000000000000000000000000000000000000000000000000000173eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff0000000100"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-empty",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-only",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "01",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0x00",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0018706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0x02",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0218706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-version-0xff",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "ff18706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-truncated-in-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-truncated-by-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758f",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-trailing-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc400",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-47-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758f",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-49-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc400",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-32-octets",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-96-octets-uncompressed",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76310c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc40c8fc0620ee33b431343dc145ae8bea08c5943054d9a6704b5dffb358331198e1daac14536fede90600395545cdf38c9",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-mismatch-no-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-id-length-exceeds-envelope",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "014a706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-other-g1-profile-pedersen-bls12-381-g1-bytes-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "011e706564657273656e2d626c7331322d3338312d67312d62797465732d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-basis-set-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "011e706564657273656e2d626c7331322d3338312d67312d62617369732d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-jubjub-profile-pedersen-jubjub-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76310100000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-jubjub-profile-pedersen-jubjub-vector-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0119706564657273656e2d6a75626a75622d766563746f722d76310100000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-jubjub-profile-pedersen-jubjub-bytes-v1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d6a75626a75622d62797465732d76310100000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-jubjub-profile-pedersen-jubjub-v1-with-g1-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0112706564657273656e2d6a75626a75622d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-differs-in-one-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76328c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-uppercase-first-octet",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118506564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-length-octet-minus-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0117706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-length-octet-plus-one",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0119706564657273656e2d626c7331322d3338312d67312d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-id-empty",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "01008c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-order-version-before-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "021e706564657273656e2d626c7331322d3338312d67312d62797465732d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-order-id-length-before-identifier",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "01c8706564657273656e2d626c7331322d3338312d67312d62797465732d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-order-identifier-before-point-length",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "011e706564657273656e2d626c7331322d3338312d67312d62797465732d76318c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758f",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-decode-order-identifier-before-point",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "011e706564657273656e2d626c7331322d3338312d67312d62797465732d7631800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "PROFILE_MISMATCH"
+    },
+    {
+      "name": "envelope-encode-order-3",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-encode-x-1-not-square",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-encode-infinity-with-sort-flag",
+      "operation": "encodeEnvelope",
+      "input": {
+        "pointHex": "e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "relation-add-second-order-3",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+          "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "relation-negate-mixed-order",
+      "operation": "relation",
+      "input": {
+        "op": "negate",
+        "pointsHex": [
+          "b6ee2defa35097e6bbaea5ab251479b37157dedfcbc4b319181bf28298f048a66eb93dc0230190c18ae135644c2d3df4"
+        ]
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "relation-subtract-infinity-sort-flag",
+      "operation": "relation",
+      "input": {
+        "op": "subtract",
+        "pointsHex": [
+          "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+          "e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "relation-order-first-point-first",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          ""
+        ]
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "relation-order-empty-then-order-3",
+      "operation": "relation",
+      "input": {
+        "op": "add",
+        "pointsHex": [
+          "",
+          "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "public-delta-bits-1-plus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "2",
+        "deltaBits": "1"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-1-minus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-2",
+        "deltaBits": "1"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-64-plus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "18446744073709551616",
+        "deltaBits": "64"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-64-minus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-18446744073709551616",
+        "deltaBits": "64"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-252-plus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "7237005577332262213973186563042994240829374041602535252466099000494570602496",
+        "deltaBits": "252"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-252-minus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-7237005577332262213973186563042994240829374041602535252466099000494570602496",
+        "deltaBits": "252"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-253-plus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "14474011154664524427946373126085988481658748083205070504932198000989141204992",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-253-minus-2pow",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-14474011154664524427946373126085988481658748083205070504932198000989141204992",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-254-plus-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "28948022309329048855892746252171976963317496166410141009864396001978282409983",
+        "deltaBits": "254"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-254-alias",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-23487852865797141623554994256013988874373056334117496812739262697960298774530",
+        "deltaBits": "254"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-253-alias",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-37961864020461666051501367382099977356031804417322567317671460698949439979522",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-bits-0",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "0"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-254",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "254"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-255",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "255"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-minus-1",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "-1"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-int-max",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "2147483647"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-bits-int-min",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "1",
+        "deltaBits": "-2147483648"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "public-delta-q",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-minus-q",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-2pow300",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397376",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-minus-2pow300",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "-2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397376",
+        "deltaBits": "253"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "public-delta-order-3-point",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "delta": "1",
+        "deltaBits": "1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "public-delta-mixed-order-point",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "b6ee2defa35097e6bbaea5ab251479b37157dedfcbc4b319181bf28298f048a66eb93dc0230190c18ae135644c2d3df4",
+        "delta": "1",
+        "deltaBits": "1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "public-delta-infinity-with-sort-flag",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "delta": "1",
+        "deltaBits": "1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "public-delta-order-point-before-delta-bits",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+        "delta": "1",
+        "deltaBits": "0"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "public-delta-order-subgroup-before-delta-bits",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "delta": "2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397376",
+        "deltaBits": "255"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "public-delta-order-delta-bits-before-delta",
+      "operation": "publicDelta",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "delta": "2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397376",
+        "deltaBits": "0"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-order-bad-point-before-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "blinding": "67890"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "verify-order-short-point-before-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758f",
+        "value": "-1",
+        "blinding": "67890"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "verify-order-point-before-amount-bits",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+        "value": "12345",
+        "blinding": "67890",
+        "amountBits": "255"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "verify-order-amount-bits-before-value",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "blinding": "67890",
+        "amountBits": "0"
+      },
+      "error": "INVALID_CONFIGURATION"
+    },
+    {
+      "name": "verify-order-check1-before-check2",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "18446744073709551616",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        "amountBits": "64"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-order-blinding-check1-before-equation",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "12346",
+        "blinding": "52435875175126190479447740508185965837690552500527637822603658699938581184513"
+      },
+      "error": "NON_CANONICAL_SCALAR"
+    },
+    {
+      "name": "verify-order-check2-before-equation",
+      "operation": "verifyOpening",
+      "input": {
+        "pointHex": "8c5b1e42a3912ecf2a2fc27a26ef67afd30799614ebfbd5dc7a2cb00e43b063a60a4d516007352cddecd632d2b758fc4",
+        "value": "18446744073709551616",
+        "blinding": "67890",
+        "amountBits": "64"
+      },
+      "error": "OUT_OF_RANGE"
+    },
+    {
+      "name": "decode-point-length-0",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": ""
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-0",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-47",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-47",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763180453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-49",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "80453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e00"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-49",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763180453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e00",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-32-jubjub-identity",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "0100000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-32-jubjub-identity",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76310100000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-length-96-uncompressed-g",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e0ab307006d17731edfeef508a959c6c43f6ad8f72d27af8aa0645356ffe864fd0ced6dfa806e5b2b63c8850f7cfb691c"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-length-96-uncompressed-g",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763100453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e0ab307006d17731edfeef508a959c6c43f6ad8f72d27af8aa0645356ffe864fd0ced6dfa806e5b2b63c8850f7cfb691c",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-compression-flag-clear-g",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "00453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-compression-flag-clear-g",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d763100453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-compression-flag-clear-all-zero",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-compression-flag-clear-all-zero",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-compression-flag-clear-infinity-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-compression-flag-clear-infinity-flag",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-infinity-with-sort-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-infinity-with-sort-flag",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-infinity-nonzero-last-bit",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-infinity-nonzero-last-bit",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-infinity-nonzero-bit-in-octet-0",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "c10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-infinity-nonzero-bit-in-octet-0",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631c10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-infinity-flag-on-g",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "c0453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-infinity-flag-on-g",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631c0453f5474382da080469962f6e656ba694287604b6fc18c26bfd2197b2c16644e56e5c43c76ba9869e960e3fd5c2f3e",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-x-equals-p",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-x-equals-p",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76319a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-x-equals-p-sort-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "ba0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-x-equals-p-sort-flag",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631ba0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-x-equals-p-plus-1",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaac"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-x-equals-p-plus-1",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76319a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaac",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-x-max-381-bit",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "9fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-x-max-381-bit",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76319fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-x-1-not-square",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-x-1-not-square",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-x-1-not-square-sort-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "envelope-decode-point-x-1-not-square-sort-flag",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "MALFORMED_ENCODING"
+    },
+    {
+      "name": "decode-point-order-3-x-0",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-3-x-0",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-order-3-x-0-sort-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-order-3-x-0-sort-flag",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-x-4-outside-subgroup",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-x-4-outside-subgroup",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-x-4-outside-subgroup-sort-flag",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-x-4-outside-subgroup-sort-flag",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-mixed-order-g-plus-order-3",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "b6ee2defa35097e6bbaea5ab251479b37157dedfcbc4b319181bf28298f048a66eb93dc0230190c18ae135644c2d3df4"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-mixed-order-g-plus-order-3",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d7631b6ee2defa35097e6bbaea5ab251479b37157dedfcbc4b319181bf28298f048a66eb93dc0230190c18ae135644c2d3df4",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "decode-point-mixed-order-h-plus-other-order-3",
+      "operation": "decodePoint",
+      "input": {
+        "pointHex": "8aef93dec0a8ff6fcb5b87590428bc0c62fa7d1a09ad20602aa9cb82f4869262bb9f873728bb7d50a6a60ba6b2ac8529"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    },
+    {
+      "name": "envelope-decode-point-mixed-order-h-plus-other-order-3",
+      "operation": "decodeEnvelope",
+      "input": {
+        "envelopeHex": "0118706564657273656e2d626c7331322d3338312d67312d76318aef93dec0a8ff6fcb5b87590428bc0c62fa7d1a09ad20602aa9cb82f4869262bb9f873728bb7d50a6a60ba6b2ac8529",
+        "expectedProfileId": "pedersen-bls12-381-g1-v1"
+      },
+      "error": "NOT_IN_SUBGROUP"
+    }
+  ]
+}

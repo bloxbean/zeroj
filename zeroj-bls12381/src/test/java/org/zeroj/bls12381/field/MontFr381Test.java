@@ -106,6 +106,15 @@ class MontFr381Test {
         assertThrows(ArithmeticException.class, () -> MontFr381.ZERO.inverse());
     }
 
+    /** ADR-0062 D8: a negative BigInteger exponent used to return a wrong value (pow(-1) = 1). */
+    @Test
+    void powBigInteger_rejectsNegativeExponent() {
+        var a = MontFr381.fromLong(42);
+        assertThrows(IllegalArgumentException.class, () -> a.pow(BigInteger.valueOf(-1)));
+        assertThrows(IllegalArgumentException.class, () -> a.pow(BigInteger.valueOf(-3)));
+        assertEquals(BigInteger.valueOf(42).pow(3), a.pow(BigInteger.valueOf(3)).toBigInteger());
+    }
+
     @Test
     void pow_zero_isOne() {
         var a = MontFr381.fromLong(42);

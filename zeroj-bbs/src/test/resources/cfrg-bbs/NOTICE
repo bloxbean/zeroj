@@ -1,0 +1,117 @@
+Third-party notice: CFRG BBS signature test vectors (draft-irtf-cfrg-bbs-signatures-10)
+====================================================================================
+
+The 61 JSON files under draft10/official/ are copied, unchanged, from the repository
+
+  https://github.com/decentralized-identity/bbs-signature
+  (commit dee425f810c276c751a6cd0c83addf4149f47cb1, 2024-06-03, directory
+  tooling/fixtures/fixture_data/)
+
+That commit is the latest one to change that directory, and every file is byte-identical to it
+(compared by git blob hash on 2026-10-25). They are not ZeroJ's work and are not covered by
+ZeroJ's own licence.
+
+They are the test fixtures of the Internet-Draft draft-irtf-cfrg-bbs-signatures-10, "The BBS
+Signature Scheme" (T. Looker, V. Kalos, A. Whitehead, M. Lodder, 8 January 2026). That repository
+is the drafts' source repository:
+
+  https://datatracker.ietf.org/doc/draft-irtf-cfrg-bbs-signatures/
+  https://www.ietf.org/archive/id/draft-irtf-cfrg-bbs-signatures-10.txt
+
+Credit for the fixtures belongs to the draft's authors and the contributors to that repository.
+
+
+Terms
+-----
+
+At the pinned commit, the repository is licensed under the Apache License, Version 2.0 (its
+LICENSE file):
+
+  https://github.com/decentralized-identity/bbs-signature/blob/dee425f810c276c751a6cd0c83addf4149f47cb1/LICENSE
+
+A copy of the Apache License, Version 2.0 is in licenses/Apache-2.0.txt at the root of the ZeroJ
+repository. The repository has no NOTICE file at that commit.
+
+The same values are published in the draft's sections 8.3 and 8.4 and Appendix D, which are
+subject to BCP 78 and the IETF Trust's Legal Provisions Relating to IETF Documents
+(https://trustee.ietf.org/license-info).
+
+
+Files
+-----
+
+Copied (SHA-256, paths relative to draft10/official/):
+
+  bls12-381-sha-256/MapMessageToScalarAsHash.json                  9bc985edaa26d4c008e11c92c9945098d7407ef3682a230cc53a76c4f14551ac
+  bls12-381-sha-256/generators.json                                6fdadb7935468abdbde3606b0adc4bd560b027b0221c53536cc8ff1abca0c6a3
+  bls12-381-sha-256/h2s.json                                       8876364b392284109a31e4f19a6f278ec89f9a666bfd37e79d8510aa93c3f5c3
+  bls12-381-sha-256/keypair.json                                   e1eacc2776dc625bb47400c38fe48b4642dd01285a8d9cc36dafad130ebcb110
+  bls12-381-sha-256/mockedRng.json                                 b1028723304b6a225033e82dfb879d31625bebcada662a58fe7820bac57941fd
+  bls12-381-sha-256/proof/proof001.json                            6210c761de88fbd5933a11169a5fc475425c45001667b7c416a68b5fcacf47bc
+  bls12-381-sha-256/proof/proof002.json                            76ce779cb083e8b542cc1f3cf9b9ad819ee716b6e2642ba7b5a6fca12851648a
+  bls12-381-sha-256/proof/proof003.json                            f8d5e429accacf9f5a38edc6d1447e27e73b3c5dd7a033877b4b3c25f3e77d07
+  bls12-381-sha-256/proof/proof004.json                            fac5bda0b4213b981d39b2426c5566df78dc1c84334b3bccdb93c9d2a7924283
+  bls12-381-sha-256/proof/proof005.json                            d44dd34fab9df691be19315d8521ac510e2ad9ea4851f6caf3dba0ca8f3eda63
+  bls12-381-sha-256/proof/proof006.json                            2a59585a2e3b4c98a606b5815197915ac798b26787a97d45e0d05db9a9c559e4
+  bls12-381-sha-256/proof/proof007.json                            d639630cb903da069efa804920e517c4f4c25a06aeb7698591395351c0676304
+  bls12-381-sha-256/proof/proof008.json                            caa7ab68b6967e0cc7b01f9b4131bfce791b169adb41e0df9db039a92b173bf5
+  bls12-381-sha-256/proof/proof009.json                            9f9acbcd02023327bcbe7fa68cde41131ba71f2a5dabc5e49ed9f2f2916cbcad
+  bls12-381-sha-256/proof/proof010.json                            88f45298e7df9959b3146b5dadedea2b7023ae3212505d33626d998ea8422fda
+  bls12-381-sha-256/proof/proof011.json                            f1d75ed33af104bf7d12b7810f73c8d1525c8f1fb137efadb31c61a0e860c050
+  bls12-381-sha-256/proof/proof012.json                            5fe01f26f4899337403a99952f32e03d8ba1b27afe0961452c6e6488708f187a
+  bls12-381-sha-256/proof/proof013.json                            d5b8458891b23f2cd64bbe23af74b60d6d84dc6047b2e70f909e5561298243e7
+  bls12-381-sha-256/proof/proof014.json                            d0ad2a93500744a67fe1e4fc04a043031cb16c9041dc874f880f8c4ef5b59341
+  bls12-381-sha-256/proof/proof015.json                            cb7d1489af09f06fe2b7c57beb9fa5d31ba87648c7035939ba64974d9b2c6741
+  bls12-381-sha-256/signature/signature001.json                    6fd73f64f4f34e252c1b2cda74906572f80fd542249838635bf82f65c2601ae9
+  bls12-381-sha-256/signature/signature002.json                    e37675375962837c5d4d9cde3adabdd162b271eab6dfde56fa9ae07eed3ae4dd
+  bls12-381-sha-256/signature/signature003.json                    a3a25309b6c14eed6c3244b0327513d0b726ef672a563c1c876475cb9db67c15
+  bls12-381-sha-256/signature/signature004.json                    75cfd86fb92c091070d3734f5ae181f71b97ea78f966a24805e1088c8f3b2951
+  bls12-381-sha-256/signature/signature005.json                    729450a28d70d17a37a73b54aba68110fba0b965c01ac9d458c6a2dd97dfaf35
+  bls12-381-sha-256/signature/signature006.json                    ef8a58b6bffa6538b16b30b7c85534b1d5c3df00e13e755fe1e27e098282104a
+  bls12-381-sha-256/signature/signature007.json                    a01a28e281a07611fcaa42fe11e45f5e43118dba4c7e196a5f194ddf6c447132
+  bls12-381-sha-256/signature/signature008.json                    afa33b538ccbebe847c7f5ad5574b02eecdd9e3fb4dcfe3654ceb0f68ea0c9ec
+  bls12-381-sha-256/signature/signature009.json                    88989a63b97680af8635be8bce7cdd6d7309e326bd40ef05263dfa1099147f5e
+  bls12-381-sha-256/signature/signature010.json                    293adb2b8a8c14b7be68554f2a957d2bab86117105399dea27c51ed88e306f46
+  bls12-381-shake-256/MapMessageToScalarAsHash.json                f428d301938898a69be43952be072d3e96b01a7779fe2261b6906545fe9b8078
+  bls12-381-shake-256/generators.json                              4679effe0f32060f2a9619a3dd8d7864eae6c09fd39de42a5f0a7d2377d3dcb9
+  bls12-381-shake-256/h2s.json                                     51d768969d3d038d140b62dff140ddbf59de842b3c511e38120d1d8b777f8fe1
+  bls12-381-shake-256/keypair.json                                 dae9f7637d1bf85f03cdc731faee1f4ea6743f8c2fb0185619c64319bf3652b1
+  bls12-381-shake-256/mockedRng.json                               a1efa27071970ac6f200ad7eec48ef0ba27246eae631a0321868d9ad549d09ef
+  bls12-381-shake-256/proof/proof001.json                          9d5dba92040019989ec504012b707a36f289374bc6f0d79e915196ac2fadfc2e
+  bls12-381-shake-256/proof/proof002.json                          7b97ad80bc448e51f3e127f67bc133a55a246efe1d881ffb71aef04d0b0f8f1f
+  bls12-381-shake-256/proof/proof003.json                          3f04fdb7b5e0c98549f51a696fc98c078007e2a4c35d4b7fa9603b0b3ed44730
+  bls12-381-shake-256/proof/proof004.json                          2bbeaffa930ef44ef700659f87194d56710994209b8081825d5a51771162a6e0
+  bls12-381-shake-256/proof/proof005.json                          4e6652047930f2fd62e21314b9e130d61e23e6668ade48664f4f3bd9ae8c3a8d
+  bls12-381-shake-256/proof/proof006.json                          173cca5e22f02d3ceebd528373cf7325546a18c04124dc5e13ddd4e2b295315e
+  bls12-381-shake-256/proof/proof007.json                          f5b929efc07ef317b8826e34494d6887731ad06047253a8c8f4ee4f476f82ad3
+  bls12-381-shake-256/proof/proof008.json                          5b4edad039cbfc5c7bac43040311ddf609ebaf66597ba05265d2536e79e5ce3c
+  bls12-381-shake-256/proof/proof009.json                          3789a3b7cfcc20d6baf4462bda376dd8b1fc2d6d4136026021ae86b73f903bb4
+  bls12-381-shake-256/proof/proof010.json                          e1250cab67fa226a55eb9891a33bcf04422522feced674be5e9f75c4160213b2
+  bls12-381-shake-256/proof/proof011.json                          7bfdbc0aa6b75afc9c8428fa403b0cd14ba4d6c6d43e2de50c6714ef7857176e
+  bls12-381-shake-256/proof/proof012.json                          14fe3446996f904313b38ce0f4668149a7ecffe5cd024fcc28ccc493d6c5a582
+  bls12-381-shake-256/proof/proof013.json                          eaec22e67e0aa01d4c2c0c70c9a342a4901108c32dd366bb9fd40a2085d07744
+  bls12-381-shake-256/proof/proof014.json                          f798376dd4e0c9ec59ee8f5d7cdd19da1951759c62ba7a26b78ea2c0fe5118a9
+  bls12-381-shake-256/proof/proof015.json                          de6d6440f72125878fe56fb3bb6305018225a0529ded9586465c1d37847c8f3d
+  bls12-381-shake-256/signature/signature001.json                  00c5efaef9db142c8e1ce38bf29782657cb26f561ba09f22af2c268783899490
+  bls12-381-shake-256/signature/signature002.json                  e31005bc946095fa137a6e9cf8bebe918eae1ea856a2e66ca0de8e11611281e7
+  bls12-381-shake-256/signature/signature003.json                  52229f8c90d25e790830c64716debca48cab0b1b1f63014376a82bdc5978f529
+  bls12-381-shake-256/signature/signature004.json                  4bfb4999a53f14ad8056d645b9e7f8fa16a403dae453bca199d8bdc7283b1c64
+  bls12-381-shake-256/signature/signature005.json                  2292d3f31d85825d1e782e31254fd4b6b91200c66cf996ada6c869a57fcd4b2c
+  bls12-381-shake-256/signature/signature006.json                  7d2192955cd70311329ba23d0d27605c5ceb954f9ef853b8b85b2a98e8b4499b
+  bls12-381-shake-256/signature/signature007.json                  d75e4b23e0bda01258e7cbac225e57b5b74259797719c0ab7865147a64046943
+  bls12-381-shake-256/signature/signature008.json                  d45607b2ea879d9172fd8d6438e7a24d3c4c711a71eecdfb8b7a31484dd4177e
+  bls12-381-shake-256/signature/signature009.json                  ec95ef803c5907003e944d0d75d1d5088847ce6484091114a01e405caa90acf5
+  bls12-381-shake-256/signature/signature010.json                  589fb57060fc329b2841b86661dfae9afae47e40bf2bf7370a32e1d78ea84b94
+  messages.json                                                    a33da6d8030986c94cab741d1b2a9ebbc168d0ba9206c2463eb9782f8131bd65
+
+Not copied: draft10/sha256.properties is ZeroJ's own transcription of the section 8.4
+(BLS12-381-SHA-256) values in the draft text, so it falls under the IETF terms above.
+SHA-256 b5c7419e502a7513c9bfa2f16c09274246f0f8ca57e219e4dc9027c3d2b969a8.
+
+
+Use in ZeroJ
+------------
+
+Test data only: CfrgBbsOfficialJsonFixtureTest, CfrgBbsDraft10VectorTest and
+BbsBlsProviderConformanceTest in zeroj-bbs read these files. They are test resources, so they are
+in no published ZeroJ artifact.

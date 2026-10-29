@@ -46,6 +46,64 @@ public final class Bls12381Codecs {
         return scalarToLittleEndian32(scalar.mod(Bls12381Generators.SCALAR_FIELD_ORDER));
     }
 
+    /**
+     * Canonical 32-octet big-endian scalar decoding ({@code I2OSP}/{@code OS2IP}, RFC 9380 §4):
+     * exactly 32 octets holding a value in {@code [0, r)}, where {@code r} is the order of G1.
+     * Never reduces. The input array is read, not retained.
+     *
+     * @throws NullPointerException     if {@code bytes} is null
+     * @throws IllegalArgumentException if the length is not 32 or the value is not below {@code r}
+     */
+    public static BigInteger scalarFromBigEndian32(byte[] bytes) {
+        requireLength(bytes, SCALAR_BYTES, "Scalar");
+        BigInteger scalar = new BigInteger(1, bytes);
+        if (scalar.compareTo(Bls12381Generators.SCALAR_FIELD_ORDER) >= 0) {
+            // Never echo the value: a scalar may be secret.
+            throw new IllegalArgumentException("Scalar is outside BLS12-381 Fr");
+        }
+        return scalar;
+    }
+
+    /**
+     * Canonical 32-octet big-endian scalar encoding, {@code I2OSP(scalar, 32)}, of a value in
+     * {@code [0, r)}. Never reduces. A {@link BigInteger} subclass is copied to a plain
+     * {@code BigInteger} once, and only the copy is checked and encoded. Intermediate octets are
+     * wiped; the caller owns the returned array.
+     *
+     * @throws NullPointerException     if {@code scalar} is null
+     * @throws IllegalArgumentException if the value is not in {@code [0, r)}
+     */
+    public static byte[] scalarToBigEndian32(BigInteger scalar) {
+        Objects.requireNonNull(scalar, "scalar required");
+        BigInteger value = plainCopy(scalar);
+        if (value.signum() < 0 || value.compareTo(Bls12381Generators.SCALAR_FIELD_ORDER) >= 0) {
+            throw new IllegalArgumentException("Scalar is outside BLS12-381 Fr");
+        }
+        byte[] raw = value.toByteArray();
+        try {
+            // Below r < 2^255: at most 32 octets, or 33 with a leading zero sign octet.
+            int skip = raw.length > SCALAR_BYTES ? raw.length - SCALAR_BYTES : 0;
+            int length = raw.length - skip;
+            byte[] out = new byte[SCALAR_BYTES];
+            System.arraycopy(raw, skip, out, SCALAR_BYTES - length, length);
+            return out;
+        } finally {
+            Arrays.fill(raw, (byte) 0);
+        }
+    }
+
+    private static BigInteger plainCopy(BigInteger x) {
+        if (x.getClass() == BigInteger.class) {
+            return x;
+        }
+        byte[] raw = x.toByteArray();
+        try {
+            return new BigInteger(raw);
+        } finally {
+            Arrays.fill(raw, (byte) 0);
+        }
+    }
+
     public static byte[] g1ToUncompressed(G1Point point) {
         Objects.requireNonNull(point, "point required");
         byte[] out = new byte[G1_UNCOMPRESSED_BYTES];
