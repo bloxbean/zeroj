@@ -4,6 +4,11 @@ Experimental Java-to-Wasm bindings under [ADR-0057](../docs/adr/0057-webassembly
 implemented in PR #92. See the [measured report](REPORT.md), [progress ledger](PROGRESS.md),
 [reviews](reviews/W4-W5.md) and [distribution status](DISTRIBUTION.md).
 
+The separate circuit-compiler stack adds [typed TS authoring and portable graph import](circuit/README.md)
+under [ADR-0064](../docs/adr/0064-portable-circuits-and-typescript-frontend.md).
+Its [plan](circuit/PLAN.md) distinguishes the implemented first slice from larger-key,
+Merkle and Cardano-application milestones.
+
 The adapters reuse ZeroJ's Java implementation. Typed ESM packages expose `Uint8Array`, `bigint`,
 Promises and worker-local handles. Browsers use Web Workers; Node uses worker threads. Importing
 an API or bundle descriptor does not fetch Wasm. An application explicitly selects its images.
@@ -26,9 +31,9 @@ cd ../..
 python3 bindings/wasm/check.py
 ```
 
-This opt-in check builds eight images (six consumer choices and two private entropy probes),
+This opt-in check builds nine images (seven consumer choices and two private entropy probes),
 generates development-only proof fixtures, runs adapter and SDK/browser tests, and installs
-15 local npm tarballs outside the workspace. It never publishes packages. The default Java
+local npm tarballs outside the workspace, including a separate compiler consumer. It never publishes packages. The default Java
 build/BOM/publication does not depend on Node, Binaryen or Web Image.
 
 After the check, from `bindings/js`:
@@ -79,8 +84,11 @@ To rerun the affected core regressions, see [REPORT.md](REPORT.md).
 | `@zeroj/elgamal` | `createElGamal` | `elgamal` / `bundle-confidential` |
 | `@zeroj/threshold` | `createThreshold` | `threshold` / `bundle-confidential` |
 | `@zeroj/confidential-notes` | `createConfidentialNotes` | `confidential-notes` / `bundle-confidential` |
+| `@zeroj/circuit` | `defineCircuit`, `createCircuitCompiler` | `circuit` / `bundle-circuit`; selected experimental graph/recipe compiler |
+| `@zeroj/circuit-lint` | `zeroj-circuit-lint` CLI | Type-aware authoring checks; no Wasm |
 
-`@zeroj/bundle-all` is optional: it supplies every capability through one image. Do not register
+`@zeroj/bundle-all` is optional: it combines the original cryptographic capabilities. The new
+compiler uses the separately selected `bundle-circuit`, which also supplies verification. Do not register
 it together with a second provider for the same capability. Several wrappers can share a single
 runtime/image; they do not dynamically link Java heaps across images. Default package imports
 never select or download all images for you. The two probe packages are test-only.

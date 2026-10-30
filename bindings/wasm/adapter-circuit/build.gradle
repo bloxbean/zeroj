@@ -1,0 +1,33 @@
+dependencies {
+    implementation project(':adapter-groth16')
+    api 'org.zeroj:zeroj-circuit-dsl:0.1.0'
+    implementation 'org.zeroj:zeroj-circuit-annotation-api:0.1.0'
+    implementation 'org.zeroj:zeroj-circuit-lib:0.1.0'
+    implementation 'org.zeroj:zeroj-crypto:0.1.0'
+    testAnnotationProcessor 'org.zeroj:zeroj-circuit-annotation-processor:0.1.0'
+}
+test {
+    maxHeapSize = '2g'
+    inputs.files(fileTree('build/recipes') { include '*.json' })
+    outputs.dir('build/symbolic-test-vectors')
+}
+tasks.register('fixtures', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.circuit.Fixtures'
+    maxHeapSize = '2g'
+    args rootProject.file('../js/build/circuit').absolutePath
+}
+
+tasks.register('exportRecipe', JavaExec) {
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.circuit.ExportCircuit'
+    maxHeapSize = '2g'
+    doFirst {
+        if (!project.hasProperty('recipeFile') || !project.hasProperty('artifactDir'))
+            throw new GradleException('Set -PrecipeFile and -PartifactDir (relative to bindings/wasm or absolute)')
+        args rootProject.file(project.property('recipeFile')).absolutePath,
+                rootProject.file(project.property('artifactDir')).absolutePath
+    }
+}

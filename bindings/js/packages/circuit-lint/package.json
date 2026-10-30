@@ -1,0 +1,26 @@
+{
+  "name": "@zeroj/circuit-lint",
+  "version": "0.1.0-experimental.1",
+  "type": "module",
+  "description": "Experimental type-aware circuit authoring lint (not a JavaScript sandbox)",
+  "license": "MIT",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "bin": {
+    "zeroj-circuit-lint": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

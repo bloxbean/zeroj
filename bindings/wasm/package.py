@@ -60,7 +60,11 @@ for name in args.profiles:
     if not (home/'LICENSE.txt').is_file(): raise SystemExit('Set GRAALVM_HOME when packaging to preserve compiler notices')
     legal=package/'third-party';legal.mkdir(exist_ok=True)
     shutil.copyfile(home/'LICENSE.txt',legal/'Oracle-GraalVM-GFTC.txt')
-    shutil.copytree(home/'legal',legal/'graalvm-legal',dirs_exist_ok=True)
+    # GraalVM notices include read-only files. Recreate this generated subtree so
+    # a second packaging run need not overwrite those files in place.
+    legal_tree=legal/'graalvm-legal'
+    if legal_tree.exists(): shutil.rmtree(legal_tree)
+    shutil.copytree(home/'legal',legal_tree)
     shutil.copyfile(ROOT/'licenses/Apache-2.0.txt',legal/'Apache-2.0.txt')
     (legal/'graalvm-release.txt').write_text((home/'release').read_text())
     for entry in (HERE/'bundles/build/classpath.txt').read_text().split(os.pathsep):

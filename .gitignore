@@ -75,6 +75,7 @@ Thumbs.db
 
 ### Development planning (not part of the source) ###
 plan.md
+!/bindings/circuit/PLAN.md
 /.playwright-mcp/
 
 ### Durable local benchmark datasets (not removed by Gradle clean) ###

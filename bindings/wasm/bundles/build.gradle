@@ -28,3 +28,5 @@ tasks.register('confidentialFixtures', JavaExec) {
     maxHeapSize = '6g'
     args rootProject.file('../js/build/confidential').absolutePath
 }
+
+dependencies { implementation project(':adapter-circuit') }

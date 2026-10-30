@@ -5,6 +5,7 @@ import argparse, hashlib, json, os, subprocess, time
 ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / 'bindings/wasm'
 PROFILES = {'hash': ('HashWeb', ['hash']), 'probe': ('PlatformProbeWeb', ['probe']),
+            'circuit': ('CircuitWeb', ['circuit','groth16-verifier']),
             'crypto': ('CryptoWeb', ['bbs','pedersen']),
             'all': ('AllWeb', ['hash','pedersen','bbs','groth16-verifier','groth16-prover','elgamal','threshold','confidential-notes']),
             'confidential': ('ConfidentialWeb', ['elgamal','threshold','confidential-notes']),
@@ -54,6 +55,8 @@ for name in args.profiles or ['hash']:
          '-H:AbortOnTypeReachable=org.zeroj.blst.*',
          '-H:AbortOnTypeReachable=supranational.blst.*',
          '-H:AbortOnTypeReachable=org.zeroj.crypto.setup.*',
+         '-H:AbortOnTypeReachable=org.zeroj.bindings.circuit.Fixtures',
+         '-H:AbortOnTypeReachable=org.zeroj.bindings.circuit.ExportCircuit',
          'org.zeroj.bindings.bundles.'+entry], folder/'compile.log')
     metadata = {'profile': name, 'capabilities': capabilities, 'apiVersion': 1,
                 'graalvm': '25.3.4.1+1.1', 'binaryen': binaryen, 'classpathAndBuildSha256': inputs.hexdigest(),

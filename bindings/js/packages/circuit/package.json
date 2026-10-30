@@ -1,0 +1,35 @@
+{
+  "name": "@zeroj/circuit",
+  "version": "0.1.0-experimental.1",
+  "type": "module",
+  "description": "Experimental typed circuits and portable R1CS compilation in ZeroJ Wasm",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./graph": {
+      "types": "./dist/builder.d.ts",
+      "import": "./dist/builder.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "dependencies": {
+    "@zeroj/runtime": "0.1.0-experimental.1",
+    "@zeroj/groth16-verifier": "0.1.0-experimental.1"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
