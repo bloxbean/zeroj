@@ -29,6 +29,14 @@ code compiled *to* WebAssembly or to a native library.
   `65412c40ed1b6397ecfeb654e7bff547f6ea5b96`. Follow-up research supersedes the monolithic POC.
 - **r1 (2026-10-13):** first version, written from the proof of concept described in §Evidence.
 
+## Circuit compilation follow-up
+
+[ADR-0064](0064-portable-circuits-and-typescript-frontend.md) accepts a bounded portable
+graph/recipe compiler and typed TS frontend in a separate stack above this ADR’s PR #92.
+It supersedes the runtime-circuit exclusion only for its enumerated vocabulary.
+The first promotion retains the existing proving limits; broader gadget proving and
+Cardano application integration follow its explicit milestone gates.
+
 ## r2 implementation decisions (governing)
 
 ### Scope, evidence and limits

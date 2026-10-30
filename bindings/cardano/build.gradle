@@ -1,0 +1,25 @@
+plugins { id 'java'; id 'application' }
+repositories {
+    // Commit-pinned JuLC experiment is installed from source; not a public release.
+    mavenLocal { content { includeGroup "org.julclang" } }
+    mavenCentral()
+    maven { url 'https://central.sonatype.com/repository/maven-snapshots' }
+    maven { url 'https://repo.bloxbean.org/maven/snapshots' }
+}
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+// Isolated experimental runner: no change to the core module's pinned compiler profile.
+def julc = '0.1.0-pre20-c3a31c2-SNAPSHOT'
+dependencies {
+    implementation 'org.zeroj:zeroj-onchain-julc:0.1.0'
+    implementation "org.julclang:julc-compiler:${julc}"
+    implementation "org.julclang:julc-cardano-client-lib:${julc}"
+    implementation "org.julclang:julc-vm-java:${julc}"
+    implementation 'com.bloxbean.cardano:cardano-client-lib:0.8.0-pre7'
+    implementation 'com.bloxbean.cardano:cardano-client-backend-blockfrost:0.8.0-pre7'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+}
+application { mainClass = 'org.zeroj.bindings.cardano.AllowlistDevnet' }
+tasks.named('run') {
+    workingDir rootProject.file('../..')
+    maxHeapSize = '2g'
+}

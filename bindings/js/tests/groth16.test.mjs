@@ -31,6 +31,10 @@ test('supplied-key Wasm proofs verify independently in snarkjs and vice versa',a
   const description=await p.describe(meta.circuit);assert.equal(description.fingerprint,meta.fingerprint);
   await assert.rejects(p.loadKey({...input,expectedSha256:new Uint8Array(32)}),{code:'INVALID_PROVING_KEY'});
   await assert.rejects(p.loadKey({...input,fingerprint:'untrusted'}),{code:'CIRCUIT_MISMATCH'});
+  // The compiler's chunk profile must not widen the standalone prover or JSON byte cap.
+  await assert.rejects(p.loadKey({...input,zkey:new Uint8Array(262145)}),{code:'INVALID_BYTES'});
+  await assert.rejects(runtime.call('groth16-prover','loadKey',{
+    ...input,zkey:'00'.repeat(262145),expectedSha256:meta.sha256}),{code:'INVALID_REQUEST'});
   const key=await p.loadKey(input);
   const start=performance.now(),result=await p.proveCubic(key,3n),elapsed=performance.now()-start;
   assert.deepEqual(result.publicInputs,[35n]);

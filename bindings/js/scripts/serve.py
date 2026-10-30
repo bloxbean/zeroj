@@ -11,7 +11,7 @@ args=parser.parse_args()
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self,*args): pass
     def end_headers(self):
-        html=(ROOT/'examples/browser/index.html').read_text()
+        html='\n'.join(p.read_text() for p in sorted((ROOT/'examples').glob('*/index.html')))
         maps=re.findall(r'<script type="importmap">(.*?)</script>',html,re.S)
         hashes=' '.join("'sha256-"+base64.b64encode(hashlib.sha256(m.encode()).digest()).decode()+"'" for m in maps)
         self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval' "+hashes+"; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")

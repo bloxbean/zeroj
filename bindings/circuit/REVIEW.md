@@ -1,0 +1,160 @@
+# First compiler milestone — implementation review
+
+**Historical M1 review; later milestone self-reviews are appended below.**
+
+2026-10-30. This is an implementation self-review. Independent review remains a draft-PR gate;
+no audit, production, constant-time or post-quantum claim is made.
+
+## Boundaries checked
+
+- Graph and recipe tags, explicit compiler policy, fixed canonical order, canonical scalars,
+  field profiles, input ordering, bounded parsing and references. Existing Java operations
+  determine constraints; raw/custom/multi-output hints are excluded.
+- Five recipe expansions match separately authored Java annotation graphs/fingerprints/full
+  witnesses. The operation exercise covers every exposed primitive. Standard hash host oracles
+  and snarkjs provide additional checks; shared-Java parity alone is not cryptographic assurance.
+- The compiler accepts expected graph/fingerprint identities before retaining an object that
+  can receive private input. These values must be selected by the trusted application; a digest
+  accompanying attacker-selected content does not authenticate its meaning.
+- Private operations preserve entropy/experimental-secret opt-in. No consumer witness digest
+  or witness vector export remains. Diagnostics contain public metadata and timings only.
+- Compiled handles own their proving-key handles. Closing a circuit releases Java key objects;
+  keys cannot prove through another typed circuit/runtime. Runtime disposal remains the way to
+  interrupt an active computation; compiled.dispose() releases resources through the queue.
+- The common session release helper preserves prior behavior and allows composite resources
+  to release their children. No prover equations, curve/field code or key parser was modified.
+- Build-time recipe export uses existing R1CS export and no setup/witness code. Reachability
+  guards exclude it, fixture generation, setup and native blst from the consumer image.
+
+## Findings resolved during implementation
+
+1. Research recipe decoding accepted alternate object-key ordering. The promoted canonical
+   recipe rebuilds root/input records and compares exact text; negative tests cover alternatives.
+2. Research witness digests were useful fixture diagnostics but unsuitable for a consumer API.
+   They are now confined to test source sets; checkWitness returns only validity and timings.
+3. Circuit disposal initially needed owned-key cleanup. The Java state tracks its retained keys
+   and closes them via BindingSession.release; the TS lifecycle rejects foreign/closed handles.
+4. TS-only authors need public artifact identities before browser private work. A build-time
+   recipe exporter now emits graph/R1CS/manifest without requiring a Java companion circuit.
+5. Repeat packaging failed because GraalVM legal files copy as read-only. Packaging recreates
+   only its generated legal-notice subtree, preserving the original notices unchanged.
+6. The first Node oracle test used a different snarkjs module path from worker cleanup and left
+   oracle workers alive. It now uses the existing CommonJS dependency consistently and terminates
+   the matching curve workers; the test process exits normally.
+7. Gradle parity tests declare exported TS recipes as inputs and diagnostic vectors as outputs.
+   Changing only the TS frontend therefore invalidates cached Java parity checks.
+
+## Remaining gates
+
+The initial promotion is deliberately bounded. Arrays/bits and schema convenience, generated
+operation catalogs, full ESLint integration, richer source diagnostics, larger-key transfer and
+hard resource accounting remain tracked in PLAN.md. The present estimates and caps are not a
+proof of hostile-input heap containment. No test here validates a larger browser proving workload.
+
+The importer still requires application-trusted keys/VKs and self-verifies generated proofs.
+Its inherited production key/ceremony consistency gaps are not resolved by this frontend.
+A mismatched but structurally valid VK can be detected at proof self-verification; no rejected
+proof is returned. Official gadget assurance, independent review, mobile/Safari validation and
+release/distribution review remain necessary. Real Cardano application authorization/replay/state
+checks and Yaci measurements belong to a later milestone.
+
+
+## M2 bounded key loading — follow-up self-review
+
+- Separate compiler-only 2 MiB policy; original standalone key and global JSON/string caps
+  remain in place. Wire/domain/coefficient budgets and point/subgroup checks are unchanged.
+- Small metadata/identity/VK shape are validated before an exact-sized staging reservation.
+  No concatenated full-key hex string or second assembled binary array in Java. One upload
+  and one lifetime successful key per compiled worker bound retained key growth.
+- Upload handles belong to a compiled state. Bad owned chunks/finish release the reservation;
+  malformed outer requests cannot dispatch cleanup, but cannot exceed the one-upload bound.
+  Aborting/releasing the upload or closing the circuit releases its buffer. Successful finish
+  retains no upload buffer; the existing parser owns only its normal parsed objects.
+- Failed imports cannot consume the one-key slot. Digest, canonical coordinate, forbidden
+  infinity, G1 non-subgroup (order-three point), dimension and relation negatives use real
+  snarkjs keys, with recomputed hashes where parser validation must be reached.
+- AbortSignal during loading terminates all runtime workers/handles; queued release alone
+  cannot interrupt synchronous Java import. Node and both browser tests exercise actual
+  cancellation. Deadline failure also invalidates handles. Pre-abort leaves the runtime usable.
+- Review caught missing import timing/byte accounting in the legacy direct-request path.
+  Both import paths now use the same state update and the compatibility test covers it.
+- Imported-key reuse avoids repeating validation; no trusted-point cache or skipped check
+  was introduced. Public counters measure transport only; sampled RSS and JVM allocation
+  observations are labeled separately in M2-KEY-LOADING.md.
+- No equations, core compiler, randomness provider, key parser or curve arithmetic changed.
+  This self-review does not satisfy the independent reviewer/audit gate for draft PR #116.
+
+M2 does not prove hostile-input heap containment, stable p95 on real devices, Safari support,
+large SHA/Merkle feasibility, full ceremony/key-consistency assurance, or production security.
+
+
+## M3 arrays/Merkle and bounded Cardano example — follow-up self-review
+
+- R2 design was appended to ADR-0064 before implementation. The new recipe vocabulary has its
+  own version; scalar/byte-only definitions retain their exact v1 bytes. Java rejects v2 features
+  in v1, noncanonical descriptor order, nested/byte arrays, forged depth/type/shape and collisions.
+- Logical input IDs remain separate from flattened wire names. Public declarations precede
+  private ones. Array widths/ranges are accounted for in preflight; actual lengths are checked
+  against the claimed Merkle depth before expansion. Static `.get()` cannot select by a witness.
+- TS schemas copy/freeze the nested element descriptor; symbolic arrays use recorder ownership.
+  A caught shape/index/type error invalidates the recorder. Java enforces types independently.
+- Existing `ZkArray`, `ZkMerkle`, boolean/range types and Poseidon parameters provide all gadget
+  semantics. The Java selection path emits already-admitted gates; raw Select/hints were not
+  added to the graph codec. Core cryptographic code and the R1CS compiler are untouched.
+- Exact Java annotation parity initially exposed the processor's default singularization of
+  array names. Explicit `@Secret(name=...)` declarations now match TS flattened names exactly;
+  this required no processor or compiler change.
+- Negative tests reach the actual Wasm boundary as well as TS validation. The raw boolean-bit
+  rejection is preceded by a successful raw witness check on the same handle, avoiding a false
+  pass caused only by an invalid handle. Field/bool/UInt array indexing executes in Wasm.
+- Circuit identity, setup/VK authentication, byte/wire/domain/coefficient caps, importer checks,
+  WebCrypto entropy and worker cancellation remain inherited. Depth-2 key loading fits by only
+  8,033 bytes; no larger-key or production feasibility is inferred.
+- The Cardano example pins root and signer and checks the claim action separately from proof
+  validity. A valid alternate-root proof passes snarkjs first, then fails the application policy.
+  The signer authorizes arbitrary transaction outputs; no payout restriction is implied.
+- Four signed invalid claims reject phase 2. A different transaction ID spending the same UTxO
+  rejects after the valid claim confirms. The first harness expected `BadInputsUTxO`, whereas the
+  local node returned `ConwayMempoolFailure: All inputs are spent`; the assertion now accepts and
+  records those specific spent-input failures. Identical-transaction resubmission is not used as
+  evidence. The protocol deliberately permits membership-proof reuse on fresh deposits.
+- The runner is opt-in, loopback-only and uses ephemeral test wallet keys without logging or
+  saving them. Its commit-pinned experimental JuLC profile is isolated from core dependency
+  versions. Raw vectors/keys/transactions/logs/images stay ignored; curated measurements remain.
+- Browser results now show compact phase/count summaries, with full identities/resources under
+  expandable details. This avoids flooding the tutorial with 32-level flattened path names.
+
+This remains a self-review, not an independent audit. Large browser proving, hostile-input heap
+containment, actual mobile/Safari, ceremony consistency, runtime side channels, other Poseidon
+profiles, nullifier/private-state protocols and release gates remain open. See M3-MERKLE.md.
+
+
+## Larger-Merkle resource experiment — follow-up self-review
+
+- R2 resource-profile design precedes implementation in ADR-0064. Java fixes an immutable policy;
+  untrusted RPC cannot set it. Normal limits, graph/compiler identity, cryptographic parameters,
+  standalone prover and direct-load caps remain unchanged.
+- Review tightened profile ownership: both allocation and import use the policy on the owning
+  circuit state, even if a future Java session invokes another adapter instance. A regression
+  test rejects using a research adapter to enlarge a normal state's reservation.
+- Compile dimensions reject before staging. Actual key bytes/wires/domain/coefficients still
+  pass through the unchanged bounded importer. A shape flag does not guarantee a key fits all
+  limits. The research policy does not certify arbitrary relations as Merkle circuits.
+- Research entry point has its own Gradle source set. Build rejects mixed consumer/research
+  profile selection; packaging requires explicit research output outside npm workspace. Existing
+  reachability and legal-notice checks remain active. No generated key/image/result is tracked.
+- The driver preserves an original timeout/failure if disposal also fails; cancelling invalidates
+  the runtime. The actual UI tests cancel loading, restore controls, and prove using a fresh
+  runtime. Default-policy rejection, malformed-key cleanup and import cancellation also execute
+  against the final image. Browser benchmark retries remove stale proof files and record failures.
+- Five engines × three depths cross-verify with independent snarkjs and the JVM; changed roots
+  reject. Invalid paths/witnesses reject in the measured drivers. JVM 6g/8g and Node RSS are
+  reported separately, with no invented browser peak-memory or retained-key claim.
+- JFR identifies cumulative allocation during required subgroup checks. The read-only zero-column
+  census and compressed-file sizes are evidence for further work, not implemented cryptographic
+  shortcuts. Core wire mapping/fingerprints/setup were not changed.
+
+This self-review does not satisfy independent review/audit gates. Measurements demonstrate the
+bounded desktop experiment only. Default promotion, hostile-input containment, actual mobile/
+Safari, secret-dependent timing, production ceremony assurance and private-state protocols remain
+open. See [M3-LARGE-MERKLE.md](M3-LARGE-MERKLE.md) and [the core proposal](WIRE-COMPACTION-PLAN.md).

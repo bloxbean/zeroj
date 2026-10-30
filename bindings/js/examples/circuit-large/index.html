@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZeroJ · Larger Merkle research</title><link rel="stylesheet" href="../browser/style.css">
+<script type="importmap">{"imports":{"@zeroj/runtime":"/packages/runtime/dist/index.js","@zeroj/circuit":"/packages/circuit/dist/index.js","@zeroj/groth16-verifier":"/packages/groth16-verifier/dist/index.js","@zeroj/bundle-circuit":"/packages/bundle-circuit/dist/index.js"}}</script>
+<script type="module" src="app.mjs"></script></head><body><main>
+<p class="eyebrow">ZEROJ · OPT-IN RESOURCE EXPERIMENT</p><h1>How deep can a browser prove?</h1>
+<p class="intro">Compile an existing Java Poseidon Merkle relation, load its development key, and generate a fresh proof locally. This page selects a separate research image. Normal SDK limits remain unchanged.</p>
+<p class="notice">Published test witnesses and disposable setup. Experimental secret operations; no production, anonymity or post-quantum claim. Key loading may take several minutes and consume substantial memory. No inputs are uploaded.</p>
+<section><h2>Choose a fixed tree depth</h2><p>A depth-8 tree has 256 positions, depth 16 has 65,536, and depth 32 has about 4.3 billion. Only the membership path is processed here; the full tree is not built or stored.</p>
+<p>The experiment admits at most a 32 MiB key, 65,536 wires, 8,192 domain cells and 262,144 coefficient entries. These are admission limits, not a total memory guarantee.</p>
+<button data-depth="8">Depth 8</button><button data-depth="16">Depth 16</button><button data-depth="32">Depth 32</button>
+<button id="cancel" disabled>Cancel and close worker</button>
+<pre id="result" aria-live="polite">Select a depth. Build the research assets and fixtures first.</pre>
+<details id="details" hidden><summary>Full public identities and resource measurements</summary><pre id="full-result"></pre></details>
+</section><p><a href="../circuit/">Return to the default compiler examples</a></p>
+</main></body></html>

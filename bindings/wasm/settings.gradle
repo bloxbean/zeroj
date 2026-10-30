@@ -1,4 +1,4 @@
 rootProject.name = 'zeroj-web-bindings'
 includeBuild('../..')
 include 'adapter-common', 'adapter-hash', 'adapter-pedersen', 'adapter-bbs',
-        'adapter-groth16', 'adapter-elgamal', 'adapter-threshold', 'adapter-notes', 'bundles'
+        'adapter-circuit', 'adapter-groth16', 'adapter-elgamal', 'adapter-threshold', 'adapter-notes', 'bundles'

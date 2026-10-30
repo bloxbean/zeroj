@@ -4,10 +4,21 @@ Experimental Java-to-Wasm bindings under [ADR-0057](../docs/adr/0057-webassembly
 implemented in PR #92. See the [measured report](REPORT.md), [progress ledger](PROGRESS.md),
 [reviews](reviews/W4-W5.md) and [distribution status](DISTRIBUTION.md).
 
+The separate circuit-compiler stack adds [typed TS authoring and portable graph import](circuit/README.md)
+under [ADR-0064](../docs/adr/0064-portable-circuits-and-typescript-frontend.md).
+Its [plan](circuit/PLAN.md) tracks completed slices and remaining gates.
+[Measured Merkle support](circuit/M3-MERKLE.md) includes depth-1/2 browser proofs and a
+[local Cardano claim](cardano/README.md); larger trees remain compile/witness-only in the default profile.
+
 The adapters reuse ZeroJ's Java implementation. Typed ESM packages expose `Uint8Array`, `bigint`,
 Promises and worker-local handles. Browsers use Web Workers; Node uses worker threads. Importing
 an API or bundle descriptor does not fetch Wasm. An application explicitly selects its images.
 No JVM is needed at runtime. These images require a JavaScript host and are not generic WASI modules.
+
+The opt-in [larger-Merkle experiment](circuit/M3-LARGE-MERKLE.md) also measures depths 8/16/32
+in Node, Chromium, Firefox and the JVM at 6g/8g. It uses a separate research image outside npm
+packages; normal SDK limits are unchanged. Key import takes minutes, so these results establish
+desktop research feasibility rather than supported large-circuit browser performance.
 
 ## Build and try it
 
@@ -26,9 +37,9 @@ cd ../..
 python3 bindings/wasm/check.py
 ```
 
-This opt-in check builds eight images (six consumer choices and two private entropy probes),
+This opt-in check builds nine images (seven consumer choices and two private entropy probes),
 generates development-only proof fixtures, runs adapter and SDK/browser tests, and installs
-15 local npm tarballs outside the workspace. It never publishes packages. The default Java
+local npm tarballs outside the workspace, including a separate compiler consumer. It never publishes packages. The default Java
 build/BOM/publication does not depend on Node, Binaryen or Web Image.
 
 After the check, from `bindings/js`:
@@ -79,8 +90,11 @@ To rerun the affected core regressions, see [REPORT.md](REPORT.md).
 | `@zeroj/elgamal` | `createElGamal` | `elgamal` / `bundle-confidential` |
 | `@zeroj/threshold` | `createThreshold` | `threshold` / `bundle-confidential` |
 | `@zeroj/confidential-notes` | `createConfidentialNotes` | `confidential-notes` / `bundle-confidential` |
+| `@zeroj/circuit` | `defineCircuit`, `createCircuitCompiler` | `circuit` / `bundle-circuit`; selected experimental graph/recipe compiler |
+| `@zeroj/circuit-lint` | `zeroj-circuit-lint` CLI | Type-aware authoring checks; no Wasm |
 
-`@zeroj/bundle-all` is optional: it supplies every capability through one image. Do not register
+`@zeroj/bundle-all` is optional: it combines the original cryptographic capabilities. The new
+compiler uses the separately selected `bundle-circuit`, which also supplies verification. Do not register
 it together with a second provider for the same capability. Several wrappers can share a single
 runtime/image; they do not dynamically link Java heaps across images. Default package imports
 never select or download all images for you. The two probe packages are test-only.
@@ -122,12 +136,15 @@ Fr profile (t=3, alpha=5, RF=8, RP=57), rejects non-canonical scalars and requir
 secret-path opt-in because its Java arithmetic is variable-time.
 
 None of these ordinary calls builds ZK constraints. SHA-2/Poseidon circuit gadgets remain Java
-circuit components. The shipped prover demonstrates `y = x³ + x + 5` with private x. Custom
+circuit components. The standalone prover package demonstrates `y = x³ + x + 5` with private x. Custom
 small circuits implement [CompiledCircuit](wasm/adapter-groth16/src/main/java/org/zeroj/bindings/groth16/CompiledCircuit.java),
 register in a Java entry point, and compile into an explicit image. Import a ceremony key pinned
 by trusted hash and exact fingerprint; do not implement setup in the consumer image. The existing
 Java witness/circuit APIs can be used by a custom adapter. The current typed convenience method
-is `proveCubic`; the transport supports only the compiled adapter's allowlisted input contract.
+is `proveCubic`; that transport supports only the compiled adapter's allowlisted input contract.
+The separate `@zeroj/circuit` / `bundle-circuit` path also accepts authenticated portable graphs
+and typed recipes at runtime, including selected Poseidon/Merkle/SHA-256 gadgets. See the
+[circuit guide](circuit/README.md) for measured limits and artifact authentication.
 
 ## Deployment and bundlers
 
@@ -178,7 +195,8 @@ shows the policy without enabling general JavaScript `unsafe-eval`.
 | Boundary | Initial limit |
 |---|---|
 | Request JSON | 1,048,576 characters; depth 24; duplicate fields/trailing tokens rejected |
-| Byte array / proving key | 262,144 bytes |
+| Direct byte array / standalone proving key | 262,144 bytes |
+| Compiler proving key (`circuit-key-v1`) | 2 MiB total, 64 KiB chunks, one upload / one successful key per compiled circuit |
 | Key import allocations | <=4,096 wires, <=4,096 domain cells, <=16,384 coefficients; compiled relation must also match |
 | Groth16 public inputs | 64 |
 | BBS messages | 64, each <=4,096 bytes |

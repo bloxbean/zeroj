@@ -39,11 +39,7 @@ public final class BindingSession {
                     }
                     case "release" -> {
                         Boundary.fields(args,"handle");
-                        Object removed = handles.remove(Boundary.text(args,"handle"));
-                        if (removed instanceof AutoCloseable closeable) {
-                            try { closeable.close(); } catch (Exception e) { throw new BindingException("RELEASE_FAILED"); }
-                        }
-                        yield Boundary.object().put("released",removed != null);
+                        yield Boundary.object().put("released",release(Boundary.text(args,"handle")));
                     }
                     default -> throw new BindingException("UNSUPPORTED_OPERATION");
                 };
@@ -77,5 +73,13 @@ public final class BindingSession {
         Object value = handles.get(id);
         if (!type.isInstance(value)) throw new BindingException("INVALID_HANDLE");
         return type.cast(value);
+    }
+    /** Release a local object and its owned resources. No erasure guarantee. */
+    public boolean release(String id) {
+        Object removed = handles.remove(id);
+        if (removed instanceof AutoCloseable closeable) {
+            try { closeable.close(); } catch (Exception e) { throw new BindingException("RELEASE_FAILED"); }
+        }
+        return removed != null;
     }
 }
