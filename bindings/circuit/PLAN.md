@@ -201,6 +201,7 @@ Promote the recipe/graph contract and typed frontend in a new stack above #92, t
 
 - Base: PR #92 at `844a0625282cc87e77f3c85df1c1cbdd4cc86a3a`.
 - Branch: `feat/wasm-circuit-frontend`.
+- Tracking PR: [#116](https://github.com/bloxbean/zeroj/pull/116), draft and explicitly based on PR #92’s branch.
 - Governing security design: [ADR-0064](../../docs/adr/0064-portable-circuits-and-typescript-frontend.md).
 - First bounded milestone: promote graph codec, selected symbolic recipe dispatcher, typed compilation/proving lifecycle and authoring lint; retain the existing proving limits.
 - M1 initial slice implemented and validated: canonical graph/recipe contract; Java adapter and build-time artifact exporter; typed TS lifecycle/input conversion; CLI authoring lint; browser/Node examples; isolated local npm package test.
