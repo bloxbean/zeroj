@@ -8,12 +8,17 @@ The separate circuit-compiler stack adds [typed TS authoring and portable graph 
 under [ADR-0064](../docs/adr/0064-portable-circuits-and-typescript-frontend.md).
 Its [plan](circuit/PLAN.md) tracks completed slices and remaining gates.
 [Measured Merkle support](circuit/M3-MERKLE.md) includes depth-1/2 browser proofs and a
-[local Cardano claim](cardano/README.md); larger measured trees remain compile/witness-only.
+[local Cardano claim](cardano/README.md); larger trees remain compile/witness-only in the default profile.
 
 The adapters reuse ZeroJ's Java implementation. Typed ESM packages expose `Uint8Array`, `bigint`,
 Promises and worker-local handles. Browsers use Web Workers; Node uses worker threads. Importing
 an API or bundle descriptor does not fetch Wasm. An application explicitly selects its images.
 No JVM is needed at runtime. These images require a JavaScript host and are not generic WASI modules.
+
+The opt-in [larger-Merkle experiment](circuit/M3-LARGE-MERKLE.md) also measures depths 8/16/32
+in Node, Chromium, Firefox and the JVM at 6g/8g. It uses a separate research image outside npm
+packages; normal SDK limits are unchanged. Key import takes minutes, so these results establish
+desktop research feasibility rather than supported large-circuit browser performance.
 
 ## Build and try it
 

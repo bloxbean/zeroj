@@ -1,6 +1,6 @@
 # First compiler milestone — implementation review
 
-**Historical M1 review; M2 follow-up appears below.**
+**Historical M1 review; later milestone self-reviews are appended below.**
 
 2026-10-30. This is an implementation self-review. Independent review remains a draft-PR gate;
 no audit, production, constant-time or post-quantum claim is made.
@@ -127,3 +127,34 @@ large SHA/Merkle feasibility, full ceremony/key-consistency assurance, or produc
 This remains a self-review, not an independent audit. Large browser proving, hostile-input heap
 containment, actual mobile/Safari, ceremony consistency, runtime side channels, other Poseidon
 profiles, nullifier/private-state protocols and release gates remain open. See M3-MERKLE.md.
+
+
+## Larger-Merkle resource experiment — follow-up self-review
+
+- R2 resource-profile design precedes implementation in ADR-0064. Java fixes an immutable policy;
+  untrusted RPC cannot set it. Normal limits, graph/compiler identity, cryptographic parameters,
+  standalone prover and direct-load caps remain unchanged.
+- Review tightened profile ownership: both allocation and import use the policy on the owning
+  circuit state, even if a future Java session invokes another adapter instance. A regression
+  test rejects using a research adapter to enlarge a normal state's reservation.
+- Compile dimensions reject before staging. Actual key bytes/wires/domain/coefficients still
+  pass through the unchanged bounded importer. A shape flag does not guarantee a key fits all
+  limits. The research policy does not certify arbitrary relations as Merkle circuits.
+- Research entry point has its own Gradle source set. Build rejects mixed consumer/research
+  profile selection; packaging requires explicit research output outside npm workspace. Existing
+  reachability and legal-notice checks remain active. No generated key/image/result is tracked.
+- The driver preserves an original timeout/failure if disposal also fails; cancelling invalidates
+  the runtime. The actual UI tests cancel loading, restore controls, and prove using a fresh
+  runtime. Default-policy rejection, malformed-key cleanup and import cancellation also execute
+  against the final image. Browser benchmark retries remove stale proof files and record failures.
+- Five engines × three depths cross-verify with independent snarkjs and the JVM; changed roots
+  reject. Invalid paths/witnesses reject in the measured drivers. JVM 6g/8g and Node RSS are
+  reported separately, with no invented browser peak-memory or retained-key claim.
+- JFR identifies cumulative allocation during required subgroup checks. The read-only zero-column
+  census and compressed-file sizes are evidence for further work, not implemented cryptographic
+  shortcuts. Core wire mapping/fingerprints/setup were not changed.
+
+This self-review does not satisfy independent review/audit gates. Measurements demonstrate the
+bounded desktop experiment only. Default promotion, hostile-input containment, actual mobile/
+Safari, secret-dependent timing, production ceremony assurance and private-state protocols remain
+open. See [M3-LARGE-MERKLE.md](M3-LARGE-MERKLE.md) and [the core proposal](WIRE-COMPACTION-PLAN.md).

@@ -6,6 +6,7 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.zeroj.bindings.common.Adapter;
 import org.zeroj.bindings.common.BindingException;
@@ -13,14 +14,15 @@ import org.zeroj.bindings.common.BindingSession;
 import org.zeroj.bindings.common.Boundary;
 import org.zeroj.bindings.groth16.Groth16ProverAdapter;
 import org.zeroj.circuit.ConstraintGraph;
-import org.zeroj.crypto.groth16.ZkeyImporterBLS381;
 
 /** One compilation attempt per worker. ADR-0064; no source evaluation or witness export. */
 public final class CircuitAdapter implements Adapter {
     public static final int MAX_KEY_BYTES = 2 * 1024 * 1024;
     public static final int KEY_CHUNK_BYTES = 64 * 1024;
-    private static final ZkeyImporterBLS381.Limits KEY_LIMITS =
-            new ZkeyImporterBLS381.Limits(MAX_KEY_BYTES, 4096, 4096, 16384);
+    private final CircuitKeyProfile profile;
+    public CircuitAdapter() { this(CircuitKeyProfile.STANDARD); }
+    /** Trusted Java/image configuration, not an RPC option. */
+    public CircuitAdapter(CircuitKeyProfile profile) { this.profile = Objects.requireNonNull(profile); }
     private boolean consumed;
     private StringBuilder upload;
     private int expectedLength;
@@ -31,6 +33,7 @@ public final class CircuitAdapter implements Adapter {
         private CompiledGraph circuit;
         private Groth16ProverAdapter prover;
         private final BindingSession session;
+        private final CircuitKeyProfile profile;
         private final Set<String> keys = new HashSet<>();
         private KeyUpload upload;
         private String uploadId;
@@ -42,6 +45,10 @@ public final class CircuitAdapter implements Adapter {
         void available() {
             if (imported) throw new BindingException("KEY_LIMIT");
             if (upload != null && upload.bytes != null) throw new BindingException("UPLOAD_ACTIVE");
+        }
+        void requireDimensions() {
+            if (!profile.admits(circuit.numWires(), circuit.numPublic(), circuit.constraints().size()))
+                throw new BindingException("CIRCUIT_LIMIT");
         }
         void clearUpload() {
             if (uploadId != null) session.release(uploadId);
@@ -56,15 +63,18 @@ public final class CircuitAdapter implements Adapter {
             lastDomainSize = loaded.path("domainSize").asInt();
         }
         ObjectNode resources() {
-            return Boundary.object().put("profile", "circuit-key-v1")
+            return Boundary.object().put("profile", profile.id())
                     .put("reservedBytes", upload == null || upload.bytes == null ? 0 : upload.bytes.length)
                     .put("receivedBytes", upload == null || upload.bytes == null ? 0 : upload.received)
                     .put("peakStagingBytes", peakStagingBytes).put("importedKeys", imported ? 1 : 0)
-                    .put("maxKeyBytes", MAX_KEY_BYTES).put("chunkBytes", KEY_CHUNK_BYTES)
+                    .put("maxKeyBytes", profile.limits().maxBytes()).put("chunkBytes", KEY_CHUNK_BYTES)
+                    .put("maxWires", profile.limits().maxWires()).put("maxDomainSize", profile.limits().maxDomainSize())
+                    .put("maxCoefficients", profile.limits().maxCoefficients())
                     .put("lastImportMs", lastImportMs).put("lastKeyBytes", lastKeyBytes)
                     .put("lastDomainSize", lastDomainSize);
         }
-        State(CompiledGraph circuit, BindingSession session) {
+        State(CompiledGraph circuit, BindingSession session, CircuitKeyProfile profile) {
+            this.profile = profile;
             this.circuit = circuit;
             this.prover = new Groth16ProverAdapter(Map.of(circuit.id(), circuit));
             this.session = session;
@@ -160,7 +170,8 @@ public final class CircuitAdapter implements Adapter {
                 Boundary.fields(args, "circuit", "fingerprint", "length", "expectedSha256", "verificationKey");
                 var state = state(args, session);
                 state.available();
-                int length = Boundary.integer(args, "length", 1, MAX_KEY_BYTES);
+                state.requireDimensions();
+                int length = Boundary.integer(args, "length", 1, state.profile.limits().maxBytes());
                 ObjectNode metadata = args.deepCopy();
                 metadata.remove("length");
                 metadata.put("circuit", state.circuit.id());
@@ -195,7 +206,7 @@ public final class CircuitAdapter implements Adapter {
                     Boundary.fields(args, "circuit", "upload");
                     if (operation.equals("abortKey")) yield Boundary.object().put("aborted", true);
                     if (upload.received != upload.bytes.length) throw new BindingException("INCOMPLETE_KEY");
-                    JsonNode loaded = state.prover.loadKeyBytes(upload.metadata, upload.bytes, session, KEY_LIMITS);
+                    JsonNode loaded = state.prover.loadKeyBytes(upload.metadata, upload.bytes, session, state.profile.limits());
                     state.imported(loaded);
                     yield loaded;
                 } finally { if (!keep) state.clearUpload(); }
@@ -205,6 +216,7 @@ public final class CircuitAdapter implements Adapter {
                 Boundary.fields(args, "circuit", "fingerprint", "zkey", "expectedSha256", "verificationKey");
                 var state = state(args, session);
                 state.available();
+                state.requireDimensions();
                 ObjectNode forwarded = args.deepCopy();
                 forwarded.put("circuit", state.circuit.id());
                 JsonNode loaded = state.prover.invoke("loadKey", forwarded, session);
@@ -239,15 +251,16 @@ public final class CircuitAdapter implements Adapter {
         if (!GraphCodec.hash(encoded).equals(expectedGraphHash)) throw new BindingException("CIRCUIT_MISMATCH");
         var compiled = new CompiledGraph(graph);
         if (!compiled.fingerprint().equals(expectedFingerprint)) throw new BindingException("CIRCUIT_MISMATCH");
-        String handle = session.retain(new State(compiled, session));
+        String handle = session.retain(new State(compiled, session, profile));
         var result = Boundary.object().put("handle", handle).put("compiler", GraphCodec.COMPILER)
                 .put("graphSha256", expectedGraphHash).put("fingerprint", compiled.fingerprint())
                 .put("name", compiled.id()).put("wires", compiled.numWires())
                 .put("constraints", compiled.constraints().size()).put("publicInputs", compiled.numPublic())
-                .put("compileMs", compiled.compileMs).put("maxKeyBytes", MAX_KEY_BYTES)
-                .put("keyChunkBytes", KEY_CHUNK_BYTES).put("keyProfile", "circuit-key-v1")
-                .put("withinProverDimensions", compiled.numWires() <= 4096 && compiled.numPublic() <= 64
-                        && compiled.constraints().size() + compiled.numPublic() + 1 <= 4096);
+                .put("compileMs", compiled.compileMs).put("maxKeyBytes", profile.limits().maxBytes())
+                .put("keyChunkBytes", KEY_CHUNK_BYTES).put("keyProfile", profile.id())
+                .put("maxWires", profile.limits().maxWires()).put("maxDomainSize", profile.limits().maxDomainSize())
+                .put("maxCoefficients", profile.limits().maxCoefficients())
+                .put("withinProverDimensions", profile.admits(compiled.numWires(), compiled.numPublic(), compiled.constraints().size()));
         var pub = result.putArray("publicNames");
         graph.publicInputs().forEach(v -> pub.add(v.name()));
         var sec = result.putArray("secretNames");

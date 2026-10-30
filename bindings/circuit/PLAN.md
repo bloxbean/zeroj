@@ -227,3 +227,16 @@ Promote the recipe/graph contract and typed frontend in a new stack above #92, t
   Next resource work is profiling larger keys/graphs and evaluating separately reviewed core wire
   compaction, before broadening the browser proving profile. Other Poseidon profiles, SHA-512 and
   BLAKE2b still require their own measured slices. M1 catalog/lint/diagnostic work remains open.
+
+
+- M3 larger-Merkle resource experiment completed: separate Java-selected 32 MiB / 65,536-wire /
+  8,192-domain / 262,144-coefficient policy, excluded from consumer npm packaging. Defaults and
+  core cryptography/compiler remain unchanged. Depths 8/16/32 now prove and cross-verify in Node,
+  Chromium, Firefox, and JVM at 6g/8g. Import dominates startup; no OOM in the measured matrix.
+- [Larger-Merkle report](M3-LARGE-MERKLE.md) records all phase timings, JVM heap/Node RSS scope,
+  JFR allocation attribution, negative tests and local browser controls. These are shared-host
+  feasibility samples, not stable p95, browser peak-memory or production evidence.
+- Read-only wire/query census and compressed-file measurements motivate the
+  [separate core compaction proposal](WIRE-COMPACTION-PLAN.md). No compaction, validation shortcut,
+  new compressed loader, larger-depth Cardano measurement or default-limit increase is included.
+  Remaining M1/M4/M6/device/audit gates still apply; the overall roadmap is not complete.

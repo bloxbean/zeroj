@@ -237,3 +237,46 @@ accounting, fuzz/property coverage, independent review, Safari/real-device valid
 explicit stable-format compatibility and artifact distribution review. The bounded arrays/Merkle
 and local Cardano slices are recorded in `bindings/circuit/M3-MERKLE.md`; broader SHA-2/BLAKE2b,
 other Poseidon profiles, EC relations and richer application protocols remain in the plan.
+
+## M3 larger-Merkle resource experiment (2026-10-30)
+
+R2 extension, after the bounded M3 result at `219a27b8420bdd50740f5f5caabaf64b8bc1ff41`.
+The question is whether existing Java code can prove deeper trees with explicitly larger
+resource budgets, without changing cryptography or the default SDK's admission policy.
+Depth-2 metadata measures 13,007 coefficient entries as well as 3,054 wires and a 2,089,119-byte
+key. Byte, wire, coefficient and domain bounds therefore need separate measurement.
+
+Add a Java-selected `RESEARCH_MERKLE` profile to the circuit adapter, reachable only through
+an explicitly chosen separate research image. No JSON/RPC argument may choose or raise a
+profile. The normal constructor/image remains `circuit-key-v1` (2 MiB, 4,096 wires/domain,
+16,384 coefficients); standalone direct imports remain 256 KiB. Research bounds are
+`circuit-key-research-merkle-v1`: 32 MiB, 65,536 wires, 8,192 domain cells, 262,144 coefficients,
+64 public inputs. These are experimental admission ceilings, not a promise of heap containment
+or support for every admitted circuit. Graph/recipe vocabulary and identities stay unchanged.
+The profile name describes this experiment; it is not a cryptographic allowlist of Merkle relations.
+
+The immutable profile is selected in Java at image construction. Descriptions/resource counters
+report its exact limits. Reject a compiled circuit outside its profile dimensions before reserving
+an upload buffer. Preserve 64 KiB sequential chunks, one active upload/one lifetime imported key,
+application-authenticated graph/fingerprint/key/VK, hash-before-parse, existing canonical field,
+point/subgroup/relation validation, experimental-secret opt-in, WebCrypto entropy, witness checks
+and proof self-verification. No alternate parser, trusted-point cache or unchecked path is added.
+The research driver may explicitly use a bounded 600-second call timeout; the runtime/default
+image's 120-second default remains unchanged. Cancellation terminates the whole worker.
+
+Build/package research assets into ignored experiment output, outside the npm workspace/release
+package inventory. The research image must retain native-blst/setup reachability guards and
+upstream notices. Generate separate development-only snarkjs keys for depths 8/16/32; do not
+rewrite M3/default manifests or imply a production ceremony. Inspect actual byte/section counts,
+then use the unchanged importer/prover on JVM (6 GB and 8 GB maximum heaps), Node and browsers.
+Begin at depth 8; advance only after correctness and observed resource use permit it. Record
+compile/witness/import/first proof/reused proof/verify independently, process RSS and sampled JVM
+heap with their limitations. Cross-verify fresh proofs with snarkjs/JVM, change public roots and
+private paths, check default-profile rejection, oversized lengths/dimensions/coefficients,
+incomplete/digest-invalid imports and cancellation. Failures/timeouts are research results.
+
+Secrets and timing assumptions remain ADR-0057's experimental variable-time Java path; no audit,
+constant-time, anonymous-authorization or post-quantum claim follows. Published fixtures have
+no privacy claim. Do not increase production/default limits based on a desktop benchmark.
+Core wire compaction is an alternative requiring a separate core design/review because it changes
+witness mapping, fingerprints and setup compatibility; this experiment changes none of those.

@@ -27,8 +27,10 @@ Generated images, keys, logs, screenshots and raw vectors remain ignored. No npm
 
 The eleven browser scenarios cover portable graphs, field/UInt/boolean authoring, Poseidon,
 SHA-256, an allowlist and Merkle paths. Seven generate fresh proofs, including Merkle depths
-1 and 2. SHA-256 and depths 8/16/32 compile and check witnesses but exceed the current proving
-limits. See [M3 measurements and tutorial](M3-MERKLE.md) and the opt-in
+1 and 2. SHA-256 and depths 8/16/32 compile and check witnesses but exceed the default proving
+limits. A separate [larger-Merkle experiment](M3-LARGE-MERKLE.md) now generates and cross-verifies
+depth-8/16/32 proofs in Node, Chromium, Firefox and the JVM at 6g/8g; its long key imports and
+resource policy are opt-in, outside consumer npm packages. See [M3 measurements and tutorial](M3-MERKLE.md) and the opt-in
 [local Cardano example](../cardano/README.md). The full implementation plan remains in progress.
 
 ## Author and prove

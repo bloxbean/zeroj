@@ -44,3 +44,30 @@ tasks.register('circuitInterop', JavaExec) {
         jvmArgs '-XX:StartFlightRecording=settings=profile,filename=' + rootProject.file(project.property('circuitJfr')).absolutePath
     }
 }
+
+// Explicit resource experiment; never runs in the normal test/build lane.
+tasks.register('largeMerkleBench', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.circuit.LargeMerkleBench'
+    def heap = providers.gradleProperty('merkleHeap').getOrElse('6g')
+    def depth = providers.gradleProperty('merkleDepth').getOrElse('8')
+    if (!(heap in ['6g','8g']) || !(depth in ['8','16','32'])) throw new GradleException('Research heap is 6g/8g, depth is 8/16/32')
+    maxHeapSize = heap
+    args rootProject.file('../js/build/circuit-large').absolutePath, 'merkle_d'+depth, heap
+    if (project.hasProperty('merkleJfr')) jvmArgs '-XX:StartFlightRecording=settings=profile,filename='+rootProject.file(project.property('merkleJfr')).absolutePath
+}
+tasks.register('merkleWireCensus', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.circuit.MerkleWireCensus'
+    maxHeapSize = '2g'
+    args rootProject.file('../js/build/circuit-large/wire-census.json').absolutePath
+}
+tasks.register('largeMerkleInterop', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.circuit.LargeMerkleInterop'
+    maxHeapSize = '6g'
+    args rootProject.file('../js/build/circuit-large').absolutePath
+}

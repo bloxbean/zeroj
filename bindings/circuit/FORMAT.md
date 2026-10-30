@@ -141,7 +141,7 @@ graph hash and R1CS fingerprint, not a self-authenticating hash supplied by an a
 4. `checkWitness({circuit,input})` checks constraints and returns only a boolean/timings.
    It requires secret opt-in. No witness or witness digest crosses the consumer boundary.
 5. `beginKey({circuit,fingerprint,length,expectedSha256,verificationKey})` returns `upload` and
-   `chunkBytes` (65,536). Length is 1..2,097,152 raw bytes. `appendKey({circuit,upload,offset,chunk})`
+   `chunkBytes` (65,536). Length is 1..2,097,152 raw bytes in the normal profile. `appendKey({circuit,upload,offset,chunk})`
    accepts 1..65,536 lowercase-hex-encoded bytes at the exact byte offset. A valid owned-upload
    request with bad chunk/offset terminates that upload; requests rejected before ownership is
    established cannot cancel another upload. Malformed outer JSON cannot dispatch cleanup.
@@ -161,3 +161,18 @@ graph hash and R1CS fingerprint, not a self-authenticating hash supplied by an a
 Wasm compilation is not Java source compilation. Gadget implementations are compiled into the
 selected image; a recipe selects those implementations. Arbitrary graphs require application
 review: accepting a graph does not certify that every intended relation was constrained.
+
+
+## Opt-in larger-key research image
+
+The separate image described in [M3-LARGE-MERKLE.md](M3-LARGE-MERKLE.md) implements the same
+protocol/graph/recipe identities with Java-selected `circuit-key-research-merkle-v1` limits:
+32 MiB bytes, 65,536 wires, 8,192 domain entries, 262,144 coefficients and 64 public inputs.
+This profile is not an RPC parameter or a new circuit/cryptographic format. The original direct
+`loadKey` cap remains 256 KiB. Chunked loading uses the profile fixed on the owning circuit state.
+Descriptions and `keyResources` expose `maxWires`, `maxDomainSize` and `maxCoefficients` alongside
+existing byte/chunk counters. `withinProverDimensions` checks compiled shape, not eventual encoded
+key bytes or coefficient count; the existing parser enforces the actual imported key's limits.
+Both profiles reject incompatible compiled dimensions before allocating key staging. The normal
+SDK package continues to select its original policy. Neither profile proves hostile-input heap
+containment or authenticates the semantics of a caller-selected relation.

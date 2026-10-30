@@ -30,3 +30,13 @@ tasks.register('confidentialFixtures', JavaExec) {
 }
 
 dependencies { implementation project(':adapter-circuit') }
+
+// Research entry points are excluded from the ordinary consumer classpath.
+sourceSets { research { java.srcDir 'src/research/java' } }
+configurations.researchImplementation.extendsFrom configurations.implementation
+configurations.researchRuntimeOnly.extendsFrom configurations.runtimeOnly
+dependencies { researchImplementation sourceSets.main.output }
+tasks.register('researchClasspath') {
+    dependsOn researchClasses, configurations.researchRuntimeClasspath.buildDependencies
+    doLast { layout.buildDirectory.file('research-classpath.txt').get().asFile.text = sourceSets.research.runtimeClasspath.asPath }
+}

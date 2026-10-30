@@ -6,10 +6,12 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT/'bindings/wasm'
 parser=argparse.ArgumentParser()
 parser.add_argument('profiles',nargs='+')
+parser.add_argument('--research-output',action='store_true',help='Package the large-Merkle experiment into ignored build output, never npm workspace')
 args=parser.parse_args()
 version='0.1.0-experimental.1'
 sizes={}
 for name in args.profiles:
+    if (name=='circuit-large-research') != args.research_output: raise SystemExit('Research image requires --research-output; regular images must omit it')
     folder=HERE/'build/images'/name
     meta=json.loads((folder/'build.json').read_text())
     launcher=(folder/'engine.js').read_text()
@@ -26,7 +28,7 @@ for name in args.profiles:
     launcher='/* ZeroJ modifications, 2026-10-30: verified byte injection, explicit Wasm path, bounded startup error hook. Original copyright and license headers preserved below. */\n'+launcher
     files={'launcher':launcher.encode(),'wasm':(folder/'engine.js.wasm').read_bytes()}
     identity=name+'-'+hashlib.sha256(files['launcher']+files['wasm']).hexdigest()[:24]
-    package=ROOT/'bindings/js/packages'/('bundle-'+name)
+    package=ROOT/'bindings/js/build/circuit-large/bundle' if args.research_output else ROOT/'bindings/js/packages'/('bundle-'+name)
     assets=package/'assets';dist=package/'dist'
     assets.mkdir(parents=True,exist_ok=True);dist.mkdir(exist_ok=True)
     info={'id':identity,'apiVersion':1,'capabilities':meta['capabilities']}
@@ -67,7 +69,7 @@ for name in args.profiles:
     shutil.copytree(home/'legal',legal_tree)
     shutil.copyfile(ROOT/'licenses/Apache-2.0.txt',legal/'Apache-2.0.txt')
     (legal/'graalvm-release.txt').write_text((home/'release').read_text())
-    for entry in (HERE/'bundles/build/classpath.txt').read_text().split(os.pathsep):
+    for entry in (HERE/meta.get('classpathFile','bundles/build/classpath.txt')).read_text().split(os.pathsep):
         jar=Path(entry)
         if not jar.is_file() or jar.suffix!='.jar': continue
         with zipfile.ZipFile(jar) as archive:

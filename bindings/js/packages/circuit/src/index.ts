@@ -12,14 +12,14 @@ export type CircuitIdentity=Readonly<{expectedGraphSha256:string;fingerprint:str
 export type CircuitDescription=Readonly<{
   name:string;compiler:string;graphSha256:string;fingerprint:string;
   wires:number;constraints:number;publicInputs:number;publicNames:readonly string[];secretNames:readonly string[];
-  maxKeyBytes:number;keyChunkBytes:number;keyProfile:string;withinProverDimensions:boolean;compileMs:number;
+  maxKeyBytes:number;maxWires:number;maxDomainSize:number;maxCoefficients:number;keyChunkBytes:number;keyProfile:string;withinProverDimensions:boolean;compileMs:number;
   recipeSha256?:string;expandMs?:number;graphValidationMs:number;
 }>;
 export type CircuitProvingKey=Handle<'circuit-proving-key'>;
 export type CircuitKeyArtifact=Readonly<{zkey:Uint8Array;expectedSha256:Uint8Array;verificationKey:Groth16VerificationKey}>;
 export type KeyResources=Readonly<{
   profile:string;reservedBytes:number;receivedBytes:number;peakStagingBytes:number;importedKeys:number;
-  maxKeyBytes:number;chunkBytes:number;lastImportMs:number;lastKeyBytes:number;lastDomainSize:number;
+  maxKeyBytes:number;maxWires:number;maxDomainSize:number;maxCoefficients:number;chunkBytes:number;lastImportMs:number;lastKeyBytes:number;lastDomainSize:number;
 }>;
 export type CircuitProof=Readonly<{proof:Groth16Proof;publicInputs:readonly bigint[]}>;
 export interface CompiledCircuit<I> {

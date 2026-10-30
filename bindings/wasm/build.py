@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / 'bindings/wasm'
 PROFILES = {'hash': ('HashWeb', ['hash']), 'probe': ('PlatformProbeWeb', ['probe']),
             'circuit': ('CircuitWeb', ['circuit','groth16-verifier']),
+            'circuit-large-research': ('CircuitLargeResearchWeb', ['circuit','groth16-verifier']),
             'crypto': ('CryptoWeb', ['bbs','pedersen']),
             'all': ('AllWeb', ['hash','pedersen','bbs','groth16-verifier','groth16-prover','elgamal','threshold','confidential-notes']),
             'confidential': ('ConfidentialWeb', ['elgamal','threshold','confidential-notes']),
@@ -14,6 +15,8 @@ PROFILES = {'hash': ('HashWeb', ['hash']), 'probe': ('PlatformProbeWeb', ['probe
 parser = argparse.ArgumentParser()
 parser.add_argument('profiles', nargs='*', choices=list(PROFILES))
 args = parser.parse_args()
+if 'circuit-large-research' in args.profiles and len(args.profiles) != 1:
+    parser.error('Build the research image separately from consumer profiles')
 home = Path(os.environ.get('GRAALVM_HOME', os.environ.get('JAVA_HOME', '')))
 if not (home / 'bin/native-image').is_file():
     parser.error('Set GRAALVM_HOME to Oracle GraalVM 25.3.4.1+1.1')
@@ -27,8 +30,10 @@ def run(command, log):
     if result.returncode:
         print(log.read_text()[-8000:])
         raise SystemExit(result.returncode)
-run([str(ROOT/'gradlew'), '-p', str(HERE), ':bundles:classpath', '--max-workers=2', '--console=plain'], out/'compile.log')
-cp = (HERE/'bundles/build/classpath.txt').read_text()
+research='circuit-large-research' in (args.profiles or [])
+run([str(ROOT/'gradlew'), '-p', str(HERE), ':bundles:researchClasspath' if research else ':bundles:classpath', '--max-workers=2', '--console=plain'], out/'compile.log')
+classpath_file=HERE/'bundles/build'/('research-classpath.txt' if research else 'classpath.txt')
+cp = classpath_file.read_text()
 binaryen = subprocess.check_output(['wasm-as','--version'],text=True).strip()
 if binaryen != 'wasm-as version 132': raise SystemExit('Expected Binaryen 132, got '+binaryen)
 inputs = hashlib.sha256()
@@ -60,6 +65,7 @@ for name in args.profiles or ['hash']:
          'org.zeroj.bindings.bundles.'+entry], folder/'compile.log')
     metadata = {'profile': name, 'capabilities': capabilities, 'apiVersion': 1,
                 'graalvm': '25.3.4.1+1.1', 'binaryen': binaryen, 'classpathAndBuildSha256': inputs.hexdigest(),
+                'researchOnly': name=='circuit-large-research', 'classpathFile': str(classpath_file.relative_to(HERE)),
                 'worktreeDirty': bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip()), 'seconds': time.perf_counter()-start,
                 'zerojCommit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()}
     (folder/'build.json').write_text(json.dumps(metadata,indent=2)+'\n')
