@@ -26,9 +26,9 @@ keys, tests Node and Chromium/Firefox, and verifies an isolated local npm-tarbal
 Generated images, keys, logs, screenshots and raw vectors remain ignored. No npm publication occurs.
 
 The six browser scenarios cover a Java graph, typed field arithmetic, an age threshold, boolean
-selection, Poseidon and SHA-256. The first four generate fresh proofs and reject changed public
-inputs. Poseidon/SHA compile and check witnesses; **their browser proof path remains beyond the
-current adapter limits**. This is the first milestone, not completion of the whole plan.
+selection, Poseidon and SHA-256. The first five generate fresh proofs and reject changed public
+inputs, including the Poseidon opening. SHA-256 compiles and checks witnesses; **its browser
+proof path remains beyond the wire/domain limits**. The full implementation plan remains in progress.
 
 ## Author and prove
 
@@ -131,11 +131,33 @@ branching/shape is unsupported.
 
 ## Limits and security
 
-The first milestone keeps the research compilation bounds and the existing 256 KiB key /
-4,096-wire/domain prover budgets. The measured Poseidon fixture's key is 1,090,303 bytes;
-SHA-256 has 103,259 wires. Witness success is not proof-generation success. Broader key transport
-and hard allocation accounting are the next milestone, with independent parser/point/relation
-checks retained. The present schema limits are not proven heap containment for hostile graphs.
+The compiler image uses `circuit-key-v1`: at most 2 MiB per key, 64 KiB sequential chunks,
+one active upload and one successfully imported key per compiled circuit. The standalone
+`@zeroj/groth16-prover` retains its 256 KiB limit. Both retain 4,096 wires/domain and 16,384
+coefficients. Poseidon's measured 1,090,303-byte key fits; SHA-256's 103,259 wires do not.
+The current load API accepts a bounded caller-owned `Uint8Array`; it does not fetch or stream
+arbitrarily large network responses for you. Check the expected length before buffering downloads.
+
+```ts
+const cancellation = new AbortController();
+const key = await compiled.loadKey(trustedKeyArtifact, {signal: cancellation.signal});
+const resources = await compiled.keyResources();
+// reservedBytes is zero after import. peakStagingBytes counts raw key buffering only.
+// Reuse key for subsequent proofs; this avoids repeating point/subgroup validation.
+```
+
+Abort before loading leaves the runtime usable. Abort during transfer/import terminates the
+**entire runtime**, invalidating all its handles and capabilities, including any shared verifier.
+A new runtime is needed afterwards. Ordinary `compiled.dispose()` releases the circuit, its
+upload and owned key after queued work; use runtime disposal for immediate cancellation.
+A failed import releases its staging reservation and can be retried. A successful import consumes
+the single-key slot even if its handle is subsequently released; use a new runtime to change keys.
+
+The existing importer still checks the authenticated hash, canonical fields, curve/subgroup
+membership, dimensions and relation. Transport counters are not heap measurements. Parsed key
+objects, compiler data, FFT/MSM scratch and GC overhead add memory beyond the raw key buffer;
+profile evidence and remaining limits are in [M2-KEY-LOADING.md](M2-KEY-LOADING.md). The present
+schema limits are not proven heap containment for hostile graphs.
 
 Compiled graph acceptance is not a circuit-soundness audit. Hints are advice, not constraints;
 review intended equations and trust the application-selected statement/VK. Existing gadget

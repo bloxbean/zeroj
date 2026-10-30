@@ -12,5 +12,8 @@ Private input operations require `experimentalSecrets: true`. No witness export 
 
 See `bindings/circuit/README.md`, ADR-0064, and `bindings/js/examples/circuit` in the source
 repository for runnable browser/Node examples, artifact export, limits and remaining milestones.
-The first implementation proves small examples; Poseidon/SHA witness checks do not imply
-browser proving support. Packages are experimental, not audited and not yet published to npm.
+Small circuits and the measured Poseidon opening generate browser/Node proofs. SHA-256 remains
+compile/witness-only under the current 4,096-wire/domain budgets. Compiler key loading uses
+64 KiB chunks, a 2 MiB total cap and one successful key per circuit. `loadKey(artifact, {signal})`
+can abort: cancellation during loading terminates the whole runtime. `keyResources()` reports
+transport counters, not total heap. Reuse a loaded key to avoid repeated subgroup validation. Packages are experimental, not audited and not yet published to npm.

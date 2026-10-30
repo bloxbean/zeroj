@@ -100,9 +100,21 @@ graph hash and R1CS fingerprint, not a self-authenticating hash supplied by an a
    Only one compilation attempt is admitted per worker; create a fresh runtime for another.
 4. `checkWitness({circuit,input})` checks constraints and returns only a boolean/timings.
    It requires secret opt-in. No witness or witness digest crosses the consumer boundary.
-5. `loadKey({circuit,fingerprint,zkey,expectedSha256,verificationKey})` retains the existing
-   bounded importer/point/relation checks. `prove({circuit,key,input})` checks ownership and
-   self-verifies before returning a proof and public inputs.
+5. `beginKey({circuit,fingerprint,length,expectedSha256,verificationKey})` returns `upload` and
+   `chunkBytes` (65,536). Length is 1..2,097,152 raw bytes. `appendKey({circuit,upload,offset,chunk})`
+   accepts 1..65,536 lowercase-hex-encoded bytes at the exact byte offset. A valid owned-upload
+   request with bad chunk/offset terminates that upload; requests rejected before ownership is
+   established cannot cancel another upload. Malformed outer JSON cannot dispatch cleanup.
+   `finishKey({circuit,upload})` consumes the upload, requires exact completion, checks the hash
+   before parsing and invokes the unchanged cryptographic importer/relation validator. It returns
+   a key handle and public import timings/domain/byte count. `abortKey({circuit,upload})` abandons
+   the upload. Both successful and failed finish are terminal; retries need a new upload.
+   One active upload and one successfully imported key per compiled circuit. An explicit raw
+   release of the upload handle also drops its buffer. Key release does not reset the one-key slot.
+   `keyResources({circuit})` returns exact staging/reservation counters, not heap usage.
+   Small direct `loadKey({circuit,fingerprint,zkey,expectedSha256,verificationKey})` requests remain
+   compatible at the original 256 KiB cap and share the single-key slot. `prove({circuit,key,input})`
+   checks ownership and self-verifies before returning a proof and public inputs.
 6. Typed `compiled.dispose()` releases the circuit and its keys. Runtime disposal/timeout
    terminates the worker and invalidates local handles. No secure-erasure claim is made.
 

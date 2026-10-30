@@ -24,11 +24,28 @@ try{
     await page.waitForFunction(id=>!!document.getElementById(id).dataset.status,id,{timeout:120000});
     const box=page.locator('#'+id);assert.equal(await box.getAttribute('data-status'),'passed',await box.textContent());
     const result=JSON.parse(await box.textContent());assert.equal(result.valid,true);
-    if(['poseidon_opening','sha256_abc'].includes(id))assert.equal(result.proofGenerated,false);
+    if(id==='sha256_abc')assert.equal(result.proofGenerated,false);
     else {assert.equal(result.proofGenerated,true);assert.equal(result.tamperedAccepted,false);assert.equal(result.snarkjsAccepted,true);}
     if(id==='sha256_abc')assert.equal(result.hostDigestMatches,true);
+    if(id==='poseidon_opening'){
+      const proof=await page.evaluate(async()=>{const {scenario}=await import('/examples/circuit/scenarios.mjs');const load=async(n,k)=>{const r=await fetch('/build/circuit/'+n);return k==='text'?r.text():r.arrayBuffer();};const r=await scenario('poseidon_opening',load);return {proof:r.proof.proof,publicInputs:r.proof.publicInputs.map(String)};});
+      await fs.writeFile(new URL('../circuit/poseidon_opening/'+name+'-proof.json',out),JSON.stringify(proof));
+    }
     results.push(result);
    }
+   const cancelled=await page.evaluate(async()=>{
+    const {createCircuitCompiler}=await import('@zeroj/circuit');
+    const {circuitRuntime,symbolicExamples}=await import('/examples/circuit/scenarios.mjs');
+    const f=(await(await fetch('/build/circuit/manifest.json')).json()).find(x=>x.name==='poseidon_opening');
+    const r=circuitRuntime(),controller=new AbortController();
+    try{
+     const c=await createCircuitCompiler(r).compile(symbolicExamples.find(x=>x.name===f.name),{expectedGraphSha256:f.graphSha256,fingerprint:f.fingerprint});
+     const a={zkey:new Uint8Array(await(await fetch('/build/circuit/poseidon_opening/key.zkey')).arrayBuffer()),expectedSha256:Uint8Array.from(f.keySha256.match(/../g),h=>parseInt(h,16)),verificationKey:await(await fetch('/build/circuit/poseidon_opening/vk.json')).json()};
+     const call=r.call.bind(r);r.call=(cap,op,args)=>{const promise=call(cap,op,args);if(op==='finishKey')setTimeout(()=>controller.abort(),25);return promise;};
+     try{await c.loadKey(a,{signal:controller.signal});return false;}catch(e){return e.code==='ABORTED';}
+    }finally{await r.dispose();}
+   });
+   assert.equal(cancelled,true,'browser abort during import');
    assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
    await page.screenshot({path:new URL(name+'-results.png',out).pathname,fullPage:true});
    await page.setViewportSize({width:390,height:844});

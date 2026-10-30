@@ -12,17 +12,26 @@ export type CircuitIdentity=Readonly<{expectedGraphSha256:string;fingerprint:str
 export type CircuitDescription=Readonly<{
   name:string;compiler:string;graphSha256:string;fingerprint:string;
   wires:number;constraints:number;publicInputs:number;publicNames:readonly string[];secretNames:readonly string[];
-  maxKeyBytes:number;withinProverDimensions:boolean;compileMs:number;
+  maxKeyBytes:number;keyChunkBytes:number;keyProfile:string;withinProverDimensions:boolean;compileMs:number;
   recipeSha256?:string;expandMs?:number;graphValidationMs:number;
 }>;
 export type CircuitProvingKey=Handle<'circuit-proving-key'>;
+export type CircuitKeyArtifact=Readonly<{zkey:Uint8Array;expectedSha256:Uint8Array;verificationKey:Groth16VerificationKey}>;
+export type KeyResources=Readonly<{
+  profile:string;reservedBytes:number;receivedBytes:number;peakStagingBytes:number;importedKeys:number;
+  maxKeyBytes:number;chunkBytes:number;lastImportMs:number;lastKeyBytes:number;lastDomainSize:number;
+}>;
 export type CircuitProof=Readonly<{proof:Groth16Proof;publicInputs:readonly bigint[]}>;
 export interface CompiledCircuit<I> {
   readonly description:CircuitDescription;
   /** Checks constraints locally; never returns witnesses or their hashes. */
   checkWitness(input:I):Promise<{valid:boolean;witnessMs:number;constraintCheckMs:number}>;
-  /** Supplied ceremony artifacts only; the hash and VK must be application-trusted. */
-  loadKey(artifact:{zkey:Uint8Array;expectedSha256:Uint8Array;verificationKey:Groth16VerificationKey}):Promise<CircuitProvingKey>;
+  /** Supplied ceremony artifacts only; the hash and VK must be application-trusted.
+   * One successful import per compiled circuit. Abort during loading terminates the entire runtime.
+   */
+  loadKey(artifact:CircuitKeyArtifact,options?:{signal?:AbortSignal}):Promise<CircuitProvingKey>;
+  /** Exact key-transport counters, not total Java/Wasm heap measurements. */
+  keyResources():Promise<KeyResources>;
   prove(key:CircuitProvingKey,input:I):Promise<CircuitProof>;
   /** Releases the compiled circuit and all its keys. A new compilation needs a new runtime. */
   dispose():Promise<void>;
@@ -37,18 +46,42 @@ function lifecycle<I>(runtime:ZeroJRuntime,response:CompiledResponse,encode:(inp
   const handle=runtime.retainHandle('compiled-circuit',CAPABILITY,response.handle),keys=new WeakSet<object>();
   const {handle:ignored,...data}=response;
   const description=Object.freeze({...data,publicNames:Object.freeze([...data.publicNames]),secretNames:Object.freeze([...data.secretNames])});
-  let closed=false;
+  let closed=false,loading=false;
   const id=()=>{if(closed)throw new ZeroJError('INVALID_HANDLE');return runtime.handleId(handle,'compiled-circuit',CAPABILITY);};
   return Object.freeze({description,
     async checkWitness(input:I){return runtime.call<{valid:boolean;witnessMs:number;constraintCheckMs:number}>(CAPABILITY,'checkWitness',{circuit:id(),input:encode(input)});},
-    async loadKey(artifact:{zkey:Uint8Array;expectedSha256:Uint8Array;verificationKey:Groth16VerificationKey}){
-      const circuit=id();
-      if(!(artifact.expectedSha256 instanceof Uint8Array)||artifact.expectedSha256.length!==32)throw new ZeroJError('INVALID_BYTES');
-      const result=await runtime.call<{handle:string}>(CAPABILITY,'loadKey',{circuit,fingerprint:description.fingerprint,
-        zkey:bytesToHex(artifact.zkey,description.maxKeyBytes),expectedSha256:bytesToHex(artifact.expectedSha256,32),verificationKey:artifact.verificationKey});
-      // dispose() may have been called while loadKey was pending. Never return a stale key.
-      if(closed){await runtime.release(runtime.retainHandle('circuit-proving-key',CAPABILITY,result.handle));throw new ZeroJError('INVALID_HANDLE');}
-      const key=runtime.retainHandle('circuit-proving-key',CAPABILITY,result.handle);keys.add(key);return key;
+    async keyResources(){return runtime.call<KeyResources>(CAPABILITY,'keyResources',{circuit:id()});},
+    async loadKey(artifact:CircuitKeyArtifact,options:{signal?:AbortSignal}={}){
+      const circuit=id(),signal=options.signal;
+      if(signal?.aborted)throw new ZeroJError('ABORTED');
+      if(loading)throw new ZeroJError('UPLOAD_ACTIVE');
+      if(!(artifact.zkey instanceof Uint8Array)||artifact.zkey.length<1||artifact.zkey.length>description.maxKeyBytes
+        ||!(artifact.expectedSha256 instanceof Uint8Array)||artifact.expectedSha256.length!==32)throw new ZeroJError('INVALID_BYTES');
+      const metadata={circuit,fingerprint:description.fingerprint,length:artifact.zkey.length,
+        expectedSha256:bytesToHex(artifact.expectedSha256,32),verificationKey:artifact.verificationKey};
+      const abort=()=>{void runtime.dispose();};
+      loading=true;signal?.addEventListener('abort',abort,{once:true});
+      let upload:string|undefined;
+      try{
+        const started=await runtime.call<{upload:string;chunkBytes:number}>(CAPABILITY,'beginKey',metadata);
+        upload=started.upload;
+        if(started.chunkBytes!==65536)throw new ZeroJError('INVALID_RESPONSE');
+        for(let offset=0;offset<artifact.zkey.length;offset+=started.chunkBytes){
+          id();
+          await runtime.call(CAPABILITY,'appendKey',{circuit,upload,offset,
+            chunk:bytesToHex(artifact.zkey.subarray(offset,offset+started.chunkBytes),started.chunkBytes)});
+        }
+        const result=await runtime.call<{handle:string}>(CAPABILITY,'finishKey',{circuit,upload});
+        upload=undefined;
+        if(signal?.aborted)throw new ZeroJError('ABORTED');
+        const key=runtime.retainHandle('circuit-proving-key',CAPABILITY,result.handle);
+        if(closed){await runtime.release(key);throw new ZeroJError('INVALID_HANDLE');}
+        keys.add(key);return key;
+      }catch(error){
+        if(upload!==undefined)await runtime.call(CAPABILITY,'abortKey',{circuit,upload}).catch(()=>{});
+        if(signal?.aborted)throw new ZeroJError('ABORTED');
+        throw error;
+      }finally{loading=false;signal?.removeEventListener('abort',abort);}
     },
     async prove(key:CircuitProvingKey,input:I){
       const circuit=id();if(!keys.has(key))throw new ZeroJError('INVALID_HANDLE');

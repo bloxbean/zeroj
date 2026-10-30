@@ -21,7 +21,7 @@ for(const item of manifest){
   const fd=await bin.createBinFile(path.join(dir,'witness.wtns'),'wtns',2,2);
   await write(fd,witness,BigInt('0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001'));await fd.close();
   if(!await snarkjs.wtns.check(path.join(dir,'circuit.r1cs'),path.join(dir,'witness.wtns')))throw Error('Independent R1CS check failed');
-  if(item.name==='sha256_abc'){item.proofSupported=false;item.proofLimit='Exceeds unchanged PR #92 4096-wire / 256 KiB proving-key limits';continue;}
+  if(item.name==='sha256_abc'){item.proofSupported=false;item.proofLimit='Exceeds compiler profile 4096-wire / domain limits';continue;}
   run('groth16','setup',item.name+'/circuit.r1cs','pot_final.ptau',item.name+'/key0.zkey');
   run('zkey','contribute',item.name+'/key0.zkey',item.name+'/key.zkey','--name=research-only','-e='+randomBytes(64).toString('hex'));
   run('zkey','verify',item.name+'/circuit.r1cs','pot_final.ptau',item.name+'/key.zkey');
@@ -30,8 +30,8 @@ for(const item of manifest){
   run('groth16','verify',item.name+'/vk.json',item.name+'/snarkjs-public.json',item.name+'/snarkjs-proof.json');
   const key=await fs.readFile(path.join(dir,'key.zkey'));item.keySha256=createHash('sha256').update(key).digest('hex');item.keyBytes=key.length;
   item.independentProofVerified=true;
-  item.proofSupported=key.length<=256*1024&&item.wires<=4096;
-  if(!item.proofSupported)item.proofLimit=`Measured ${key.length}-byte key exceeds unchanged PR #92 256 KiB import cap; snarkjs proof verified separately`;
+  item.proofSupported=key.length<=2*1024*1024&&item.wires<=4096;
+  if(!item.proofSupported)item.proofLimit=`Measured ${key.length}-byte key exceeds circuit-key-v1 2 MiB import cap; snarkjs proof verified separately`;
   await fs.unlink(path.join(dir,'key0.zkey'));
 }
 await log.close();

@@ -1,5 +1,7 @@
 # First compiler milestone — implementation review
 
+**Historical M1 review; M2 follow-up appears below.**
+
 2026-10-30. This is an implementation self-review. Independent review remains a draft-PR gate;
 no audit, production, constant-time or post-quantum claim is made.
 
@@ -55,3 +57,32 @@ A mismatched but structurally valid VK can be detected at proof self-verificatio
 proof is returned. Official gadget assurance, independent review, mobile/Safari validation and
 release/distribution review remain necessary. Real Cardano application authorization/replay/state
 checks and Yaci measurements belong to a later milestone.
+
+
+## M2 bounded key loading — follow-up self-review
+
+- Separate compiler-only 2 MiB policy; original standalone key and global JSON/string caps
+  remain in place. Wire/domain/coefficient budgets and point/subgroup checks are unchanged.
+- Small metadata/identity/VK shape are validated before an exact-sized staging reservation.
+  No concatenated full-key hex string or second assembled binary array in Java. One upload
+  and one lifetime successful key per compiled worker bound retained key growth.
+- Upload handles belong to a compiled state. Bad owned chunks/finish release the reservation;
+  malformed outer requests cannot dispatch cleanup, but cannot exceed the one-upload bound.
+  Aborting/releasing the upload or closing the circuit releases its buffer. Successful finish
+  retains no upload buffer; the existing parser owns only its normal parsed objects.
+- Failed imports cannot consume the one-key slot. Digest, canonical coordinate, forbidden
+  infinity, G1 non-subgroup (order-three point), dimension and relation negatives use real
+  snarkjs keys, with recomputed hashes where parser validation must be reached.
+- AbortSignal during loading terminates all runtime workers/handles; queued release alone
+  cannot interrupt synchronous Java import. Node and both browser tests exercise actual
+  cancellation. Deadline failure also invalidates handles. Pre-abort leaves the runtime usable.
+- Review caught missing import timing/byte accounting in the legacy direct-request path.
+  Both import paths now use the same state update and the compatibility test covers it.
+- Imported-key reuse avoids repeating validation; no trusted-point cache or skipped check
+  was introduced. Public counters measure transport only; sampled RSS and JVM allocation
+  observations are labeled separately in M2-KEY-LOADING.md.
+- No equations, core compiler, randomness provider, key parser or curve arithmetic changed.
+  This self-review does not satisfy the independent reviewer/audit gate for draft PR #116.
+
+M2 does not prove hostile-input heap containment, stable p95 on real devices, Safari support,
+large SHA/Merkle feasibility, full ceremony/key-consistency assurance, or production security.

@@ -30,7 +30,7 @@ export async function scenario(name,load,{graph=false}={}){
       const verificationKey=JSON.parse(await load(name+'/vk.json','text'));
       const key=await circuit.loadKey({zkey:new Uint8Array(await load(name+'/key.zkey','bytes')),
         expectedSha256:Uint8Array.from(fixture.keySha256.match(/../g),x=>parseInt(x,16)),verificationKey});
-      result.keyLoadMs=performance.now()-t;t=performance.now();
+      result.keyLoadMs=performance.now()-t;result.keyResources=await circuit.keyResources();t=performance.now();
       const proof=await circuit.prove(key,input);result.proveAndSelfVerifyMs=performance.now()-t;
       if(!await verifier.verify({...proof,verificationKey}))throw Error('PROOF_REJECTED');
       const bad=[...proof.publicInputs];bad[0]+=1n;

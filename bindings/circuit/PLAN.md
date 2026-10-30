@@ -206,8 +206,9 @@ Promote the recipe/graph contract and typed frontend in a new stack above #92, t
 - First bounded milestone: promote graph codec, selected symbolic recipe dispatcher, typed compilation/proving lifecycle and authoring lint; retain the existing proving limits.
 - M1 initial slice implemented and validated: canonical graph/recipe contract; Java adapter and build-time artifact exporter; typed TS lifecycle/input conversion; CLI authoring lint; browser/Node examples; isolated local npm package test.
 - M1 remains in progress for fixed bits/arrays, generated operation catalog, full lint/build integration, richer diagnostics and shape parameters. Independent review remains a draft-PR gate.
-- M2–M6 are planned, not implemented by the first milestone. Their acceptance gates remain in force.
+- M2 bounded transport/Poseidon slice is implemented in this stack; validation and remaining profiling/device gates are tracked in [M2-KEY-LOADING.md](M2-KEY-LOADING.md). M3–M6 remain planned.
 - Do not publish npm packages or merge this stack as part of implementation.
 
-- Validation: 21 JVM tests (16 compiler, 4 common boundary, 1 hash regression), 17 Node tests, all six scenarios in Chromium/Firefox, five SDK tarballs installed offline and exercised outside the workspace. See [VALIDATION.md](VALIDATION.md).
-- Next implementation milestone: bounded larger-key transfer/resource accounting for the measured Poseidon case; existing limits were retained in this slice.
+- M1 validation baseline: 21 JVM and 17 Node tests; see [VALIDATION.md](VALIDATION.md).
+- M2 validation: 26 JVM and 23 Node tests, six scenarios plus import cancellation in Chromium/Firefox, Poseidon proof cross-verification with JVM/snarkjs, and five SDK tarballs installed offline. Measurements and limitations are in [M2-KEY-LOADING.md](M2-KEY-LOADING.md).
+- M2 retains the standalone prover limits and adds the separately bounded compiler key profile. Full heap containment/device gates remain open; fixed arrays and Poseidon Merkle are the next functional slice once those limits are assessed.

@@ -134,6 +134,46 @@ not prune precompiled Wasm. Core/default Java builds remain unchanged.
 
 ## Verification and acceptance
 
+### M2 bounded key-loading profile (2026-10-30)
+
+The compiler image adds `circuit-key-v1`: at most 2 MiB of raw key bytes,
+64 KiB per sequential chunk, one active upload and one successfully imported
+key per compiled circuit. Existing standalone prover and JSON request/string
+limits stay unchanged, as do 4,096 wires/domain and 16,384 coefficients. The
+profile is sufficient for the measured 1,090,303-byte Poseidon opening key;
+it is not admission for arbitrary larger circuits or SHA proving.
+
+`beginKey` validates circuit identity, expected digest, VK shape and declared
+length before reserving one exact-sized byte array. `appendKey` requires an
+owned upload handle and exact offset; replay, gaps, empty/oversized chunks or
+overflow terminate that upload. `finishKey` consumes the upload, requires the
+declared length and invokes the existing importer with its authenticated-hash,
+canonical-field, point/subgroup and circuit-relation checks intact. No key handle
+escapes on failure. Closing the upload/circuit drops the buffer. No second full
+hex string or assembled JSON object is created. The parser still needs the full
+binary buffer and allocates its existing parsed-key objects; this is chunked
+transport, not a streaming cryptographic parser.
+
+Accounting reports reserved/received bytes, peak staging reservation and the
+imported-key count. These exact transport counters are not Java/Wasm heap sizes.
+The caller retains its original byte array; the worker receives one bounded hex
+chunk at a time. Platform measurements must separately describe process/heap
+scope and sampling limitations. A successful key consumes the single-key slot
+until circuit disposal, even if the caller releases its handle earlier.
+
+The typed API accepts an optional AbortSignal. Abort before loading leaves the
+runtime intact; abort during transfer/import terminates the entire physical
+runtime (all its handles/capabilities), because synchronous Java point validation
+cannot observe queued cancellation. Runtime timeout/disposal has the same hard
+termination semantics. Protocol abort between calls only abandons the upload.
+No cancellation, timing or memory-erasure guarantee follows for secrets already
+handled by the trusted host. Secrets are not involved in key transfer itself.
+
+Acceptance requires malformed/chunk-state tests, independent Poseidon proof
+verification in snarkjs and JVM, actual Chromium/Firefox proofs, repeatable timing
+and memory measurements. Full M2 exit remains gated on wider allocation profiling
+and device coverage; a successful desktop example is experimental support only.
+
 - Port graph/recipe positives and malformed-input tests; add canonical root/input
   ordering and explicit hint allowlist tests. Add semantic/width/boolean/range and
   forged-ref negatives, witness tampering and artifact mismatch tests.

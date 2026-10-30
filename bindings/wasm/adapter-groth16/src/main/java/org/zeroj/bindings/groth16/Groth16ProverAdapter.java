@@ -1,6 +1,7 @@
 package org.zeroj.bindings.groth16;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -25,19 +26,11 @@ public final class Groth16ProverAdapter implements Adapter {
         }
         if (operation.equals("loadKey")) {
             Boundary.fields(args,"circuit","fingerprint","zkey","expectedSha256","verificationKey");
-            var c = circuit(args);
-            if (!c.fingerprint().equals(Boundary.text(args,"fingerprint"))) throw new BindingException("CIRCUIT_MISMATCH");
-            JsonNode vk = args.get("verificationKey");
-            Groth16VerifierAdapter.keyShape(vk);
-            if (Boundary.integer(vk,"nPublic",0,64) != c.numPublic()) throw new BindingException("CIRCUIT_MISMATCH");
             byte[] bytes = Boundary.bytes(args,"zkey",1,Boundary.MAX_BYTES);
-            byte[] digest = Boundary.bytes(args,"expectedSha256",32,32);
-            try {
-                var data = ZkeyImporterBLS381.importZkeyFull(bytes,digest,
-                        new ZkeyImporterBLS381.Limits(Boundary.MAX_BYTES,4096,4096,16384));
-                checkRelation(c,data);
-                return Boundary.object().put("handle",session.retain(new Loaded(c,data,vk.deepCopy())));
-            } catch (IOException e) { throw new BindingException("INVALID_PROVING_KEY"); }
+            ObjectNode metadata = args.deepCopy();
+            metadata.remove("zkey");
+            return loadKeyBytes(metadata, bytes, session,
+                    new ZkeyImporterBLS381.Limits(Boundary.MAX_BYTES,4096,4096,16384));
         }
         if (operation.equals("prove")) {
             Boundary.fields(args,"key","input");
@@ -57,6 +50,31 @@ public final class Groth16ProverAdapter implements Adapter {
             } finally { Arrays.fill(witness,BigInteger.ZERO); }
         }
         throw new BindingException("UNSUPPORTED_OPERATION");
+    }
+    /** Java-only entry point for bounded chunk transports. No alternate key parser. */
+    public JsonNode loadKeyBytes(JsonNode metadata, byte[] bytes, BindingSession session,
+                                 ZkeyImporterBLS381.Limits limits) {
+        validateKeyMetadata(metadata);
+        var c = circuit(metadata);
+        byte[] digest = Boundary.bytes(metadata,"expectedSha256",32,32);
+        long start = System.nanoTime();
+        try {
+            var data = ZkeyImporterBLS381.importZkeyFull(bytes,digest,limits);
+            checkRelation(c,data);
+            return Boundary.object().put("handle",session.retain(new Loaded(c,data,metadata.get("verificationKey").deepCopy())))
+                    .put("keyBytes",bytes.length).put("importMs",(System.nanoTime()-start)/1e6)
+                    .put("domainSize",data.domainSize());
+        } catch (IOException e) { throw new BindingException("INVALID_PROVING_KEY"); }
+    }
+    /** Validate small metadata before the transport reserves a key-sized buffer. */
+    public void validateKeyMetadata(JsonNode metadata) {
+        Boundary.fields(metadata,"circuit","fingerprint","expectedSha256","verificationKey");
+        var c = circuit(metadata);
+        if (!c.fingerprint().equals(Boundary.text(metadata,"fingerprint"))) throw new BindingException("CIRCUIT_MISMATCH");
+        Boundary.bytes(metadata,"expectedSha256",32,32);
+        JsonNode vk = metadata.get("verificationKey");
+        Groth16VerifierAdapter.keyShape(vk);
+        if (Boundary.integer(vk,"nPublic",0,64) != c.numPublic()) throw new BindingException("CIRCUIT_MISMATCH");
     }
     private CompiledCircuit circuit(JsonNode args) {
         var c = circuits.get(Boundary.text(args,"circuit"));

@@ -31,3 +31,16 @@ tasks.register('exportRecipe', JavaExec) {
                 rootProject.file(project.property('artifactDir')).absolutePath
     }
 }
+
+// Test-only interop after Node and both browsers have exported fresh proofs.
+tasks.register('circuitInterop', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.zeroj.bindings.circuit.CircuitInterop'
+    maxHeapSize = '2g'
+    args rootProject.file('../js/build/circuit/poseidon_opening').absolutePath
+    if (project.hasProperty('circuitJfr')) {
+        jvmArgs '-XX:FlightRecorderOptions=stackdepth=128'
+        jvmArgs '-XX:StartFlightRecording=settings=profile,filename=' + rootProject.file(project.property('circuitJfr')).absolutePath
+    }
+}

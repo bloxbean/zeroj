@@ -16,3 +16,13 @@ circuit.encodeInputs({public:{out:1n},secret:{x:1n,flag:true,count:2n,data:new U
 circuit.encodeInputs({public:{out:1},secret:{x:1n,flag:true,count:2n,data:new Uint8Array(3)}});
 // @ts-expect-error missing private data
 circuit.encodeInputs({public:{out:1n},secret:{x:1n,flag:true,count:2n}});
+
+import type {CompiledCircuit,CircuitKeyArtifact} from '@zeroj/circuit';
+declare const compiled:CompiledCircuit<{public:{y:bigint};secret:{x:bigint}}>;
+declare const artifact:CircuitKeyArtifact;
+compiled.loadKey(artifact,{signal:new AbortController().signal});
+compiled.keyResources().then(r=>r.reservedBytes+r.lastImportMs);
+// @ts-expect-error cancellation requires an AbortSignal
+compiled.loadKey(artifact,{signal:true});
+// @ts-expect-error an arbitrary key cannot bypass local ownership
+compiled.prove('key',{public:{y:35n},secret:{x:3n}});

@@ -13,9 +13,14 @@ import org.zeroj.bindings.common.BindingSession;
 import org.zeroj.bindings.common.Boundary;
 import org.zeroj.bindings.groth16.Groth16ProverAdapter;
 import org.zeroj.circuit.ConstraintGraph;
+import org.zeroj.crypto.groth16.ZkeyImporterBLS381;
 
 /** One compilation attempt per worker. ADR-0064; no source evaluation or witness export. */
 public final class CircuitAdapter implements Adapter {
+    public static final int MAX_KEY_BYTES = 2 * 1024 * 1024;
+    public static final int KEY_CHUNK_BYTES = 64 * 1024;
+    private static final ZkeyImporterBLS381.Limits KEY_LIMITS =
+            new ZkeyImporterBLS381.Limits(MAX_KEY_BYTES, 4096, 4096, 16384);
     private boolean consumed;
     private StringBuilder upload;
     private int expectedLength;
@@ -27,17 +32,62 @@ public final class CircuitAdapter implements Adapter {
         private Groth16ProverAdapter prover;
         private final BindingSession session;
         private final Set<String> keys = new HashSet<>();
+        private KeyUpload upload;
+        private String uploadId;
+        private int peakStagingBytes;
+        private double lastImportMs;
+        private int lastKeyBytes;
+        private int lastDomainSize;
+        private boolean imported;
+        void available() {
+            if (imported) throw new BindingException("KEY_LIMIT");
+            if (upload != null && upload.bytes != null) throw new BindingException("UPLOAD_ACTIVE");
+        }
+        void clearUpload() {
+            if (uploadId != null) session.release(uploadId);
+            upload = null;
+            uploadId = null;
+        }
+        void imported(JsonNode loaded) {
+            keys.add(Boundary.text(loaded, "handle"));
+            imported = true;
+            lastImportMs = loaded.path("importMs").asDouble();
+            lastKeyBytes = loaded.path("keyBytes").asInt();
+            lastDomainSize = loaded.path("domainSize").asInt();
+        }
+        ObjectNode resources() {
+            return Boundary.object().put("profile", "circuit-key-v1")
+                    .put("reservedBytes", upload == null || upload.bytes == null ? 0 : upload.bytes.length)
+                    .put("receivedBytes", upload == null || upload.bytes == null ? 0 : upload.received)
+                    .put("peakStagingBytes", peakStagingBytes).put("importedKeys", imported ? 1 : 0)
+                    .put("maxKeyBytes", MAX_KEY_BYTES).put("chunkBytes", KEY_CHUNK_BYTES)
+                    .put("lastImportMs", lastImportMs).put("lastKeyBytes", lastKeyBytes)
+                    .put("lastDomainSize", lastDomainSize);
+        }
         State(CompiledGraph circuit, BindingSession session) {
             this.circuit = circuit;
             this.prover = new Groth16ProverAdapter(Map.of(circuit.id(), circuit));
             this.session = session;
         }
         @Override public void close() {
+            clearUpload();
             for (String key : keys) session.release(key);
             keys.clear();
             circuit = null;
             prover = null;
         }
+    }
+
+    /** One exact-sized public-key buffer; no accumulated hex or second binary copy. */
+    private static final class KeyUpload implements AutoCloseable {
+        private byte[] bytes;
+        private int received;
+        private final ObjectNode metadata;
+        KeyUpload(int length, ObjectNode metadata) {
+            this.bytes = new byte[length];
+            this.metadata = metadata;
+        }
+        @Override public void close() { bytes = null; }
     }
 
     @Override public JsonNode invoke(String operation, JsonNode args, BindingSession session) {
@@ -102,13 +152,63 @@ public final class CircuitAdapter implements Adapter {
                             .put("constraintCheckMs", elapsed(start));
                 } finally { Arrays.fill(witness, BigInteger.ZERO); }
             }
+            case "keyResources" -> {
+                Boundary.fields(args, "circuit");
+                yield state(args, session).resources();
+            }
+            case "beginKey" -> {
+                Boundary.fields(args, "circuit", "fingerprint", "length", "expectedSha256", "verificationKey");
+                var state = state(args, session);
+                state.available();
+                int length = Boundary.integer(args, "length", 1, MAX_KEY_BYTES);
+                ObjectNode metadata = args.deepCopy();
+                metadata.remove("length");
+                metadata.put("circuit", state.circuit.id());
+                state.prover.validateKeyMetadata(metadata);
+                var upload = new KeyUpload(length, metadata);
+                // If handle admission fails, no live state retains the buffer.
+                String id = session.retain(upload);
+                state.upload = upload;
+                state.uploadId = id;
+                state.peakStagingBytes = Math.max(state.peakStagingBytes, length);
+                yield Boundary.object().put("upload", id).put("chunkBytes", KEY_CHUNK_BYTES);
+            }
+            case "appendKey", "finishKey", "abortKey" -> {
+                var state = state(args, session);
+                String id = Boundary.text(args, "upload");
+                var upload = session.get(id, KeyUpload.class);
+                if (!id.equals(state.uploadId) || upload != state.upload || upload.bytes == null)
+                    throw new BindingException("INVALID_HANDLE");
+                boolean keep = false;
+                try {
+                    if (operation.equals("appendKey")) {
+                        Boundary.fields(args, "circuit", "upload", "offset", "chunk");
+                        int offset = Boundary.integer(args, "offset", 0, upload.bytes.length);
+                        byte[] chunk = Boundary.bytes(args, "chunk", 1, KEY_CHUNK_BYTES);
+                        if (offset != upload.received || chunk.length > upload.bytes.length - offset)
+                            throw Boundary.invalid();
+                        System.arraycopy(chunk, 0, upload.bytes, offset, chunk.length);
+                        upload.received += chunk.length;
+                        keep = true;
+                        yield Boundary.object().put("received", upload.received);
+                    }
+                    Boundary.fields(args, "circuit", "upload");
+                    if (operation.equals("abortKey")) yield Boundary.object().put("aborted", true);
+                    if (upload.received != upload.bytes.length) throw new BindingException("INCOMPLETE_KEY");
+                    JsonNode loaded = state.prover.loadKeyBytes(upload.metadata, upload.bytes, session, KEY_LIMITS);
+                    state.imported(loaded);
+                    yield loaded;
+                } finally { if (!keep) state.clearUpload(); }
+            }
             case "loadKey" -> {
+                // Compatibility for small direct requests; the standalone cap is unchanged.
                 Boundary.fields(args, "circuit", "fingerprint", "zkey", "expectedSha256", "verificationKey");
                 var state = state(args, session);
+                state.available();
                 ObjectNode forwarded = args.deepCopy();
                 forwarded.put("circuit", state.circuit.id());
                 JsonNode loaded = state.prover.invoke("loadKey", forwarded, session);
-                state.keys.add(Boundary.text(loaded, "handle"));
+                state.imported(loaded);
                 yield loaded;
             }
             case "prove" -> {
@@ -144,7 +244,8 @@ public final class CircuitAdapter implements Adapter {
                 .put("graphSha256", expectedGraphHash).put("fingerprint", compiled.fingerprint())
                 .put("name", compiled.id()).put("wires", compiled.numWires())
                 .put("constraints", compiled.constraints().size()).put("publicInputs", compiled.numPublic())
-                .put("compileMs", compiled.compileMs).put("maxKeyBytes", Boundary.MAX_BYTES)
+                .put("compileMs", compiled.compileMs).put("maxKeyBytes", MAX_KEY_BYTES)
+                .put("keyChunkBytes", KEY_CHUNK_BYTES).put("keyProfile", "circuit-key-v1")
                 .put("withinProverDimensions", compiled.numWires() <= 4096 && compiled.numPublic() <= 64
                         && compiled.constraints().size() + compiled.numPublic() + 1 <= 4096);
         var pub = result.putArray("publicNames");

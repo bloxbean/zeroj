@@ -186,7 +186,8 @@ shows the policy without enabling general JavaScript `unsafe-eval`.
 | Boundary | Initial limit |
 |---|---|
 | Request JSON | 1,048,576 characters; depth 24; duplicate fields/trailing tokens rejected |
-| Byte array / proving key | 262,144 bytes |
+| Direct byte array / standalone proving key | 262,144 bytes |
+| Compiler proving key (`circuit-key-v1`) | 2 MiB total, 64 KiB chunks, one upload / one successful key per compiled circuit |
 | Key import allocations | <=4,096 wires, <=4,096 domain cells, <=16,384 coefficients; compiled relation must also match |
 | Groth16 public inputs | 64 |
 | BBS messages | 64, each <=4,096 bytes |

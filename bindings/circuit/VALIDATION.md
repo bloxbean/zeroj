@@ -1,5 +1,8 @@
 # Circuit compiler first milestone — validation
 
+**Historical M1 baseline.** See [M2 key-loading results](M2-KEY-LOADING.md) for the current
+Poseidon proving support, updated checks and resource measurements.
+
 2026-10-30. Experimental initial promotion on `feat/wasm-circuit-frontend`, stacked above
 PR #92 at `844a0625282cc87e77f3c85df1c1cbdd4cc86a3a`. The preceding research is commit
 `d425988` in the independent browser-circuit-compiler-poc repository. This report covers the
