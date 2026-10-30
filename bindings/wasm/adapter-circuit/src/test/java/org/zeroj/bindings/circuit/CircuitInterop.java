@@ -21,7 +21,9 @@ public final class CircuitInterop {
         return response.path("value");
     }
     public static void main(String[] args) throws Exception {
-        Path dir=Path.of(args[0]);
+        for(String name:new String[]{"poseidon_opening","allowlist_d1","merkle_d2"}) run(Path.of(args[0]).resolve(name),name);
+    }
+    private static void run(Path dir,String name) throws Exception {
         var vk=Boundary.parse(Files.readString(dir.resolve("vk.json")));
         for(String engine:new String[]{"node","chromium","firefox"}) {
             var result=Boundary.parse(Files.readString(dir.resolve(engine+"-proof.json")));
@@ -29,7 +31,7 @@ public final class CircuitInterop {
             if(!Groth16VerifierAdapter.verify(result.get("proof"),vk,values))throw new AssertionError(engine);
             values.set(0,values.getFirst().add(BigInteger.ONE));
             if(Groth16VerifierAdapter.verify(result.get("proof"),vk,values))throw new AssertionError("tamper "+engine);
-            System.out.println("JVM verified "+engine+" Poseidon proof and rejected changed public input");
+            System.out.println("JVM verified "+engine+" "+name+" proof and rejected changed public input");
         }
         var session=new BindingSession(Map.of("circuit",new CircuitAdapter()),true);
         String graph=Files.readString(dir.resolve("graph.json"));
@@ -48,9 +50,9 @@ public final class CircuitInterop {
                     .put("chunk",HexFormat.of().formatHex(key,offset,Math.min(offset+CircuitAdapter.KEY_CHUNK_BYTES,key.length))));
         String keyHandle=call(session,"finishKey",Boundary.object().put("circuit",circuit).put("upload",upload)).path("handle").asText();
         var prove=Boundary.object().put("circuit",circuit).put("key",keyHandle);
-        prove.set("input",Fixtures.inputs("poseidon_opening"));
+        prove.set("input",Fixtures.inputs(name));
         Files.writeString(dir.resolve("jvm-proof.json"),call(session,"prove",prove).toString());
         session.release(circuit);
-        System.out.println("JVM chunk import / Poseidon proof / self-verification PASS");
+        System.out.println("JVM chunk import / "+name+" proof / self-verification PASS");
     }
 }

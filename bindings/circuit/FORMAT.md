@@ -70,7 +70,7 @@ order, independent of their flattened wire count. Each value-returning command a
 symbolic object to the table; assertions append none. References must point backward and have
 the expected Java symbolic type. Bytes use names `base_0` through `base_(length-1)` and every
 flattened name must be unique across public/secret input declarations. Public declarations
-precede secret declarations. Types are field, bool, uint (bits 1..253) and bytes (length 1..64).
+precede secret declarations. V1 types are field, bool, uint (bits 1..253) and bytes (length 1..64).
 
 Commands call the existing Java methods; they do not carry constraint formulas or user code:
 
@@ -86,6 +86,46 @@ Operands other than constants/indexes are symbolic IDs. Invalid arity, type, wid
 forward reference rejects. Existing Java constraints determine UInt widening/underflow and
 boolean soundness. SHA-256 is limited to one invocation with 1..55 input bytes in this version.
 No raw signal wrapping, custom parameters or additional hints are exposed.
+
+## Recipe v2: fixed arrays and Poseidon Merkle paths
+
+Existing TS definitions still emit **identical v1 bytes**. Definitions using arrays or Merkle
+emit version 2. Java accepts both versions, but v1 rejects v2 vocabulary. Graph version 1 and
+compiler policy `zeroj-r1cs-bls12381-v1` are unchanged: the existing Java Merkle gadget expands
+into already-admitted boolean, linear-combination, multiplication, addition and equality gates.
+
+An array input uses this exact order (the outer recipe order is unchanged):
+
+```json
+{"name":"siblings","visibility":"secret","type":"array","element":{"type":"field"},"length":2}
+```
+
+Elements are `{"type":"field"}`, `{"type":"bool"}` or `{"type":"uint","bits":8}` with
+UInt widths 1..253. Length is 1..64. Nested/byte arrays are excluded. One logical input ID
+represents the array; flattened scalar names are `siblings_0`, `siblings_1`, etc. Public arrays
+retain public declaration order. Logical names and flattened names must be unique, including
+collisions with scalars/bytes. The existing 64 logical / 256 flattened input caps remain.
+
+- `["a.get",arrayId,index]` returns one scalar symbol. The index is a literal nonnegative integer
+  strictly below the declared length; witness-dependent indexing rejects.
+- `["g.merkleRootBls12381T3",leafId,siblingsId,pathBitsId,depth]` returns one field symbol using
+  `ZkMerkle.computeRootPoseidon` with `PoseidonParamsBLS12_381T3.INSTANCE`. The leaf is a field;
+  siblings are fields; directions are booleans. Both array lengths must equal the explicit
+  depth, which is 1..32. Arrays run from leaf to root: false = current node left, true = right.
+  There is no implicit leaf hash, domain separator, document encoding or nullifier.
+
+Only one Merkle invocation is admitted per recipe. Its preflight cost is 5,000 per explicit
+level, then actual array lengths are checked before gadget expansion; callers cannot understate
+work with a false depth. Array declaration cost accounts for every element and its UInt width.
+The existing 180,000 expansion budget, four direct Poseidon calls and one SHA-256 call remain.
+These work estimates are admission guards, not a proven bound on total heap use.
+
+TS uses `array(field(), depth)`, `array(bool(), depth)` or `array(uint(bits), depth)`, read-only
+`.length`, and `.get(index)`. Input arrays are ordinary exact-length arrays of bigint/boolean;
+values, ranges and sparse arrays are checked. Frozen copied descriptors and recorder ownership
+prevent shape mutation or cross-definition symbolic handles. Java independently checks the
+untrusted recipe and the existing constraints enforce ranges/booleans. Application manifests
+still authenticate the exact expanded graph and R1CS fingerprint before private inputs.
 
 ## Consumer worker protocol
 

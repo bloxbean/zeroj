@@ -186,6 +186,45 @@ and device coverage; a successful desktop example is experimental support only.
 - Measure image bytes, startup, compile/witness/prove/verify, with explicit memory
   scope and supported gadget sizes. No production/large-browser/quantum claims.
 
+## M3 fixed arrays and Merkle extension (2026-10-30)
+
+R2 extension under the accepted plan: add `zeroj-symbolic` version 2 for fixed
+homogeneous arrays of field/bool/uint (1..64 elements, no nested/byte arrays).
+Existing definitions still emit v1; the decoder keeps its v1 vocabulary closed.
+Array records have `name,visibility,type,element,length`; element descriptors have
+`type`, then `bits` for uint. Flattening is `name_0` through `name_(length-1)`,
+public before secret, with duplicate/collision and total-256-scalar checks.
+Array indexing is a public host integer, never a witness-dependent index. Java
+`ZkArray` supplies all input range/boolean constraints and element semantics.
+
+The only Merkle profile is existing `ZkMerkle.computeRootPoseidon` with explicit
+`PoseidonParamsBLS12_381T3.INSTANCE`, pinned at ZeroJ `cb998587`. Siblings and
+boolean directions are ordered leaf-to-root; false places the current node on
+the left, true on the right. One call of depth 1..32 is admitted, with explicit
+depth checked against both typed arrays and charged at 5,000 expansion units per
+level within the existing 180,000-unit budget. Empty proofs and length/type
+aliases reject. No raw select, custom hash/hint or new cryptography is admitted.
+Graph v1, compiler policy, importer/prover and 2 MiB/4,096-wire budgets do not change.
+
+The demonstration proves knowledge of a field leaf and path under an
+application-selected public root; it must not describe membership as identity,
+one-time authorization or a nullifier protocol. Fixtures use public test values.
+Compare native Java authoring/host hashing, all-false/all-true/mixed directions,
+invalid booleans and every leaf/sibling/root/path tampering; measure depths before
+claiming proving support. Depths outside prover admission remain compile/witness
+experiments. Cardano integration must additionally bind the trusted root and
+intended action to ScriptContext, with positive/negative and replay tests. The local
+example pins the root and an authorized signer in the validator and admits only
+an explicit claim action. The signer authorizes the transaction, while the proof
+supplies membership; the proof alone is not authorization. Ledger UTxO consumption
+prevents spending the same deposit twice. Membership proofs can be reused for
+another deposit under the same policy: no global one-use/nullifier claim is made.
+The required signer is public, so this is not an anonymous-spending protocol.
+The opt-in Cardano runner uses existing ZeroJ point compression/verifier sources,
+JuLC and CCL, and admits only loopback Yaci endpoints with an ephemeral test account.
+Wallet secrets remain in memory. No mainnet/testnet external submission is allowed
+by the example; only disposable local DevKit transactions are in scope.
+
 ## Alternatives and remaining gates
 
 A second TS crypto/compiler implementation would duplicate security-critical rules;
@@ -195,6 +234,6 @@ builder is an advanced escape hatch with the same format/validation limits.
 
 Before broader support: hard allocation/work counters, streaming graph/key memory
 accounting, fuzz/property coverage, independent review, Safari/real-device validation,
-explicit stable-format compatibility and artifact distribution review. Arrays,
-Merkle, broader SHA-2/BLAKE2b, EC relation packs and Yaci/Cardano application policy
-checks follow the plan; no such completion is implied by the initial promotion.
+explicit stable-format compatibility and artifact distribution review. The bounded arrays/Merkle
+and local Cardano slices are recorded in `bindings/circuit/M3-MERKLE.md`; broader SHA-2/BLAKE2b,
+other Poseidon profiles, EC relations and richer application protocols remain in the plan.

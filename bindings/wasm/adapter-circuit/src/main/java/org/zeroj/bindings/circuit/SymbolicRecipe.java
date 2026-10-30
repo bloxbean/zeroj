@@ -8,41 +8,53 @@ import org.zeroj.bindings.common.Boundary;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.ConstraintGraph;
 import org.zeroj.circuit.SignalBuilder;
+import org.zeroj.circuit.annotation.ZkArray;
+import org.zeroj.circuit.annotation.ZkValue;
 import org.zeroj.circuit.annotation.ZkBool;
 import org.zeroj.circuit.annotation.ZkBytes;
 import org.zeroj.circuit.annotation.ZkContext;
 import org.zeroj.circuit.annotation.ZkField;
 import org.zeroj.circuit.annotation.ZkUInt;
 import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
+import org.zeroj.circuit.lib.zk.ZkMerkle;
 import org.zeroj.circuit.lib.zk.ZkPoseidon;
 import org.zeroj.circuit.lib.zk.ZkSha256;
 
 /** Typed authoring commands delegate to Java symbolic APIs. This class contains no gadget equations. */
 public final class SymbolicRecipe {
-    private record Input(String name, boolean visible, String type, int size) {}
+    private record Input(String name, boolean visible, String type, int size, String element, int bits) {}
     private SymbolicRecipe() {}
     public static ConstraintGraph expand(String text) {
         JsonNode recipe=Boundary.parse(text);
         Boundary.fields(recipe,"format","version","compiler","field","name","inputs","commands");
+        int version=Boundary.integer(recipe,"version",1,2);
         if (!Boundary.text(recipe,"format").equals("zeroj-symbolic")
-                || Boundary.integer(recipe,"version",1,1)!=1
                 || !Boundary.text(recipe,"compiler").equals(GraphCodec.COMPILER)
                 || !Boundary.text(recipe,"field").equals("bls12-381-fr")
                 || !recipe.toString().equals(text)) throw Boundary.invalid();
         String name=identifier(recipe.get("name"));
         JsonNode inputs=recipe.get("inputs"),commands=recipe.get("commands");
         if(!inputs.isArray() || inputs.size()>64 || !commands.isArray() || commands.size()>128) throw Boundary.invalid();
-        var canonical=Boundary.object().put("format","zeroj-symbolic").put("version",1)
+        var canonical=Boundary.object().put("format","zeroj-symbolic").put("version",version)
                 .put("compiler",GraphCodec.COMPILER).put("field","bls12-381-fr").put("name",name);
         var canonicalInputs=canonical.putArray("inputs");
         var declarations=new ArrayList<Input>();var names=new HashSet<String>();var logicalNames=new HashSet<String>();
         int expanded=0,budget=0;boolean secretSeen=false;
         for(JsonNode n:inputs) {
             String type=Boundary.text(n,"type");
-            int size;
+            int size,bits=0;String element=null;
             switch(type) {
                 case "field","bool" -> {Boundary.fields(n,"name","visibility","type");size=1;}
                 case "uint" -> {Boundary.fields(n,"name","visibility","type","bits");size=Boundary.integer(n,"bits",1,253);}
+                case "array" -> {
+                    if(version!=2)throw Boundary.invalid();
+                    Boundary.fields(n,"name","visibility","type","element","length");
+                    size=Boundary.integer(n,"length",1,64);
+                    JsonNode e=n.get("element");element=Boundary.text(e,"type");
+                    if(element.equals("uint")){Boundary.fields(e,"type","bits");bits=Boundary.integer(e,"bits",1,253);}
+                    else if(element.equals("field")||element.equals("bool"))Boundary.fields(e,"type");
+                    else throw Boundary.invalid();
+                }
                 case "bytes" -> {Boundary.fields(n,"name","visibility","type","length");size=Boundary.integer(n,"length",1,64);}
                 default -> throw Boundary.invalid();
             }
@@ -51,20 +63,31 @@ public final class SymbolicRecipe {
             boolean visible=visibility.equals("public");
             if(visible&&secretSeen)throw Boundary.invalid();if(!visible)secretSeen=true;
             if(!logicalNames.add(id))throw Boundary.invalid();
-            int width=type.equals("bytes")?size:1;
+            int width=(type.equals("bytes")||type.equals("array"))?size:1;
             expanded+=width;if(expanded>256)throw Boundary.invalid();
-            for(int i=0;i<width;i++)if(!names.add(type.equals("bytes")?id+"_"+i:id))throw Boundary.invalid();
-            budget+=switch(type){case "uint"->4*size+16;case "bytes"->40*size;default->16;};
-            declarations.add(new Input(id,visible,type,size));
+            for(int i=0;i<width;i++)if(!names.add((type.equals("bytes")||type.equals("array"))?id+"_"+i:id))throw Boundary.invalid();
+            budget+=switch(type){case "uint"->4*size+16;case "bytes"->40*size;case "array"->size*(element.equals("uint")?4*bits+16:16);default->16;};
+            if(budget>180000)throw Boundary.invalid();
+            declarations.add(new Input(id,visible,type,size,element,bits));
             var encoded=canonicalInputs.addObject().put("name",id).put("visibility",visibility).put("type",type);
             if(type.equals("uint"))encoded.put("bits",size);
             if(type.equals("bytes"))encoded.put("length",size);
+            if(type.equals("array")){
+                var e=encoded.putObject("element").put("type",element);
+                if(element.equals("uint"))e.put("bits",bits);
+                encoded.put("length",size);
+            }
         }
-        int sha=0,poseidon=0;
+        int sha=0,poseidon=0,merkle=0;
         for(JsonNode command:commands) {
             if(!command.isArray() || command.isEmpty() || !command.get(0).isTextual())throw Boundary.invalid();
             String op=command.get(0).textValue();int cost;
-            if(op.equals("g.sha256")){if(++sha>1)throw Boundary.invalid();cost=150000;}
+            if(op.equals("g.merkleRootBls12381T3")){
+                if(version!=2||++merkle>1)throw Boundary.invalid();arity(command,5);
+                int depth=integer(command.get(4),32);if(depth<1)throw Boundary.invalid();cost=5000*depth;
+            }
+            else if(op.equals("a.get")){if(version!=2)throw Boundary.invalid();cost=512;}
+            else if(op.equals("g.sha256")){if(++sha>1)throw Boundary.invalid();cost=150000;}
             else if(op.equals("g.poseidonBls12381T3")){if(++poseidon>4)throw Boundary.invalid();cost=5000;}
             else if(op.startsWith("u.")||op.startsWith("bytes."))cost=4096;
             else if(op.startsWith("f."))cost=512;
@@ -75,8 +98,8 @@ public final class SymbolicRecipe {
         canonical.set("commands",commands);
         if(!canonical.toString().equals(text))throw Boundary.invalid();
         var builder=CircuitBuilder.create(name);
-        for(Input in:declarations)for(int i=0;i<(in.type.equals("bytes")?in.size:1);i++) {
-            String id=in.type.equals("bytes")?in.name+"_"+i:in.name;
+        for(Input in:declarations)for(int i=0;i<((in.type.equals("bytes")||in.type.equals("array"))?in.size:1);i++) {
+            String id=(in.type.equals("bytes")||in.type.equals("array"))?in.name+"_"+i:in.name;
             if(in.visible)builder.publicVar(id);else builder.secretVar(id);
         }
         return builder.defineSignals(signals->{
@@ -98,6 +121,12 @@ public final class SymbolicRecipe {
             case "field" -> i.visible?ZkField.publicInput(b,i.name):ZkField.secret(b,i.name);
             case "uint" -> i.visible?ZkUInt.publicInput(b,i.name,i.size):ZkUInt.secret(b,i.name,i.size);
             case "bool" -> i.visible?ZkBool.publicInput(b,i.name):ZkBool.secret(b,i.name);
+            case "array" -> switch(i.element) {
+                case "field" -> i.visible?ZkArray.publicFields(b,i.name,i.size):ZkArray.secretFields(b,i.name,i.size);
+                case "bool" -> i.visible?ZkArray.publicBools(b,i.name,i.size):ZkArray.secretBools(b,i.name,i.size);
+                case "uint" -> i.visible?ZkArray.publicUInts(b,i.name,i.size,i.bits):ZkArray.secretUInts(b,i.name,i.size,i.bits);
+                default -> throw Boundary.invalid();
+            };
             case "bytes" -> i.visible?ZkBytes.publicInput(b,i.name,i.size):ZkBytes.secret(b,i.name,i.size);
             default -> throw Boundary.invalid();
         };
@@ -115,6 +144,14 @@ public final class SymbolicRecipe {
     private static ZkUInt u(JsonNode c,int i,List<Object> v){return value(c,i,v,ZkUInt.class);}
     private static ZkBool b(JsonNode c,int i,List<Object> v){return value(c,i,v,ZkBool.class);}
     private static ZkBytes bytes(JsonNode c,int i,List<Object> v){return value(c,i,v,ZkBytes.class);}
+    private static <T extends ZkValue> ZkArray<T> array(JsonNode c,int index,List<Object> values,Class<T> element) {
+        var array=value(c,index,values,ZkArray.class);
+        var checked=new ArrayList<T>(array.size());
+        for(Object item:array.values()){
+            if(!element.isInstance(item))throw Boundary.invalid();checked.add(element.cast(item));
+        }
+        return new ZkArray<>(checked);
+    }
     private static Object execute(JsonNode c,List<Object> v,ZkContext zk) {
         String op=c.get(0).textValue();
         return switch(op) {
@@ -152,6 +189,13 @@ public final class SymbolicRecipe {
             case "bytes.isEqual" -> {arity(c,3);yield bytes(c,1,v).isEqual(bytes(c,2,v));}
             case "bytes.assertEqual" -> {arity(c,3);bytes(c,1,v).assertEqual(bytes(c,2,v));yield null;}
             case "g.poseidonBls12381T3" -> {arity(c,3);yield ZkPoseidon.hash(zk,PoseidonParamsBLS12_381T3.INSTANCE,f(c,1,v),f(c,2,v));}
+            case "a.get" -> {arity(c,3);var array=value(c,1,v,ZkArray.class);yield array.get(integer(c.get(2),array.size()-1));}
+            case "g.merkleRootBls12381T3" -> {
+                arity(c,5);int depth=integer(c.get(4),32);
+                var siblings=array(c,2,v,ZkField.class);var directions=array(c,3,v,ZkBool.class);
+                if(depth<1||siblings.size()!=depth||directions.size()!=depth)throw Boundary.invalid();
+                yield ZkMerkle.computeRootPoseidon(zk,PoseidonParamsBLS12_381T3.INSTANCE,f(c,1,v),siblings,directions);
+            }
             case "g.sha256" -> {arity(c,2);var message=bytes(c,1,v);if(message.size()>55)throw Boundary.invalid();yield ZkSha256.hash(zk,message);}
             default -> throw Boundary.invalid();
         };

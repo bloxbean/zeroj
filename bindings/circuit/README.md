@@ -25,10 +25,11 @@ runs JVM parity/negative tests, builds/packages the compiler image, creates disp
 keys, tests Node and Chromium/Firefox, and verifies an isolated local npm-tarball consumer.
 Generated images, keys, logs, screenshots and raw vectors remain ignored. No npm publication occurs.
 
-The six browser scenarios cover a Java graph, typed field arithmetic, an age threshold, boolean
-selection, Poseidon and SHA-256. The first five generate fresh proofs and reject changed public
-inputs, including the Poseidon opening. SHA-256 compiles and checks witnesses; **its browser
-proof path remains beyond the wire/domain limits**. The full implementation plan remains in progress.
+The eleven browser scenarios cover portable graphs, field/UInt/boolean authoring, Poseidon,
+SHA-256, an allowlist and Merkle paths. Seven generate fresh proofs, including Merkle depths
+1 and 2. SHA-256 and depths 8/16/32 compile and check witnesses but exceed the current proving
+limits. See [M3 measurements and tutorial](M3-MERKLE.md) and the opt-in
+[local Cardano example](../cardano/README.md). The full implementation plan remains in progress.
 
 ## Author and prove
 
@@ -109,9 +110,10 @@ An edited compiler or circuit can require different setup artifacts.
 
 - Field arithmetic/equality, constants; unsigned integers with Java's checked widening/range rules.
 - Boolean logic/assertions and field/UInt/Bool `select`; fixed nonempty bytes/indexing/equality.
-- Existing `zk.gadgets.poseidonBls12381T3` and one-block `zk.gadgets.sha256`.
-- bigint/boolean/Uint8Array inputs with exact public/private names. Arrays/bits and broader gadget
-  profiles are later milestones.
+- Fixed arrays of field/bool/UInt, static `.get(index)` and `.length`; no nested/dynamic arrays.
+- Existing `zk.gadgets.poseidonBls12381T3`, `merkleRootBls12381T3` and one-block `sha256`.
+- bigint/boolean/Uint8Array and exact-length array inputs with exact public/private names.
+  Bit-vector convenience and broader gadget profiles remain later milestones.
 
 Use explicit symbolic assertions. `isEqual()` returns a symbolic boolean; ignoring it adds no
 assertion that it is true. `if(symbol)`, `symbol === other`, `symbol + other` and `Boolean(symbol)`
@@ -166,8 +168,8 @@ checks and post-proof self-verification do not replace application-authenticated
 resolve all production ceremony/key-consistency assurance gates.
 
 The age example does not authenticate an age, the fixed salt offers no privacy demonstration,
-and proving a hash preimage does not interpret a document. No new Yaci transaction/fee benchmark
-is claimed here. Real Cardano applications must bind their public inputs and proof to validator
+and proving a hash preimage does not interpret a document. The [M3 local devnet example](M3-MERKLE.md)
+measures a browser proof with explicit root/signer/action policy. Real Cardano applications must bind their public inputs and proof to validator
 policy, transaction context and replay/state-transition rules. Groth16/EC primitives here are
 not post-quantum. Browser/Node secret operations remain experimental and unassessed for side
 channels under ADR-0057.

@@ -19,8 +19,9 @@ try{
  run('npm',['install','--ignore-scripts','--offline','--no-audit','--no-fund',...tarballs,'typescript@5.9.3'],consumer);
  const dir=path.join(root,'build/circuit/cubic'),f=JSON.parse(fs.readFileSync(path.join(root,'build/circuit/manifest.json'))).find(x=>x.name==='cubic');
  const vk=JSON.parse(fs.readFileSync(path.join(dir,'vk.json'))),key=Array.from(fs.readFileSync(path.join(dir,'key.zkey')));
+ const arrayIdentity=JSON.parse(fs.readFileSync(path.join(root,'../wasm/adapter-circuit/build/symbolic-test-vectors/arrays-identity.json')));
  const source=`import {createRuntime} from '@zeroj/runtime';
-import {createCircuitCompiler,defineCircuit,field} from '@zeroj/circuit';
+import {createCircuitCompiler,defineCircuit,field,bool,uint,array} from '@zeroj/circuit';
 import {createGroth16Verifier,type Groth16VerificationKey} from '@zeroj/groth16-verifier';
 import {bundle} from '@zeroj/bundle-circuit';
 const d=defineCircuit({name:'cubic',public:{y:field()},secret:{x:field()}},({public:p,secret:s,zk})=>{s.x.mul(s.x).mul(s.x).add(s.x).add(zk.constant(5n)).assertEqual(p.y);});
@@ -33,7 +34,17 @@ try{
  if(!await createGroth16Verifier(r).verify({...proof,verificationKey:vk}))throw Error('proof');
  if(await createGroth16Verifier(r).verify({...proof,publicInputs:[36n],verificationKey:vk}))throw Error('tamper');
  await c.dispose();console.log('Packed circuit SDK: author, compile, prove, verify, reject tamper PASS');
-}finally{await r.dispose();}`;
+}finally{await r.dispose();}
+const arrays=defineCircuit({name:'arrays',public:{out:array(field(),2)},secret:{flags:array(bool(),2),values:array(uint(8),2)}},({public:p,secret:s})=>{
+ for(let i=0;i<s.flags.length;i++)s.flags.get(i).assertTrue();
+ for(let i=0;i<p.out.length;i++)s.values.get(i).asField().assertEqual(p.out.get(i));
+});
+const ar=createRuntime({bundles:[bundle],experimentalSecrets:true});
+try{
+ const c=await createCircuitCompiler(ar).compile(arrays,${JSON.stringify(arrayIdentity)});
+ if(!(await c.checkWitness({public:{out:[5n,7n]},secret:{flags:[true,true],values:[5n,7n]}})).valid)throw Error('array witness');
+ await c.dispose();console.log('Packed SDK fixed arrays: typed recipe v2 and Wasm witness PASS');
+}finally{await ar.dispose();}`;
  fs.writeFileSync(path.join(consumer,'main.ts'),source);
  fs.writeFileSync(path.join(consumer,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ES2022',module:'NodeNext',moduleResolution:'NodeNext',strict:true,lib:['ES2022','DOM'],outDir:'dist'},include:['main.ts']}));
  run(process.execPath,[path.join(root,'node_modules/typescript/bin/tsc'),'-p',consumer],consumer);

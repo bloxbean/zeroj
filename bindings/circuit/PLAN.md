@@ -2,6 +2,8 @@
 
 Accepted experimental implementation plan, 2026-10-30; maintainer requested a separate stacked PR above #92. **GO for a bounded experimental SDK; RESEARCH for larger browser proving and advanced gadget packs.** This is a plan to promote the tested research, not a declaration that the APIs below are published. Implementation evidence is in the research report at `zeroj-research/browser-circuit-compiler-poc/docs/SYMBOLIC_REPORT.md` (research commit `d425988`).
 
+Sections 1–7 preserve the accepted roadmap; the implementation ledger at the end records current completion and measured limits.
+
 ## 1. The architectural decision
 
 Keep **one implementation of circuit semantics and cryptography, in Java**. TypeScript describes intent and input shapes; it does not implement SHA rounds, Poseidon permutations, elliptic-curve arithmetic, range constraints, witness algorithms, MSM or FFT.
@@ -206,9 +208,22 @@ Promote the recipe/graph contract and typed frontend in a new stack above #92, t
 - First bounded milestone: promote graph codec, selected symbolic recipe dispatcher, typed compilation/proving lifecycle and authoring lint; retain the existing proving limits.
 - M1 initial slice implemented and validated: canonical graph/recipe contract; Java adapter and build-time artifact exporter; typed TS lifecycle/input conversion; CLI authoring lint; browser/Node examples; isolated local npm package test.
 - M1 remains in progress for fixed bits/arrays, generated operation catalog, full lint/build integration, richer diagnostics and shape parameters. Independent review remains a draft-PR gate.
-- M2 bounded transport/Poseidon slice is implemented in this stack; validation and remaining profiling/device gates are tracked in [M2-KEY-LOADING.md](M2-KEY-LOADING.md). M3–M6 remain planned.
+- M2 bounded transport/Poseidon slice is implemented in this stack; validation and remaining profiling/device gates are tracked in [M2-KEY-LOADING.md](M2-KEY-LOADING.md). M3 and the bounded M5 application slice now have measured evidence below; the remaining gates are still planned.
 - Do not publish npm packages or merge this stack as part of implementation.
 
 - M1 validation baseline: 21 JVM and 17 Node tests; see [VALIDATION.md](VALIDATION.md).
 - M2 validation: 26 JVM and 23 Node tests, six scenarios plus import cancellation in Chromium/Firefox, Poseidon proof cross-verification with JVM/snarkjs, and five SDK tarballs installed offline. Measurements and limitations are in [M2-KEY-LOADING.md](M2-KEY-LOADING.md).
-- M2 retains the standalone prover limits and adds the separately bounded compiler key profile. Full heap containment/device gates remain open; fixed arrays and Poseidon Merkle are the next functional slice once those limits are assessed.
+- M2 retains the standalone prover limits and adds the separately bounded compiler key profile. Full heap containment/device gates remain open; the subsequent fixed-array/Merkle slice is documented below.
+
+- M3 bounded slice implemented: recipe v2 fixed field/bool/UInt arrays and static indexing,
+  existing Java BLS12-381 T3 Merkle expansion, browser allowlist illustration, Node/browser proofs
+  at depths 1/2, and compile/witness measurements at 8/16/32. V1 bytes and all proving limits remain
+  unchanged. Depth 2 nearly fills the 2 MiB key cap; larger browser trees remain RESEARCH.
+- Bounded M5 application slice implemented: exact Chromium proof submitted on local Yaci with
+  pinned root/VK/signer/action; independent Java/remote/Haskell budget equality, four invalid signed
+  claims and same-UTxO replay rejection. Membership remains reusable on other deposits. This does
+  not complete private-state, anonymous authorization, nullifier or network-context protocol work.
+- Current measurements, reproduction and security limits: [M3-MERKLE.md](M3-MERKLE.md).
+  Next resource work is profiling larger keys/graphs and evaluating separately reviewed core wire
+  compaction, before broadening the browser proving profile. Other Poseidon profiles, SHA-512 and
+  BLAKE2b still require their own measured slices. M1 catalog/lint/diagnostic work remains open.

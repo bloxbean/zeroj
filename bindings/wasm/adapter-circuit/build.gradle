@@ -38,7 +38,7 @@ tasks.register('circuitInterop', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'org.zeroj.bindings.circuit.CircuitInterop'
     maxHeapSize = '2g'
-    args rootProject.file('../js/build/circuit/poseidon_opening').absolutePath
+    args rootProject.file('../js/build/circuit').absolutePath
     if (project.hasProperty('circuitJfr')) {
         jvmArgs '-XX:FlightRecorderOptions=stackdepth=128'
         jvmArgs '-XX:StartFlightRecording=settings=profile,filename=' + rootProject.file(project.property('circuitJfr')).absolutePath

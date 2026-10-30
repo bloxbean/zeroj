@@ -2,13 +2,13 @@
 import {bundle} from '@zeroj/bundle-circuit';
 import {createCircuitCompiler} from '@zeroj/circuit';
 import {createGroth16Verifier} from '@zeroj/groth16-verifier';
-import {circuitRuntime,symbolicExamples,typedFixtureInputs} from './scenarios.mjs';
+import {circuitRuntime,allDefinitions,typedFixtureInputs} from './scenarios.mjs';
 const percentile=(values,q)=>[...values].sort((a,b)=>a-b)[Math.ceil(q*values.length)-1];
-export async function benchmark(load,{runs=5,warmRuns=5,onPhase=()=>{}}={}){
+export async function benchmark(load,{name="poseidon_opening",runs=5,warmRuns=5,onPhase=()=>{}}={}){
  if(!Number.isInteger(runs)||runs<1||runs>20||!Number.isInteger(warmRuns)||warmRuns<1||warmRuns>20)throw Error('BENCHMARK_LIMIT');
- const name='poseidon_opening',f=JSON.parse(await load('manifest.json','text')).find(x=>x.name===name);
+ const f=JSON.parse(await load('manifest.json','text')).find(x=>x.name===name);
  if(!f?.developmentOnly)throw Error('DEVELOPMENT_FIXTURE_REQUIRED');
- const definition=symbolicExamples.find(x=>x.name===name),input=typedFixtureInputs(definition,JSON.parse(await load(name+'/inputs.json','text')));
+ const definition=allDefinitions.find(x=>x.name===name),input=typedFixtureInputs(definition,JSON.parse(await load(name+'/inputs.json','text')));
  const artifact={zkey:new Uint8Array(await load(name+'/key.zkey','bytes')),verificationKey:JSON.parse(await load(name+'/vk.json','text')),
   expectedSha256:Uint8Array.from(f.keySha256.match(/../g),v=>parseInt(v,16))};
  const cold=[],warm=[];let resources;

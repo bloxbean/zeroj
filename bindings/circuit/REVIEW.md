@@ -86,3 +86,44 @@ checks and Yaci measurements belong to a later milestone.
 
 M2 does not prove hostile-input heap containment, stable p95 on real devices, Safari support,
 large SHA/Merkle feasibility, full ceremony/key-consistency assurance, or production security.
+
+
+## M3 arrays/Merkle and bounded Cardano example — follow-up self-review
+
+- R2 design was appended to ADR-0064 before implementation. The new recipe vocabulary has its
+  own version; scalar/byte-only definitions retain their exact v1 bytes. Java rejects v2 features
+  in v1, noncanonical descriptor order, nested/byte arrays, forged depth/type/shape and collisions.
+- Logical input IDs remain separate from flattened wire names. Public declarations precede
+  private ones. Array widths/ranges are accounted for in preflight; actual lengths are checked
+  against the claimed Merkle depth before expansion. Static `.get()` cannot select by a witness.
+- TS schemas copy/freeze the nested element descriptor; symbolic arrays use recorder ownership.
+  A caught shape/index/type error invalidates the recorder. Java enforces types independently.
+- Existing `ZkArray`, `ZkMerkle`, boolean/range types and Poseidon parameters provide all gadget
+  semantics. The Java selection path emits already-admitted gates; raw Select/hints were not
+  added to the graph codec. Core cryptographic code and the R1CS compiler are untouched.
+- Exact Java annotation parity initially exposed the processor's default singularization of
+  array names. Explicit `@Secret(name=...)` declarations now match TS flattened names exactly;
+  this required no processor or compiler change.
+- Negative tests reach the actual Wasm boundary as well as TS validation. The raw boolean-bit
+  rejection is preceded by a successful raw witness check on the same handle, avoiding a false
+  pass caused only by an invalid handle. Field/bool/UInt array indexing executes in Wasm.
+- Circuit identity, setup/VK authentication, byte/wire/domain/coefficient caps, importer checks,
+  WebCrypto entropy and worker cancellation remain inherited. Depth-2 key loading fits by only
+  8,033 bytes; no larger-key or production feasibility is inferred.
+- The Cardano example pins root and signer and checks the claim action separately from proof
+  validity. A valid alternate-root proof passes snarkjs first, then fails the application policy.
+  The signer authorizes arbitrary transaction outputs; no payout restriction is implied.
+- Four signed invalid claims reject phase 2. A different transaction ID spending the same UTxO
+  rejects after the valid claim confirms. The first harness expected `BadInputsUTxO`, whereas the
+  local node returned `ConwayMempoolFailure: All inputs are spent`; the assertion now accepts and
+  records those specific spent-input failures. Identical-transaction resubmission is not used as
+  evidence. The protocol deliberately permits membership-proof reuse on fresh deposits.
+- The runner is opt-in, loopback-only and uses ephemeral test wallet keys without logging or
+  saving them. Its commit-pinned experimental JuLC profile is isolated from core dependency
+  versions. Raw vectors/keys/transactions/logs/images stay ignored; curated measurements remain.
+- Browser results now show compact phase/count summaries, with full identities/resources under
+  expandable details. This avoids flooding the tutorial with 32-level flattened path names.
+
+This remains a self-review, not an independent audit. Large browser proving, hostile-input heap
+containment, actual mobile/Safari, ceremony consistency, runtime side channels, other Poseidon
+profiles, nullifier/private-state protocols and release gates remain open. See M3-MERKLE.md.

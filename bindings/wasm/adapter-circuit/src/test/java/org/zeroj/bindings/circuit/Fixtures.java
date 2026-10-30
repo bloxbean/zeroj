@@ -18,7 +18,9 @@ import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 /** JVM-only exporter and independent oracle fixture generator; never referenced from Wasm. */
 public final class Fixtures {
     static CircuitBuilder circuit(String name) {
+        if(name.startsWith("merkle_d"))return MerkleFixtures.circuit(Integer.parseInt(name.substring(8)));
         return switch(name) {
+            case "allowlist_d1" -> AllowlistCircuit.build();
             case "multiplier" -> MultiplierCircuit.build();
             case "cubic" -> CubicCircuit.build();
             case "age_check" -> AgeCheckCircuit.build();
@@ -29,6 +31,8 @@ public final class Fixtures {
         };
     }
     static ObjectNode inputs(String name) throws Exception {
+        if(name.startsWith("merkle_d"))return MerkleFixtures.input(Integer.parseInt(name.substring(8)),2);
+        if(name.equals("allowlist_d1"))return MerkleFixtures.input(1,1);
         var n=GraphCodec.JSON.createObjectNode();
         switch(name) {
             case "multiplier" -> n.put("product","33").put("x","3").put("y","11");
@@ -49,7 +53,7 @@ public final class Fixtures {
     public static void main(String[] args) throws Exception {
         Path out=Path.of(args[0]); Files.createDirectories(out);
         var manifest=GraphCodec.JSON.createArrayNode();
-        for(String name:List.of("multiplier","cubic","age_check","sha256_abc","poseidon_opening","symbolic_select")) {
+        for(String name:List.of("multiplier","cubic","age_check","sha256_abc","poseidon_opening","symbolic_select","merkle_d1","merkle_d2","merkle_d8","merkle_d16","merkle_d32","allowlist_d1")) {
             long t=System.nanoTime(); var original=circuit(name).constraintGraph();
             double buildMs=(System.nanoTime()-t)/1e6;
             t=System.nanoTime(); String encoded=GraphCodec.encode(original); double encodeMs=(System.nanoTime()-t)/1e6;

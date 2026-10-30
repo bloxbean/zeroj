@@ -1,4 +1,4 @@
-import {defineCircuit,field,bool,uint,bytes} from '@zeroj/circuit';
+import {defineCircuit,field,bool,uint,bytes,array} from '@zeroj/circuit';
 const circuit=defineCircuit({name:'typing',public:{out:field()},secret:{x:field(),flag:bool(),count:uint(8),data:bytes(3)}},({public:p,secret:s,zk})=>{
   s.flag.select(s.x,p.out).assertEqual(p.out);
   zk.gadgets.sha256(s.data).get(0).asField();
@@ -26,3 +26,16 @@ compiled.keyResources().then(r=>r.reservedBytes+r.lastImportMs);
 compiled.loadKey(artifact,{signal:true});
 // @ts-expect-error an arbitrary key cannot bypass local ownership
 compiled.prove('key',{public:{y:35n},secret:{x:3n}});
+
+const membership=defineCircuit({name:'membership',public:{root:field()},secret:{leaf:field(),siblings:array(field(),1),path:array(bool(),1)}},({public:p,secret:s,zk})=>{
+ zk.gadgets.merkleRootBls12381T3(s.leaf,s.siblings,s.path).assertEqual(p.root);
+ // @ts-expect-error path directions must be symbolic booleans
+ zk.gadgets.merkleRootBls12381T3(s.leaf,s.siblings,s.siblings);
+ // @ts-expect-error indexing is a host integer, not a field witness
+ s.siblings.get(s.leaf);
+});
+membership.encodeInputs({public:{root:1n},secret:{leaf:2n,siblings:[3n],path:[true]}});
+// @ts-expect-error field arrays take bigint values
+membership.encodeInputs({public:{root:1n},secret:{leaf:2n,siblings:[3],path:[true]}});
+// @ts-expect-error nested arrays are not admitted in recipe v2
+array(array(field(),2),2);

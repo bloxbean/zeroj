@@ -19,17 +19,20 @@ try{
    assert.equal(assets.length,0,'imports must not eagerly fetch Wasm');
    await page.screenshot({path:new URL(name+'-initial.png',out).pathname,fullPage:true});
    const results=[];
-   for(const id of ['multiplier','cubic','age_check','symbolic_select','poseidon_opening','sha256_abc']){
+   for(const id of ['multiplier','cubic','age_check','symbolic_select','poseidon_opening','sha256_abc','allowlist_d1','merkle_d2','merkle_d8','merkle_d16','merkle_d32']){
     await page.locator('button[data-name="'+id+'"]').click();
     await page.waitForFunction(id=>!!document.getElementById(id).dataset.status,id,{timeout:120000});
     const box=page.locator('#'+id);assert.equal(await box.getAttribute('data-status'),'passed',await box.textContent());
     const result=JSON.parse(await box.textContent());assert.equal(result.valid,true);
-    if(id==='sha256_abc')assert.equal(result.proofGenerated,false);
+    const details=page.locator("#"+id+" + details.artifact-details");
+    assert.equal(await details.count(),1);assert.equal(await details.getAttribute("open"),null);
+    assert.equal((await details.textContent()).includes("graphSha256"),true);
+    if(['sha256_abc','merkle_d8','merkle_d16','merkle_d32'].includes(id))assert.equal(result.proofGenerated,false);
     else {assert.equal(result.proofGenerated,true);assert.equal(result.tamperedAccepted,false);assert.equal(result.snarkjsAccepted,true);}
     if(id==='sha256_abc')assert.equal(result.hostDigestMatches,true);
-    if(id==='poseidon_opening'){
-      const proof=await page.evaluate(async()=>{const {scenario}=await import('/examples/circuit/scenarios.mjs');const load=async(n,k)=>{const r=await fetch('/build/circuit/'+n);return k==='text'?r.text():r.arrayBuffer();};const r=await scenario('poseidon_opening',load);return {proof:r.proof.proof,publicInputs:r.proof.publicInputs.map(String)};});
-      await fs.writeFile(new URL('../circuit/poseidon_opening/'+name+'-proof.json',out),JSON.stringify(proof));
+    if(['poseidon_opening','allowlist_d1','merkle_d2'].includes(id)){
+      const proof=await page.evaluate(async id=>{const {scenario}=await import('/examples/circuit/scenarios.mjs');const load=async(n,k)=>{const r=await fetch('/build/circuit/'+n);return k==='text'?r.text():r.arrayBuffer();};const r=await scenario(id,load);return {proof:r.proof.proof,publicInputs:r.proof.publicInputs.map(String)};},id);
+      await fs.writeFile(new URL('../circuit/'+id+'/'+name+'-proof.json',out),JSON.stringify(proof));
     }
     results.push(result);
    }
@@ -48,11 +51,12 @@ try{
    assert.equal(cancelled,true,'browser abort during import');
    assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
    await page.screenshot({path:new URL(name+'-results.png',out).pathname,fullPage:true});
+   await page.locator('section').filter({has:page.locator('#allowlist_d1')}).screenshot({path:new URL(name+'-allowlist.png',out).pathname});
    await page.setViewportSize({width:390,height:844});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    await page.screenshot({path:new URL(name+'-mobile.png',out).pathname,fullPage:true});
    all.push({browser:name,version:browser.version(),results});
-   console.log(name,browser.version(),'all six compiler scenarios passed');
+   console.log(name,browser.version(),'all eleven compiler scenarios passed');
   }finally{await browser.close();}
  }
  await fs.writeFile(new URL('browser.json',out),JSON.stringify(all,null,2)+'\n');

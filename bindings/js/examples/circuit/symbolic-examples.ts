@@ -1,4 +1,4 @@
-import {defineCircuit,field,uint,bool,bytes} from '@zeroj/circuit';
+import {defineCircuit,field,uint,bool,bytes,array} from '@zeroj/circuit';
 
 export const symbolicCubic=defineCircuit({name:'cubic',public:{y:field()},secret:{x:field()}},({public:p,secret:s,zk})=>{
   s.x.mul(s.x).mul(s.x).add(s.x).add(zk.constant(5n)).assertEqual(p.y);
@@ -17,3 +17,19 @@ export const sha256Preimage=defineCircuit({name:'sha256_abc',public:{digest:byte
   zk.gadgets.sha256(s.message).assertEqual(p.digest);
 });
 export const symbolicExamples=[symbolicCubic,ageCheck,typedSelection,poseidonOpening,sha256Preimage] as const;
+
+/** An input leaf is a field value; this profile does not implicitly hash/encode a document. */
+export const merkleMembership=(depth:number)=>defineCircuit({name:'merkle_d'+depth,
+  public:{root:field()},secret:{leaf:field(),siblings:array(field(),depth),pathBits:array(bool(),depth)}},
+  ({public:p,secret:s,zk})=>{zk.gadgets.merkleRootBls12381T3(s.leaf,s.siblings,s.pathBits).assertEqual(p.root);});
+export const merkleExamples=[1,2,8,16,32].map(merkleMembership);
+export const allowlist=defineCircuit({name:'allowlist_d1',public:{root:field()},
+  secret:{leaf:field(),siblings:array(field(),1),pathBits:array(bool(),1)}},
+  ({public:p,secret:s,zk})=>{
+    zk.gadgets.merkleRootBls12381T3(s.leaf,s.siblings,s.pathBits).assertEqual(p.root);
+  });
+export const arrayExample=defineCircuit({name:'arrays',public:{out:array(field(),2)},
+  secret:{flags:array(bool(),2),values:array(uint(8),2)}},({public:p,secret:s})=>{
+    for(let i=0;i<s.flags.length;i++)s.flags.get(i).assertTrue();
+    for(let i=0;i<p.out.length;i++)s.values.get(i).asField().assertEqual(p.out.get(i));
+  });

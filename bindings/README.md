@@ -6,8 +6,9 @@ implemented in PR #92. See the [measured report](REPORT.md), [progress ledger](P
 
 The separate circuit-compiler stack adds [typed TS authoring and portable graph import](circuit/README.md)
 under [ADR-0064](../docs/adr/0064-portable-circuits-and-typescript-frontend.md).
-Its [plan](circuit/PLAN.md) distinguishes the implemented first slice from larger-key,
-Merkle and Cardano-application milestones.
+Its [plan](circuit/PLAN.md) tracks completed slices and remaining gates.
+[Measured Merkle support](circuit/M3-MERKLE.md) includes depth-1/2 browser proofs and a
+[local Cardano claim](cardano/README.md); larger measured trees remain compile/witness-only.
 
 The adapters reuse ZeroJ's Java implementation. Typed ESM packages expose `Uint8Array`, `bigint`,
 Promises and worker-local handles. Browsers use Web Workers; Node uses worker threads. Importing
@@ -130,12 +131,15 @@ Fr profile (t=3, alpha=5, RF=8, RP=57), rejects non-canonical scalars and requir
 secret-path opt-in because its Java arithmetic is variable-time.
 
 None of these ordinary calls builds ZK constraints. SHA-2/Poseidon circuit gadgets remain Java
-circuit components. The shipped prover demonstrates `y = x³ + x + 5` with private x. Custom
+circuit components. The standalone prover package demonstrates `y = x³ + x + 5` with private x. Custom
 small circuits implement [CompiledCircuit](wasm/adapter-groth16/src/main/java/org/zeroj/bindings/groth16/CompiledCircuit.java),
 register in a Java entry point, and compile into an explicit image. Import a ceremony key pinned
 by trusted hash and exact fingerprint; do not implement setup in the consumer image. The existing
 Java witness/circuit APIs can be used by a custom adapter. The current typed convenience method
-is `proveCubic`; the transport supports only the compiled adapter's allowlisted input contract.
+is `proveCubic`; that transport supports only the compiled adapter's allowlisted input contract.
+The separate `@zeroj/circuit` / `bundle-circuit` path also accepts authenticated portable graphs
+and typed recipes at runtime, including selected Poseidon/Merkle/SHA-256 gadgets. See the
+[circuit guide](circuit/README.md) for measured limits and artifact authentication.
 
 ## Deployment and bundlers
 

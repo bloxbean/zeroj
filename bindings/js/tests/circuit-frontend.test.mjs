@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import {defineCircuit,field,uint,bool,bytes} from '@zeroj/circuit';
+import {defineCircuit,field,uint,bool,bytes,array} from '@zeroj/circuit';
 import {ageCheck,sha256Preimage} from '../build/circuit-examples/symbolic-examples.js';
 import {lintSymbolic} from '@zeroj/circuit-lint';
 const spec=()=>({name:'test',public:{out:field()},secret:{x:field()}});
@@ -51,4 +51,30 @@ test('type-aware lint catches symbolic JS truthiness and operators; symbolic sel
     });`);
   assert.equal(lintSymbolic([file]).length,6);
   assert.deepEqual(lintSymbolic(['examples/circuit/symbolic-examples.ts']),[]);
+});
+
+test('fixed arrays have immutable schemas, typed values and bounded static indices',()=>{
+ const element={type:'uint',bits:8},spec=array(element,2);element.bits=16;
+ const c=defineCircuit({name:'arrays_test',public:{out:array(field(),2)},secret:{values:spec,flags:array(bool(),2)}},({public:p,secret:s})=>{
+   for(let i=0;i<p.out.length;i++)s.flags.get(i).select(s.values.get(i).asField(),p.out.get(i)).assertEqual(p.out.get(i));
+ });
+ assert.equal(JSON.parse(c.recipe).version,2);
+ const input={public:{out:[1n,2n]},secret:{values:[1n,2n],flags:[true,false]}};
+ assert.deepEqual({...c.encodeInputs(input)},{out_0:'1',out_1:'2',values_0:'1',values_1:'2',flags_0:'1',flags_1:'0'});
+ for(const values of [[1n], [1n,256n], [1,2], new Array(2)])assert.throws(()=>c.encodeInputs({...input,secret:{...input.secret,values}}));
+ assert.throws(()=>c.encodeInputs({...input,secret:{...input.secret,flags:[1,0]}}));
+ for(const n of [0,65,-1,1.5,NaN])assert.throws(()=>array(field(),n));
+ assert.throws(()=>array(bytes(2),1));assert.throws(()=>array(array(field(),2),2));
+ assert.throws(()=>defineCircuit({name:'collision',public:{x:array(field(),1)},secret:{x_0:field()}},()=>{}));
+ assert.throws(()=>defineCircuit({name:'bounds',public:{},secret:{a:array(field(),2)}},({secret:s})=>{try{s.a.get(2);}catch{}}));
+ assert.throws(()=>defineCircuit({name:'bounds',public:{},secret:{a:array(field(),2)}},({secret:s})=>{s.a.get(s.a.get(0));}));
+});
+test('Merkle array ownership, element type and lengths cannot be forged',()=>{
+ const spec={name:'merkle_test',public:{root:field()},secret:{leaf:field(),siblings:array(field(),1),bits:array(bool(),1)}};
+ let foreign;defineCircuit(spec,({secret:s})=>{foreign=s.siblings;});
+ for(const change of [(s)=>foreign,(s)=>({__zerojSymbolic:'array',length:1}),(s)=>s.bits])
+  assert.throws(()=>defineCircuit(spec,({secret:s,zk})=>{try{zk.gadgets.merkleRootBls12381T3(s.leaf,change(s),s.bits);}catch{}}));
+ assert.throws(()=>defineCircuit({...spec,secret:{...spec.secret,bits:array(bool(),2)}},({secret:s,zk})=>{zk.gadgets.merkleRootBls12381T3(s.leaf,s.siblings,s.bits);}));
+ assert.throws(()=>defineCircuit({...spec,secret:{leaf:field(),siblings:array(field(),33),bits:array(bool(),33)}},({secret:s,zk})=>{zk.gadgets.merkleRootBls12381T3(s.leaf,s.siblings,s.bits);}));
+ assert.equal(JSON.parse(ageCheck.recipe).version,1,'existing recipes keep v1');
 });

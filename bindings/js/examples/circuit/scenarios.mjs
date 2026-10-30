@@ -2,13 +2,14 @@ import {createRuntime} from '@zeroj/runtime';
 import {createCircuitCompiler} from '@zeroj/circuit';
 import {createGroth16Verifier} from '@zeroj/groth16-verifier';
 import {bundle} from '@zeroj/bundle-circuit';
-import {symbolicExamples} from '../../build/circuit-examples/symbolic-examples.js';
-export {symbolicExamples};
+import {symbolicExamples,merkleExamples,allowlist} from '../../build/circuit-examples/symbolic-examples.js';
+export {symbolicExamples,merkleExamples,allowlist};
+export const allDefinitions=[...symbolicExamples,...merkleExamples,allowlist];
 export const circuitRuntime=(options={})=>createRuntime({bundles:[bundle],experimentalSecrets:true,...options});
 export function typedFixtureInputs(definition,flat){
   const input={public:{},secret:{}};
   for(const d of JSON.parse(definition.recipe).inputs){
-    input[d.visibility][d.name]=d.type==='bytes'?Uint8Array.from({length:d.length},(_,i)=>Number(flat[d.name+'_'+i])):
+    input[d.visibility][d.name]=d.type==='array'?Array.from({length:d.length},(_,i)=>d.element.type==='bool'?flat[d.name+'_'+i]==='1':BigInt(flat[d.name+'_'+i])):d.type==='bytes'?Uint8Array.from({length:d.length},(_,i)=>Number(flat[d.name+'_'+i])):
       d.type==='bool'?flat[d.name]==='1':BigInt(flat[d.name]);
   }
   return input;
@@ -18,7 +19,7 @@ export async function scenario(name,load,{graph=false}={}){
   if(!fixture?.developmentOnly)throw Error('UNKNOWN_DEVELOPMENT_FIXTURE');
   const r=circuitRuntime(),verifier=createGroth16Verifier(r),start=performance.now();let circuit;
   try{
-    const definition=symbolicExamples.find(x=>x.name===name),compiler=createCircuitCompiler(r);
+    const definition=allDefinitions.find(x=>x.name===name),compiler=createCircuitCompiler(r);
     const identity={expectedGraphSha256:fixture.graphSha256,fingerprint:fixture.fingerprint};
     const flat=JSON.parse(await load(name+'/inputs.json','text'));
     const useGraph=graph||!definition;

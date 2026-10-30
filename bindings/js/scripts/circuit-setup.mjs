@@ -13,7 +13,7 @@ const out=path.join(root,'build/circuit'),cli=path.join(root,'node_modules/snark
 const manifest=JSON.parse(await fs.readFile(path.join(out,'manifest.json'),'utf8'));
 const log=await fs.open(path.join(out,'setup.log'),'w');
 function run(...args){const r=spawnSync(process.execPath,[cli,...args],{cwd:out,stdio:['ignore',log.fd,log.fd]});if(r.status!==0)throw Error('snarkjs failed: '+args.slice(0,2).join(' '));}
-run('powersoftau','new','bls12-381','8','pot0.ptau');
+run('powersoftau','new','bls12-381','9','pot0.ptau');
 run('powersoftau','contribute','pot0.ptau','pot1.ptau','--name=research-only','-e='+randomBytes(64).toString('hex'));
 run('powersoftau','prepare','phase2','pot1.ptau','pot_final.ptau');
 for(const item of manifest){
@@ -21,7 +21,7 @@ for(const item of manifest){
   const fd=await bin.createBinFile(path.join(dir,'witness.wtns'),'wtns',2,2);
   await write(fd,witness,BigInt('0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001'));await fd.close();
   if(!await snarkjs.wtns.check(path.join(dir,'circuit.r1cs'),path.join(dir,'witness.wtns')))throw Error('Independent R1CS check failed');
-  if(item.name==='sha256_abc'){item.proofSupported=false;item.proofLimit='Exceeds compiler profile 4096-wire / domain limits';continue;}
+  if(item.wires>4096||item.constraints+item.publicInputs+1>4096){item.proofSupported=false;item.proofLimit='Exceeds compiler profile 4096-wire / domain limits';continue;}
   run('groth16','setup',item.name+'/circuit.r1cs','pot_final.ptau',item.name+'/key0.zkey');
   run('zkey','contribute',item.name+'/key0.zkey',item.name+'/key.zkey','--name=research-only','-e='+randomBytes(64).toString('hex'));
   run('zkey','verify',item.name+'/circuit.r1cs','pot_final.ptau',item.name+'/key.zkey');
