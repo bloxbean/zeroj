@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: fc99a09b8208f59ff0a9aea25ee32c265dbc5bee
+Source revision: 20a997962641d1a1d018667ed264ff5d6dbcadc7
 
 ## Key facts
 
@@ -9846,6 +9846,7 @@ _The web version of this page has an interactive illustration here._
 | Typed profiles, strict adapters, envelopes and keys (`commitScalar`, `verifyScalar`, vector `verifyOpening`, `CommitmentEnvelope`, `CommitmentKey`) | **Experimental**, pending external review; creating commitments is offline/isolated only. New in 0.1.0-pre14 |
 | Committing to bytes or a document (`commitBytes`, `commitBytesToEnd`; profile [`pedersen-jubjub-bytes-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-jubjub-bytes-v1.md)) | **Experimental**; creating them is offline/isolated only. New in 0.1.0-pre14 |
 | BLS12-381 G1 commitments opened directly on Cardano (`G1Pedersen`, `PedersenG1Lib`; profiles [`pedersen-bls12-381-g1-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/pedersen-bls12-381-g1-v1.md) and `-bytes-v1`) | **Experimental**, pending external review; creating them is offline/isolated only. New in 0.1.0-pre14 |
+| Range proofs on G1 commitments, off-chain (`G1RangeProver`, `G1RangeVerifier`; protocol [`bulletproof-range-bls12-381-g1-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/bulletproof-range-bls12-381-g1-v1.md)) | **Experimental**, pending external review; proving is offline/isolated only; no on-chain verifier. New in 0.1.0-pre14 |
 
 "Offline/isolated only" restricts *where* you run the secret-handling code: on the user's device or
 in a separate process, never in a service an attacker can time. It doesn't weaken the commitment's
@@ -10408,7 +10409,8 @@ proof. The profiles are
 [ADR-0060](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0060-pedersen-bls12-381-g1-profiles.md).
 A commitment is a 48-byte compressed point. The trade-off: no ZeroJ circuit proves facts about a
 G1 commitment's hidden value, so use it when you will **open** the value or move it by **public**
-amounts.
+amounts. Off-chain, a Bulletproof can show that a G1 commitment's hidden value is in range; see
+[section 9](#9-prove-a-g1-commitment-is-in-range-off-chain).
 
 Off-chain (`zeroj-bls12381`):
 
@@ -10448,6 +10450,44 @@ Things to know:
   [`zeroj-integration-tests`](https://github.com/bloxbean/zeroj/tree/main/zeroj-integration-tests/src/test/java/org/zeroj/examples/pedersen/g1).
 - **Creating commitments is offline/isolated only**, as for Jubjub; neither the pure-Java nor the
   blst provider is constant-time.
+
+### 9. Prove a G1 commitment is in range, off-chain
+
+> **Note:** the APIs on this page are new in ZeroJ 0.1.0-pre14 and not in a release on Maven Central yet (the latest is 0.1.0-pre13). Use a development snapshot (`0.1.0-pre14-<commit>-SNAPSHOT`) from https://repo.bloxbean.org/maven/snapshots to try them.
+
+A range proof shows that a `pedersen-bls12-381-g1-v1` commitment hides a value in `[0, 2^n)`, for
+`n` = 16, 32 or 64, **without opening it**. It is a Bulletproof: no trusted setup, 736 to 928
+bytes, with the CFRG Fiat–Shamir transcript (SHAKE128). The protocol is
+[`bulletproof-range-bls12-381-g1-v1`](https://github.com/bloxbean/zeroj/blob/main/docs/specs/bulletproof-range-bls12-381-g1-v1.md),
+designed in
+[ADR-0061](https://github.com/bloxbean/zeroj/blob/main/docs/adr/0061-bulletproof-range-proofs-bls12-381-g1.md).
+
+```java
+byte[] ctx = "https://example.com/payroll/v1".getBytes(StandardCharsets.US_ASCII);  // your app's namespace
+
+// Prover (offline/isolated): the opening never leaves this machine.
+G1RangeProof proof = G1RangeProver.pureJava().prove(G1PedersenOpening.of(amount, r), 64, ctx);
+
+// Verifier: the width and the context come from YOUR configuration, never from the proof.
+boolean inRange = G1RangeVerifier.pureJava().verify(c.toPointBytes(), proof.toBytes(), 64, ctx);
+```
+
+Things to know:
+
+- **Off-chain only.** There is no Cardano verifier: Plutus V3 has no SHAKE128 builtin. Use it in a
+  service, an app chain or between parties.
+- **The context is the binding.** A proof made under one `ctx` fails under any other. Make `ctx`
+  unique to your application, and add a message, sender or epoch if a proof must not be reused.
+- **A range proof is not a balance.** To read "inputs equal outputs" as whole numbers, give every
+  term its own range proof and fix the coefficients yourself (ADR-0051 D3a). Authorization, replay
+  protection and getting each payee the opening of what it received stay your job. A reference
+  ledger in
+  [`zeroj-integration-tests`](https://github.com/bloxbean/zeroj/tree/main/zeroj-integration-tests/src/test/java/org/zeroj/it/confidential)
+  shows one way to do these; it is a test, not a product.
+- **Cost:** on pure Java, about 1.5 / 3.0 / 6.0 s to prove and 0.46 / 0.75 / 1.3 s to verify at
+  16 / 32 / 64 bits, on one core. See the
+  [measurements](https://github.com/bloxbean/zeroj/blob/main/docs/benchmarks/bulletproof-range-g1-2026-10-25.md).
+- **Proving is offline/isolated only**, like committing.
 
 ### Commitments you didn't make
 
@@ -15508,6 +15548,7 @@ otherwise offline/isolated too. See
 | Vector bounds (0.1.0-pre14): `commitment.verifyOpening(values, r, PedersenVectorBoundPolicy.widened(schema, n))` · `schemaWidths(schema)` · `residueOnly(schema)` | `PedersenVectorCommitment`, `PedersenVectorBoundPolicy` (`…lib.jubjub`) |
 | Envelope and keys (0.1.0-pre14): `CommitmentEnvelope.encode(c)` · `CommitmentEnvelope.decode(bytes, PedersenScalarCommitment.CODEC)` · `CommitmentKey.of(c, codec)` · `CommitmentAcceptance.accept(bytes, codec, provenance, opening)` | `CommitmentEnvelope`, `CommitmentKey`, `CommitmentAcceptance` (`org.zeroj.api.commitment`) |
 | BLS12-381 G1 (0.1.0-pre14): `G1Pedersen.pureJava()` · `withProvider(provider)` · `commitScalar(v, r)` · `verifyScalar(c, v, r, amountBits)` · `commitBytes(bytes, r)` · `verifyBytes(c, bytes, r)` · `G1Pedersen.randomBlinding(new SecureRandom())` · `G1PedersenCommitment.decode(point48)` · `c.withPublicDelta(delta, deltaBits)` | `G1Pedersen`, `G1PedersenCommitment`, `G1PedersenBytesCommitment` (`org.zeroj.bls12381.pedersen`) |
+| G1 range proofs (0.1.0-pre14): `G1RangeProver.pureJava().prove(G1PedersenOpening.of(v, r), 64, ctx)` · `G1RangeVerifier.pureJava().verify(commitment48, proofBytes, 64, ctx)` · `G1RangeProof.decode(bytes, 64)` (off-chain only; `n` and `ctx` from your configuration) | `G1RangeProver`, `G1RangeVerifier`, `G1RangeProof` (`org.zeroj.bls12381.bulletproofs`) |
 | On-chain G1 openings (0.1.0-pre14): `PedersenG1Lib.decodeCommitment(bytes)` · `verifyScalarOpeningBounded(c, m, r, bits)` · `verifyBytesOpening(c, payload, r)` · `applyPublicDelta(c, delta, bits)` | `PedersenG1Lib` (`org.zeroj.onchain.julc.pedersen.lib`) |
 | In a circuit: `ZkPedersen.commit(zk, value, blinding).assertAffineEquals(zk, u, v)` (blinding `@Secret @UInt(bits = 252)`) | `ZkPedersen` (`…lib.zk`) |
 | `ZkPedersenCommitment.commit(zk, value, blinding)` · `ZkPedersen.assertBalanced(zk, List.of(Term.of(in)), List.of(Term.of(out), Term.amount(fee)))` | `ZkPedersenCommitment`, `ZkPedersen.Term` (`…lib.zk`) |
