@@ -20,6 +20,10 @@ tasks.named('jar') {
 test {
     systemProperty 'zeroj.manifest.schema',
             rootProject.file('docs/merkle/circuit-manifest-v1.schema.json').absolutePath
+    // ADR-0061 D7a: ReservedIdentifiersTest checks the seeded registry set against the registry text.
+    systemProperty 'zeroj.registry.spec',
+            rootProject.file('docs/specs/commitment-profiles-v1.md').absolutePath
+    inputs.file(rootProject.file('docs/specs/commitment-profiles-v1.md')).withPropertyName('registrySpec')
 }
 
 publishing {

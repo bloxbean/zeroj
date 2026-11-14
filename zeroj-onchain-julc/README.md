@@ -155,6 +155,13 @@ public class MyOpening {
   `zeroj-integration-tests` (`org.zeroj.examples.pedersen.g1`). Costs and limits:
   [`docs/benchmarks/pedersen-g1-2026-10-22.md`](../docs/benchmarks/pedersen-g1-2026-10-22.md).
 
+**Range proofs on G1 commitments have no on-chain verifier.** The off-chain Bulletproof
+(`bulletproof-range-bls12-381-g1-v1`, ADR-0061) derives its challenges with SHAKE128, which Plutus
+V3 does not have. The test sources hold a cost study of the verifier algebra with the challenges
+supplied (`org.zeroj.onchain.julc.bulletproofs`, **not a verifier**, never published). It needs 54%,
+89% and 155% of a transaction's CPU limit at 16, 32 and 64 bits:
+[`docs/benchmarks/bulletproof-range-g1-2026-10-25.md`](../docs/benchmarks/bulletproof-range-g1-2026-10-25.md).
+
 ## BBS selective disclosure (on-chain)
 
 `BbsProofVerify` verifies a **BBS presentation natively on-chain** — proof that an

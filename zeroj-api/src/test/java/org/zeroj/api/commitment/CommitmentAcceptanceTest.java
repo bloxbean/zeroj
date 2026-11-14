@@ -103,6 +103,27 @@ class CommitmentAcceptanceTest {
     }
 
     @Test
+    @DisplayName("INVALID_STATEMENT propagates unchanged from decoding, provenance and the opening check (registry §12.1)")
+    void invalidStatementPropagates() {
+        CommitmentFormatException refusal = new CommitmentFormatException(CommitmentError.INVALID_STATEMENT, "s");
+        FakeCodec refusingCodec = new FakeCodec(FAKE, (byte) 0) {
+            @Override
+            public FakeCommitment decodePoint(byte[] pointBytes) {
+                throw refusal;
+            }
+        };
+        AtomicInteger calls = new AtomicInteger();
+        assertSame(refusal, assertThrows(CommitmentFormatException.class, () -> CommitmentAcceptance.accept(GOOD,
+                refusingCodec, c -> { calls.incrementAndGet(); return ProvenancePolicy.Result.OK; },
+                c -> { calls.incrementAndGet(); return true; })));
+        assertEquals(0, calls.get(), "no callback runs after a refusal in decoding");
+        assertSame(refusal, assertThrows(CommitmentFormatException.class,
+                () -> accept(GOOD, c -> { throw refusal; }, c -> { calls.incrementAndGet(); return true; })));
+        assertEquals(0, calls.get(), "the opening check does not run after a refusal in provenance");
+        assertSame(refusal, assertThrows(CommitmentFormatException.class, () -> accept(GOOD, OK, c -> { throw refusal; })));
+    }
+
+    @Test
     @DisplayName("Null arguments and a null provenance result are NullPointerException, never acceptance")
     void nulls() {
         FakeCodec codec = new FakeCodec(FAKE, (byte) 0);
@@ -114,9 +135,11 @@ class CommitmentAcceptanceTest {
     }
 
     @Test
-    @DisplayName("policyRejected is true exactly for the PROVENANCE_* classes")
+    @DisplayName("policyRejected is true exactly for the PROVENANCE_* classes; INVALID_STATEMENT is never a check")
     void policyRejectedFlag() {
+        assertThrows(IllegalArgumentException.class, () -> CommitmentCheck.rejected(CommitmentError.INVALID_STATEMENT));
         for (CommitmentError e : CommitmentError.values()) {
+            if (e == CommitmentError.INVALID_STATEMENT) continue;
             CommitmentCheck check = CommitmentCheck.rejected(e);
             assertFalse(check.accepted());
             assertEquals(Optional.of(e), check.reason());

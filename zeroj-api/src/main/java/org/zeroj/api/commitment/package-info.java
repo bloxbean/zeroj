@@ -6,7 +6,8 @@
  * safe map key and combine decoding, provenance and opening checks into one result. They perform
  * no group arithmetic and hold no secret. Concrete profiles (for example the Jubjub Pedersen
  * profiles in {@code zeroj-circuit-lib}) implement {@link org.zeroj.api.commitment.Commitment} and
- * {@link org.zeroj.api.commitment.CommitmentCodec}.
+ * {@link org.zeroj.api.commitment.CommitmentCodec}. {@link org.zeroj.api.commitment.ProofProtocol}
+ * names a proof protocol over one profile ({@code commitment-profiles-v1} §5, ADR-0061 D7a).
  *
  * <p><b>The expected profile always comes from the caller's trusted configuration</b>, never from
  * data that travels with the input: every decoder takes the expected codec, and no decoder selects

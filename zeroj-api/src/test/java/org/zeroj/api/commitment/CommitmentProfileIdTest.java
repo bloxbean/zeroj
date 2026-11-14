@@ -7,6 +7,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
+import java.util.EnumSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -91,10 +93,16 @@ class CommitmentProfileIdTest {
     }
 
     @Test
-    @DisplayName("CommitmentFormatException carries only the seven format classes and is an IllegalArgumentException")
+    @DisplayName("CommitmentFormatException carries only the eight format classes and is an IllegalArgumentException")
     void formatExceptionClasses() {
+        // ADR-0061 D7a: an explicit set, because INVALID_STATEMENT is appended after the two
+        // classes that are not format classes.
+        Set<CommitmentError> formatClasses = EnumSet.of(CommitmentError.MALFORMED_ENCODING,
+                CommitmentError.NOT_IN_SUBGROUP, CommitmentError.NON_CANONICAL_SCALAR, CommitmentError.OUT_OF_RANGE,
+                CommitmentError.LENGTH_OUT_OF_RANGE, CommitmentError.PROFILE_MISMATCH,
+                CommitmentError.INVALID_CONFIGURATION, CommitmentError.INVALID_STATEMENT);
         for (CommitmentError e : CommitmentError.values()) {
-            boolean format = e.ordinal() <= CommitmentError.INVALID_CONFIGURATION.ordinal();
+            boolean format = formatClasses.contains(e);
             if (format) {
                 CommitmentFormatException ex = new CommitmentFormatException(e, "m");
                 assertSame(e, ex.reason());
@@ -106,8 +114,12 @@ class CommitmentProfileIdTest {
             }
         }
         assertThrows(NullPointerException.class, () -> new CommitmentFormatException(null, "m"));
-        assertEquals(10, CommitmentError.values().length);
+        // Appending INVALID_STATEMENT shifted no existing ordinal.
+        assertEquals(11, CommitmentError.values().length);
+        assertEquals(CommitmentError.INVALID_CONFIGURATION, CommitmentError.values()[6]);
         assertEquals(CommitmentError.OPENING_MISMATCH, CommitmentError.values()[7]);
+        assertEquals(CommitmentError.PROVENANCE_MISMATCH, CommitmentError.values()[9]);
+        assertEquals(CommitmentError.INVALID_STATEMENT, CommitmentError.values()[10]);
     }
 
     private static void assertInvalid(String id) {

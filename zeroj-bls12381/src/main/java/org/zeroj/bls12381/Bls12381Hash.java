@@ -252,7 +252,8 @@ public final class Bls12381Hash {
         }
     }
 
-    private static void keccakF1600(long[] state) {
+    /** Keccak-f[1600] on the 25-lane state, in place (FIPS 202 §3). Shared with {@link Shake128}. */
+    static void keccakF1600(long[] state) {
         long[] b = new long[25];
         long[] c = new long[5];
         long[] d = new long[5];
