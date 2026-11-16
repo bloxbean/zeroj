@@ -6,13 +6,10 @@
 
 [![snapshot](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo.bloxbean.org%2Fmaven%2Fsnapshots%2Forg%2Fzeroj%2Fzeroj-crypto%2Fmaven-metadata.xml&strategy=latestProperty&label=snapshot)](#development-snapshots)
 
-> [!WARNING]
-> **Status: Experimental — Research & Learning Project**
+> ## **Preview Status**
+> **ZeroJ** is currently in preview and under active development. Core functionality is available and usable for experimentation and testnet development, but some components and edge cases are still being implemented and hardened.
 >
-> This project is generated using AI, with human-assisted design, testing, and verification.
-> It is an experimental project created mainly for research and exploration purposes.
->
-> **Please do not use this in production.** Expect rough edges, incomplete features, and potential bugs.
+> ZeroJ has **not been externally audited**. APIs, serialization formats, and on-chain verifier scripts may change between releases. **Production use is not yet recommended.**
 
 Java-first zero-knowledge proof toolkit for Cardano.
 
