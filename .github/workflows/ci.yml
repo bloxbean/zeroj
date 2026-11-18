@@ -56,7 +56,7 @@ jobs:
           - os: linux-x86_64
             runner: ubuntu-22.04
           - os: macos-arm64
-            runner: macos-14
+            runner: macos-15
     steps:
       - uses: actions/checkout@v4
 

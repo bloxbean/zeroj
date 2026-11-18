@@ -136,7 +136,7 @@ jobs:
           - runner: ubuntu-22.04-arm  # same glibc 2.35 baseline as build-blst.yml
             os: linux
             arch: aarch64
-          - runner: macos-14
+          - runner: macos-15
             os: mac
             arch: aarch64
     steps:
