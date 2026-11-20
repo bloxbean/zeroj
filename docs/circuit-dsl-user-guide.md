@@ -368,7 +368,8 @@ BigInteger[] witness = circuit.calculateWitness(inputs, CurveId.BLS12_381);
 
 | Method | Returns | Constraints |
 |--------|---------|------------|
-| `arrayAccess(arr, idx)` | arr[idx] via MUX tree | O(arr.length) |
+| `arrayAccess(arr, idx)` | `arr[idx]` via MUX scan; constrains `0 <= idx < arr.length` (ADR-0065) | O(arr.length) |
+| `arrayAccessOrZero(arr, idx)` | `arr[idx]` if in bounds, else `0` (no bounds check; opt-in for masked padding rows) | O(arr.length) |
 
 ## Standard Library (zeroj-circuit-lib)
 

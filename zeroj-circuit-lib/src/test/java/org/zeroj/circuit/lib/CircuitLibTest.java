@@ -2,6 +2,7 @@ package org.zeroj.circuit.lib;
 
 import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
+import org.zeroj.circuit.Variable;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -111,6 +112,31 @@ class CircuitLibTest {
                 "a", List.of(BigInteger.valueOf(100)), "b", List.of(BigInteger.valueOf(200)),
                 "c", List.of(BigInteger.valueOf(300)), "d", List.of(BigInteger.valueOf(400))), CurveId.BN254);
         assertEquals(BigInteger.valueOf(400), w2[1]);
+    }
+
+    @Test
+    void mux_arrayAccess_enforcesBoundsAndRejectsEmpty() {
+        var circuit = CircuitBuilder.create("mux-array-access")
+                .publicVar("out")
+                .secretVar("index")
+                .define(api -> {
+                    var result = Mux.arrayAccess(api,
+                            new Variable[]{api.constant(10), api.constant(20), api.constant(30)},
+                            api.var("index"));
+                    api.assertEqual(result, api.var("out"));
+                });
+
+        var w = circuit.calculateWitness(Map.of(
+                "index", List.of(BigInteger.TWO),
+                "out", List.of(BigInteger.valueOf(30))), CurveId.BLS12_381);
+        assertEquals(BigInteger.valueOf(30), w[1]);
+
+        assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(Map.of(
+                "index", List.of(BigInteger.valueOf(3)),
+                "out", List.of(BigInteger.ZERO)), CurveId.BLS12_381));
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("mux-array-empty")
+                .secretVar("index")
+                .define(api -> Mux.arrayAccess(api, new Variable[0], api.var("index"))));
     }
 
     // --- MiMC ---

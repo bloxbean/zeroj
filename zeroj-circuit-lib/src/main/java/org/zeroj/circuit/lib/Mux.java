@@ -24,7 +24,12 @@ public final class Mux {
         return api.select(sel1, cd, ab);
     }
 
-    /** Array access: returns arr[index] via MUX tree. */
+    /**
+     * Bounds-constrained array access: returns {@code arr[index]} via MUX scan and constrains
+     * {@code 0 <= index < arr.length} (ADR-0065).
+     *
+     * @throws IllegalArgumentException if {@code arr} is empty
+     */
     public static Variable arrayAccess(CircuitAPI api, Variable[] arr, Variable index) {
         return api.arrayAccess(arr, index);
     }

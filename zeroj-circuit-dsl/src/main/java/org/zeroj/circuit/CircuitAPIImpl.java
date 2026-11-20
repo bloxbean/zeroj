@@ -602,7 +602,39 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public Variable arrayAccess(Variable[] arr, Variable index) {
-        // MUX: sum(arr[i] * isEqual(index, i))
+        requireNotFrozen();
+        Objects.requireNonNull(arr, "arr");
+        Objects.requireNonNull(index, "index");
+        if (arr.length == 0) {
+            throw new IllegalArgumentException("arrayAccess requires a non-empty array");
+        }
+        for (int i = 0; i < arr.length; i++) {
+            Objects.requireNonNull(arr[i], "arr[" + i + "]");
+        }
+        // MUX: sum(arr[i] * isEqual(index, i)) with explicit bounds constraint sum(selector_i) == 1
+        // so out-of-bounds indices (e.g., arr.length or p - 1) cannot silently satisfy with 0 (ADR-0065).
+        Variable result = constant(0);
+        List<Gate.Term> selectorTerms = new ArrayList<>(arr.length);
+        for (int i = 0; i < arr.length; i++) {
+            var selector = isEqual(index, constant(i));
+            selectorTerms.add(new Gate.Term(BigInteger.ONE, selector));
+            result = add(result, mul(arr[i], selector));
+        }
+        var selectorSum = newIntermediate();
+        gates.add(new Gate.LinComb(selectorSum, selectorTerms));
+        assertEqual(selectorSum, oneWire);
+        return result;
+    }
+
+    @Override
+    public Variable arrayAccessOrZero(Variable[] arr, Variable index) {
+        requireNotFrozen();
+        Objects.requireNonNull(arr, "arr");
+        Objects.requireNonNull(index, "index");
+        for (int i = 0; i < arr.length; i++) {
+            Objects.requireNonNull(arr[i], "arr[" + i + "]");
+        }
+        // Total MUX without index bounds check (ADR-0065 opt-in): returns 0 when index >= arr.length.
         Variable result = constant(0);
         for (int i = 0; i < arr.length; i++) {
             var selector = isEqual(index, constant(i));

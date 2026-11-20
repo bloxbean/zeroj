@@ -1,6 +1,7 @@
 package org.zeroj.circuit;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
  * The circuit construction API — the DSL surface that circuit authors program against.
@@ -160,8 +161,40 @@ public interface CircuitAPI {
 
     // --- Array ---
 
-    /** Access arr[index] via MUX tree. */
+    /**
+     * Access {@code arr[index]} via a MUX scan, constraining {@code 0 <= index < arr.length}.
+     *
+     * <p>Emits {@code sum_i isEqual(index, i) == 1}, so any out-of-bounds index (such as
+     * {@code arr.length} or {@code p - 1}) makes the constraint system unsatisfiable rather than
+     * silently returning {@code 0} (ADR-0065).
+     *
+     * @throws IllegalArgumentException if {@code arr} is empty
+     */
     Variable arrayAccess(Variable[] arr, Variable index);
+
+    /**
+     * Total-function array lookup: returns {@code arr[index]} when {@code 0 <= index < arr.length},
+     * and {@code 0} otherwise, <em>without</em> emitting a bounds constraint on {@code index}.
+     *
+     * <p><b>Soundness warning (ADR-0065):</b> only use this when the caller independently
+     * constrains {@code index} on every active row and masks out-of-bounds results on inactive
+     * padding rows (for example, {@code ZkMpf} padding rows that pass {@code queryIndex = 64}
+     * and discard the result via {@code valid.select(...)}). For general dynamic indexing, use
+     * {@link #arrayAccess(Variable[], Variable)}.
+     */
+    default Variable arrayAccessOrZero(Variable[] arr, Variable index) {
+        Objects.requireNonNull(arr, "arr");
+        Objects.requireNonNull(index, "index");
+        for (int i = 0; i < arr.length; i++) {
+            Objects.requireNonNull(arr[i], "arr[" + i + "]");
+        }
+        Variable result = constant(0);
+        for (int i = 0; i < arr.length; i++) {
+            var selector = isEqual(index, constant(i));
+            result = add(result, mul(arr[i], selector));
+        }
+        return result;
+    }
 
     // --- Variable access ---
 
