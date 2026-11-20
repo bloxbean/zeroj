@@ -116,10 +116,10 @@ The `ReasonCode` enum covers both sides:
 |---|---|
 | `INVALID_PROOF` | A backend: the pairing check failed, or a point was malformed |
 | `INVALID_PUBLIC_INPUTS` | A backend: wrong count, or a value outside `[0, r)` |
-| `INTERNAL_ERROR` | A backend: an unexpected exception, e.g. unparseable proof bytes |
+| `INTERNAL_ERROR` | A backend: an unexpected internal or native-loading error |
 | `UNKNOWN_VERIFICATION_KEY` | The orchestrator: the envelope's `vkRef` isn't registered |
 | `UNSUPPORTED_PROOF_SYSTEM` | The orchestrator (no backend registered) or a backend given the wrong proof system |
-| `VK_MISMATCH`, `UNSUPPORTED_CURVE`, `MALFORMED_ENVELOPE` | Consistency checks in the PlonK and BBS backends, and in your own gate |
+| `VK_MISMATCH`, `UNSUPPORTED_CURVE`, `MALFORMED_ENVELOPE` | Envelope-to-material binding and format checks in `VerifierOrchestrator` and all BLS12-381 backends (Groth16, PlonK, BBS), plus your own policy gate |
 | `UNKNOWN_CIRCUIT`, `RETIRED_CIRCUIT`, `STALE_STATE_ROOT`, `DUPLICATE_NONCE`, `UNAUTHORIZED_SUBMITTER`, `USED_NULLIFIER` | Your policy layer |
 
 ## Choose a backend
@@ -142,9 +142,10 @@ The PlonK verifier is an experimental, opt-in path. Groth16 on BLS12-381 is the 
 the current release; don't treat PlonK verification as production evidence.
 :::
 
-The legacy BN254 verifiers are not registered with `ServiceLoader` and refuse to run unless you
-start the JVM with `-Dzeroj.allowLegacyBn254=true`. BN254 is not a Cardano curve; ignore it
-unless you are running old off-chain experiments.
+The legacy BN254 verifiers are not registered with `ServiceLoader`, report `isAvailable() == false`
+by default, and refuse to run unless you start the JVM with `-Dzeroj.allowLegacyBn254=true`. They
+are **unsound against adversarial input** and BN254 is not a Cardano curve; ignore them unless you
+are running trusted local off-chain experiments.
 
 ## Route proofs with registries
 
@@ -201,10 +202,16 @@ The Groth16 backends fail closed on malformed input before any pairing work:
   An infinity `IC` entry would leave a public input unbound, so ZeroJ's setup refuses to create
   one and every verifier rejects it.
 
-What the Groth16 backends do **not** check: that `envelope.circuitId()` or `envelope.vkRef()`
-matches the `VerificationMaterial` you passed. They verify the proof against whatever key you give
-them. (The experimental PlonK verifier does compare them and returns `VK_MISMATCH`.) Do that
-comparison yourself, as the next section shows.
+- **Envelope-to-material binding.** `VerifierOrchestrator` and every BLS12-381 backend (Groth16
+  pure-Java, Groth16 blst, PlonK, and BBS) verify that `envelope.version()`, `proofSystem()`,
+  `curve()`, `circuitId()`, `material.vkHash()`, and `ByHash` `vkRef()` match the provided
+  `VerificationMaterial` (`VK_MISMATCH` on mismatch; `MALFORMED_ENVELOPE` on invalid version,
+  unsupported `proofFormat`, or unparseable JSON/CBOR). The Groth16 backends also verify the
+  parsed JSON `protocol` (`"groth16"`) and `curve` (`"bls12-381"`).
+
+Your application gate must still decide *which* `circuitId` and pinned VK hash an endpoint expects
+(for example, rejecting a valid proof for `circuit-a` on an endpoint that requires `circuit-b`), as
+the next section shows.
 
 ## Build a verification service
 
@@ -308,11 +315,14 @@ ZkProofEnvelope decoded = CborEnvelopeCodec.decode(cbor);  // bounded, typed Cod
 byte[] id = CanonicalHash.hash(envelope);                  // SHA-256 over the core fields
 ```
 
-The CBOR encoding carries the core fields only: version, proof system, curve, circuit ID, proof
-bytes, public inputs, and the VK reference. Optional fields such as `metadata()` (where annotated
-circuits put their version) and `proofFormat()` are **not** carried, and `CanonicalHash` ignores
-them too. If your policy depends on them, send them another way, or rely on the pinned VK hash,
-which already distinguishes circuit versions.
+The CBOR encoding is strictly canonical (RFC 8949 §4.2): keys `1..7` carry version, proof system,
+curve, circuit ID, proof bytes, minimal non-negative `BigInteger` public inputs, and the VK
+reference, while optional keys `8` (`domainTag`), `9` (`metadata`, sorted canonically), and `10`
+(`proofFormat`) are included whenever populated and omitted when empty. `CborEnvelopeCodec.decode`
+fails closed on duplicate keys, unknown keys, non-minimal integers, indefinite lengths, padded
+`BigInteger` bytes, or any non-canonical re-encoding. Local builder metadata (`proofUri`,
+`proofHash`, `createdAt`, `producerId`) is not carried in CBOR, and `CanonicalHash` hashes the core
+fields (`1..7`) only.
 
 ## Write a custom backend
 

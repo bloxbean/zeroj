@@ -241,6 +241,63 @@ class BbsServiceTest {
     }
 
     @Test
+    void zkVerifierEnforcesMaterialBindingAndClassifiesMalformedInput() throws Exception {
+        BbsService service = BbsService.pureJava();
+        BbsKeyPair keyPair = service.keyPair(bytes("012345678901234567890123456789ef"), bytes("issuer-key"));
+        List<byte[]> messages = List.of(bytes("given:Alice"), bytes("age:20"));
+        byte[] header = bytes("credential-v1");
+        BbsSignature signature = service.sign(keyPair.secretKey(), keyPair.publicKey(), messages, header);
+        BbsPresentation presentation = service.derivePresentation(
+                keyPair.publicKey(), signature, messages, header, bytes("verifier-nonce"), new int[]{0});
+        byte[] pkBytes = keyPair.publicKey().bytes();
+        byte[] pkHash = java.security.MessageDigest.getInstance("SHA-256").digest(pkBytes);
+        byte[] proofBytes = BbsPresentationCodec.encode(presentation);
+
+        VerificationMaterial material = VerificationMaterial.of(
+                pkBytes, ProofSystemId.BBS, CurveId.BLS12_381, new CircuitId("bbs-a"));
+        BbsZkVerifier verifier = new BbsZkVerifier(service);
+
+        // Matching ByHash succeeds
+        ZkProofEnvelope matchingHash = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS).curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-a")).proofBytes(proofBytes)
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ByHash(pkHash))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT).build();
+        assertTrue(verifier.verify(matchingHash, material).proofValid());
+
+        // Mismatched circuitId -> VK_MISMATCH
+        ZkProofEnvelope wrongCircuit = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS).curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-other")).proofBytes(proofBytes)
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ByHash(pkHash))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT).build();
+        assertEquals(org.zeroj.api.VerificationResult.ReasonCode.VK_MISMATCH,
+                verifier.verify(wrongCircuit, material).reasonCode().orElse(null));
+
+        // Mismatched ByHash -> VK_MISMATCH
+        ZkProofEnvelope wrongHash = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS).curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-a")).proofBytes(proofBytes)
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ByHash(new byte[32]))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT).build();
+        assertEquals(org.zeroj.api.VerificationResult.ReasonCode.VK_MISMATCH,
+                verifier.verify(wrongHash, material).reasonCode().orElse(null));
+
+        // Malformed CBOR presentation -> MALFORMED_ENVELOPE (not INTERNAL_ERROR)
+        ZkProofEnvelope malformedCbor = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS).curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-a")).proofBytes(new byte[]{0x01, 0x02, 0x03})
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ByHash(pkHash))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT).build();
+        assertEquals(org.zeroj.api.VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                verifier.verify(malformedCbor, material).reasonCode().orElse(null));
+    }
+
+    @Test
     void signingAndProofGenerationUseSecretScalarProviderBoundary() {
         var bls = new CountingBlsProvider(Bls12381Providers.pureJava());
         var provider = new PureJavaBbsProvider(BbsCiphersuite.BLS12381_SHA256, bls);

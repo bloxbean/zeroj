@@ -86,6 +86,79 @@ class ZkeyImporterTest {
         assertTrue(pk.pointsH().length >= 4, "H should have at least domainSize=4 points");
     }
 
+    @Test
+    void importWtns_requiresLegacyPolicyAndValidatesPrimeAndBounds() throws Exception {
+        byte[] validWtns = buildWtns(org.zeroj.crypto.field.MontFr254.modulus(),
+                new BigInteger[]{BigInteger.ONE, BigInteger.valueOf(33)});
+
+        String prev = System.getProperty(org.zeroj.api.LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        try {
+            System.clearProperty(org.zeroj.api.LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+            var ex = assertThrows(IllegalStateException.class,
+                    () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(validWtns)));
+            assertTrue(ex.getMessage().contains("unsound against adversarial input"));
+        } finally {
+            if (prev != null) {
+                System.setProperty(org.zeroj.api.LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY, prev);
+            } else {
+                System.clearProperty(org.zeroj.api.LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+            }
+        }
+
+        // Valid BN254 witness succeeds when enabled
+        BigInteger[] parsed = ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(validWtns));
+        assertArrayEquals(new BigInteger[]{BigInteger.ONE, BigInteger.valueOf(33)}, parsed);
+
+        // Wrong prime (BLS12-381 Fr) rejected
+        BigInteger blsFr = new BigInteger("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16);
+        byte[] wrongPrime = buildWtns(blsFr, new BigInteger[]{BigInteger.ONE});
+        assertThrows(IOException.class,
+                () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(wrongPrime)));
+
+        // Non-canonical scalar (>= BN254 Fr) rejected
+        byte[] nonCanonical = buildWtns(org.zeroj.crypto.field.MontFr254.modulus(),
+                new BigInteger[]{BigInteger.ONE, org.zeroj.crypto.field.MontFr254.modulus()});
+        assertThrows(IOException.class,
+                () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(nonCanonical)));
+
+        // Trailing bytes rejected
+        byte[] trailing = java.util.Arrays.copyOf(validWtns, validWtns.length + 1);
+        assertThrows(IOException.class,
+                () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(trailing)));
+    }
+
+    private static byte[] buildWtns(BigInteger prime, BigInteger[] values) {
+        int sec1Size = 4 + 32 + 4;
+        int sec2Size = values.length * 32;
+        var buf = java.nio.ByteBuffer.allocate(12 + 12 + sec1Size + 12 + sec2Size)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        buf.put(new byte[]{'w', 't', 'n', 's'});
+        buf.putInt(2);
+        buf.putInt(2);
+        // Section 1
+        buf.putInt(1);
+        buf.putLong(sec1Size);
+        buf.putInt(32);
+        buf.put(toLE32(prime));
+        buf.putInt(values.length);
+        // Section 2
+        buf.putInt(2);
+        buf.putLong(sec2Size);
+        for (BigInteger v : values) {
+            buf.put(toLE32(v));
+        }
+        return buf.array();
+    }
+
+    private static byte[] toLE32(BigInteger v) {
+        byte[] be = v.toByteArray();
+        byte[] le = new byte[32];
+        for (int i = 0; i < Math.min(32, be.length); i++) {
+            le[i] = be[be.length - 1 - i];
+        }
+        return le;
+    }
+
     // --- Helper ---
 
     private Groth16ProvingKey loadProvingKey() throws IOException {

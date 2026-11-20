@@ -4,16 +4,20 @@ import org.zeroj.api.CurveId;
 import org.zeroj.api.ProofSystemId;
 import org.zeroj.backend.spi.ZkVerifier;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.ServiceLoader;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Registry of available verification backends.
+ * Thread-safe registry of available verification backends.
  *
  * <p>Backends can be registered manually or discovered via {@link java.util.ServiceLoader}.</p>
  */
 public class VerifierRegistry {
 
-    private final List<ZkVerifier> verifiers = new ArrayList<>();
+    private final List<ZkVerifier> verifiers = new CopyOnWriteArrayList<>();
 
     /**
      * Create a registry that auto-discovers backends via ServiceLoader.
@@ -53,9 +57,9 @@ public class VerifierRegistry {
     }
 
     /**
-     * List all registered backends.
+     * List all registered backends as an immutable snapshot.
      */
     public List<ZkVerifier> all() {
-        return Collections.unmodifiableList(verifiers);
+        return List.copyOf(verifiers);
     }
 }

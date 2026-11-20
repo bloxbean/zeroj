@@ -147,8 +147,22 @@ public final class SnarkjsPlonkCodec {
      */
     public static ZkProofEnvelope toEnvelopeFromJson(String proofJson, String vkJson,
                                                       String publicJson, CircuitId circuitId) {
+        if (circuitId == null) {
+            throw new CodecException("circuitId must not be null");
+        }
         var proof = parseProof(proofJson);
+        var vk = parseVerificationKey(vkJson);
         var inputs = SnarkjsJsonCodec.parsePublicInputs(publicJson);
+
+        if (!"plonk".equals(proof.protocol()) || !"plonk".equals(vk.protocol())) {
+            throw new CodecException("PlonK proof and verification key must have protocol 'plonk'");
+        }
+        if (!proof.curve().equals(vk.curve())) {
+            throw new CodecException("PlonK proof and verification key curves do not match");
+        }
+        if (vk.nPublic() != inputs.size()) {
+            throw new CodecException("PlonK public input count does not match verification key nPublic");
+        }
 
         ProofSystemId proofSystem = ProofSystemId.PLONK;
         CurveId curve = CurveId.fromValue(proof.curve());

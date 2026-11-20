@@ -140,6 +140,20 @@ class PlonkBN254VerifierTest {
     }
 
     @Test
+    void isAvailableTracksPolicyAndNeverAppearsInServiceLoader() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        assertFalse(verifier.isAvailable(), "Legacy PlonkBN254Verifier must be unavailable by default");
+
+        enableLegacyBn254();
+        assertTrue(verifier.isAvailable(), "Legacy PlonkBN254Verifier becomes available only when explicitly enabled");
+        var discovered = java.util.ServiceLoader.load(org.zeroj.backend.spi.ZkVerifier.class).stream()
+                .map(p -> p.type().getName())
+                .toList();
+        assertFalse(discovered.contains(PlonkBN254Verifier.class.getName()),
+                "Legacy PlonkBN254Verifier must never be registered in META-INF/services");
+    }
+
+    @Test
     void verify_sameProofTwice_deterministic() {
         enableLegacyBn254();
         var envelope = buildEnvelope(proofJson, vkJson, publicJson);

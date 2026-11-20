@@ -231,6 +231,27 @@ class SnarkjsPlonkCodecTest {
         assertTrue(envelope.proofBytes().length > 0);
     }
 
+    @Test
+    void toEnvelopeFromJson_validatesVkJsonAndCrossChecks() {
+        var proofJson = loadString("/test-vectors/plonk-bn254/proof.json");
+        var vkJson = loadString("/test-vectors/plonk-bn254/verification_key.json");
+        var publicJson = loadString("/test-vectors/plonk-bn254/public.json");
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.toEnvelopeFromJson(
+                proofJson, "{not json", publicJson, new CircuitId("multiplier")));
+
+        String wrongProtocolVk = replaceTopLevelValue(vkJson, "protocol", "\"groth16\"");
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.toEnvelopeFromJson(
+                proofJson, wrongProtocolVk, publicJson, new CircuitId("multiplier")));
+
+        String wrongCurveVk = replaceTopLevelValue(vkJson, "curve", "\"bls12-381\"");
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.toEnvelopeFromJson(
+                proofJson, wrongCurveVk, publicJson, new CircuitId("multiplier")));
+
+        assertThrows(CodecException.class, () -> SnarkjsPlonkCodec.toEnvelopeFromJson(
+                proofJson, vkJson, "[\"33\"]", new CircuitId("multiplier")));
+    }
+
     // --- Cross-check: proof values are in the BN254 scalar field ---
 
     @Test

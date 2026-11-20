@@ -149,7 +149,116 @@ class VerifierCoreTest {
         assertFalse(result.proofValid());
     }
 
+    @Test
+    void orchestrator_rejectsMismatchedCircuitIdBeforeCallingBackend() {
+        var registry = VerifierRegistry.empty();
+        registry.register(failingIfCalledVerifier(ProofSystemId.GROTH16, CurveId.BLS12_381));
+        var vkRegistry = new InMemoryVerificationKeyRegistry();
+        var material = VerificationMaterial.of("vk-a".getBytes(), ProofSystemId.GROTH16,
+                CurveId.BLS12_381, new CircuitId("circuit-a"));
+        vkRegistry.register(material);
+
+        var orchestrator = new VerifierOrchestrator(registry, vkRegistry);
+        var envelope = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.GROTH16)
+                .curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("circuit-b"))
+                .proofBytes(new byte[]{1, 2, 3})
+                .publicInputs(new PublicInputs(List.of(BigInteger.ONE)))
+                .vkRef(new VerificationKeyRef.ById("circuit-a"))
+                .build();
+
+        var result = orchestrator.verify(envelope);
+        assertFalse(result.proofValid());
+        assertEquals(VerificationResult.ReasonCode.VK_MISMATCH, result.reasonCode().orElse(null));
+    }
+
+    @Test
+    void orchestrator_rejectsMismatchedByHashAndSpoofedMaterialHash() {
+        var registry = VerifierRegistry.empty();
+        registry.register(failingIfCalledVerifier(ProofSystemId.GROTH16, CurveId.BLS12_381));
+        var vkRegistry = new InMemoryVerificationKeyRegistry();
+        var orchestrator = new VerifierOrchestrator(registry, vkRegistry);
+
+        var material = VerificationMaterial.of("vk-a".getBytes(), ProofSystemId.GROTH16,
+                CurveId.BLS12_381, new CircuitId("test"));
+        var wrongHashEnvelope = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.GROTH16)
+                .curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("test"))
+                .proofBytes(new byte[]{1})
+                .publicInputs(new PublicInputs(List.of(BigInteger.ONE)))
+                .vkRef(new VerificationKeyRef.ByHash(new byte[32]))
+                .build();
+
+        var wrongHashResult = orchestrator.verify(wrongHashEnvelope, material);
+        assertEquals(VerificationResult.ReasonCode.VK_MISMATCH, wrongHashResult.reasonCode().orElse(null));
+
+        var spoofedMaterial = new VerificationMaterial(
+                "vk-a".getBytes(), ProofSystemId.GROTH16, CurveId.BLS12_381,
+                new CircuitId("test"), java.util.Optional.of(new byte[32]));
+        var spoofedResult = orchestrator.verify(
+                makeEnvelope(ProofSystemId.GROTH16, CurveId.BLS12_381), spoofedMaterial);
+        assertEquals(VerificationResult.ReasonCode.VK_MISMATCH, spoofedResult.reasonCode().orElse(null));
+    }
+
+    @Test
+    void orchestrator_rejectsUnsupportedVersionAndAllowsEmptyPublicInputs() {
+        var registry = VerifierRegistry.empty();
+        registry.register(fakeVerifier(ProofSystemId.BBS, CurveId.BLS12_381, true));
+        var vkRegistry = new InMemoryVerificationKeyRegistry();
+        var orchestrator = new VerifierOrchestrator(registry, vkRegistry);
+        var material = VerificationMaterial.of(new byte[96], ProofSystemId.BBS,
+                CurveId.BLS12_381, new CircuitId("bbs-circuit"));
+
+        var badVersion = ZkProofEnvelope.builder()
+                .version(99)
+                .proofSystem(ProofSystemId.BBS)
+                .curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-circuit"))
+                .proofBytes(new byte[]{1})
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ById("issuer-key"))
+                .build();
+        assertEquals(VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                orchestrator.verify(badVersion, material).reasonCode().orElse(null));
+
+        var emptyPublicInputs = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS)
+                .curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-circuit"))
+                .proofBytes(new byte[]{1})
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ById("issuer-key"))
+                .build();
+        assertTrue(orchestrator.verify(emptyPublicInputs, material).proofValid());
+    }
+
+    @Test
+    void vkRegistry_rejectsSpoofedVkHashOnRegister() {
+        var vkRegistry = new InMemoryVerificationKeyRegistry();
+        var spoofed = new VerificationMaterial(
+                "real-vk".getBytes(), ProofSystemId.GROTH16, CurveId.BLS12_381,
+                new CircuitId("test"), java.util.Optional.of(new byte[32]));
+
+        assertThrows(IllegalArgumentException.class, () -> vkRegistry.register(spoofed));
+    }
+
     // --- Helpers ---
+
+    private static ZkVerifier failingIfCalledVerifier(ProofSystemId ps, CurveId curve) {
+        return new ZkVerifier() {
+            @Override
+            public VerificationResult verify(ZkProofEnvelope e, VerificationMaterial m) {
+                throw new AssertionError("backend must not be called when binding fails");
+            }
+
+            @Override
+            public BackendDescriptor descriptor() {
+                return new BackendDescriptor(ps, curve, "guard-" + ps + "-" + curve);
+            }
+        };
+    }
 
     private static ZkVerifier fakeVerifier(ProofSystemId ps, CurveId curve, boolean valid) {
         return new ZkVerifier() {
