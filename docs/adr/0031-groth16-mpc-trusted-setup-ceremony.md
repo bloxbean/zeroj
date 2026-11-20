@@ -167,7 +167,7 @@ that stays with the circuit's ceremony (minimum viable: coordinator contribution
 | M2 | `ZkeyPkStoreImporter` — streaming (mmap) ceremony-`.zkey` → `Groth16PkStore`; bit-identical to the strict importer; `snarkjsConstraints()` binding-row synthesis asserted against real zkeys (which store only the A/B matrices — provers derive C=A·B) |
 | M3 | phase-1 decision: **Filecoin PoT primary**, own-ptau fallback (measured table above) |
 | M4 | `zeroj-ceremony` CLI (picocli; GraalVM configs auto-emitted; `contribute`/`finalize` native-friendly) + Option-A runbook; full ceremony driven through the CLI **green** |
-| M5 | **ZeroJ-native contributor, snarkjs-verified**: `contribute` writes snarkjs-format `.zkey`; interop test: zeroj → `snarkjs zkey verify` OK → snarkjs stacks on top → second zeroj contribution → verify OK → proves. Measured **23.3k parallel G1 muls/s → a 19M-circuit contribution ≈ 0.9 h** (vs ~2.5–3 h Node) |
+| M5 | **ZeroJ-native contributor, snarkjs-verified**: `contribute` writes snarkjs-format `.zkey`; interop test: zeroj → `snarkjs zkey verify` OK → snarkjs stacks on top → second zeroj contribution → verify OK → proves. Initial unvalidated variable-time measurement: **23.3k parallel G1 muls/s → ≈ 0.9 h** (vs ~2.5–3 h Node) — *superseded by the 2026-11-20 R3 hardening amendment measurement below (~4.0 h on 16 cores with per-point subgroup validation and `ctScalarMul`)* |
 | M6 | **rehearsal ceremony green** (`docs/ceremony/rehearsal.sh`): mixed tooling (2 ZeroJ + 1 snarkjs), beacon, independent `zkey verify`, finalize → PkStore |
 
 **Bug-compatibility findings** (the two subtleties that make Option B possible, documented in code):
@@ -264,9 +264,12 @@ proceed in parallel with the audit; only the production ceremony itself must wai
     contribution's `deltaAfter`, `g1_s`, `g1_sx`, `g2_spx` MUST be canonical (`< p`), non-infinity,
     on-curve, and in the prime-order subgroup (`[r]P = O`).
   - Header deltas MUST satisfy `e(delta1, G2) == e(G1, delta2)`.
-  - Section 10 MUST be structurally exact (`size >= 68`, bounded `nContrib`, `type ∈ {0, 1}`,
-    strictly ascending TLV parameter tags `{1, 2, 3}` matching `snarkjs zkey_utils.js`, zero
-    trailing bytes).
+  - Section 10 MUST be structurally exact (`size >= 68`, `nContrib < 2³² − 1` so `nContrib + 1`
+    fits uint32, bounded against section size, `type ∈ {0, 1}`, strictly ascending TLV parameter
+    tags `{1, 2, 3}` matching `snarkjs zkey_utils.js`, zero trailing bytes). Section 10 transcript
+    hashing is streamed in `O(1)` heap memory (no per-record `ArrayList` or `byte[]` buffering),
+    and the validated prior-record byte range is copied directly from the input mapping into the
+    output mapping.
   - Chain continuity: `delta1` MUST equal `G1` when `nContrib == 0`, and MUST equal
     `priors[nContrib - 1].deltaAfter` when `nContrib > 0` (matching
     `snarkjs zkey_verify_frominit.js:48,141`).
@@ -275,25 +278,34 @@ proceed in parallel with the audit; only the production ceremony itself must wai
   all-zero 96-byte LEM infinity sentinel is legal in `L` (e.g. private wires unused in constraints)
   and preserved unchanged (`k⁻¹ · O = O`, leaking zero bits of `k⁻¹`). Every non-infinity point in
   `L` (section 8) and `H` (section 9) MUST have canonical `< p` coordinates, lie on BLS12-381 G1,
-  and lie in the prime-order subgroup. Any violation aborts the contribution with `IOException`.
+  and lie in the prime-order subgroup. These per-point `L`/`H` checks run during rescaling right
+  before each secret multiplication (`ctScalarMul`); any violation aborts with `IOException` and
+  deletes the staging temp file without touching `out`.
 - **S6 — Secret-scalar routing (`ctScalarMul`):** Every multiplication by `s`, `k`, or `k⁻¹`
   (`g1_s`, `g1_sx`, `g2_spx`, `delta1New`, `delta2New`, and every non-infinity `L`/`H` point) is
   routed through `JacobianG1BLS381.ctScalarMul` / `JacobianG2BLS381.ctScalarMul`. For `L`/`H`,
   validation relies on `ctScalarMul`'s built-in on-curve + prime-order subgroup check (avoiding a
   duplicate subgroup check per point) and maps `IllegalArgumentException` across parallel worker
   threads into a deterministic `IOException`.
-- **S7 — Atomic output writes, overwrite guard, and UTF-8 `--name` safety:**
+- **S7 — Atomic output writes, overwrite guard, POSIX permissions, and UTF-16 `--name` parity:**
   - In-place overwrite (`in` and `out` resolving to the same file, including symlinks via
     `Files.isSameFile`) is unconditionally rejected, even when overwrite is requested.
   - Existing `out` is rejected by default (`ZkeyContributor.contribute(in, out, name)` and CLI
     `contribute`) unless explicit `overwrite = true` / `--overwrite` is supplied.
-  - Output is written to a sibling temp file in `out`'s parent directory, forced to storage
-    (`FileChannel.force(true)`), unmapped/closed, and published atomically (`Files.createLink` for
-    non-clobbering publish when `!overwrite`, or `Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)`
-    when `overwrite`). On any error, the temp file is deleted and any existing `out` remains
-    untouched.
-  - `--name` truncates up to 64 code points and `<= 255` UTF-8 bytes on code-point boundaries,
-    matching `snarkjs 0.7.6` while preventing surrogate splits and 1-byte TLV length overflow.
+  - Output is written to a sibling temp file in `out`'s parent directory, mapped content is forced
+    (`MemorySegment.force()`), the channel is forced (`FileChannel.force(true)`), POSIX mode bits
+    are copied from `in` on POSIX filesystems (so public `.zkey` files are not restricted to
+    `0600`), and publication fails closed if the filesystem cannot honor the requested guarantee:
+    - `!overwrite`: publishes via `Files.createLink(out, tmp)` (atomic non-clobbering; fails closed
+      if `out` already exists or hard links are unsupported — never degrades to check-then-move),
+      then unlinks `tmp` in a separate post-publish step.
+    - `overwrite`: publishes via `Files.move(tmp, out, ATOMIC_MOVE, REPLACE_EXISTING)` (fails closed
+      if atomic move is unsupported — never degrades to non-atomic move).
+    - On any error before publish succeeds, `tmp` is deleted and any existing `out` stays untouched.
+  - `--name` matches `snarkjs@0.7.6` (`new TextEncoder("utf-8").encode(c.name.substring(0, 64))`)
+    bit-for-bit: truncates at 64 UTF-16 code units and replaces any unpaired surrogate (including
+    one produced at index 64) with `U+FFFD` (`EF BF BD`) before UTF-8 encoding (max 192 bytes, so
+    the 1-byte TLV length cannot overflow).
 
 ### Alternatives considered & measured performance trade-off
 
@@ -313,16 +325,20 @@ proceed in parallel with the audit; only the production ceremony itself must wai
   if `out` already exists (previously it deleted `out` first). Callers intending replacement must
   call `contribute(in, out, name, true)` or pass `--overwrite` to `zeroj-ceremony contribute`.
   In-place `--in == --out` is always rejected.
-- **Stricter input validation:** Malformed or synthetic `.zkey` files with wrong primes, non-canonical
-  coordinates, invalid points, mismatched `delta1`/`delta2` pairings, or broken `deltaAfter` chains
-  are now rejected before secret generation.
-- **Wire compatibility:** Produced `.zkey` files remain 100% bit-compatible with `snarkjs@0.7.6`.
+- **Stricter input validation:** Header framing, primes, header VK points, `delta1`/`delta2`
+  pairing, and Section 10 prior records/chains are validated and fail closed **before** secret
+  generation (`k`/`s`); `L` and `H` points are validated per point (canonical `< p`, on-curve,
+  prime-order subgroup inside `ctScalarMul`) during rescaling before each secret multiplication.
+- **Wire compatibility:** Produced `.zkey` files (including UTF-16 `--name` truncation with
+  `U+FFFD` replacement) remain 100% bit-compatible with `snarkjs@0.7.6`.
 
 ### CI interop wiring
 
 - Shared test-fixture locator `SnarkjsCliLocator` (`zeroj-crypto` `testFixtures`, excluded from
-  published artifacts per ADR-0046) resolves `snarkjs@0.7.6` via `-Dzeroj.snarkjs`, `SNARKJS_BIN`,
-  `PATH`, and common npm directories.
+  published artifacts per ADR-0046) resolves `snarkjs@0.7.6` across `zeroj-crypto`, `zeroj-tools`,
+  and `zeroj-integration-tests`. Explicit `-Dzeroj.snarkjs` and `SNARKJS_BIN` overrides are
+  authoritative (failing closed if missing or wrong version rather than falling through to `PATH`);
+  otherwise discovery searches `PATH` and common npm directories.
 - `zeroj-crypto/build.gradle`, `zeroj-tools/build.gradle`, and `zeroj-integration-tests/build.gradle`
   forward `-Dzeroj.snarkjs` and honor `-PrequireSnarkjs` (`zeroj.assurance.requireSnarkjs=true`,
   disabling up-to-date caching).

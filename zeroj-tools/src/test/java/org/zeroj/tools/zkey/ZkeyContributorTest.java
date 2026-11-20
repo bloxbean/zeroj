@@ -20,10 +20,16 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -384,6 +390,125 @@ class ZkeyContributorTest {
         assertEquals(64, hash.length);
         assertFalse(Arrays.equals(sentinel, Files.readAllBytes(existing)));
         assertNoTempFiles(dir);
+    }
+
+    @Test
+    void encodeName_matchesSnarkjsUtf16TruncationAndReplacementChar() {
+        // 63 ASCII 'a' + 4-byte emoji (2 UTF-16 code units) => 63 'a' + lone high surrogate => 66B ending 61 EF BF BD
+        byte[] splitEmoji = ZkeyContributor.encodeName("a".repeat(63) + "\uD83D\uDE00");
+        assertEquals(66, splitEmoji.length);
+        assertEquals((byte) 'a', splitEmoji[62]);
+        assertEquals((byte) 0xEF, splitEmoji[63]);
+        assertEquals((byte) 0xBF, splitEmoji[64]);
+        assertEquals((byte) 0xBD, splitEmoji[65]);
+
+        // 64 rockets (128 UTF-16 code units) => truncated at 64 code units = 32 rockets = 128 UTF-8 bytes
+        byte[] rockets = ZkeyContributor.encodeName("\uD83D\uDE80".repeat(64));
+        assertEquals(128, rockets.length);
+        assertArrayEquals("\uD83D\uDE80".repeat(32).getBytes(StandardCharsets.UTF_8), rockets);
+
+        // Lone low surrogate replaced by U+FFFD
+        byte[] loneLow = ZkeyContributor.encodeName("x\uDC00y");
+        assertArrayEquals(new byte[]{'x', (byte) 0xEF, (byte) 0xBF, (byte) 0xBD, 'y'}, loneLow);
+    }
+
+    @Test
+    void rejectsSection10CountOverflowAndUnboundedCount(@TempDir Path dir) throws Exception {
+        // nContrib = 0xFFFFFFFF (would wrap uint32 on increment)
+        ByteArrayOutputStream overflowSec10 = new ByteArrayOutputStream();
+        overflowSec10.write(new byte[64]);
+        writeU32(overflowSec10, -1); // 0xFFFFFFFF unsigned
+        assertRejects(dir, "u32-overflow.zkey",
+                buildSyntheticZkey(G1, G2, defaultL(), defaultH(), overflowSec10.toByteArray()),
+                "overflow uint32");
+
+        // Large nContrib exceeding section byte budget rejected before iterating
+        ByteArrayOutputStream hugeCountSec10 = new ByteArrayOutputStream();
+        hugeCountSec10.write(new byte[64]);
+        writeU32(hugeCountSec10, 1_000_000);
+        assertRejects(dir, "huge-count.zkey",
+                buildSyntheticZkey(G1, G2, defaultL(), defaultH(), hugeCountSec10.toByteArray()),
+                "Invalid prior contribution count");
+    }
+
+    @Test
+    void publishFailsClosedOnCompetingWriterAndUnsupportedFilesystem_andPreservesPosixMode(@TempDir Path dir)
+            throws Exception {
+        Path in = dir.resolve("in.zkey");
+        Files.write(in, buildValidGenesisBytes());
+
+        // Competing writer wins the race during createHardLink -> fails closed, destination untouched, no temp left
+        Path outRace = dir.resolve("race.zkey");
+        byte[] winnerBytes = "competing-writer".getBytes(StandardCharsets.UTF_8);
+        ZkeyContributor.FilePublisher competingWriter = new ZkeyContributor.FilePublisher() {
+            @Override
+            public void createHardLink(Path target, Path existing) throws IOException {
+                Files.write(target, winnerBytes);
+                throw new FileAlreadyExistsException(target.toString());
+            }
+
+            @Override
+            public void atomicReplace(Path source, Path target) throws IOException {
+                throw new AssertionError("atomicReplace must not be called when overwrite=false");
+            }
+        };
+        IOException raceEx = assertThrows(IOException.class,
+                () -> ZkeyContributor.contribute(in, outRace, "alice", false, competingWriter));
+        assertTrue(raceEx.getMessage().contains("already exists"), raceEx.getMessage());
+        assertArrayEquals(winnerBytes, Files.readAllBytes(outRace));
+        assertNoTempFiles(dir);
+
+        // Unsupported hard-link filesystem on overwrite=false -> fails closed (no check-then-move fallback)
+        Path outNoLink = dir.resolve("nolink.zkey");
+        ZkeyContributor.FilePublisher noHardLinks = new ZkeyContributor.FilePublisher() {
+            @Override
+            public void createHardLink(Path target, Path existing) {
+                throw new UnsupportedOperationException("hard links unsupported");
+            }
+
+            @Override
+            public void atomicReplace(Path source, Path target) {
+                throw new AssertionError("must not fall back to move when overwrite=false");
+            }
+        };
+        IOException noLinkEx = assertThrows(IOException.class,
+                () -> ZkeyContributor.contribute(in, outNoLink, "alice", false, noHardLinks));
+        assertTrue(noLinkEx.getMessage().contains("hard links"), noLinkEx.getMessage());
+        assertFalse(Files.exists(outNoLink));
+        assertNoTempFiles(dir);
+
+        // Unsupported atomic move on overwrite=true -> fails closed, existing output untouched
+        Path outNoAtomic = dir.resolve("noatomic.zkey");
+        byte[] existingBytes = "keep-me".getBytes(StandardCharsets.UTF_8);
+        Files.write(outNoAtomic, existingBytes);
+        ZkeyContributor.FilePublisher noAtomicMove = new ZkeyContributor.FilePublisher() {
+            @Override
+            public void createHardLink(Path target, Path existing) {
+                throw new AssertionError("createHardLink must not be called when overwrite=true");
+            }
+
+            @Override
+            public void atomicReplace(Path source, Path target) throws IOException {
+                throw new AtomicMoveNotSupportedException(source.toString(), target.toString(), "unsupported");
+            }
+        };
+        IOException noAtomicEx = assertThrows(IOException.class,
+                () -> ZkeyContributor.contribute(in, outNoAtomic, "alice", true, noAtomicMove));
+        assertTrue(noAtomicEx.getMessage().contains("atomic move"), noAtomicEx.getMessage());
+        assertArrayEquals(existingBytes, Files.readAllBytes(outNoAtomic));
+        assertNoTempFiles(dir);
+
+        // POSIX permissions match input (public ceremony file is not forced to 0600)
+        try {
+            Set<PosixFilePermission> mode644 = PosixFilePermissions.fromString("rw-r--r--");
+            Files.setPosixFilePermissions(in, mode644);
+            Path outPerms = dir.resolve("perms.zkey");
+            ZkeyContributor.contribute(in, outPerms, "alice");
+            assertEquals(mode644, Files.getPosixFilePermissions(outPerms));
+            assertNoTempFiles(dir);
+        } catch (UnsupportedOperationException ignored) {
+            // Non-POSIX filesystem
+        }
     }
 
     // ---- Helpers ----

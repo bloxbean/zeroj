@@ -1,5 +1,7 @@
 package org.zeroj.examples.dsl.common;
 
+import org.zeroj.crypto.testsupport.SnarkjsCliLocator;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -51,20 +53,9 @@ public class SnarkjsProver {
         String envBin = System.getenv("SNARKJS_BIN");
         if (envBin != null && !envBin.isBlank()) return envBin.trim();
 
-        // 3. Common npm global install locations
-        String home = System.getProperty("user.home");
-        String[] candidates = {
-                "snarkjs",
-                home + "/.npm-global/bin/snarkjs",
-                "/usr/local/bin/snarkjs",
-                "/opt/homebrew/bin/snarkjs",
-                home + "/.nvm/versions/node/current/bin/snarkjs",
-        };
-        for (String candidate : candidates) {
-            if (Files.isExecutable(Path.of(candidate))) {
-                return candidate;
-            }
-        }
+        // 3. Shared PATH + common npm global install discovery
+        var res = SnarkjsCliLocator.resolvePinned();
+        if (res.isReady()) return res.binary();
         return "snarkjs"; // fallback to PATH
     }
 

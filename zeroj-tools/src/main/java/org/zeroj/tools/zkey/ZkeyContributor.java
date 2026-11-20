@@ -30,12 +30,12 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -69,6 +69,7 @@ public final class ZkeyContributor {
     private static final int GROTH16_PROTOCOL = 1;
     private static final int REQUIRED_SECTIONS = 10;
     private static final long MIN_CONTRIBUTION_BYTES = 96 + 96 + 96 + 192 + 64 + 4 + 4; // 552
+    private static final long MAX_U32 = 0xFFFF_FFFFL;
 
     private static final BigInteger P = MontFp381.modulus();
     private static final BigInteger R_FR = MontFr381.modulus();
@@ -91,13 +92,23 @@ public final class ZkeyContributor {
     private static final long H_DELTA2 = 772;
     private static final long HEADER_LEN = 964;
 
-    private record PriorContribution(
-            AffineG1 deltaAfter,
-            AffineG1 g1s,
-            AffineG1 g1sx,
-            AffineG2 g2spx,
-            byte[] transcript,
-            byte[] rawBytes) {}
+    /** Package-private seam for testing atomic publish behavior under contention and unsupported filesystems. */
+    interface FilePublisher {
+        void createHardLink(Path target, Path existing) throws IOException;
+        void atomicReplace(Path source, Path target) throws IOException;
+    }
+
+    static final FilePublisher DEFAULT_PUBLISHER = new FilePublisher() {
+        @Override
+        public void createHardLink(Path target, Path existing) throws IOException {
+            Files.createLink(target, existing);
+        }
+
+        @Override
+        public void atomicReplace(Path source, Path target) throws IOException {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        }
+    };
 
     /**
      * Contribute to {@code in} and atomically write the updated {@code .zkey} to {@code out}.
@@ -117,8 +128,14 @@ public final class ZkeyContributor {
      * @return the contribution hash (blake2b-512 of the new record's public key) — publish it.
      */
     public static byte[] contribute(Path in, Path out, String name, boolean overwrite) throws IOException {
+        return contribute(in, out, name, overwrite, DEFAULT_PUBLISHER);
+    }
+
+    static byte[] contribute(Path in, Path out, String name, boolean overwrite, FilePublisher publisher)
+            throws IOException {
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(out, "out");
+        Objects.requireNonNull(publisher, "publisher");
 
         Path inAbs = in.toAbsolutePath().normalize();
         Path outAbs = out.toAbsolutePath().normalize();
@@ -232,7 +249,7 @@ public final class ZkeyContributor {
             validateSectionSize(sec, 8, nL * 96L, "L");
             validateSectionSize(sec, 9, domainSize * 96L, "H");
 
-            // ---- S3 & S4: pre-secret header, delta pairing, and contribution chain validation ----
+            // ---- S3 & S4: pre-secret header, delta pairing, and streamed Section 10 validation ----
             requireNonIdentitySubgroupG1(z, h + H_ALPHA1, "header.alpha1");
             requireNonIdentitySubgroupG1(z, h + H_BETA1, "header.beta1");
             requireNonIdentitySubgroupG2(z, h + H_BETA2, "header.beta2");
@@ -254,20 +271,28 @@ public final class ZkeyContributor {
             }
             byte[] csHash = bytes(z, s10, 64);
             long nContribLong = Integer.toUnsignedLong(z.get(U32, s10 + 64));
+            if (nContribLong >= MAX_U32) {
+                throw new IOException("Prior contribution count " + nContribLong + " would overflow uint32");
+            }
             long maxContribs = (s10Size - 68) / MIN_CONTRIBUTION_BYTES;
             if (nContribLong > maxContribs) {
                 throw new IOException("Invalid prior contribution count " + nContribLong
                         + " for section size " + s10Size);
             }
-            int nContrib = (int) nContribLong;
-            long rp = s10 + 68;
-            List<PriorContribution> priors = new ArrayList<>(nContrib);
-            long priorRawTotal = 0;
-            for (int i = 0; i < nContrib; i++) {
+
+            // Stream transcript hashing in O(1) heap (no per-record ArrayList or byte[] copies).
+            // snarkjs streams each prior's components into ONE running blake2b-512 hasher
+            // (hashPubKey(hasher, c)), NOT the priors' sub-hashes.
+            Blake2bDigest th = new Blake2bDigest(512);
+            update(th, csHash);
+
+            long priorRecordsStart = s10 + 68;
+            long rp = priorRecordsStart;
+            AffineG1 lastDeltaAfter = null;
+            for (long i = 0; i < nContribLong; i++) {
                 if (rp > s10End - MIN_CONTRIBUTION_BYTES) {
                     throw new IOException("Truncated contribution record at index " + i);
                 }
-                long start = rp;
                 String prefix = "contributions[" + i + "]";
                 AffineG1 deltaAfter = requireNonIdentitySubgroupG1(z, rp, prefix + ".deltaAfter");
                 AffineG1 pG1s = requireNonIdentitySubgroupG1(z, rp + 96, prefix + ".g1_s");
@@ -284,38 +309,30 @@ public final class ZkeyContributor {
                     throw new IOException("Out-of-bounds contribution params length " + paramLen + " at index " + i);
                 }
                 validateContributionParams(z, paramStart, paramLen);
+                hashPubKeyInto(th, deltaAfter, pG1s, pG1sx, pG2spx, pTranscript);
+                lastDeltaAfter = deltaAfter;
                 rp = paramStart + paramLen;
-                byte[] raw = bytes(z, start, rp - start);
-                priorRawTotal += raw.length;
-                priors.add(new PriorContribution(deltaAfter, pG1s, pG1sx, pG2spx, pTranscript, raw));
             }
             if (rp != s10End) {
                 throw new IOException("Trailing bytes in .zkey contributions section: " + (s10End - rp));
             }
+            long priorRawLen = rp - priorRecordsStart;
 
-            AffineG1 expectedDelta1 = priors.isEmpty()
+            AffineG1 expectedDelta1 = lastDeltaAfter == null
                     ? JacobianG1BLS381.GENERATOR.toAffine()
-                    : priors.get(priors.size() - 1).deltaAfter();
+                    : lastDeltaAfter;
             if (!delta1.equals(expectedDelta1)) {
                 throw new IOException("Header delta1 does not match "
-                        + (priors.isEmpty() ? "G1 generator (0 prior contributions)" : "last contribution deltaAfter"));
+                        + (lastDeltaAfter == null ? "G1 generator (0 prior contributions)" : "last contribution deltaAfter"));
             }
 
-            // ---- S6: draw fresh secrets ONLY after all pre-secret checks succeed ----
+            // ---- S6: draw fresh secrets ONLY after all pre-secret header & prior checks succeed ----
             SecureRandom rnd = new SecureRandom();
             BigInteger k = randScalar(rnd);
             BigInteger s = randScalar(rnd);
             AffineG1 g1s = JacobianG1BLS381.GENERATOR.ctScalarMul(s).toAffine();
             AffineG1 g1sx = JacobianG1BLS381.fromAffine(g1s.x(), g1s.y()).ctScalarMul(k).toAffine();
 
-            // transcript = blake2b512(csHash ‖ RAW fields of every prior record ‖ unc(g1_s) ‖ unc(g1_sx))
-            // — snarkjs streams each prior's components into ONE running hasher (hashPubKey(hasher, c)),
-            // NOT the priors' sub-hashes. (The two coincide only with zero priors.)
-            Blake2bDigest th = new Blake2bDigest(512);
-            update(th, csHash);
-            for (PriorContribution c : priors) {
-                hashPubKeyInto(th, c.deltaAfter(), c.g1s(), c.g1sx(), c.g2spx(), c.transcript());
-            }
             update(th, g1Unc(g1s));
             update(th, g1Unc(g1sx));
             byte[] transcript = digest(th);
@@ -330,7 +347,7 @@ public final class ZkeyContributor {
             AffineG2 delta2New = JacobianG2BLS381.fromAffine(delta2.x(), delta2.y()).ctScalarMul(k).toAffine();
             BigInteger kInv = k.modInverse(R_FR);
 
-            // new contribution record
+            // new contribution record (UTF-16 truncation + U+FFFD matches snarkjs 0.7.6 TextEncoder)
             byte[] nameBytes = encodeName(name);
             byte[] params = nameBytes.length == 0
                     ? new byte[0]
@@ -339,8 +356,8 @@ public final class ZkeyContributor {
                     g1Lem(delta1New), g1Lem(g1s), g1Lem(g1sx), g2Lem(g2spx), transcript,
                     u32(0), u32(params.length), params);
 
-            // ---- S7: write the new .zkey into a sibling temp file, then publish atomically ----
-            long s10NewSize = 64L + 4L + priorRawTotal + record.length;
+            // ---- S7: write the new .zkey into a sibling temp file, flush, then publish atomically ----
+            long s10NewSize = 64L + 4L + priorRawLen + record.length;
             long total = 12L
                     + 12L + sec.get(1)[1] + 12L + sec.get(2)[1]
                     + 12L + sec.get(3)[1] + 12L + sec.get(4)[1] + 12L + sec.get(5)[1]
@@ -385,23 +402,29 @@ public final class ZkeyContributor {
 
                         w = section(o, w, 10, s10NewSize);
                         put(o, w, csHash);
-                        o.set(U32, w + 64, nContrib + 1);
-                        long q = w + 68;
-                        for (PriorContribution prior : priors) {
-                            put(o, q, prior.rawBytes());
-                            q += prior.rawBytes().length;
+                        o.set(U32, w + 64, (int) (nContribLong + 1L));
+                        if (priorRawLen > 0) {
+                            MemorySegment.copy(z, priorRecordsStart, o, w + 68, priorRawLen);
                         }
-                        put(o, q, record);
+                        put(o, w + 68 + priorRawLen, record);
+
+                        o.force();
                     }
                     outCh.force(true);
                 }
 
-                publishTempFile(tmp, inAbs, outAbs, overwrite);
+                copyPosixPermissionsBestEffort(inAbs, tmp);
+                publishTempFile(tmp, inAbs, outAbs, overwrite, publisher);
                 published = true;
             } finally {
                 if (!published) {
                     Files.deleteIfExists(tmp);
                 }
+            }
+
+            // Temp unlink is separate from link publication: outAbs is already committed.
+            if (!overwrite) {
+                Files.deleteIfExists(tmp);
             }
 
             Blake2bDigest ch = new Blake2bDigest(512);
@@ -410,7 +433,17 @@ public final class ZkeyContributor {
         }
     }
 
-    private static void publishTempFile(Path tmp, Path inAbs, Path outAbs, boolean overwrite) throws IOException {
+    private static void copyPosixPermissionsBestEffort(Path inAbs, Path tmp) {
+        try {
+            Set<PosixFilePermission> perms = Files.getPosixFilePermissions(inAbs);
+            Files.setPosixFilePermissions(tmp, perms);
+        } catch (UnsupportedOperationException | IOException ignored) {
+            // Non-POSIX filesystems (e.g. Windows) do not expose POSIX mode bits.
+        }
+    }
+
+    static void publishTempFile(Path tmp, Path inAbs, Path outAbs, boolean overwrite, FilePublisher publisher)
+            throws IOException {
         if (Files.exists(outAbs, LinkOption.NOFOLLOW_LINKS)
                 && Files.exists(inAbs)
                 && Files.isSameFile(inAbs, outAbs)) {
@@ -418,29 +451,23 @@ public final class ZkeyContributor {
         }
         if (!overwrite) {
             try {
-                // Atomic non-clobbering publish on POSIX/NTFS filesystems supporting hard links.
-                Files.createLink(outAbs, tmp);
-                Files.deleteIfExists(tmp);
+                // Atomic non-clobbering publish: fails with FileAlreadyExistsException if outAbs exists.
+                publisher.createHardLink(outAbs, tmp);
                 return;
             } catch (FileAlreadyExistsException e) {
-                throw new IOException("Output file already exists (pass --overwrite / overwrite=true to replace): " + outAbs, e);
-            } catch (UnsupportedOperationException | SecurityException | IOException ignored) {
-                // Fall back to move on filesystems without hard-link support.
-                if (Files.exists(outAbs, LinkOption.NOFOLLOW_LINKS)) {
-                    throw new IOException("Output file already exists (pass --overwrite / overwrite=true to replace): " + outAbs);
-                }
-                try {
-                    Files.move(tmp, outAbs, StandardCopyOption.ATOMIC_MOVE);
-                } catch (AtomicMoveNotSupportedException e) {
-                    Files.move(tmp, outAbs);
-                }
-                return;
+                throw new IOException(
+                        "Output file already exists (pass --overwrite / overwrite=true to replace): " + outAbs, e);
+            } catch (UnsupportedOperationException | IOException e) {
+                throw new IOException(
+                        "Atomic non-clobbering publish failed (filesystem must support hard links for safe "
+                                + "no-overwrite publication): " + outAbs, e);
             }
         }
         try {
-            Files.move(tmp, outAbs, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(tmp, outAbs, StandardCopyOption.REPLACE_EXISTING);
+            publisher.atomicReplace(tmp, outAbs);
+        } catch (AtomicMoveNotSupportedException | UnsupportedOperationException e) {
+            throw new IOException(
+                    "Atomic overwrite failed (filesystem does not support atomic move for target): " + outAbs, e);
         }
     }
 
@@ -696,25 +723,31 @@ public final class ZkeyContributor {
     }
 
     /**
-     * Truncates contributor name matching snarkjs 0.7.6 ({@code name.substring(0, 64)} in UTF-8)
-     * while preventing surrogate splitting and 1-byte TLV length overflow ({@code <= 255} UTF-8 bytes).
+     * Bit-exact port of snarkjs 0.7.6 ({@code new TextEncoder("utf-8").encode(c.name.substring(0, 64))}):
+     * truncates at 64 UTF-16 code units, then replaces any unpaired surrogate (including one created
+     * by slicing a surrogate pair at index 64) with {@code U+FFFD} ({@code EF BF BD}) per WHATWG
+     * {@code toUSVString} before UTF-8 encoding. Maximum output length is 192 bytes ({@code <= 255}),
+     * so the 1-byte TLV length field can never overflow.
      */
-    private static byte[] encodeName(String name) {
+    static byte[] encodeName(String name) {
         if (name == null || name.isEmpty()) return new byte[0];
-        int maxCodePoints = 64;
-        int endIndex = 0;
-        int utf8Bytes = 0;
-        int codePoints = 0;
-        while (endIndex < name.length() && codePoints < maxCodePoints) {
-            int cp = name.codePointAt(endIndex);
-            int charCount = Character.charCount(cp);
-            int cpUtf8Len = cp <= 0x7F ? 1 : (cp <= 0x7FF ? 2 : (cp <= 0xFFFF ? 3 : 4));
-            if (utf8Bytes + cpUtf8Len > 255) break;
-            utf8Bytes += cpUtf8Len;
-            endIndex += charCount;
-            codePoints++;
+        int limit = Math.min(name.length(), 64);
+        StringBuilder usv = new StringBuilder(limit);
+        for (int i = 0; i < limit; i++) {
+            char c = name.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 < limit && Character.isLowSurrogate(name.charAt(i + 1))) {
+                    usv.append(c).append(name.charAt(++i));
+                } else {
+                    usv.append('\uFFFD');
+                }
+            } else if (Character.isLowSurrogate(c)) {
+                usv.append('\uFFFD');
+            } else {
+                usv.append(c);
+            }
         }
-        return name.substring(0, endIndex).getBytes(StandardCharsets.UTF_8);
+        return usv.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     private static BigInteger randScalar(SecureRandom rnd) {

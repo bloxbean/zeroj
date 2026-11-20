@@ -13,13 +13,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
- * Discovers and version-checks the pinned {@code snarkjs} CLI for ceremony and {@code .zkey}
- * interop tests (ADR-0031 / ADR-0047).
+ * Shared locator and version validator for the pinned {@code snarkjs} CLI used across ceremony,
+ * streaming {@code .zkey}, and bidirectional interop tests (ADR-0031 / ADR-0047).
  *
  * <p>Discovery order:
  * <ol>
- *   <li>{@code -Dzeroj.snarkjs} system property</li>
- *   <li>{@code SNARKJS_BIN} environment variable</li>
+ *   <li>{@code -Dzeroj.snarkjs} system property (authoritative if set — never falls through)</li>
+ *   <li>{@code SNARKJS_BIN} environment variable (authoritative if set — never falls through)</li>
  *   <li>{@code PATH} entries</li>
  *   <li>common global npm install directories ({@code ~/.npm-global/bin}, {@code /usr/local/bin},
  *       {@code /opt/homebrew/bin}, {@code ~/.nvm/versions/node/current/bin})</li>
@@ -57,14 +57,26 @@ public final class SnarkjsCliLocator {
 
     /**
      * Locate {@code snarkjs} and verify that {@code snarkjs --version} reports
-     * {@code snarkjs@0.7.6}.
+     * {@code snarkjs@0.7.6}. Explicit overrides ({@code -Dzeroj.snarkjs} or {@code SNARKJS_BIN})
+     * are authoritative and do not fall through to {@code PATH} if missing or wrong-version.
      */
     public static Resolution resolvePinned() {
+        return resolvePinned(System.getProperty(BIN_PROPERTY), System.getenv(BIN_ENV));
+    }
+
+    static Resolution resolvePinned(String explicitProp, String explicitEnv) {
         String expected = "snarkjs@" + PINNED_VERSION;
+
+        if (explicitProp != null && !explicitProp.isBlank()) {
+            return resolveAuthoritative(explicitProp.trim(), "-D" + BIN_PROPERTY, expected);
+        }
+        if (explicitEnv != null && !explicitEnv.isBlank()) {
+            return resolveAuthoritative(explicitEnv.trim(), BIN_ENV, expected);
+        }
+
         String wrongVersionFound = null;
         String wrongVersionBin = null;
-
-        for (String candidate : candidateBinaries()) {
+        for (String candidate : discoverFallbackBinaries()) {
             String detected = probeVersion(candidate);
             if (expected.equals(detected)) {
                 return new Resolution(candidate, detected, null);
@@ -85,17 +97,22 @@ public final class SnarkjsCliLocator {
                         + "(checked -D" + BIN_PROPERTY + ", " + BIN_ENV + ", PATH, and common npm bin dirs)");
     }
 
-    private static List<String> candidateBinaries() {
-        Set<String> candidates = new LinkedHashSet<>();
+    private static Resolution resolveAuthoritative(String bin, String source, String expected) {
+        String detected = probeVersion(bin);
+        if (expected.equals(detected)) {
+            return new Resolution(bin, detected, null);
+        }
+        if (detected != null) {
+            return new Resolution(null, detected,
+                    "Explicit " + source + "=" + bin + " reported " + detected
+                            + ", but ADR-0047/ADR-0031 pin " + expected);
+        }
+        return new Resolution(null, null,
+                "Explicit " + source + "=" + bin + " is missing or did not answer `--version` within 10 s");
+    }
 
-        String prop = System.getProperty(BIN_PROPERTY);
-        if (prop != null && !prop.isBlank()) {
-            candidates.add(prop.trim());
-        }
-        String envBin = System.getenv(BIN_ENV);
-        if (envBin != null && !envBin.isBlank()) {
-            candidates.add(envBin.trim());
-        }
+    private static List<String> discoverFallbackBinaries() {
+        Set<String> candidates = new LinkedHashSet<>();
 
         boolean isWindows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
         String[] exeNames = isWindows ? new String[]{"snarkjs.cmd", "snarkjs.exe", "snarkjs"} : new String[]{"snarkjs"};
@@ -127,7 +144,6 @@ public final class SnarkjsCliLocator {
             }
         }
 
-        // Final fallback letting OS PATH resolution run directly if PATH scan missed a wrapper
         candidates.add(isWindows ? "snarkjs.cmd" : "snarkjs");
         return new ArrayList<>(candidates);
     }

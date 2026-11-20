@@ -168,8 +168,10 @@ I confirm the entropy was generated fresh and destroyed after use.
 
 - **Do I have to trust this tool?** No — verification is always done with *snarkjs* (`zkey verify`),
   which independently re-checks every contribution including ZeroJ-made ones.
-- **zeroj-ceremony or snarkjs for contributing?** Identical result; ZeroJ is ~3× faster on large
-  circuits (measured: ~0.9 h vs ~2.5–3 h for a 19M-constraint key) and ships as a single binary.
+- **zeroj-ceremony or snarkjs for contributing?** Bit-compatible result; `zeroj-ceremony` ships as
+  a single native/JVM binary with pre-secret validation and per-point subgroup checks via ADR-0062
+  `ctScalarMul` (~4.0 h extrapolated on 16 cores for a 19M-constraint key, vs ~2.5–3 h for
+  `snarkjs` on Node). Use whichever fits your contributor environment.
 - **How much machine do I need?** Contributing needs modest memory (the tool streams the file);
   disk = ~2× the `.zkey` size. A 19M-constraint key is ~30 GB.
 - **What must I keep secret?** Nothing after you finish — your randomness is used and discarded.

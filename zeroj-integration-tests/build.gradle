@@ -39,6 +39,7 @@ dependencies {
     testImplementation project(':zeroj-circuit-annotation-api')
     testImplementation project(':zeroj-mpf-poseidon')
     testImplementation project(':zeroj-crypto')
+    testImplementation testFixtures(project(':zeroj-crypto'))
     testImplementation project(':zeroj-bls12381')
     testImplementation project(':zeroj-blst')
     testImplementation project(':zeroj-test-vectors')
