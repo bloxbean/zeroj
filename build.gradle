@@ -280,7 +280,8 @@ tasks.matching {
 // === Release -SNAPSHOT dependency guard =========================================================
 // Fails any non-SNAPSHOT release (or any run with -PrequireNoSnapshotDependencies=true) if a
 // published Maven POM, resolved compile/runtime/annotationProcessor classpath, or buildscript
-// plugin classpath references a -SNAPSHOT artifact.
+// plugin classpath references a Maven snapshot artifact (including timestamped snapshots or
+// property-interpolated / unresolved version expressions).
 def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInReleasePoms') {
     group = 'verification'
     description = 'Asserts published release POMs and resolved release classpaths contain no -SNAPSHOT dependencies.'
@@ -291,18 +292,62 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
     def deployedProjects = centralDeploymentProjects
 
     doLast {
+        // Matches org.apache.maven.artifact.ArtifactUtils.isSnapshot (Maven 3.9.9):
+        // literal "SNAPSHOT", suffix "-SNAPSHOT", or timestamped "<base>-YYYYMMDD.HHMMSS-<build>".
+        def timestampedSnapshotPattern = ~/^(.*)-([0-9]{8}\.[0-9]{6})-([0-9]+)$/
+        def isMavenSnapshot = { String ver ->
+            if (ver == null || ver.isEmpty()) return false
+            return ver == 'SNAPSHOT'
+                    || ver.endsWith('-SNAPSHOT')
+                    || timestampedSnapshotPattern.matcher(ver).matches()
+        }
+
+        def resolvePomProperties = { String raw, Map<String, String> props ->
+            if (raw == null) return null
+            String current = raw.trim()
+            // Bounded expansion to handle chained properties without looping on cycles.
+            for (int depth = 0; depth < 8 && current.contains('${'); depth++) {
+                String next = current.replaceAll(/\$\{([^}]+)\}/) { match, key ->
+                    props.containsKey(key) ? java.util.regex.Matcher.quoteReplacement(props[key]) : java.util.regex.Matcher.quoteReplacement(match)
+                }
+                if (next == current) break
+                current = next
+            }
+            return current
+        }
+
         def findSnapshotVersionsInPom = { String xmlText, String sourceLabel ->
             def hits = []
             def pom = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
-            def checkVersion = { String coord, String ver ->
-                if (ver != null && ver.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
-                    hits << "${sourceLabel}: ${coord} -> ${ver}"
+            Map<String, String> props = new LinkedHashMap<>()
+            pom.properties.children().each { prop ->
+                props[prop.name()] = prop.text().trim()
+            }
+            String parentVer = pom.parent.size() > 0 ? pom.parent.version?.text()?.trim() : null
+            String projectVer = pom.version?.text()?.trim()
+            if (parentVer) {
+                props['project.parent.version'] = parentVer
+                props['parent.version'] = parentVer
+            }
+            String effectiveProjectVer = projectVer ?: parentVer
+            if (effectiveProjectVer) {
+                props['project.version'] = effectiveProjectVer
+                props['version'] = effectiveProjectVer
+            }
+
+            def checkVersion = { String coord, String rawVer ->
+                if (rawVer == null || rawVer.isEmpty()) return
+                String resolved = resolvePomProperties(rawVer, props)
+                if (resolved.contains('${')) {
+                    hits << "${sourceLabel}: ${coord} -> unresolved version expression '${rawVer}' (resolved: '${resolved}')"
+                } else if (isMavenSnapshot(resolved)) {
+                    hits << "${sourceLabel}: ${coord} -> ${resolved}" + (resolved != rawVer ? " (from ${rawVer})" : '')
                 }
             }
-            checkVersion('project', pom.version?.text()?.trim())
+            checkVersion('project', effectiveProjectVer)
             if (pom.parent.size() > 0) {
                 def parentCoord = "${pom.parent.groupId.text().trim()}:${pom.parent.artifactId.text().trim()}"
-                checkVersion("parent ${parentCoord}", pom.parent.version?.text()?.trim())
+                checkVersion("parent ${parentCoord}", parentVer)
             }
             def inspectDeps = { depsNode, String section ->
                 depsNode.dependency.each { dep ->
@@ -320,9 +365,18 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
             <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
             <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>0.1.0-pre21-SNAPSHOT</version></dependency></dependencies>
         </project>'''
-        def badBomPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+        def badTimestampedPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
+            <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>0.1.0-20261120.174000-1</version></dependency></dependencies>
+        </project>'''
+        def badBomPropPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
             <groupId>org.zeroj</groupId><artifactId>sample-bom</artifactId><version>0.1.0</version>
-            <dependencyManagement><dependencies><dependency><groupId>org.zeroj</groupId><artifactId>zeroj-api</artifactId><version>0.1.0-SNAPSHOT</version></dependency></dependencies></dependencyManagement>
+            <properties><julc.ver>0.1.0-SNAPSHOT</julc.ver></properties>
+            <dependencyManagement><dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>${julc.ver}</version></dependency></dependencies></dependencyManagement>
+        </project>'''
+        def badUnresolvedPropPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample-bom</artifactId><version>0.1.0</version>
+            <dependencyManagement><dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>${missing.ver}</version></dependency></dependencies></dependencyManagement>
         </project>'''
         def badParentPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
             <parent><groupId>org.example</groupId><artifactId>parent</artifactId><version>1.0-SNAPSHOT</version></parent>
@@ -330,17 +384,23 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
         </project>'''
         def cleanPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
             <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0-pre13</version>
-            <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>0.1.0-pre22</version></dependency></dependencies>
+            <properties><julc.ver>0.1.0-pre22</julc.ver></properties>
+            <dependencies>
+                <dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>${julc.ver}</version></dependency>
+                <dependency><groupId>org.example</groupId><artifactId>non-snapshot-qualifier</artifactId><version>1.0.0-snapshotter</version></dependency>
+            </dependencies>
         </project>'''
         if (findSnapshotVersionsInPom(badDepPom, 'self-check').isEmpty()
-                || findSnapshotVersionsInPom(badBomPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badTimestampedPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badBomPropPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badUnresolvedPropPom, 'self-check').isEmpty()
                 || findSnapshotVersionsInPom(badParentPom, 'self-check').isEmpty()
                 || !findSnapshotVersionsInPom(cleanPom, 'self-check').isEmpty()) {
             throw new GradleException('Release -SNAPSHOT POM guard self-check failed.')
         }
 
         def rootVersion = rootProject.version.toString()
-        def isSnapshotBuild = rootVersion.toUpperCase(Locale.ROOT).endsWith('SNAPSHOT')
+        def isSnapshotBuild = isMavenSnapshot(rootVersion)
         if (isSnapshotBuild && !forceCheck) {
             logger.lifecycle("Skipping release -SNAPSHOT dependency guard for SNAPSHOT project version ${rootVersion}.")
             return
@@ -352,6 +412,24 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
 
         if (isSnapshotBuild) {
             violations << "rootProject version is SNAPSHOT: ${rootVersion}"
+        }
+
+        def scanConfiguration = { Configuration cfg, String label ->
+            if (cfg != null && cfg.canBeResolved) {
+                configCount++
+                def result = cfg.incoming.resolutionResult
+                result.allDependencies.each { dep ->
+                    if (dep instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
+                        violations << "${label}: unresolved dependency ${dep.requested} (${dep.failure.message})"
+                    }
+                }
+                result.allComponents.each { comp ->
+                    def mv = comp.moduleVersion
+                    if (mv != null && isMavenSnapshot(mv.version)) {
+                        violations << "${label}: ${mv.group}:${mv.name}:${mv.version}"
+                    }
+                }
+            }
         }
 
         deployedProjects.each { candidate ->
@@ -372,49 +450,17 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
             }
 
             ['compileClasspath', 'runtimeClasspath', 'annotationProcessor'].each { cfgName ->
-                def cfg = candidate.configurations.findByName(cfgName)
-                if (cfg != null && cfg.canBeResolved) {
-                    configCount++
-                    def result = cfg.incoming.resolutionResult
-                    result.allDependencies.each { dep ->
-                        if (dep instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
-                            violations << "${candidate.path} [${cfgName}]: unresolved dependency ${dep.requested} (${dep.failure.message})"
-                        }
-                    }
-                    result.allComponents.each { comp ->
-                        def mv = comp.moduleVersion
-                        if (mv != null && mv.version != null
-                                && mv.version.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
-                            violations << "${candidate.path} [${cfgName}]: ${mv.group}:${mv.name}:${mv.version}"
-                        }
-                    }
-                }
+                scanConfiguration(candidate.configurations.findByName(cfgName), "${candidate.path} [${cfgName}]")
             }
-
-            def bsCfg = candidate.buildscript.configurations.findByName('classpath')
-            if (bsCfg != null && bsCfg.canBeResolved) {
-                configCount++
-                bsCfg.incoming.resolutionResult.allComponents.each { comp ->
-                    def mv = comp.moduleVersion
-                    if (mv != null && mv.version != null
-                            && mv.version.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
-                        violations << "${candidate.path} [buildscript:classpath]: ${mv.group}:${mv.name}:${mv.version}"
-                    }
-                }
-            }
+            // Note: covers buildscript { dependencies { classpath ... } } plugins (e.g. julc-gradle-plugin).
+            // Plugins resolved via settings pluginManagement / plugins {} blocks live on the settings
+            // classpath rather than project.buildscript and are pinned directly in plugin blocks.
+            scanConfiguration(candidate.buildscript.configurations.findByName('classpath'),
+                    "${candidate.path} [buildscript:classpath]")
         }
 
-        def rootBsCfg = rootProject.buildscript.configurations.findByName('classpath')
-        if (rootBsCfg != null && rootBsCfg.canBeResolved) {
-            configCount++
-            rootBsCfg.incoming.resolutionResult.allComponents.each { comp ->
-                def mv = comp.moduleVersion
-                if (mv != null && mv.version != null
-                        && mv.version.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
-                    violations << ": [buildscript:classpath]: ${mv.group}:${mv.name}:${mv.version}"
-                }
-            }
-        }
+        scanConfiguration(rootProject.buildscript.configurations.findByName('classpath'),
+                ': [buildscript:classpath]')
 
         if (pomCount < deployedProjects.size()) {
             violations << "Scanned only ${pomCount} POMs across ${deployedProjects.size()} published projects"
@@ -447,6 +493,11 @@ tasks.matching {
 allprojects { candidate ->
     candidate.tasks.matching { it.name == 'publishAllPublicationsToStagingRepository' }.configureEach {
         dependsOn verifyNoSnapshotDeps
+    }
+    candidate.tasks.withType(PublishToMavenRepository).configureEach { publishTask ->
+        if (publishTask.name.endsWith('ToStagingRepository') || publishTask.repository?.name == 'staging') {
+            publishTask.dependsOn verifyNoSnapshotDeps
+        }
     }
 }
 
