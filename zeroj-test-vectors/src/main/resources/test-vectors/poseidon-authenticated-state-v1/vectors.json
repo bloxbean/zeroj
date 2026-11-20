@@ -48,10 +48,11 @@
       "05c7ded878d78a42be21a4c575ffc29382eb7784f1087eb2379c822514def6e3"
     ],
     "fixture": {
+      "cclVersion": "0.8.0-pre8",
       "entries": { "alpha": "one", "beta": "two", "gamma": "three" },
       "rootHex": "5ac3487f1d8a88691fdb7261b284ac346a3f8b5569451a6a2eec92b9e0b0fd83",
       "inclusionKey": "beta",
-      "inclusionProofForm": "branch-path",
+      "inclusionProofForm": "compact-fork-path",
       "inclusionWireBase64": "gdh6ggDYeYMBQFggYDbCAeM2R9kXbWi1PFV6yC+xBZiJmQzlpMddodHewHw=",
       "inclusionDecoded": {
         "kind": "fork",
@@ -147,7 +148,7 @@
       "54d862d2a5f68d5f63ae727d798e4dfe8414e862494386c64665185089cacda6"
     ],
     "cclFixture": {
-      "cclVersion": "0.8.0-pre5",
+      "cclVersion": "0.8.0-pre8",
       "version": 0,
       "entries": {
         "count": 24,

@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -318,6 +319,51 @@ class BbsServiceTest {
             assertThrows(IllegalArgumentException.class,
                     () -> BbsCodec.octetsToProof(rScalarProof, suite),
                     "octetsToProof must reject scalar == r at slot " + slotIndex);
+        }
+    }
+
+    @Test
+    void proofPartsAndProofToOctetsRejectZeroAndOutOfRangeScalarsInEverySlot() {
+        BbsService service = BbsService.pureJava();
+        BbsKeyPair keyPair = service.keyPair(bytes("012345678901234567890123456789st"), bytes("issuer-key"));
+        List<byte[]> messages = List.of(bytes("given:Alice"), bytes("family:Liddell"), bytes("age:20"));
+        byte[] header = bytes("credential-v1");
+        BbsSignature signature = service.sign(keyPair.secretKey(), keyPair.publicKey(), messages, header);
+        BbsPresentation presentation = service.derivePresentation(
+                keyPair.publicKey(), signature, messages, header, bytes("nonce"), new int[]{0});
+
+        BbsCodec.ProofParts valid = BbsCodec.octetsToProof(
+                presentation.proof().bytes(), BbsCiphersuite.BLS12381_SHA256);
+        assertEquals(2, valid.mHats().size());
+        assertArrayEquals(presentation.proof().bytes(), BbsCodec.proofToOctets(valid));
+
+        BigInteger[] invalidScalars = {BigInteger.ZERO, BigInteger.ONE.negate(), G1Point.R, G1Point.R.add(BigInteger.ONE)};
+        for (BigInteger bad : invalidScalars) {
+            assertThrows(IllegalArgumentException.class, () -> new BbsCodec.ProofParts(
+                    valid.aBar(), valid.bBar(), valid.d(),
+                    bad, valid.r1Hat(), valid.r3Hat(), valid.mHats(), valid.challenge()),
+                    "ProofParts must reject invalid eHat=" + bad);
+            assertThrows(IllegalArgumentException.class, () -> new BbsCodec.ProofParts(
+                    valid.aBar(), valid.bBar(), valid.d(),
+                    valid.eHat(), bad, valid.r3Hat(), valid.mHats(), valid.challenge()),
+                    "ProofParts must reject invalid r1Hat=" + bad);
+            assertThrows(IllegalArgumentException.class, () -> new BbsCodec.ProofParts(
+                    valid.aBar(), valid.bBar(), valid.d(),
+                    valid.eHat(), valid.r1Hat(), bad, valid.mHats(), valid.challenge()),
+                    "ProofParts must reject invalid r3Hat=" + bad);
+            for (int i = 0; i < valid.mHats().size(); i++) {
+                List<BigInteger> badMHats = new ArrayList<>(valid.mHats());
+                badMHats.set(i, bad);
+                int idx = i;
+                assertThrows(IllegalArgumentException.class, () -> new BbsCodec.ProofParts(
+                        valid.aBar(), valid.bBar(), valid.d(),
+                        valid.eHat(), valid.r1Hat(), valid.r3Hat(), badMHats, valid.challenge()),
+                        "ProofParts must reject invalid mHat[" + idx + "]=" + bad);
+            }
+            assertThrows(IllegalArgumentException.class, () -> new BbsCodec.ProofParts(
+                    valid.aBar(), valid.bBar(), valid.d(),
+                    valid.eHat(), valid.r1Hat(), valid.r3Hat(), valid.mHats(), bad),
+                    "ProofParts must reject invalid challenge=" + bad);
         }
     }
 

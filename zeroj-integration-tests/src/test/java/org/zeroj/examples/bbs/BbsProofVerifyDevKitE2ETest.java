@@ -164,7 +164,21 @@ class BbsProofVerifyDevKitE2ETest {
         Outcome zeroScalar = spend(script, locked, zeroScalarRedeemer, fixedBudget());
         assertNodeRejected(zeroScalar, "zero scalar (eHat = 0)");
 
-        // 4. Honest presentation must be accepted and confirmed on-chain.
+        // 4. Tampered presentation header must be rejected by BbsProofVerify on the node
+        //    (lock a UTxO whose datum expects wrongPh so the datum policy check passes and
+        //    the cryptographic challenge check inside BbsProofVerify.verify must reject it).
+        byte[] wrongPh = "devkit-bbs-tampered-header".getBytes(StandardCharsets.UTF_8);
+        Utxo lockedWrongPh = lock(scriptAddress, claimPolicy(ownerPkh, MESSAGES.get(2), MESSAGES.get(3), wrongPh));
+        PlutusData tamperedPhRedeemer = claimProof(
+                honest.aBar(), honest.bBar(), honest.d(),
+                honest.eHat(), honest.r1Hat(), honest.r3Hat(),
+                honest.mHats().get(0), honest.mHats().get(1), honest.mHats().get(2),
+                honest.challenge(),
+                honest.disclosed().get(0).message(), honest.disclosed().get(1).message(), wrongPh);
+        Outcome tamperedPh = spend(script, lockedWrongPh, tamperedPhRedeemer, fixedBudget());
+        assertNodeRejected(tamperedPh, "tampered presentation header");
+
+        // 5. Honest presentation must be accepted and confirmed on-chain.
         PlutusData honestRedeemer = claimProof(
                 honest.aBar(), honest.bBar(), honest.d(),
                 honest.eHat(), honest.r1Hat(), honest.r3Hat(),

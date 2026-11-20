@@ -81,10 +81,12 @@ class BbsProofVerifyVmTest extends ContractTest {
         var result = evaluate(program, ctx(honestClaim(proof.presentationHeader())));
         assertSuccess(result);
         System.out.println("[BbsProofVerify on-chain] budget consumed: " + result.budgetConsumed());
-        assertTrue(result.budgetConsumed().cpuSteps() < 2_600_000_000L,
-                "CPU steps should remain well inside Cardano per-tx budget: " + result.budgetConsumed());
-        assertTrue(result.budgetConsumed().memoryUnits() < 300_000L,
-                "Memory units should remain low: " + result.budgetConsumed());
+        // ADR-0064 I5: pre-fix Julc pre22 baseline is 2,434,070,891 CPU / 170,454 mem;
+        // hardened verifier measures 2,442,385,555 CPU (+0.34%) / 207,274 mem (+21.6%, ~1.48% of 14M tx limit).
+        assertTrue(result.budgetConsumed().cpuSteps() <= 2_460_000_000L,
+                "CPU steps regressed past ADR-0064 I5 ceiling (2.46B): " + result.budgetConsumed());
+        assertTrue(result.budgetConsumed().memoryUnits() <= 215_000L,
+                "Memory units regressed past ADR-0064 I5 ceiling (215k): " + result.budgetConsumed());
     }
 
     @Test

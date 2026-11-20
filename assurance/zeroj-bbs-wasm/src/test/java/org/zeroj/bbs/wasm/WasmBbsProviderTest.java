@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -429,6 +430,42 @@ class WasmBbsProviderTest {
 
         assertFalse(provider.proofVerify(
                 pk, proof, HEADER, wrongPh, disclosedMessages, disclosedIndexes));
+    }
+
+    @Test
+    void proofVerify_rejectsZeroAndOutOfRangeScalarsInEverySlot() {
+        var provider = WasmBbsProvider.createDefault(BbsCiphersuite.BLS12381_SHA256);
+        BbsPublicKey pk = new BbsPublicKey(EXPECTED_PK, BbsCiphersuite.BLS12381_SHA256);
+        List<byte[]> allMessages = tenFixtureMessages();
+        int[] disclosed = {0, 2, 4, 6};
+        List<byte[]> disclosedMessages = List.of(
+                allMessages.get(0), allMessages.get(2), allMessages.get(4), allMessages.get(6));
+
+        // BLS12-381 scalar field modulus r (32-byte big-endian).
+        byte[] modulus = hex("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
+        int pointSection = 3 * 48;
+        int scalarCount = (PROOF_SHA256_PROOF003.length - pointSection) / 32;
+        assertEquals(10, scalarCount, "eHat, r1Hat, r3Hat, 6 hidden mHats, challenge");
+
+        for (int slot = 0; slot < scalarCount; slot++) {
+            int offset = pointSection + slot * 32;
+
+            byte[] zeroSlot = PROOF_SHA256_PROOF003.clone();
+            Arrays.fill(zeroSlot, offset, offset + 32, (byte) 0);
+            assertFalse(provider.proofVerify(
+                            pk,
+                            new BbsProof(zeroSlot, BbsCiphersuite.BLS12381_SHA256),
+                            HEADER, PRESENTATION_HEADER, disclosedMessages, disclosed),
+                    "WASM provider must reject zero scalar at slot " + slot);
+
+            byte[] modulusSlot = PROOF_SHA256_PROOF003.clone();
+            System.arraycopy(modulus, 0, modulusSlot, offset, 32);
+            assertFalse(provider.proofVerify(
+                            pk,
+                            new BbsProof(modulusSlot, BbsCiphersuite.BLS12381_SHA256),
+                            HEADER, PRESENTATION_HEADER, disclosedMessages, disclosed),
+                    "WASM provider must reject scalar == r at slot " + slot);
+        }
     }
 
     @Test

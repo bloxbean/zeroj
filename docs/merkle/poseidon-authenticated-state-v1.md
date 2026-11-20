@@ -315,9 +315,11 @@ deployment manifest.
 - total raw hashing, including empty, non-canonical 32-byte, and long inputs;
 - MPF leaf suffix boundaries and all sixteen branch positions;
 - JMT empty, complete-key leaves, all sixteen branch positions, and roots;
-- the MPF CCL root plus independently decoded/re-encoded branch-path
-  inclusion, missing-branch, and different-leaf wire fixtures;
-- CCL pre5 JMT multi-level object and wire proofs for inclusion and both
+- the MPF CCL root plus independently decoded/re-encoded compact-fork
+  inclusion (CCL `0.8.0-pre8`, together with the legacy pre5 `BranchStep` wire
+  and normalized 4-sibling witness equivalence), missing-branch, and
+  different-leaf wire fixtures;
+- CCL JMT multi-level object and wire proofs for inclusion and both
   non-inclusion forms, including all branch-neighbor metadata;
 - a JMT single-neighbor object/wire case and a literal valid root-leaf
   different-leaf proof with zero branch steps;
@@ -326,11 +328,15 @@ deployment manifest.
 - canonical field-boundary and malformed child-count checks.
 
 The MPF leaf suffix pattern is explicitly recorded alongside its vectors.
-The Phase 0A commitment/MPF corpus and Phase 0B CCL pre5 JMT object, wire,
+The Phase 0A commitment/MPF corpus and Phase 0B CCL JMT object, wire,
 persistence, profile-mismatch, and negative corpus are present. Phase 2 adds
 operation-specific circuit witness and R1CS vectors without changing these
 profile vectors. The JMT fixture was first frozen on `0.8.0-pre5-dev1` and was
-reverified byte-for-byte after promotion to published `0.8.0-pre5`.
+reverified byte-for-byte after promotion to published `0.8.0-pre5` and `0.8.0-pre8`.
+The MPF root and commitment digests are unchanged across `0.8.0-pre5` and `0.8.0-pre8`;
+`mpf.fixture.inclusionWireBase64` reflects CCL `0.8.0-pre8`'s compact 2-child `ForkStep`
+wire encoding while `legacyBranchInclusionWireBase64` retains the pre5 `BranchStep` wire
+and verifies identical normalized witness output.
 
 The literal vectors are checked both by the optimized profile implementation
 and a small reference checker that uses generic `PoseidonHash` and reconstructs

@@ -43,14 +43,14 @@ public final class BbsCodec {
             requireNonIdentity(aBar, "proof Abar");
             requireNonIdentity(bBar, "proof Bbar");
             requireNonIdentity(d, "proof D");
-            eHat = requireScalar(eHat, "proof eHat");
-            r1Hat = requireScalar(r1Hat, "proof r1Hat");
-            r3Hat = requireScalar(r3Hat, "proof r3Hat");
+            eHat = requireNonZeroScalar(eHat, "proof eHat");
+            r1Hat = requireNonZeroScalar(r1Hat, "proof r1Hat");
+            r3Hat = requireNonZeroScalar(r3Hat, "proof r3Hat");
             mHats = List.copyOf(Objects.requireNonNull(mHats, "proof commitments required"));
             for (BigInteger mHat : mHats) {
-                requireScalar(mHat, "proof hidden message commitment");
+                requireNonZeroScalar(mHat, "proof hidden message commitment");
             }
-            challenge = requireScalar(challenge, "proof challenge");
+            challenge = requireNonZeroScalar(challenge, "proof challenge");
         }
     }
 
@@ -114,13 +114,13 @@ public final class BbsCodec {
         parts.add(Bls12381Codecs.g1ToCompressed(proof.aBar()));
         parts.add(Bls12381Codecs.g1ToCompressed(proof.bBar()));
         parts.add(Bls12381Codecs.g1ToCompressed(proof.d()));
-        parts.add(scalarToBytesAllowZero(proof.eHat()));
-        parts.add(scalarToBytesAllowZero(proof.r1Hat()));
-        parts.add(scalarToBytesAllowZero(proof.r3Hat()));
+        parts.add(scalarToBytes(proof.eHat()));
+        parts.add(scalarToBytes(proof.r1Hat()));
+        parts.add(scalarToBytes(proof.r3Hat()));
         for (BigInteger mHat : proof.mHats()) {
-            parts.add(scalarToBytesAllowZero(mHat));
+            parts.add(scalarToBytes(mHat));
         }
-        parts.add(scalarToBytesAllowZero(proof.challenge()));
+        parts.add(scalarToBytes(proof.challenge()));
         return concat(parts.toArray(byte[][]::new));
     }
 

@@ -326,6 +326,45 @@ branch now builds on pre18:
 `COMPILER_PROFILE` changes even though the bytes don't, because it names the toolchain that produced
 them (I8).
 
+## Addendum (2026-11-20): Julc `0.1.0-pre22`
+
+ZeroJ upgrades `julcVersion` from `0.1.0-pre18` to `0.1.0-pre22` alongside [ADR-0064](0064-onchain-bbs-proof-verify-hardening.md) (PR #118):
+
+- **Source adjustments required by `0.1.0-pre22`:**
+  - `PlonkBLS12381Lib`: replaced non-literal static field initializer `MAX_PUBLIC_INPUT_COUNT = BigInteger.valueOf(8)` with `private static BigInteger maxPublicInputCount()` to satisfy `JULC0095`. No PlonK proof equation, transcript, domain separator, or limit changed.
+  - Four test validators in `zeroj-integration-tests` (`AuditedConfidentialNoteValidator`, `G1RunningTotalValidator`, `ConfidentialNoteValidator`, `VectorCommitmentConsumerValidator`): bound `PlutusData missing = Builtins.iData(BigInteger.ZERO)` before `switch (output.datum())` to satisfy `JULC0012` switch-arm type unification.
+  - `Groth16AuthenticatedStateTransitionScriptFactory.COMPILER_PROFILE` bumped from `julc-0.1.0-pre18/plutus-v3` to `julc-0.1.0-pre22/plutus-v3` (I8; release manifests and regenerated script bundles for downstream deployments must be regenerated on release).
+- **Invariants I1–I7:**
+  - **I1–I4, I6–I7 (Groth16, PlonK, Pedersen, context binding, boundary encodings):** Unchanged in semantics; all 131 tests in `zeroj-onchain-julc` (0 failures, 2 skipped) and the full `zeroj-integration-tests` suite pass with identical accept/reject verdicts.
+  - **I5 (BBS):** Intentionally hardened per [ADR-0064](0064-onchain-bbs-proof-verify-hardening.md) (pre-decompression non-identity checks and `[1, r - 1]` proof-scalar bounds).
+- **Measured Julc VM budgets (`0.1.0-pre22`, accepted spends):**
+
+| Test class / profile | CPU steps | Memory units |
+|---|---:|---:|
+| `Groth16BLS12381VerifierTest` (2 inputs) | 2,191,303,891 | 163,318 |
+| `Groth16BLS12381VerifierTest` (3 inputs) | 2,330,720,361 | 190,599 |
+| `Groth16BLS12381PureJavaProverTest` (2 inputs) | 2,191,275,664 | 163,318 |
+| `CircomToOnChainE2ETest` (2 inputs) | 2,191,275,664 | 163,318 |
+| `PlonkBLS12381VerifierTest` (1 input) | 4,575,977,561 | 643,162 |
+| `PlonkBLS12381MultiInputVerifierTest` (1 / 2 / 4 / 8 inputs) | 4,591.8M – 4,713.0M | 710.4k – 1,129.9k |
+| `PlonkBLS12381TranscriptPrototypeTest` | 3,000,796,344 | 491,941 |
+| `PedersenG1LibVmTest` (scalar opening / public delta / 1 KB bytes) | 338.8M / 219.0M / 349.5M | 76.2k / 110.5k / 83.4k |
+| `BbsProofVerifyVmTest` (pre-fix `BbsProofVerify` on pre22) | 2,434,070,891 | 170,454 |
+| `BbsProofVerifyVmTest` (ADR-0064 hardened on pre22) | 2,442,385,555 | 207,274 |
+
+- **Compiled validators whose script hash changes under `0.1.0-pre22` (carry into release notes):**
+
+| Validator (`zeroj-onchain-julc`) | Compiled bytes | Script hash (unapplied) |
+|---|---:|---|
+| `Groth16BLS12381Verifier` | 1,117 | `59f37dc68c0dd3a9f1aeeef7dbbdc3b57ab7acf0e75ddb28d1385db6` |
+| `Groth16BLS12381TxOutRefBindingVerifier` | 1,325 | `5c2f90090a78275d2b5eb26195bfeeebf9633daec452e01deef01b13` |
+| `Groth16AuthenticatedStateTransitionValidator` | 2,817 | `46c77c445f4d16b156797d05aee6964f9c93d7446dd4f12d26824d4d` |
+| `PlonkBLS12381Verifier` | 4,262 | `7e36f398c0d0c1d3f141563c4766118cb6ea1496dfaab269fc30b2de` |
+| `PlonkBLS12381MultiInputVerifier` | 4,668 | `4172c86d5e8e8e69dfd91f92776176b567c4c2200108dc98273d4a1e` |
+| `PlonkBLS12381MultiInputParamVerifier` | 4,707 | `7e78ad1bbf6ef553a4401fab1025250f14e3f5271816bcc8a732f38f` |
+
+Downstream validators embedding `BbsProofVerify`, `PedersenG1Lib`, `Groth16BLS12381Lib`, or `PlonkBLS12381Lib` (including `zeroj-integration-tests` example validators and `zeroj-usecases` validators) also receive regenerated UPLC bytes and new script hashes.
+
 ## Open questions
 
 Resolved by the maintainer on 2026-09-29:

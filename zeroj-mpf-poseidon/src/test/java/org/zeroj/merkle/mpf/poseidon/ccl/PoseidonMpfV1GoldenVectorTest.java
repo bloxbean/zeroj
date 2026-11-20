@@ -95,9 +95,10 @@ class PoseidonMpfV1GoldenVectorTest {
         byte[] expectedRoot = HEX.parseHex(fixture.path("rootHex").asText());
         assertArrayEquals(expectedRoot, trie.getRootHash());
 
+        assertEquals("0.8.0-pre8", fixture.path("cclVersion").asText());
         byte[] inclusionKey = fixture.path("inclusionKey").asText().getBytes(StandardCharsets.UTF_8);
         byte[] inclusionValue = trie.get(inclusionKey);
-        assertEquals("branch-path", fixture.path("inclusionProofForm").asText());
+        assertEquals("compact-fork-path", fixture.path("inclusionProofForm").asText());
         byte[] inclusion = Base64.getDecoder().decode(fixture.path("inclusionWireBase64").asText());
         assertArrayEquals(inclusion, trie.getProofWire(inclusionKey).orElseThrow());
         assertForkWireFixture(
