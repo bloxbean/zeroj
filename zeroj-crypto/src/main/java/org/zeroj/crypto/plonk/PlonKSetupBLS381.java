@@ -9,6 +9,7 @@ import org.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import org.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -53,7 +54,8 @@ public final class PlonKSetupBLS381 {
         // numerator has degree ~3n+6. The 4n coset needs 4n > 3n+6, i.e., n > 6.
         int domainSize = domainSizeFor(numGates);
         int logN = Integer.numberOfTrailingZeros(domainSize);
-        validateSetupInputs(numGates, numPublic, gateSelectors, sigmaA, sigmaB, sigmaC, numWires, srs, domainSize);
+        ValidatedSrs validatedSrs = validateSetupInputs(
+                numGates, numPublic, gateSelectors, sigmaA, sigmaB, sigmaC, numWires, srs, domainSize);
 
         MontFr381 omega = FieldFFTBLS381.rootOfUnity(logN);
         BigInteger k1 = BigInteger.TWO;
@@ -125,7 +127,7 @@ public final class PlonKSetupBLS381 {
         var s2Coeffs = FieldFFTBLS381.ifft(s2);
         var s3Coeffs = FieldFFTBLS381.ifft(s3);
 
-        AffineG1[] srsG1 = srs.tauG1();
+        AffineG1[] srsG1 = validatedSrs.tauG1();
 
         var qmCommit = KZGCommitmentBLS381.commit(srsG1, qmCoeffs).toAffine();
         var qlCommit = KZGCommitmentBLS381.commit(srsG1, qlCoeffs).toAffine();
@@ -140,7 +142,7 @@ public final class PlonKSetupBLS381 {
                 domainSize, numPublic, numGates, k1, k2, omega,
                 ql, qr, qm, qo, qc, s1, s2, s3,
                 srsG1, srsG1, // lagrange SRS = standard SRS for now
-                srs.x2(),
+                validatedSrs.tauG2()[1],
                 qmCommit, qlCommit, qrCommit, qoCommit, qcCommit,
                 s1Commit, s2Commit, s3Commit);
     }
@@ -172,7 +174,9 @@ public final class PlonKSetupBLS381 {
         return Math.max(domainSize, MIN_DOMAIN_SIZE);
     }
 
-    private static void validateSetupInputs(
+    private record ValidatedSrs(AffineG1[] tauG1, AffineG2[] tauG2) {}
+
+    private static ValidatedSrs validateSetupInputs(
             int numGates,
             int numPublic,
             BigInteger[][] gateSelectors,
@@ -192,7 +196,7 @@ public final class PlonKSetupBLS381 {
         validateSigma("sigmaA", sigmaA, numGates);
         validateSigma("sigmaB", sigmaB, numGates);
         validateSigma("sigmaC", sigmaC, numGates);
-        validateSrs(srs, domainSize);
+        return validateSrs(srs, domainSize);
     }
 
     private static void validateGateSelectors(BigInteger[][] gateSelectors, int numGates) {
@@ -222,26 +226,32 @@ public final class PlonKSetupBLS381 {
         }
     }
 
-    private static void validateSrs(PtauImporterBLS381.SRS srs, int domainSize) {
+    private static ValidatedSrs validateSrs(PtauImporterBLS381.SRS srs, int domainSize) {
         Objects.requireNonNull(srs, "srs");
-        AffineG1[] tauG1 = srs.tauG1();
-        AffineG2[] tauG2 = srs.tauG2();
+        AffineG1[] rawG1 = srs.tauG1();
+        AffineG2[] rawG2 = srs.tauG2();
         int requiredG1 = domainSize + 6;
-        if (tauG1 == null || tauG1.length < requiredG1) {
+        if (rawG1 == null || rawG1.length < requiredG1) {
             throw new IllegalArgumentException("BLS12-381 SRS G1 length must be at least " + requiredG1);
         }
-        if (tauG2 == null || tauG2.length < 2) {
+        if (rawG2 == null || rawG2.length < 2) {
             throw new IllegalArgumentException("BLS12-381 SRS G2 length must be at least 2");
         }
-        if (SrsConsistencyBLS381.isUnmodifiedVerified(srs, requiredG1)) {
-            return;
+        // Pin private snapshots BEFORE validation/challenge drawing and reuse them through all
+        // commitments and the returned proving key so concurrent or post-setup caller edits to
+        // srs.tauG1()/tauG2() cannot bypass checks or alter the returned key (ADR-0068).
+        AffineG1[] snapshotG1 = Arrays.copyOf(rawG1, requiredG1);
+        AffineG2[] snapshotG2 = Arrays.copyOf(rawG2, 2);
+        if (SrsConsistencyBLS381.isUnmodifiedVerified(srs, snapshotG1, snapshotG2)) {
+            return new ValidatedSrs(snapshotG1, snapshotG2);
         }
         for (int i = 0; i < requiredG1; i++) {
-            requireValidSrsG1(tauG1[i], "tauG1[" + i + "]");
+            requireValidSrsG1(snapshotG1[i], "tauG1[" + i + "]");
         }
-        requireValidSrsG2(tauG2[0], "tauG2[0]");
-        requireValidSrsG2(tauG2[1], "tauG2[1]");
-        SrsConsistencyBLS381.verifyConsistency(tauG1, tauG2, requiredG1, "BLS12-381");
+        requireValidSrsG2(snapshotG2[0], "tauG2[0]");
+        requireValidSrsG2(snapshotG2[1], "tauG2[1]");
+        SrsConsistencyBLS381.verifyConsistency(snapshotG1, snapshotG2, requiredG1, "BLS12-381");
+        return new ValidatedSrs(snapshotG1, snapshotG2);
     }
 
     private static void requireScalar(BigInteger value, String label) {

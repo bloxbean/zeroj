@@ -60,8 +60,7 @@ public record R1CSConstraintSystem(
                 BigInteger lhs = aVal.multiply(bVal).mod(mod);
                 if (!lhs.equals(cVal)) {
                     throw new IllegalArgumentException(
-                            "Witness does not satisfy R1CS constraint " + i
-                                    + ": (A·w)*(B·w) = " + lhs + " but C·w = " + cVal);
+                            "Witness does not satisfy R1CS constraint " + i);
                 }
             }
         } else {
@@ -113,7 +112,7 @@ public record R1CSConstraintSystem(
         }
         if (!BigInteger.ONE.equals(witness[0])) {
             throw new IllegalArgumentException(
-                    "witness[0] must be 1 (the constant wire), got " + witness[0]);
+                    "witness[0] must be 1 (the constant wire)");
         }
     }
 
@@ -131,8 +130,7 @@ public record R1CSConstraintSystem(
             BigInteger lhs = aVal.multiply(bVal).mod(mod);
             if (!lhs.equals(cVal)) {
                 throw new IllegalArgumentException(
-                        "Witness does not satisfy R1CS constraint " + i
-                                + ": (A·w)*(B·w) = " + lhs + " but C·w = " + cVal);
+                        "Witness does not satisfy R1CS constraint " + i);
             }
         }
     }

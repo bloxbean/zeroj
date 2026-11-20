@@ -201,7 +201,7 @@ or transaction binding.
 |---|---|---|---|
 | `zeroj-mpf-v1-inclusion-sN-p1` | `root` | normalized inclusion path, value commitment | some canonical MPF v1 key path maps to the value commitment under `root` |
 | `zeroj-mpf-v1-non-inclusion-empty-sN-p1` | `root` | query path and authenticated empty-child path | the query path reaches an authenticated empty child under `root` |
-| `zeroj-mpf-v1-non-inclusion-different-leaf-sN-p1` | `root` | query path, conflicting leaf and authenticated path | an authenticated different leaf proves the query path absent; terminal forks fail closed (~1% rejection rate on random absent keys in populated tries; see ADR-0068) |
+| `zeroj-mpf-v1-non-inclusion-different-leaf-sN-p1` | `root` | query path, conflicting leaf and authenticated path | an authenticated different leaf proves the query path absent; terminal forks fail closed (unsupported under current MPF witness format; use JMT v1 templates for total non-inclusion) |
 | `zeroj-mpf-v1-value-update-sN-p2` | `oldRoot,newRoot` | one key path, old/new values, shared path | only the value commitment at the authenticated path changes |
 | `zeroj-mpf-v1-insert-empty-sN-p2` | `oldRoot,newRoot` | authenticated empty-child absence plus canonical rewrite | insertion into an authenticated empty child transforms the roots |
 | `zeroj-mpf-v1-insert-different-leaf-sN-p2` | `oldRoot,newRoot` | authenticated conflicting leaf plus canonical rewrite | insertion beside an authenticated different leaf transforms the roots |

@@ -100,22 +100,21 @@ final class SrsConsistencyBLS381 {
         VERIFIED.put(srs, new VerifiedSnapshot(srs.tauG1().clone(), Arrays.copyOf(srs.tauG2(), 2)));
     }
 
-    static boolean isUnmodifiedVerified(PtauImporterBLS381.SRS srs, int requiredG1) {
+    static boolean isUnmodifiedVerified(
+            PtauImporterBLS381.SRS srs,
+            AffineG1[] snapshotG1,
+            AffineG2[] snapshotG2) {
         VerifiedSnapshot snap = VERIFIED.get(srs);
-        if (snap == null) {
+        if (snap == null || snapshotG1 == null || snapshotG2 == null || snapshotG2.length < 2) {
             return false;
         }
-        AffineG1[] tauG1 = srs.tauG1();
-        AffineG2[] tauG2 = srs.tauG2();
-        if (tauG1 == null || tauG2 == null
-                || tauG1.length < requiredG1
-                || snap.tauG1.length < requiredG1
-                || tauG2.length < 2) {
+        int requiredG1 = snapshotG1.length;
+        if (snap.tauG1.length < requiredG1) {
             return false;
         }
-        return Arrays.equals(tauG1, 0, requiredG1, snap.tauG1, 0, requiredG1)
-                && Objects.equals(tauG2[0], snap.tauG2[0])
-                && Objects.equals(tauG2[1], snap.tauG2[1]);
+        return Arrays.equals(snapshotG1, 0, requiredG1, snap.tauG1, 0, requiredG1)
+                && Objects.equals(snapshotG2[0], snap.tauG2[0])
+                && Objects.equals(snapshotG2[1], snap.tauG2[1]);
     }
 
     static G1Point toG1(AffineG1 point) {

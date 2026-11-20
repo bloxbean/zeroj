@@ -164,12 +164,19 @@ class CircuitDslHardeningTest {
                 "b", List.of(BigInteger.ONE.negate()));
         assertThrows(IllegalArgumentException.class, () -> WitnessCalculator.calculate(graph, negative, bls));
 
-        // Value >= p (no silent mod p)
+        // Value >= p (no silent mod p) — exception must not leak private input value
+        BigInteger secretSentinel = new BigInteger("98765432109876543210987654321");
+        BigInteger gePrimeVal = p.add(secretSentinel);
         Map<String, List<BigInteger>> gePrime = Map.of(
                 "c", List.of(BigInteger.ZERO),
-                "a", List.of(p),
+                "a", List.of(gePrimeVal),
                 "b", List.of(BigInteger.ONE));
-        assertThrows(IllegalArgumentException.class, () -> WitnessCalculator.calculate(graph, gePrime, bls));
+        IllegalArgumentException calcEx = assertThrows(IllegalArgumentException.class,
+                () -> WitnessCalculator.calculate(graph, gePrime, bls));
+        assertEquals(false, calcEx.getMessage().contains(gePrimeVal.toString()),
+                "WitnessCalculator must redact private input value");
+        assertEquals(false, calcEx.getMessage().contains(secretSentinel.toString()),
+                "WitnessCalculator must redact private input value");
         assertThrows(IllegalArgumentException.class, () -> WitnessCalculator.calculateFlat(graph, gePrime, bls));
     }
 
@@ -196,10 +203,14 @@ class CircuitDslHardeningTest {
             BigInteger[] shortW = Arrays.copyOf(witness, witness.length - 1);
             assertThrows(IllegalArgumentException.class, () -> r1cs.verifyWitness(shortW));
 
-            // witness[0] != 1
+            // witness[0] != 1 — must redact private sentinel value
+            BigInteger sentinel = new BigInteger("777666555444333222111");
             BigInteger[] badWire0 = witness.clone();
-            badWire0[0] = BigInteger.TWO;
-            assertThrows(IllegalArgumentException.class, () -> r1cs.verifyWitness(badWire0));
+            badWire0[0] = sentinel;
+            IllegalArgumentException wire0Ex = assertThrows(IllegalArgumentException.class,
+                    () -> r1cs.verifyWitness(badWire0));
+            assertEquals(false, wire0Ex.getMessage().contains(sentinel.toString()),
+                    "verifyWitness must redact wire-0 value");
 
             // Non-canonical entry >= p
             BigInteger[] geP = witness.clone();
@@ -216,10 +227,17 @@ class CircuitDslHardeningTest {
             nullW[1] = null;
             assertThrows(IllegalArgumentException.class, () -> r1cs.verifyWitness(nullW));
 
-            // Violated constraint
+            // Violated constraint — must redact witness-derived lhs/cVal in BOTH flat and list paths
             BigInteger[] badC = witness.clone();
-            badC[1] = c.add(BigInteger.ONE).mod(p);
-            assertThrows(IllegalArgumentException.class, () -> r1cs.verifyWitness(badC));
+            badC[1] = sentinel;
+            IllegalArgumentException flatEx = assertThrows(IllegalArgumentException.class,
+                    () -> r1cs.verifyWitness(badC));
+            assertEquals(false, flatEx.getMessage().contains(sentinel.toString()),
+                    "verifyWitness (flat) must redact witness-derived values");
+            IllegalArgumentException listEx = assertThrows(IllegalArgumentException.class,
+                    () -> R1CSConstraintSystem.verifyWitness(r1cs.constraints(), badC, r1cs.fieldConfig()));
+            assertEquals(false, listEx.getMessage().contains(sentinel.toString()),
+                    "verifyWitness (list) must redact witness-derived values");
 
             // Out-of-bounds wire reference in explicit constraint list
             R1CSConstraint oobConstraint = new R1CSConstraint(Map.of(99, BigInteger.ONE), Map.of(0, BigInteger.ONE), Map.of());

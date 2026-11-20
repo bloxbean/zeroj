@@ -436,7 +436,7 @@ public final class Groth16Prover {
         }
         if (!BigInteger.ONE.equals(witness[0])) {
             throw new IllegalArgumentException(
-                    "witness[0] must be 1 (the constant wire), got " + witness[0]);
+                    "witness[0] must be 1 (the constant wire)");
         }
         for (int i = 0; i < numConstraints; i++) {
             var c = constraints.get(i);
@@ -453,8 +453,7 @@ public final class Groth16Prover {
 
             if (!lhs.equals(cVal)) {
                 throw new IllegalArgumentException(
-                        "Witness does not satisfy R1CS constraint " + i
-                                + ": A·w * B·w = " + lhs + " but C·w = " + cVal);
+                        "Witness does not satisfy R1CS constraint " + i);
             }
         }
     }

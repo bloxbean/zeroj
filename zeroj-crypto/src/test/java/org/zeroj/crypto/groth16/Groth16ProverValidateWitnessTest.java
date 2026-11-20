@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -48,10 +49,18 @@ class Groth16ProverValidateWitnessTest {
             BigInteger[] valid = {BigInteger.ONE, BigInteger.TWO, BigInteger.valueOf(3), BigInteger.valueOf(6)};
             assertDoesNotThrow(() -> Groth16Prover.validateWitness(constraints, valid, 1));
 
-            // witness[0] != 1 rejected
-            BigInteger[] badWire0 = {BigInteger.ZERO, BigInteger.TWO, BigInteger.valueOf(3), BigInteger.valueOf(6)};
-            assertThrows(IllegalArgumentException.class,
+            // witness[0] != 1 rejected without leaking value
+            BigInteger sentinel = new BigInteger("777666555444333222111");
+            BigInteger[] badWire0 = {sentinel, BigInteger.TWO, BigInteger.valueOf(3), BigInteger.valueOf(6)};
+            IllegalArgumentException wire0Ex = assertThrows(IllegalArgumentException.class,
                     () -> Groth16Prover.validateWitness(constraints, badWire0, 1));
+            assertFalse(wire0Ex.getMessage().contains(sentinel.toString()));
+
+            // Violated constraint rejected without leaking witness-derived lhs/cVal
+            BigInteger[] badConstraint = {BigInteger.ONE, sentinel, BigInteger.ONE, BigInteger.ZERO};
+            IllegalArgumentException constrEx = assertThrows(IllegalArgumentException.class,
+                    () -> Groth16Prover.validateWitness(constraints, badConstraint, 1));
+            assertFalse(constrEx.getMessage().contains(sentinel.toString()));
 
             // Non-canonical scalar >= BN254 r rejected
             BigInteger[] nonCanonical = {BigInteger.ONE, MontFr254.modulus(), BigInteger.ZERO, BigInteger.ZERO};

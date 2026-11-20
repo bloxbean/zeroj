@@ -144,5 +144,60 @@ class GadgetHardeningTest {
                 CurveId.BLS12_381);
         assertEquals(expected, witness[1]);
         assertDoesNotThrow(() -> circuit.compileR1CS(CurveId.BLS12_381).verifyWitness(witness));
+
+        // Same-builder positive control for Signal-API RangeCheck and PoseidonN
+        var sigCircuit = CircuitBuilder.create("signal-range-poseidon")
+                .secretVar("a").secretVar("b").publicVar("h")
+                .defineSignals(s -> {
+                    var sa = s.privateInput("a");
+                    var sb = s.privateInput("b");
+                    RangeCheck.check(s, sa, 8);
+                    s.assertEqual(PoseidonN.hash(s, PoseidonParamsBLS12_381T3.INSTANCE, sa, sb),
+                            s.publicInput("h"));
+                });
+        BigInteger h2 = PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, a, b);
+        var sigWitness = sigCircuit.calculateWitness(
+                Map.of("a", List.of(a), "b", List.of(b), "h", List.of(h2)), CurveId.BLS12_381);
+        assertDoesNotThrow(() -> sigCircuit.compileR1CS(CurveId.BLS12_381).verifyWitness(sigWitness));
+    }
+
+    @Test
+    @SuppressWarnings("removal")
+    void signalRangeCheckAliasCheckAndPoseidonNRejectForeignBuilderSignalsWithOverlappingWireIds() {
+        // Foreign builder allocates wire ID 1 for "x" — same wire ID as local builder's "x".
+        final Signal[] foreignSignal = new Signal[1];
+        CircuitBuilder.create("foreign-owner")
+                .secretVar("x")
+                .defineSignals(foreign -> foreignSignal[0] = foreign.privateInput("x"));
+
+        // RangeCheck rejects foreign signal before emitting gates
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("local-range")
+                .secretVar("x")
+                .defineSignals(local -> {
+                    local.privateInput("x");
+                    RangeCheck.check(local, foreignSignal[0], 8);
+                }));
+
+        // Deprecated AliasCheck inherits ownership check via RangeCheck
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("local-alias")
+                .secretVar("x")
+                .defineSignals(local -> {
+                    local.privateInput("x");
+                    AliasCheck.check(local, foreignSignal[0], 8);
+                }));
+
+        // PoseidonN rejects foreign signal in first OR second position atomically
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("local-poseidon-0")
+                .secretVar("x").secretVar("y")
+                .defineSignals(local -> {
+                    var ly = local.privateInput("y");
+                    PoseidonN.hash(local, PoseidonParamsBLS12_381T3.INSTANCE, foreignSignal[0], ly);
+                }));
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("local-poseidon-1")
+                .secretVar("x").secretVar("y")
+                .defineSignals(local -> {
+                    var lx = local.privateInput("x");
+                    PoseidonN.hash(local, PoseidonParamsBLS12_381T3.INSTANCE, lx, foreignSignal[0]);
+                }));
     }
 }

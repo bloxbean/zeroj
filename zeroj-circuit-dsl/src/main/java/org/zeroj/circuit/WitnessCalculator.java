@@ -286,7 +286,7 @@ public final class WitnessCalculator {
         if (value.signum() < 0 || value.compareTo(prime) >= 0) {
             throw new IllegalArgumentException(
                     "Non-canonical " + visibility + " input " + name
-                            + ": expected value in [0, p), got " + value);
+                            + ": expected value in [0, p)");
         }
         return value;
     }

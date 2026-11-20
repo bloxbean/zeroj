@@ -140,13 +140,29 @@ class ZkUIntSubAndInputMapHardeningTest {
         valid.put("extra", 1);
         assertThrows(IllegalArgumentException.class, () -> valid.validate(schema, CurveId.BLS12_381));
 
-        // Non-canonical field value (>= p) rejected by validate
+        // Non-canonical field value (>= p) rejected by validate without leaking the secret value
+        BigInteger secretSentinel = new BigInteger("98765432109876543210987654321");
+        BigInteger badField = FieldConfig.BLS12_381.prime().add(secretSentinel);
         var nonCanonical = new ZkInputMap()
-                .put("f", FieldConfig.BLS12_381.prime())
+                .put("f", badField)
                 .put("flag", 1)
                 .put("amt", 1)
                 .putArray("data", List.of(BigInteger.ZERO, BigInteger.ONE))
                 .putArray("bits", List.of(BigInteger.ZERO, BigInteger.ONE));
-        assertThrows(IllegalArgumentException.class, () -> nonCanonical.validate(schema, CurveId.BLS12_381));
+        IllegalArgumentException fieldEx = assertThrows(IllegalArgumentException.class,
+                () -> nonCanonical.validate(schema, CurveId.BLS12_381));
+        assertTrue(fieldEx.getMessage() != null && !fieldEx.getMessage().contains(badField.toString())
+                        && !fieldEx.getMessage().contains(secretSentinel.toString()),
+                "ZkInputMap.validate must redact witness values: " + fieldEx.getMessage());
+
+        IllegalArgumentException negEx = assertThrows(IllegalArgumentException.class,
+                () -> new ZkInputMap().put("amt", secretSentinel.negate()));
+        assertTrue(!negEx.getMessage().contains(secretSentinel.toString()),
+                "ZkInputMap.put must redact negative witness values: " + negEx.getMessage());
+
+        IllegalArgumentException rangeEx = assertThrows(IllegalArgumentException.class,
+                () -> new ZkInputMap().putChecked(schema.input("amt"), "amt", secretSentinel));
+        assertTrue(!rangeEx.getMessage().contains(secretSentinel.toString()),
+                "ZkInputMap.putChecked must redact out-of-range witness values: " + rangeEx.getMessage());
     }
 }

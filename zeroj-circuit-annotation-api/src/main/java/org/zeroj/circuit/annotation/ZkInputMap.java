@@ -26,7 +26,7 @@ public final class ZkInputMap {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
         if (value.signum() < 0) {
-            throw new IllegalArgumentException("Input " + name + " must be non-negative, got " + value);
+            throw new IllegalArgumentException("Input " + name + " must be non-negative");
         }
         values.put(name, List.of(value));
         return this;
@@ -138,7 +138,7 @@ public final class ZkInputMap {
                 if (value.compareTo(prime) >= 0) {
                     throw new IllegalArgumentException(
                             "Input " + signalName + " is not canonical for " + field.name()
-                                    + " (expected < p): " + value);
+                                    + " (expected < p)");
                 }
             }
         }
@@ -158,26 +158,26 @@ public final class ZkInputMap {
         Objects.requireNonNull(value, signalName);
         if (value.signum() < 0) {
             throw new IllegalArgumentException(
-                    "Input " + signalName + " must be non-negative, got " + value);
+                    "Input " + signalName + " must be non-negative");
         }
         switch (schemaInput.kind()) {
             case BOOL, BITS -> {
                 if (value.compareTo(BigInteger.ONE) > 0) {
                     throw new IllegalArgumentException(
-                            "Input " + signalName + " must be 0 or 1, got " + value);
+                            "Input " + signalName + " must be 0 or 1");
                 }
             }
             case BYTES -> {
                 if (value.compareTo(MAX_BYTE) > 0) {
                     throw new IllegalArgumentException(
-                            "Input " + signalName + " must be in [0, 255], got " + value);
+                            "Input " + signalName + " must be in [0, 255]");
                 }
             }
             case UINT -> {
                 if (value.bitLength() > schemaInput.bits()) {
                     throw new IllegalArgumentException(
                             "Input " + signalName + " exceeds " + schemaInput.bits()
-                                    + "-bit unsigned range: " + value);
+                                    + "-bit unsigned range");
                 }
             }
             case FIELD -> {

@@ -67,7 +67,12 @@ public final class PoseidonN {
         Objects.requireNonNull(inputs, "inputs");
         Variable[] vars = new Variable[inputs.length];
         for (int i = 0; i < inputs.length; i++) {
-            vars[i] = Objects.requireNonNull(inputs[i], "inputs[" + i + "]").variable();
+            Signal input = Objects.requireNonNull(inputs[i], "inputs[" + i + "]");
+            if (!input.isFrom(c)) {
+                throw new IllegalArgumentException(
+                        "inputs[" + i + "] does not belong to the given SignalBuilder");
+            }
+            vars[i] = input.variable();
         }
         return c.wrap(hash(c.api(), params, vars));
     }

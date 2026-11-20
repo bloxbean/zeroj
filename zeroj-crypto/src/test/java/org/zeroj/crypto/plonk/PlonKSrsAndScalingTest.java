@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -98,17 +99,26 @@ class PlonKSrsAndScalingTest {
 
         var srs = new PtauImporterBLS381.SRS(tauG1, tauG2, 3);
         SrsConsistencyBLS381.recordVerified(srs);
-        assertTrue(SrsConsistencyBLS381.isUnmodifiedVerified(srs, count));
+        assertTrue(SrsConsistencyBLS381.isUnmodifiedVerified(srs, Arrays.copyOf(tauG1, count), Arrays.copyOf(tauG2, 2)));
 
-        // Mutate an entry after import — cache MUST notice and setup MUST reject
-        tauG1[5] = tauG1[0];
-        assertFalse(SrsConsistencyBLS381.isUnmodifiedVerified(srs, count));
-
+        // Setup must pin private copies so mutating caller-owned SRS arrays AFTER setup cannot alter the returned key.
         var circuit = CircuitBuilder.create("mutated-srs")
                 .publicVar("c").secretVar("a").secretVar("b")
                 .define(api -> api.assertEqual(api.mul(api.var("a"), api.var("b")), api.var("c")));
         PlonKConstraintSystem plonk = circuit.compilePlonK(CurveId.BLS12_381);
         BigInteger[][] selectors = selectorsOf(plonk);
+        PlonKProvingKeyBLS381 pk = PlonKSetupBLS381.setup(
+                plonk.numGates(), plonk.numPublicInputs(), selectors,
+                plonk.sigmaA(), plonk.sigmaB(), plonk.sigmaC(), plonk.numWires(), srs);
+        AffineG1 originalG1At5 = pk.srsG1()[5];
+        AffineG2 originalX2 = pk.x2();
+
+        // Mutate caller's arrays after setup: returned key must stay immutable AND next setup must reject the mutated SRS
+        tauG1[5] = tauG1[0];
+        tauG2[1] = tauG2[0];
+        assertEquals(originalG1At5, pk.srsG1()[5], "post-setup caller mutation must not alter returned pk.srsG1()");
+        assertEquals(originalX2, pk.x2(), "post-setup caller mutation must not alter returned pk.x2()");
+        assertFalse(SrsConsistencyBLS381.isUnmodifiedVerified(srs, Arrays.copyOf(tauG1, count), Arrays.copyOf(tauG2, 2)));
         assertThrows(IllegalArgumentException.class, () -> PlonKSetupBLS381.setup(
                 plonk.numGates(), plonk.numPublicInputs(), selectors,
                 plonk.sigmaA(), plonk.sigmaB(), plonk.sigmaC(), plonk.numWires(), srs));

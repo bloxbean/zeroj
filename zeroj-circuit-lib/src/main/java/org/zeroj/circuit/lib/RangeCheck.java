@@ -39,6 +39,9 @@ public final class RangeCheck {
     public static void check(SignalBuilder c, Signal value, int nBits) {
         Objects.requireNonNull(c, "c");
         Objects.requireNonNull(value, "value");
+        if (!value.isFrom(c)) {
+            throw new IllegalArgumentException("Signal does not belong to the given SignalBuilder");
+        }
         check(c.api(), value.variable(), nBits);
     }
 }
