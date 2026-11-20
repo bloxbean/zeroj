@@ -71,9 +71,11 @@ ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
 ZkMerkle.isMemberPoseidon(zk, PoseidonParamsBLS12_381T3.INSTANCE, leaf, root, siblings, pathBits);
 ```
 
-Do not use no-params Poseidon or MiMC as Cardano defaults. The no-params
-Poseidon overload is retained for BN254 compatibility, and `ZkMiMC` delegates
-to the BN254-only MiMC gadget. The full gadget and curve support matrix is in
+Do not use no-params Poseidon as a Cardano default, and do not use `ZkMiMC` or
+`ZkMerkle.HashType.MIMC` in any circuit. The no-params Poseidon overload is
+retained for BN254 compatibility, while the `MiMC` gadget family is deprecated
+for removal as an insecure, invertible keyed permutation (not a hash function).
+The full gadget and curve support matrix is in
 [`docs/adr/circuit-annotation/cardano-gadget-support-matrix.md`](adr/circuit-annotation/cardano-gadget-support-matrix.md).
 
 ## Authoring Rules
@@ -156,9 +158,10 @@ circuits, the rendered `nameTemplate` is a readable prefix; generated names also
 append a canonical parameter suffix to avoid collisions between different
 parameter sets.
 
-`ZkMerkle.HashType.MIMC` and `ZkMerkle.HashType.POSEIDON` remain useful for
-BN254/off-chain compatibility. Today they are not the Cardano default path:
-`MIMC` is BN254-only, and `POSEIDON` uses the no-params Poseidon overload. Use
+`ZkMerkle.HashType.MIMC` is **deprecated for removal (insecure)** because the
+underlying `MiMC` gadget is an invertible keyed bijection rather than a
+collision-resistant hash. `ZkMerkle.HashType.POSEIDON` uses the no-params
+BN254-oriented Poseidon overload. For Cardano and all new Merkle circuits, use
 `ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
 explicit BLS12-381 Poseidon params.
 
@@ -330,11 +333,12 @@ bind them as secret `ZkUInt` inputs, using 252 bits for `kModL` and 4 bits for
   variable-arity hashing. For Cardano, pass
   `PoseidonParamsBLS12_381T3.INSTANCE` explicitly; there is intentionally no
   no-params symbolic overload.
-- `ZkMiMC` is BN254-only because the underlying MiMC gadget is BN254-only.
-  Treat MiMC-based annotated circuits as BN254/off-chain unless a separate
-  BLS12-381 MiMC variant is added.
-- `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON` path are not
-  Cardano defaults today. Use `ZkMerkle.*Poseidon(...)` with explicit
-  BLS12-381 Poseidon params for Cardano Merkle circuits.
+- `ZkMiMC` and `ZkMerkle.HashType.MIMC` are **deprecated for removal (insecure)**:
+  the underlying `MiMC` gadget is an invertible keyed bijection (not a
+  collision-resistant hash) and is scheduled for removal. Use `ZkPoseidon` /
+  `ZkMerkle.*Poseidon(...)` with explicit `PoseidonParamsBLS12_381T3.INSTANCE`.
+- The no-params `ZkMerkle.HashType.POSEIDON` path is not a Cardano default
+  today. Use `ZkMerkle.*Poseidon(...)` with explicit BLS12-381 Poseidon params
+  for Cardano Merkle circuits.
 - `ZkBits` and `ZkBytes` store one constrained field element per bit or byte;
   packed byte encodings are deferred.

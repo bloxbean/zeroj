@@ -10,12 +10,22 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * MiMC hash function circuit (MiMC-7 variant).
+ * <b>DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.</b>
  *
- * <p>MiMC uses x^7 S-box with 91 rounds for BN254.
- * Each round: state = (state + round_constant + key)^7.
- * Approximately 364 multiplication constraints for one hash.</p>
+ * <p>{@link #hash(CircuitAPI, Variable, Variable)} computes a keyed bijection {@code E_right(left)}
+ * (91 rounds of {@code (state + rc_i + key)^7}, returning {@code state + key}) with <b>no
+ * Miyaguchi–Preneel feed-forward</b>. Given any target output and chosen {@code right}, an attacker
+ * can invert all 91 rounds in milliseconds to compute a matching {@code left}, making preimages
+ * and Merkle membership proofs trivially forgeable. Round constants are derived with SHA-256
+ * ({@code "mimc_round_" + round}), not Keccak-256, and this gadget is not compatible with
+ * circomlib.</p>
+ *
+ * <p>Use {@link Poseidon} (BLS12-381) instead.</p>
+ *
+ * @deprecated Scheduled for removal because this construction is an invertible keyed bijection
+ *             rather than a one-way hash function. Use {@link Poseidon} on BLS12-381 instead.
  */
+@Deprecated(forRemoval = true)
 public final class MiMC {
 
     private MiMC() {}
@@ -23,13 +33,16 @@ public final class MiMC {
     private static final int NUM_ROUNDS = 91;
 
     /**
-     * MiMC hash of two field elements using MiMC-7 Feistel.
+     * <b>INSECURE:</b> Computes an invertible keyed bijection {@code E_right(left)} on BN254
+     * without feed-forward. Do not use for commitments, preimage proofs, or Merkle trees.
      *
-     * @param api   circuit API
+     * @param api   circuit API (BN254 only)
      * @param left  first input
      * @param right second input (used as key)
-     * @return hash output
+     * @return bijection output (trivially invertible in {@code left})
+     * @deprecated Scheduled for removal. Use {@link Poseidon#hash(CircuitAPI, Variable, Variable)} instead.
      */
+    @Deprecated(forRemoval = true)
     public static Variable hash(CircuitAPI api, Variable left, Variable right) {
         api.requireField(FieldConfig.BN254);
 
@@ -55,7 +68,8 @@ public final class MiMC {
     }
 
     /**
-     * MiMC round constants — keccak256 hash of sequential strings.
+     * MiMC round constants — SHA-256 digest of {@code "mimc_round_" + round} (not Keccak-256, not
+     * circomlib-compatible).
      */
     static BigInteger roundConstant(int round) {
         if (round == 0) return BigInteger.ZERO; // first round constant is 0

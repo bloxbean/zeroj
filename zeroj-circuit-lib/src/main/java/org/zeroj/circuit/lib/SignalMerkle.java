@@ -7,7 +7,7 @@ import org.zeroj.circuit.SignalBuilder;
  * Merkle proof verification using the Signal API.
  *
  * <pre>{@code
- * SignalMerkle.verifyProof(c, leaf, root, siblings, pathBits, SignalMiMC::hash);
+ * SignalMerkle.verifyProof(c, leaf, root, siblings, pathBits, SignalPoseidon::hash);
  * }</pre>
  */
 public final class SignalMerkle {

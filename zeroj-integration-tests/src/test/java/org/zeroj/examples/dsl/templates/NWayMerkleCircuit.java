@@ -67,6 +67,7 @@ public class NWayMerkleCircuit implements CircuitSpec {
         // Hash function selection — resolved at circuit build time (not runtime).
         // Poseidon binds to BLS12-381 params since this example compiles for BLS12-381;
         // the BN254 default would trip CircuitBuilder's field check at compile time.
+        @SuppressWarnings("removal")
         SignalMerkle.HashFn hashFn = switch (hashType) {
             case MIMC -> SignalMiMC::hash;
             case POSEIDON -> (cb, l, r) -> SignalPoseidon.hash(cb, PoseidonParamsBLS12_381T3.INSTANCE, l, r);

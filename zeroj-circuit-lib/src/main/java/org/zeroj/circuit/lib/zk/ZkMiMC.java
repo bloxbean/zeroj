@@ -7,12 +7,22 @@ import org.zeroj.circuit.lib.SignalMiMC;
 import java.util.Objects;
 
 /**
- * Symbolic MiMC adapter for annotation-based circuits.
+ * <b>DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.</b>
+ *
+ * <p>Delegates to {@link SignalMiMC#hash}, which computes an invertible keyed bijection without
+ * feed-forward on BN254. Preimages and Merkle membership proofs are trivially forgeable.
+ * Use {@link ZkPoseidon} on BLS12-381 instead.</p>
+ *
+ * @deprecated Scheduled for removal. Use {@link ZkPoseidon} on BLS12-381 instead.
  */
+@Deprecated(forRemoval = true)
+@SuppressWarnings("removal")
 public final class ZkMiMC {
 
     private ZkMiMC() {}
 
+    /** @deprecated Scheduled for removal. Use {@link ZkPoseidon#hash(ZkContext, ZkField, ZkField)} instead. */
+    @Deprecated(forRemoval = true)
     public static ZkField hash(ZkContext zk, ZkField left, ZkField right) {
         Objects.requireNonNull(zk, "zk");
         Objects.requireNonNull(left, "left");

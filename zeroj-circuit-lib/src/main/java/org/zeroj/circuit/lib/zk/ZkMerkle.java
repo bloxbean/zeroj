@@ -18,6 +18,12 @@ public final class ZkMerkle {
     private ZkMerkle() {}
 
     public enum HashType {
+        /**
+         * @deprecated Scheduled for removal — {@link ZkMiMC} is an invertible keyed bijection on
+         *             BN254, making Merkle membership proofs trivially forgeable. Use
+         *             {@link #POSEIDON} on BLS12-381 instead.
+         */
+        @Deprecated(forRemoval = true)
         MIMC,
         POSEIDON
     }
@@ -27,6 +33,7 @@ public final class ZkMerkle {
         ZkField hash(ZkContext zk, ZkField left, ZkField right);
     }
 
+    @SuppressWarnings("removal")
     public static ZkField computeRoot(
             ZkContext zk,
             ZkField leaf,

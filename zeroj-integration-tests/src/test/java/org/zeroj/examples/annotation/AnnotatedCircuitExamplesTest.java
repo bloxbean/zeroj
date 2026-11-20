@@ -304,6 +304,7 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void parameterizedMerkleMembershipUsesBn254MiMCDepthAndHashType() {
         int depth = 2;
         var hashType = ZkMerkle.HashType.MIMC;

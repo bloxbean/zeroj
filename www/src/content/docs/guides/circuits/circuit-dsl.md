@@ -143,7 +143,7 @@ byte[] iden3 = R1CSSerializer.serialize(r1cs);   // .r1cs file for snarkjs tooli
 | `compileR1CSWithDiagnostics(curve)` | `R1CSCompiler.CompilationResult` | Same compilation plus diagnostics. Use it in build tooling to catch changes in the R1CS shape before you generate keys. |
 | `compilePlonK(curve)` | `PlonKConstraintSystem` | Experimental. See [Prove with PlonK](/guides/proving/plonk/). |
 
-Gadgets that depend on field constants (Poseidon, MiMC) record the field they need. If you
+Gadgets that depend on field constants (such as Poseidon) record the field they need. If you
 compile or compute a witness for a different curve, `CircuitBuilder` throws
 `IllegalStateException` instead of producing a circuit with mismatched constants.
 

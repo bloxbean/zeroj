@@ -5,12 +5,17 @@ import org.zeroj.circuit.SignalBuilder;
 import org.zeroj.circuit.FieldConfig;
 
 /**
- * MiMC hash using the Signal API.
+ * <b>DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.</b>
  *
- * <pre>{@code
- * Signal hash = SignalMiMC.hash(c, left, right);
- * }</pre>
+ * <p>Signal API copy of {@link MiMC}: computes an invertible keyed bijection {@code E_right(left)}
+ * without feed-forward on BN254. Preimages and Merkle membership proofs are trivially forgeable.
+ * Use {@link SignalPoseidon} on BLS12-381 instead.</p>
+ *
+ * @deprecated Scheduled for removal because the underlying permutation omits feed-forward and is
+ *             trivially invertible. Use {@link SignalPoseidon} instead.
  */
+@Deprecated(forRemoval = true)
+@SuppressWarnings("removal")
 public final class SignalMiMC {
 
     private SignalMiMC() {}
@@ -18,8 +23,11 @@ public final class SignalMiMC {
     private static final int NUM_ROUNDS = 91;
 
     /**
-     * MiMC-7 hash of two signals.
+     * <b>INSECURE:</b> Invertible MiMC-7 keyed bijection on BN254. Do not use.
+     *
+     * @deprecated Scheduled for removal. Use {@link SignalPoseidon#hash(SignalBuilder, Signal, Signal)} instead.
      */
+    @Deprecated(forRemoval = true)
     public static Signal hash(SignalBuilder c, Signal left, Signal right) {
         c.api().requireField(FieldConfig.BN254);
 

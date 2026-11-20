@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests for the circuit standard library components.
  */
+@SuppressWarnings("removal")
 class CircuitLibTest {
 
     // --- Comparators ---

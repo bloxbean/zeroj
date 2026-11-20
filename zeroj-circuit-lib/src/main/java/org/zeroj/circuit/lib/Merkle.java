@@ -6,7 +6,8 @@ import org.zeroj.circuit.Variable;
 /**
  * Merkle tree proof verification circuit.
  *
- * <p>Parameterized by hash function — works with any 2-to-1 hash (Poseidon, MiMC, etc.).</p>
+ * <p>Parameterized by hash function — use a cryptographically sound 2-to-1 hash such as
+ * {@link Poseidon#hash(CircuitAPI, Variable, Variable)} (BLS12-381).</p>
  */
 public final class Merkle {
 
