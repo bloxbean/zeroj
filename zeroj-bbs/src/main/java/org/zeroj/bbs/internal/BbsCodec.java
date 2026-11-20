@@ -153,7 +153,8 @@ public final class BbsCodec {
 
         List<BigInteger> scalars = new ArrayList<>(scalarCount);
         while (offset < bytes.length) {
-            scalars.add(scalarFromBytes(Arrays.copyOfRange(bytes, offset, offset + ciphersuite.scalarBytes()),
+            // CFRG BBS draft-10 §4.2.4.5 step 14: all proof scalars (including c) must be in [1, r - 1].
+            scalars.add(nonZeroScalarFromBytes(Arrays.copyOfRange(bytes, offset, offset + ciphersuite.scalarBytes()),
                     "proof scalar"));
             offset += ciphersuite.scalarBytes();
         }

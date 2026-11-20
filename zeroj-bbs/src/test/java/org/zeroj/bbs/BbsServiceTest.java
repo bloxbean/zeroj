@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -270,6 +271,54 @@ class BbsServiceTest {
         assertEquals(BbsCiphersuite.BLS12381_SHAKE256, service.provider().ciphersuite());
         assertEquals(BbsCiphersuite.BLS12381_SHAKE256, keyPair.publicKey().ciphersuite());
         assertTrue(bls.g2SecretScalarMulCalls > 0, "Selected BLS provider must be used for SkToPk");
+    }
+
+    @Test
+    void octetsToProofAndVerifyPresentationRejectZeroAndOutOfRangeScalarsInEverySlot() {
+        BbsService service = BbsService.pureJava();
+        BbsKeyPair keyPair = service.keyPair(bytes("012345678901234567890123456789qr"), bytes("issuer-key"));
+        List<byte[]> messages = List.of(bytes("given:Alice"), bytes("family:Liddell"), bytes("age:20"));
+        byte[] header = bytes("credential-v1");
+        BbsSignature signature = service.sign(keyPair.secretKey(), keyPair.publicKey(), messages, header);
+        BbsPresentation presentation = service.derivePresentation(
+                keyPair.publicKey(), signature, messages, header, bytes("nonce"), new int[]{0});
+
+        BbsCiphersuite suite = BbsCiphersuite.BLS12381_SHA256;
+        byte[] validProofBytes = presentation.proof().bytes();
+        int pointSection = 3 * suite.g1Bytes();
+        int scalarCount = (validProofBytes.length - pointSection) / suite.scalarBytes();
+        assertEquals(6, scalarCount, "eHat, r1Hat, r3Hat, 2 hidden mHats, challenge");
+
+        byte[] modulusBytes = new byte[32];
+        byte[] rRaw = G1Point.R.toByteArray();
+        System.arraycopy(rRaw, Math.max(0, rRaw.length - 32), modulusBytes,
+                32 - Math.min(32, rRaw.length), Math.min(32, rRaw.length));
+
+        for (int slot = 0; slot < scalarCount; slot++) {
+            int offset = pointSection + slot * suite.scalarBytes();
+
+            // Draft-10 §4.2.4.5 step 14: scalar == 0 must be rejected.
+            byte[] zeroScalarProof = validProofBytes.clone();
+            Arrays.fill(zeroScalarProof, offset, offset + suite.scalarBytes(), (byte) 0);
+            int slotIndex = slot;
+            assertThrows(IllegalArgumentException.class,
+                    () -> BbsCodec.octetsToProof(zeroScalarProof, suite),
+                    "octetsToProof must reject zero scalar at slot " + slotIndex);
+            BbsPresentation zeroPres = new BbsPresentation(
+                    new BbsProof(zeroScalarProof, suite),
+                    presentation.header(),
+                    presentation.presentationHeader(),
+                    presentation.revealedMessages());
+            assertFalse(service.verifyPresentation(keyPair.publicKey(), zeroPres),
+                    "verifyPresentation must reject zero scalar at slot " + slotIndex);
+
+            // Draft-10 §4.2.4.5 step 14: scalar >= r must be rejected.
+            byte[] rScalarProof = validProofBytes.clone();
+            System.arraycopy(modulusBytes, 0, rScalarProof, offset, suite.scalarBytes());
+            assertThrows(IllegalArgumentException.class,
+                    () -> BbsCodec.octetsToProof(rScalarProof, suite),
+                    "octetsToProof must reject scalar == r at slot " + slotIndex);
+        }
     }
 
     private static byte[] bytes(String text) {

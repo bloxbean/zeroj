@@ -85,12 +85,18 @@ public final class BbsToCardano {
         Objects.requireNonNull(publicKey, "publicKey required");
         Objects.requireNonNull(header, "header required");
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
+        if (publicKey.ciphersuite() != ciphersuite) {
+            throw new IllegalArgumentException(
+                    "publicKey ciphersuite " + publicKey.ciphersuite() + " does not match " + ciphersuite);
+        }
         if (messageCount <= 0) {
             throw new IllegalArgumentException("messageCount must be positive");
         }
         Bls12381Provider bls = Bls12381Providers.pureJava();
         byte[] apiId = ciphersuite.apiId();
         byte[] w = publicKey.bytes();
+        // ADR-0064 D3/I4: reject wrong-length, off-curve, off-subgroup, or identity issuer key W.
+        BbsCodec.octetsToPublicKey(w);
         CfrgBbsCore.Generators gens = CfrgBbsCore.createGenerators(messageCount + 1, ciphersuite, bls);
         List<byte[]> h = new ArrayList<>(messageCount);
         for (int i = 0; i < messageCount; i++) {
@@ -120,6 +126,10 @@ public final class BbsToCardano {
     public static OnChainProof onChainProof(BbsPresentation presentation, BbsCiphersuite ciphersuite) {
         Objects.requireNonNull(presentation, "presentation required");
         Objects.requireNonNull(ciphersuite, "ciphersuite required");
+        if (presentation.proof().ciphersuite() != ciphersuite) {
+            throw new IllegalArgumentException(
+                    "presentation ciphersuite " + presentation.proof().ciphersuite() + " does not match " + ciphersuite);
+        }
         BbsCodec.ProofParts pp = BbsCodec.octetsToProof(presentation.proof().bytes(), ciphersuite);
         List<Disclosed> disclosed = new ArrayList<>();
         for (BbsRevealedMessage rm : presentation.revealedMessages()) {

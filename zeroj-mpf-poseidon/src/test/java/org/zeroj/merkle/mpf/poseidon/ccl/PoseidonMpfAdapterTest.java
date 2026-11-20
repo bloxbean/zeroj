@@ -423,11 +423,11 @@ class PoseidonMpfAdapterTest {
         int rootOffset = indexOf(forged, exposedForkRoot);
         assertTrue(rootOffset >= 0, "fork root must occur in its wire encoding");
         System.arraycopy(trie.getRootHash(), 0, forged, rootOffset, PoseidonMpfHash.DIGEST_LENGTH);
-        assertTrue(ProofVerifier.verify(
+        assertFalse(ProofVerifier.verify(
                         trie.getRootHash(), query, null, false, forged,
                         new PoseidonMpfHashFunction(PoseidonParamsBLS12_381T3.INSTANCE),
                         new PoseidonMpfCommitmentScheme()),
-                "regression fixture: generic CCL verifier accepts attacker-selected terminal root");
+                "CCL 0.8.0-pre8 ProofVerifier must reject attacker-selected terminal fork root");
         assertFalse(trie.verifyProofWire(trie.getRootHash(), query, null, false, forged));
         assertFalse(PoseidonMpfReference.excluding(trie.getRootHash(), query, forged));
     }
