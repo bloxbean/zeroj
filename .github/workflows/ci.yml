@@ -35,8 +35,8 @@ jobs:
       - name: Build and test
         run: ./gradlew build -PskipSigning=true --stacktrace
 
-      - name: Assert the default graph has no assurance/benchmark/removed-provider edge
-        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine --stacktrace
+      - name: Assert module boundaries and release POMs have no -SNAPSHOT dependencies
+        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine verifyNoSnapshotDependenciesInReleasePoms -PskipSigning=true --stacktrace
 
       - name: Upload test reports
         if: always()

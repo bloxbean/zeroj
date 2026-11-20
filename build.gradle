@@ -10,7 +10,10 @@ plugins {
 allprojects {
     repositories {
         mavenCentral()
-        mavenLocal()
+        // Opt-in only: keep default builds and releases isolated from locally published ~/.m2 artifacts.
+        if (rootProject.providers.gradleProperty('useMavenLocal').map { it.equalsIgnoreCase('true') }.getOrElse(false)) {
+            mavenLocal()
+        }
         maven {
             url = uri("https://central.sonatype.com/repository/maven-snapshots")
             content {
@@ -272,6 +275,179 @@ tasks.matching {
                 'nmcpPublishAggregationToCentralPortalSnapshots']
 }.configureEach {
     dependsOn 'verifyMavenReleasePublicationScope'
+}
+
+// === Release -SNAPSHOT dependency guard =========================================================
+// Fails any non-SNAPSHOT release (or any run with -PrequireNoSnapshotDependencies=true) if a
+// published Maven POM, resolved compile/runtime/annotationProcessor classpath, or buildscript
+// plugin classpath references a -SNAPSHOT artifact.
+def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInReleasePoms') {
+    group = 'verification'
+    description = 'Asserts published release POMs and resolved release classpaths contain no -SNAPSHOT dependencies.'
+
+    def forceCheck = providers.gradleProperty('requireNoSnapshotDependencies')
+            .map { it.equalsIgnoreCase('true') }
+            .getOrElse(false)
+    def deployedProjects = centralDeploymentProjects
+
+    doLast {
+        def findSnapshotVersionsInPom = { String xmlText, String sourceLabel ->
+            def hits = []
+            def pom = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
+            def checkVersion = { String coord, String ver ->
+                if (ver != null && ver.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
+                    hits << "${sourceLabel}: ${coord} -> ${ver}"
+                }
+            }
+            checkVersion('project', pom.version?.text()?.trim())
+            if (pom.parent.size() > 0) {
+                def parentCoord = "${pom.parent.groupId.text().trim()}:${pom.parent.artifactId.text().trim()}"
+                checkVersion("parent ${parentCoord}", pom.parent.version?.text()?.trim())
+            }
+            def inspectDeps = { depsNode, String section ->
+                depsNode.dependency.each { dep ->
+                    def coord = "${dep.groupId.text().trim()}:${dep.artifactId.text().trim()}"
+                    checkVersion("${section} ${coord}", dep.version?.text()?.trim())
+                }
+            }
+            inspectDeps(pom.dependencies, 'dependency')
+            inspectDeps(pom.dependencyManagement.dependencies, 'dependencyManagement')
+            return hits
+        }
+
+        // Self-check the POM scanner so a parser regression cannot turn this guard into a silent no-op.
+        def badDepPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
+            <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>0.1.0-pre21-SNAPSHOT</version></dependency></dependencies>
+        </project>'''
+        def badBomPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample-bom</artifactId><version>0.1.0</version>
+            <dependencyManagement><dependencies><dependency><groupId>org.zeroj</groupId><artifactId>zeroj-api</artifactId><version>0.1.0-SNAPSHOT</version></dependency></dependencies></dependencyManagement>
+        </project>'''
+        def badParentPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <parent><groupId>org.example</groupId><artifactId>parent</artifactId><version>1.0-SNAPSHOT</version></parent>
+            <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
+        </project>'''
+        def cleanPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0-pre13</version>
+            <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>0.1.0-pre22</version></dependency></dependencies>
+        </project>'''
+        if (findSnapshotVersionsInPom(badDepPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badBomPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badParentPom, 'self-check').isEmpty()
+                || !findSnapshotVersionsInPom(cleanPom, 'self-check').isEmpty()) {
+            throw new GradleException('Release -SNAPSHOT POM guard self-check failed.')
+        }
+
+        def rootVersion = rootProject.version.toString()
+        def isSnapshotBuild = rootVersion.toUpperCase(Locale.ROOT).endsWith('SNAPSHOT')
+        if (isSnapshotBuild && !forceCheck) {
+            logger.lifecycle("Skipping release -SNAPSHOT dependency guard for SNAPSHOT project version ${rootVersion}.")
+            return
+        }
+
+        def violations = []
+        int pomCount = 0
+        int configCount = 0
+
+        if (isSnapshotBuild) {
+            violations << "rootProject version is SNAPSHOT: ${rootVersion}"
+        }
+
+        deployedProjects.each { candidate ->
+            def pomTasks = candidate.tasks.withType(GenerateMavenPom).toList()
+            if (pomTasks.isEmpty()) {
+                violations << "${candidate.path}: declares no GenerateMavenPom task"
+            }
+            pomTasks.each { pomTask ->
+                File pomFile = pomTask.destination
+                if (!pomFile.isFile()) {
+                    violations << "${candidate.path}: expected generated POM missing at ${pomFile}"
+                } else {
+                    pomCount++
+                    violations.addAll(findSnapshotVersionsInPom(
+                            pomFile.getText('UTF-8'),
+                            "${candidate.path} (${pomFile.name})"))
+                }
+            }
+
+            ['compileClasspath', 'runtimeClasspath', 'annotationProcessor'].each { cfgName ->
+                def cfg = candidate.configurations.findByName(cfgName)
+                if (cfg != null && cfg.canBeResolved) {
+                    configCount++
+                    def result = cfg.incoming.resolutionResult
+                    result.allDependencies.each { dep ->
+                        if (dep instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
+                            violations << "${candidate.path} [${cfgName}]: unresolved dependency ${dep.requested} (${dep.failure.message})"
+                        }
+                    }
+                    result.allComponents.each { comp ->
+                        def mv = comp.moduleVersion
+                        if (mv != null && mv.version != null
+                                && mv.version.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
+                            violations << "${candidate.path} [${cfgName}]: ${mv.group}:${mv.name}:${mv.version}"
+                        }
+                    }
+                }
+            }
+
+            def bsCfg = candidate.buildscript.configurations.findByName('classpath')
+            if (bsCfg != null && bsCfg.canBeResolved) {
+                configCount++
+                bsCfg.incoming.resolutionResult.allComponents.each { comp ->
+                    def mv = comp.moduleVersion
+                    if (mv != null && mv.version != null
+                            && mv.version.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
+                        violations << "${candidate.path} [buildscript:classpath]: ${mv.group}:${mv.name}:${mv.version}"
+                    }
+                }
+            }
+        }
+
+        def rootBsCfg = rootProject.buildscript.configurations.findByName('classpath')
+        if (rootBsCfg != null && rootBsCfg.canBeResolved) {
+            configCount++
+            rootBsCfg.incoming.resolutionResult.allComponents.each { comp ->
+                def mv = comp.moduleVersion
+                if (mv != null && mv.version != null
+                        && mv.version.toUpperCase(Locale.ROOT).contains('SNAPSHOT')) {
+                    violations << ": [buildscript:classpath]: ${mv.group}:${mv.name}:${mv.version}"
+                }
+            }
+        }
+
+        if (pomCount < deployedProjects.size()) {
+            violations << "Scanned only ${pomCount} POMs across ${deployedProjects.size()} published projects"
+        }
+
+        if (!violations.isEmpty()) {
+            throw new GradleException(
+                    "Release publications must not depend on -SNAPSHOT artifacts:\n  - " +
+                            violations.unique().sort().join('\n  - '))
+        }
+        logger.lifecycle(
+                "Release -SNAPSHOT dependency guard passed: ${pomCount} published POMs and ${configCount} resolved classpaths clean.")
+    }
+}
+
+gradle.projectsEvaluated {
+    verifyNoSnapshotDeps.configure { task ->
+        centralDeploymentProjects.each { candidate ->
+            task.dependsOn(candidate.tasks.withType(GenerateMavenPom))
+        }
+    }
+}
+
+tasks.named('check') { dependsOn verifyNoSnapshotDeps }
+tasks.matching {
+    it.name in ['nmcpZipAggregation', 'nmcpPublishAggregationToCentralPortal']
+}.configureEach {
+    dependsOn verifyNoSnapshotDeps
+}
+allprojects { candidate ->
+    candidate.tasks.matching { it.name == 'publishAllPublicationsToStagingRepository' }.configureEach {
+        dependsOn verifyNoSnapshotDeps
+    }
 }
 
 // === ADR-0044 structural guard =================================================================
