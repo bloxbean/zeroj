@@ -37,9 +37,15 @@ Three coupled defects broke BLS12-381 PlonK ceremony-SRS interoperability agains
   mirrors. Malicious inputs may contain wrong curve primes, non-canonical coordinates (`>= p`),
   identity points, off-curve or small-subgroup points, inconsistent powers of `tau`, malformed or
   duplicate sections, trailing bytes, or multi-GB payloads designed to trigger OOM.
-- **Content pinning:** When `expectedSha256` is supplied, the importer hashes the entire byte stream
-  (including skipped sections) and verifies exact SHA-256 equality before returning an `SRS` or
-  running pairing consistency checks.
+- **Content pinning & streaming trade-off (amends [ADR-0022](0022-pure-java-plonk-hardening.md)):**
+  ADR-0022's original bounded-buffer `.ptau` importer buffered up to 64 MiB in memory and verified
+  `expectedSha256` before reading headers. Because real BLS12-381 `.ptau` files exceed 64 MiB above
+  power ~15, this ADR amends that boundary to a single streaming pass: only minimal section framing
+  and raw requested point bytes (`min(availableG1, maxPoints) * 96 + 384` bytes, capped at
+  `(2^24 + 6) * 96` bytes) are buffered while `DigestInputStream` hashes the entire stream. **Zero
+  elliptic-curve decoding, subgroup checks, or pairing checks run before `expectedSha256` matches**,
+  so a substituted file from a mirror fails on SHA-256 without spending elliptic-curve validation
+  CPU.
 - **Ceremony trust:** SRS soundness still depends on at least one honest phase-1 ceremony
   participant; `PtauImporterBLS381` verifies algebraic structure and optional SHA-256 pinning, not
   ceremony provenance.
@@ -67,14 +73,14 @@ sequentially without buffering the entire file:
   section IDs, negative sizes, premature EOF, and trailing bytes after the final section.
 - Section 1 (must precede Sections 2 and 3): exact size `60` bytes; `n8 == 48`; raw unsigned LE
   `prime == MontFp381.modulus()`; `1 <= power <= 32`; `power <= ceremonyPower <= 32`.
-- Section 2 (`tauG1`): exact size `((1L << (power + 1)) - 1) * 96`; loads `min(availableG1, maxPoints)`
-  points (bounded by `MAX_IMPORT_POINTS = 2^24` to prevent OOM on unbounded calls) and streams past
-  remaining bytes.
-- Section 3 (`tauG2`): exact size `(1L << power) * 192`; loads the first 2 G2 points (`G2`,
-  `tau·G2`) and streams past remaining bytes.
+- Section 2 (`tauG1`): exact size `((1L << (power + 1)) - 1) * 96`; reads `min(availableG1, maxPoints)`
+  raw point records (bounded by `MAX_IMPORT_POINTS = 2^24 + 6`, aligned with PlonK's maximum
+  supported `2^24` domain plus 6 blinding powers) and streams past remaining bytes.
+- Section 3 (`tauG2`): exact size `(1L << power) * 192`; reads the first 2 raw G2 point records
+  and streams past remaining bytes.
 - Remaining sections (4–7, 12–15, etc.) are streamed past while still feeding `SHA-256` when
-  `expectedSha256 != null`. Full-stream SHA-256 equality is verified before pairing consistency
-  checks and before returning `SRS`.
+  `expectedSha256 != null`. Full-stream SHA-256 equality is verified **before** decoding points or
+  running curve, subgroup, and pairing checks.
 
 ### I2 — Strict SRS point validation & infinity rejection
 
@@ -132,7 +138,14 @@ sequentially without buffering the entire file:
   `ceremonyPower`) and exact Section 2/3 sizes matching `power`; synthetic test fixtures must
   conform to the `snarkjs` layout.
 - `PlonKSetupBLS381`, `PlonKProverBLS381`, and `PlonkSetupCache` now accept SRS lengths in
-  `[domainSize + 6, 2 * domainSize)` that were previously rejected.
+  `[domainSize + 6, 2 * domainSize)` that were previously rejected. Forward compatibility note:
+  proving keys or setup caches built from fewer than `2 * domainSize` G1 powers will be rejected by
+  earlier ZeroJ releases that required `2 * domainSize`.
+- **Unsatisfying witnesses in `PlonKProverBLS381.prove`:** Because `t(X)` is now checked for exact
+  divisibility (`deg(t) <= 3n + 5`, matching `snarkjs@0.7.6`), proving with a witness that does not
+  satisfy the PlonK constraints now fails fast with `IllegalStateException` instead of producing an
+  unverifiable proof. Downstream negative tests expecting `verify == false` from a bad witness
+  should expect the prover exception or tamper with an honest proof/public input.
 
 ## Milestones
 

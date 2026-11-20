@@ -40,9 +40,9 @@ import java.util.Set;
  *
  * <p>The stream is read sequentially without buffering the full file in RAM, so multi-GB ceremony
  * files can load {@code maxPoints} powers in {@code O(maxPoints)} memory while still computing
- * and verifying the full-stream SHA-256 when {@code expectedSha256} is provided. Every loaded SRS
- * point must have canonical {@code < p} coordinates, be non-infinity, lie on the curve, lie in the
- * prime-order subgroup, and satisfy the pairing progression {@code e(tau^i·G1, G2) == e(tau^(i-1)·G1, tau·G2)}.</p>
+ * and verifying the full-stream SHA-256 when {@code expectedSha256} is provided. Only bounded
+ * framing and raw point bytes are read during the streaming pass; all elliptic-curve decoding,
+ * subgroup checks, and pairing checks are deferred until after {@code expectedSha256} matches.</p>
  */
 public final class PtauImporterBLS381 {
 
@@ -51,8 +51,11 @@ public final class PtauImporterBLS381 {
     private static final byte[] PTAU_MAGIC = {0x70, 0x74, 0x61, 0x75}; // "ptau"
     private static final int MAX_SECTIONS = 64;
     private static final int MAX_POWER = 32;
-    /** Maximum G1 SRS points loaded into a single Java array to prevent unbounded heap allocation. */
-    static final int MAX_IMPORT_POINTS = 1 << 24;
+    /**
+     * Maximum G1 SRS points loaded in one call: aligned with PlonK's maximum supported domain
+     * ({@code 2^24}) plus the 6 blinding powers required by {@code T3} ({@code 2^24 + 6}).
+     */
+    static final int MAX_IMPORT_POINTS = (1 << 24) + 6;
     private static final int SECTION1_LEN = 4 + 48 + 4 + 4; // n8 + prime(48) + power + ceremonyPower
     private static final int G1_LEM_BYTES = 96;
     private static final int G2_LEM_BYTES = 192;
@@ -83,9 +86,9 @@ public final class PtauImporterBLS381 {
 
     /**
      * Import SRS from a BLS12-381 {@code .ptau} stream and require an exact full-stream SHA-256
-     * match before returning.
+     * match before decoding or validating elliptic-curve points (ADR-0066).
      *
-     * @param maxPoints      maximum number of G1 powers to load
+     * @param maxPoints      maximum number of G1 powers to load (capped at {@value #MAX_IMPORT_POINTS})
      * @param expectedSha256 expected 32-byte SHA-256 digest of the entire {@code .ptau} stream, or
      *                       {@code null} for dev/test callers that intentionally skip pinning
      */
@@ -125,8 +128,9 @@ public final class PtauImporterBLS381 {
         Set<Integer> seenSections = new HashSet<>();
         boolean hasHeader = false;
         int power = -1;
-        AffineG1[] tauG1 = null;
-        AffineG2[] tauG2 = null;
+        int nG1 = -1;
+        byte[] rawG1 = null;
+        byte[] rawG2 = null;
         byte[] skipScratch = new byte[8192];
 
         for (int s = 0; s < numSections; s++) {
@@ -177,19 +181,9 @@ public final class PtauImporterBLS381 {
                     throw new IOException("Invalid BLS12-381 .ptau G1 section size: expected "
                             + expectedSize + " bytes for power " + power + ", got " + ssize);
                 }
-                long nG1Long = Math.min(availableG1, (long) maxPoints);
-                if (nG1Long > MAX_IMPORT_POINTS) {
-                    throw new IOException("Requested G1 power count " + nG1Long + " exceeds maximum "
-                            + MAX_IMPORT_POINTS + " (pass an explicit maxPoints bound)");
-                }
-                int nG1 = (int) nG1Long;
-                tauG1 = new AffineG1[nG1];
-                byte[] ptBuf = new byte[G1_LEM_BYTES];
-                for (int i = 0; i < nG1; i++) {
-                    readExactInto(stream, ptBuf, "BLS12-381 .ptau G1 point " + i);
-                    tauG1[i] = decodeSrsG1(ptBuf, i);
-                }
-                long remainingBytes = (availableG1 - nG1Long) * G1_LEM_BYTES;
+                nG1 = resolvedG1Count(availableG1, maxPoints);
+                rawG1 = readExact(stream, nG1 * G1_LEM_BYTES, "BLS12-381 .ptau G1 points");
+                long remainingBytes = (availableG1 - nG1) * G1_LEM_BYTES;
                 skipExact(stream, remainingBytes, skipScratch, ".ptau section 2 trailing G1 points");
             } else if (stype == 3) {
                 if (!hasHeader) {
@@ -204,12 +198,7 @@ public final class PtauImporterBLS381 {
                 if (availableG2 < 2) {
                     throw new IOException("BLS12-381 .ptau must contain at least two G2 powers");
                 }
-                tauG2 = new AffineG2[2];
-                byte[] ptBuf = new byte[G2_LEM_BYTES];
-                for (int i = 0; i < 2; i++) {
-                    readExactInto(stream, ptBuf, "BLS12-381 .ptau G2 point " + i);
-                    tauG2[i] = decodeSrsG2(ptBuf, i);
-                }
+                rawG2 = readExact(stream, 2 * G2_LEM_BYTES, "BLS12-381 .ptau G2 points");
                 long remainingBytes = (availableG2 - 2L) * G2_LEM_BYTES;
                 skipExact(stream, remainingBytes, skipScratch, ".ptau section 3 trailing G2 points");
             } else {
@@ -220,18 +209,28 @@ public final class PtauImporterBLS381 {
         if (!hasHeader) {
             throw new IOException("Missing .ptau section: 1");
         }
-        if (tauG1 == null) {
+        if (rawG1 == null) {
             throw new IOException("Missing .ptau section: 2");
         }
-        if (tauG2 == null) {
+        if (rawG2 == null) {
             throw new IOException("Missing .ptau section: 3");
         }
         if (stream.read() != -1) {
             throw new IOException("Trailing bytes after .ptau sections");
         }
 
+        // Verify SHA-256 BEFORE any expensive elliptic-curve decoding, subgroup checks, or pairings.
         if (expectedSha256 != null && !MessageDigest.isEqual(sha256.digest(), expectedSha256)) {
             throw new IOException(".ptau SHA-256 hash mismatch");
+        }
+
+        AffineG1[] tauG1 = new AffineG1[nG1];
+        for (int i = 0; i < nG1; i++) {
+            tauG1[i] = decodeSrsG1(rawG1, i * G1_LEM_BYTES, i);
+        }
+        AffineG2[] tauG2 = new AffineG2[2];
+        for (int i = 0; i < 2; i++) {
+            tauG2[i] = decodeSrsG2(rawG2, i * G2_LEM_BYTES, i);
         }
 
         validateSrsConsistency(tauG1, tauG2, tauG1.length);
@@ -249,15 +248,24 @@ public final class PtauImporterBLS381 {
 
     /**
      * Import SRS from a BLS12-381 {@code .ptau} stream and require an exact full-stream SHA-256
-     * match before returning.
+     * match before decoding or validating elliptic-curve points.
      */
     public static SRS importPtau(InputStream input, byte[] expectedSha256) throws IOException {
         return importPtau(input, Integer.MAX_VALUE, expectedSha256);
     }
 
-    private static AffineG1 decodeSrsG1(byte[] ptBuf, int index) throws IOException {
-        MontFp381 x = decodeMontFp(ptBuf, 0, "BLS12-381 .ptau G1[" + index + "].x");
-        MontFp381 y = decodeMontFp(ptBuf, 48, "BLS12-381 .ptau G1[" + index + "].y");
+    static int resolvedG1Count(long availableG1, int maxPoints) throws IOException {
+        long nG1Long = Math.min(availableG1, (long) maxPoints);
+        if (nG1Long > MAX_IMPORT_POINTS) {
+            throw new IOException("Requested G1 power count " + nG1Long + " exceeds maximum "
+                    + MAX_IMPORT_POINTS + " (pass an explicit maxPoints bound <= " + MAX_IMPORT_POINTS + ")");
+        }
+        return (int) nG1Long;
+    }
+
+    private static AffineG1 decodeSrsG1(byte[] ptBuf, int off, int index) throws IOException {
+        MontFp381 x = decodeMontFp(ptBuf, off, "BLS12-381 .ptau G1[" + index + "].x");
+        MontFp381 y = decodeMontFp(ptBuf, off + 48, "BLS12-381 .ptau G1[" + index + "].y");
         if (x.isZero() && y.isZero()) {
             throw new IOException("BLS12-381 .ptau G1[" + index + "] must not be the point at infinity");
         }
@@ -271,11 +279,11 @@ public final class PtauImporterBLS381 {
         return point;
     }
 
-    private static AffineG2 decodeSrsG2(byte[] ptBuf, int index) throws IOException {
-        MontFp381 x0 = decodeMontFp(ptBuf, 0, "BLS12-381 .ptau G2[" + index + "].x.c0");
-        MontFp381 x1 = decodeMontFp(ptBuf, 48, "BLS12-381 .ptau G2[" + index + "].x.c1");
-        MontFp381 y0 = decodeMontFp(ptBuf, 96, "BLS12-381 .ptau G2[" + index + "].y.c0");
-        MontFp381 y1 = decodeMontFp(ptBuf, 144, "BLS12-381 .ptau G2[" + index + "].y.c1");
+    private static AffineG2 decodeSrsG2(byte[] ptBuf, int off, int index) throws IOException {
+        MontFp381 x0 = decodeMontFp(ptBuf, off, "BLS12-381 .ptau G2[" + index + "].x.c0");
+        MontFp381 x1 = decodeMontFp(ptBuf, off + 48, "BLS12-381 .ptau G2[" + index + "].x.c1");
+        MontFp381 y0 = decodeMontFp(ptBuf, off + 96, "BLS12-381 .ptau G2[" + index + "].y.c0");
+        MontFp381 y1 = decodeMontFp(ptBuf, off + 144, "BLS12-381 .ptau G2[" + index + "].y.c1");
         if (x0.isZero() && x1.isZero() && y0.isZero() && y1.isZero()) {
             throw new IOException("BLS12-381 .ptau G2[" + index + "] must not be the point at infinity");
         }

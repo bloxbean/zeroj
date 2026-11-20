@@ -327,7 +327,8 @@ public final class PlonKProverBLS381 {
         for (int i = 3 * n + 6; i < tCoeffs.length; i++) {
             if (!tCoeffs[i].isZero()) {
                 throw new IllegalStateException(
-                        "PlonK quotient polynomial t(X) has non-zero coefficient above degree 3n+5 at index " + i);
+                        "Witness does not satisfy the PlonK constraints (quotient polynomial is not divisible by Z_H; "
+                                + "non-zero coefficient at index " + i + ")");
             }
         }
 

@@ -205,22 +205,97 @@ class PtauImporterBLS381Test {
     }
 
     @Test
-    void importPtau_rejectsExpectedHashMismatchBeforeParsing() {
-        assertThrows(IOException.class, () -> PtauImporterBLS381.importPtau(
-                new ByteArrayInputStream(new byte[]{'p', 't', 'a', 'u'}), 1, new byte[32]));
+    void importPtau_rejectsExpectedHashMismatchBeforePointValidation() throws Exception {
+        // Structurally framed .ptau containing an off-curve point in tauG1[1]:
+        // - with a WRONG pin, must fail on SHA-256 BEFORE point decoding/subgroup validation;
+        // - with the CORRECT pin, must pass SHA-256 and then fail on curve validation.
+        byte[] badPointPtau = buildSyntheticPtau(2, BigInteger.valueOf(7));
+        int sec2PayloadOff = 12 + 12 + 60 + 12;
+        System.arraycopy(g1Lem(OFF_CURVE_G1), 0, badPointPtau, sec2PayloadOff + 96, 96);
+
+        byte[] correctPin = MessageDigest.getInstance("SHA-256").digest(badPointPtau);
+        byte[] wrongPin = correctPin.clone();
+        wrongPin[0] ^= 0x01;
+
+        IOException wrongPinEx = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(badPointPtau), 7, wrongPin));
+        assertTrue(wrongPinEx.getMessage().contains("SHA-256 hash mismatch"), wrongPinEx.getMessage());
+
+        IOException rightPinEx = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(badPointPtau), 7, correctPin));
+        assertTrue(rightPinEx.getMessage().contains("not on curve"), rightPinEx.getMessage());
     }
 
     @Test
-    void importPtau_rejectsDuplicateSections() throws IOException {
+    void resolvedG1Count_alignsWithMaxDomain24Plus6() throws Exception {
+        long power24AvailableG1 = (1L << 25) - 1L;
+        int maxDomainPlus6 = (1 << 24) + 6;
+        assertEquals(maxDomainPlus6, PtauImporterBLS381.resolvedG1Count(power24AvailableG1, maxDomainPlus6));
+        IOException ex = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.resolvedG1Count(power24AvailableG1, maxDomainPlus6 + 1));
+        assertTrue(ex.getMessage().contains("exceeds maximum"), ex.getMessage());
+    }
+
+    @Test
+    void importPtau_rejectsDuplicateSectionsWithValidFirstHeader() throws IOException {
+        byte[] validSec1 = buildValidSection1(2, 2);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[]{'p', 't', 'a', 'u'});
         out.write(leInt(1));
         out.write(leInt(2));
-        writeSection(out, 1, new byte[60]);
-        writeSection(out, 1, new byte[60]);
+        writeSection(out, 1, validSec1);
+        writeSection(out, 1, validSec1);
 
-        assertThrows(IOException.class, () -> PtauImporterBLS381.importPtau(
-                new ByteArrayInputStream(out.toByteArray()), 1));
+        IOException ex = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(out.toByteArray()), 1));
+        assertTrue(ex.getMessage().contains("Duplicate .ptau section: 1"), ex.getMessage());
+    }
+
+    @Test
+    void importPtau_rejectsInvalidCeremonyPowerOutOfOrderAndSectionSizeMismatches() throws IOException {
+        // ceremonyPower < power (with valid prime & n8)
+        ByteArrayOutputStream badCeremony = new ByteArrayOutputStream();
+        badCeremony.write(new byte[]{'p', 't', 'a', 'u'});
+        badCeremony.write(leInt(1));
+        badCeremony.write(leInt(1));
+        writeSection(badCeremony, 1, buildValidSection1(4, 3));
+        IOException exCp = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(badCeremony.toByteArray()), 1));
+        assertTrue(exCp.getMessage().contains("ceremonyPower"), exCp.getMessage());
+
+        // Section 2 appearing before Section 1
+        ByteArrayOutputStream outOfOrder = new ByteArrayOutputStream();
+        outOfOrder.write(new byte[]{'p', 't', 'a', 'u'});
+        outOfOrder.write(leInt(1));
+        outOfOrder.write(leInt(2));
+        writeSection(outOfOrder, 2, new byte[96]);
+        writeSection(outOfOrder, 1, buildValidSection1(2, 2));
+        IOException exOrder = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(outOfOrder.toByteArray()), 1));
+        assertTrue(exOrder.getMessage().contains("before header section 1"), exOrder.getMessage());
+
+        // Section 2 size mismatch (valid power=2 header expects 7*96 bytes, provide 6*96)
+        ByteArrayOutputStream badSec2 = new ByteArrayOutputStream();
+        badSec2.write(new byte[]{'p', 't', 'a', 'u'});
+        badSec2.write(leInt(1));
+        badSec2.write(leInt(2));
+        writeSection(badSec2, 1, buildValidSection1(2, 2));
+        writeSection(badSec2, 2, new byte[6 * 96]);
+        IOException exSec2 = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(badSec2.toByteArray()), 4));
+        assertTrue(exSec2.getMessage().contains("G1 section size"), exSec2.getMessage());
+
+        // Section 3 size mismatch (valid power=2 header + valid section 2, section 3 has 3*192 instead of 4*192)
+        ByteArrayOutputStream badSec3 = new ByteArrayOutputStream();
+        badSec3.write(new byte[]{'p', 't', 'a', 'u'});
+        badSec3.write(leInt(1));
+        badSec3.write(leInt(3));
+        writeSection(badSec3, 1, buildValidSection1(2, 2));
+        writeSection(badSec3, 2, new byte[7 * 96]);
+        writeSection(badSec3, 3, new byte[3 * 192]);
+        IOException exSec3 = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(badSec3.toByteArray()), 4));
+        assertTrue(exSec3.getMessage().contains("G2 section size"), exSec3.getMessage());
     }
 
     @Test
@@ -299,6 +374,15 @@ class PtauImporterBLS381Test {
     }
 
     // ---- Helpers ----
+
+    private static byte[] buildValidSection1(int power, int ceremonyPower) throws IOException {
+        ByteArrayOutputStream sec1 = new ByteArrayOutputStream();
+        sec1.write(leInt(48));
+        sec1.write(unsignedLE(FP, 48));
+        sec1.write(leInt(power));
+        sec1.write(leInt(ceremonyPower));
+        return sec1.toByteArray();
+    }
 
     private static byte[] buildSyntheticPtau(int power, BigInteger tau) throws IOException {
         return buildSyntheticPtauSections1To3(power, tau, 3);
