@@ -26,7 +26,7 @@ import java.util.Objects;
  * [RFC 7693]: https://www.rfc-editor.org/rfc/rfc7693
  * [BLAKE2]: https://www.blake2.net/blake2.pdf
  */
-final class Blake2bDigest {
+public final class Blake2bDigest {
 
     private static final long[] IV = {
             0x6a09e667f3bcc908L, 0xbb67ae8584caa73bL, 0x3c6ef372fe94f82bL, 0xa54ff53a5f1d36f1L,
@@ -51,7 +51,7 @@ final class Blake2bDigest {
     private Blake2bDigest() {}
 
     /** BLAKE2b-256. */
-    static byte[] blake2b256(byte[] input) {
+    public static byte[] blake2b256(byte[] input) {
         return digest(input, 32);
     }
 
@@ -59,7 +59,7 @@ final class Blake2bDigest {
     static final int PERSONALIZATION_LENGTH = 16;
 
     /** Unkeyed BLAKE2b with an {@code outLength}-byte digest, {@code 1 ≤ outLength ≤ 64}. */
-    static byte[] digest(byte[] input, int outLength) {
+    public static byte[] digest(byte[] input, int outLength) {
         return digest(input, outLength, null);
     }
 

@@ -1,5 +1,7 @@
 package org.zeroj.crypto.setup;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
 import org.zeroj.bls12381.ec.JacobianG2BLS381;
@@ -52,7 +54,7 @@ public final class PowersOfTauBLS381 {
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use independently verified, hash-pinned BLS12-381 MPC ceremony outputs for production.");
 
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         int n = 1 << power;
 
         // Sample toxic waste tau from 512-bit random (negligible bias)

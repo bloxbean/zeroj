@@ -1,0 +1,30 @@
+{
+  "name": "@zeroj/pedersen",
+  "version": "0.1.0-experimental.1",
+  "type": "module",
+  "description": "Experimental ZeroJ pedersen Java-to-Wasm APIs",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "dependencies": {
+    "@zeroj/runtime": "0.1.0-experimental.1"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

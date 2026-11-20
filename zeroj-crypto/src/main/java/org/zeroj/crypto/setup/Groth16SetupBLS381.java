@@ -1,5 +1,7 @@
 package org.zeroj.crypto.setup;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.R1CSConstraint;
 import org.zeroj.api.R1CSFlat;
 import org.zeroj.api.R1CSValidation;
@@ -102,7 +104,7 @@ public final class Groth16SetupBLS381 {
      */
     public static SetupResult setup(List<R1CSConstraint> constraints, int numWires,
                                      int numPublic, BigInteger tau) {
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         return setup(constraints, numWires, numPublic, tau,
                 randomScalar(rng), randomScalar(rng), randomScalar(rng), randomScalar(rng));
     }
@@ -342,7 +344,7 @@ public final class Groth16SetupBLS381 {
     public static SetupResult setupToStore(R1CSFlat flat,
                                            int numWires, int numPublic, BigInteger tau,
                                            Path dir, boolean sparse) throws IOException {
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         return setupToStore(flat, numWires, numPublic, tau,
                 randomScalar(rng), randomScalar(rng), randomScalar(rng), randomScalar(rng), dir, sparse);
     }

@@ -1,5 +1,7 @@
 package org.zeroj.crypto.setup;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.api.LegacyCurvePolicy;
 import org.zeroj.api.TrustedSetupPolicy;
 import org.zeroj.crypto.ec.JacobianG1BN254;
@@ -60,7 +62,7 @@ public final class PowersOfTau {
                 + "for DEVELOPMENT and TESTING only. "
                 + "Use verified BN254 MPC ceremony outputs (Hermez, Perpetual Powers of Tau) for production.");
 
-        var rng = new SecureRandom();
+        var rng = SecureRandoms.create();
         int n = 1 << power;
 
         // Sample toxic waste tau from 512-bit random (negligible bias)

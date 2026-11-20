@@ -1,5 +1,7 @@
 package org.zeroj.circuit.lib.jubjub;
 
+import org.zeroj.api.SecureRandoms;
+
 import org.zeroj.bls12381.field.MontFr381;
 
 import java.math.BigInteger;
@@ -44,7 +46,7 @@ public final class JubjubPoint {
      * global RNG lock becoming the throughput bottleneck for independent offline workers.
      */
     private static final ThreadLocal<SecureRandom> SECRET_SCALAR_BLINDING_RANDOM =
-            ThreadLocal.withInitial(SecureRandom::new);
+            ThreadLocal.withInitial(SecureRandoms::create);
 
     /**
      * Package-private instrumentation for deterministic tests of the production schedule.
