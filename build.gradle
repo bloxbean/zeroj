@@ -293,13 +293,15 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
 
     doLast {
         // Matches org.apache.maven.artifact.ArtifactUtils.isSnapshot (Maven 3.9.9):
-        // literal "SNAPSHOT", suffix "-SNAPSHOT", or timestamped "<base>-YYYYMMDD.HHMMSS-<build>".
+        // case-insensitive terminal "SNAPSHOT" (with or without leading hyphen) or
+        // timestamped "<base>-YYYYMMDD.HHMMSS-<build>".
+        def snapSuffix = 'SNAPSHOT'
         def timestampedSnapshotPattern = ~/^(.*)-([0-9]{8}\.[0-9]{6})-([0-9]+)$/
         def isMavenSnapshot = { String ver ->
-            if (ver == null || ver.isEmpty()) return false
-            return ver == 'SNAPSHOT'
-                    || ver.endsWith('-SNAPSHOT')
-                    || timestampedSnapshotPattern.matcher(ver).matches()
+            ver != null && !ver.isEmpty() && (
+                (ver.length() >= snapSuffix.length()
+                    && ver.regionMatches(true, ver.length() - snapSuffix.length(), snapSuffix, 0, snapSuffix.length()))
+                || timestampedSnapshotPattern.matcher(ver).matches())
         }
 
         def resolvePomProperties = { String raw, Map<String, String> props ->
@@ -369,6 +371,14 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
             <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
             <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>0.1.0-20261120.174000-1</version></dependency></dependencies>
         </project>'''
+        def badLowercaseSnapPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
+            <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>1.0-snapshot</version></dependency></dependencies>
+        </project>'''
+        def badNoHyphenSnapPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+            <groupId>org.zeroj</groupId><artifactId>sample</artifactId><version>0.1.0</version>
+            <dependencies><dependency><groupId>org.julclang</groupId><artifactId>julc-stdlib</artifactId><version>1.0SNAPSHOT</version></dependency></dependencies>
+        </project>'''
         def badBomPropPom = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
             <groupId>org.zeroj</groupId><artifactId>sample-bom</artifactId><version>0.1.0</version>
             <properties><julc.ver>0.1.0-SNAPSHOT</julc.ver></properties>
@@ -392,6 +402,8 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
         </project>'''
         if (findSnapshotVersionsInPom(badDepPom, 'self-check').isEmpty()
                 || findSnapshotVersionsInPom(badTimestampedPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badLowercaseSnapPom, 'self-check').isEmpty()
+                || findSnapshotVersionsInPom(badNoHyphenSnapPom, 'self-check').isEmpty()
                 || findSnapshotVersionsInPom(badBomPropPom, 'self-check').isEmpty()
                 || findSnapshotVersionsInPom(badUnresolvedPropPom, 'self-check').isEmpty()
                 || findSnapshotVersionsInPom(badParentPom, 'self-check').isEmpty()
@@ -399,10 +411,14 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
             throw new GradleException('Release -SNAPSHOT POM guard self-check failed.')
         }
 
+        // Only skip automatically for the build's own intentional development snapshot mode
+        // (`*-SNAPSHOT`, matching subprojects version rewriting and snapshot.yml). Any other
+        // Maven-snapshot version (e.g. lowercase `-snapshot` or timestamped) is treated as a
+        // release by the rest of the build and must therefore run and fail this guard.
         def rootVersion = rootProject.version.toString()
-        def isSnapshotBuild = isMavenSnapshot(rootVersion)
-        if (isSnapshotBuild && !forceCheck) {
-            logger.lifecycle("Skipping release -SNAPSHOT dependency guard for SNAPSHOT project version ${rootVersion}.")
+        def isDevSnapshotProject = rootVersion.endsWith('-SNAPSHOT')
+        if (isDevSnapshotProject && !forceCheck) {
+            logger.lifecycle("Skipping release -SNAPSHOT dependency guard for development SNAPSHOT version ${rootVersion}.")
             return
         }
 
@@ -410,7 +426,7 @@ def verifyNoSnapshotDeps = tasks.register('verifyNoSnapshotDependenciesInRelease
         int pomCount = 0
         int configCount = 0
 
-        if (isSnapshotBuild) {
+        if (isMavenSnapshot(rootVersion)) {
             violations << "rootProject version is SNAPSHOT: ${rootVersion}"
         }
 
