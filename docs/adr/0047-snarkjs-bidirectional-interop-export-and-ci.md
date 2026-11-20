@@ -21,7 +21,7 @@ produced by this ADR's code (see invariant V8).
 ## Context
 
 ZeroJ already consumed snarkjs artifacts (`SnarkjsJsonCodec`, `SnarkjsPlonkCodec`,
-`ZkeyImporterBLS381`, `PlonKZkeyImporterBLS381`, `R1csExporter`) and its verifiers were checked
+`ZkeyImporterBLS381`, `PlonKZkeyImporterBLS381` *(later withdrawn by [ADR-0066](0066-plonk-bls12381-ptau-and-zkey-import.md))*, `R1csExporter`) and its verifiers were checked
 against snarkjs-generated vectors in the default build. The other direction did not exist: nothing
 in the repository could write a ZeroJ Groth16 or PlonK proof or verification key in the format
 `snarkjs groth16 verify` / `snarkjs plonk verify` reads, so the claim "ZeroJ proofs are
@@ -248,10 +248,12 @@ Independent evidence, per AGENTS.md "Testing":
 
 ## Known gaps
 
-- **ZeroJ proof under a snarkjs PlonK zkey is not covered.** `PlonKZkeyImporterBLS381` reads the
-  header, selectors, sigmas and SRS but not the A/B/C wire-map sections, so ZeroJ cannot assign
-  wires for a snarkjs-arithmetised circuit. Closing this needs an importer extension (its own
-  R2 change), tracked separately.
+- **ZeroJ proof under a snarkjs PlonK zkey is not supported.** `PlonKZkeyImporterBLS381.importZkey`
+  fails explicitly with `UnsupportedOperationException` ([ADR-0066](0066-plonk-bls12381-ptau-and-zkey-import.md)):
+  supporting snarkjs 0.7.6 PlonK `.zkey` files requires a full layout rework (sections 3–6 wire
+  maps, sections 7–11 `Qm/Ql/Qr/Qo/Qc` extended evaluations, and section 13 Fr Lagrange
+  polynomials). Universal ceremony SRS import works via `PtauImporterBLS381.importPtau(...)` +
+  `PlonKSetupBLS381.setup(...)`.
 - The live suites use one small circuit (`c = a·b`, `nPublic = 1`); the checked-in vectors add
   `nPublic = 2` (Groth16) and identity selector commitments (PlonK). Larger circuits and
   `nPublic = 0` are not exercised live.

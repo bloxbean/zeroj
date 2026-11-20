@@ -111,6 +111,7 @@ jobs:
             :zeroj-integration-tests:test --tests 'org.zeroj.it.snarkjs.*' \
             :zeroj-crypto:test --tests 'org.zeroj.crypto.groth16.R1csSnarkjsCeremonyRoundTripTest' \
                                --tests 'org.zeroj.crypto.groth16.ZkeyPkStoreImporterTest' \
+                               --tests 'org.zeroj.crypto.plonk.PtauImporterBLS381Test' \
             :zeroj-tools:test --tests 'org.zeroj.ceremony.ZkeyContributorInteropTest' \
                               --tests 'org.zeroj.ceremony.CeremonyCliTest' \
             --stacktrace

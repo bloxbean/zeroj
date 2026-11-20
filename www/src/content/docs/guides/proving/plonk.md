@@ -7,10 +7,10 @@ sidebar:
 
 :::caution[Experimental, with no correctness claims]
 ZeroJ's PlonK support is **experimental everywhere**: pure-Java proving, off-chain verification,
-`.zkey` import, and the on-chain validators. ZeroJ makes no claim that it is correct, sound, or
-ready for use. **Groth16 on BLS12-381 is the supported path for the current release**; use
-[Prove with Groth16](/guides/proving/groth16/) for anything you build on. Use PlonK only to
-evaluate or experiment, and never where value is at stake.
+`.ptau` SRS import, and the on-chain validators (snarkjs PlonK `.zkey` import is unsupported).
+ZeroJ makes no claim that it is correct, sound, or ready for use. **Groth16 on BLS12-381 is the
+supported path for the current release**; use [Prove with Groth16](/guides/proving/groth16/) for
+anything you build on. Use PlonK only to evaluate or experiment, and never where value is at stake.
 :::
 
 PlonK uses a *universal* setup: one powers-of-tau reference string (SRS) serves every circuit up
@@ -23,10 +23,9 @@ BLS12-381. This page describes what exists and how to try it, briefly and withou
 |-------|-----|--------|
 | Compile a circuit | `circuit.compilePlonK(CurveId.BLS12_381)` → `PlonKConstraintSystem` | `zeroj-circuit-dsl` |
 | Development SRS | `PowersOfTauBLS381.generate(power)` (needs the insecure-setup flag) | `zeroj-crypto` |
-| Import a `.ptau` SRS | `PtauImporterBLS381.importPtau(input, maxPoints, expectedSha256)` | `zeroj-crypto` |
+| Import a `.ptau` SRS | `PtauImporterBLS381.importPtau(input, maxPoints, expectedSha256)` (streaming; `domainSize + 6` points suffice) | `zeroj-crypto` |
 | Setup | `PlonKSetupBLS381.setup(...)` → `PlonKProvingKeyBLS381` | `zeroj-crypto` |
 | Prove | `PlonKProverBLS381.prove(...)`; `proveCardano(...)` and `proveCardanoMpi(...)` for the on-chain profiles | `zeroj-crypto` |
-| Import a snarkjs PlonK `.zkey` | `PlonKZkeyImporterBLS381.importZkey(input, expectedSha256)` | `zeroj-crypto` |
 | Export snarkjs JSON | `SnarkjsPlonkJson.proofJson`, `verificationKeyJson`, `publicJson` | `zeroj-crypto` |
 | Verify off-chain | `PlonkBLS12381Verifier` | `zeroj-verifier-plonk` |
 | Verify on-chain | `PlonkBLS12381Verifier`, `PlonkBLS12381MultiInputVerifier`, `PlonkBLS12381MultiInputParamVerifier` (JuLC validators) | `zeroj-onchain-julc` |
@@ -43,12 +42,10 @@ BN254 PlonK exists only as a legacy path and is disabled unless you start the JV
 
 ## Known gaps
 
-- **Blinding.** The PlonK prover uses 9 blinding scalars, while the PlonK paper and snarkjs use 11
-  (the quotient-split blinding factors are missing). This is tracked as an open issue affecting
-  the zero-knowledge margin.
-- **snarkjs PlonK keys.** `PlonKZkeyImporterBLS381` reads the header, selectors, permutations and
-  SRS, but not the wire-map sections, so ZeroJ can't prove a snarkjs-arithmetized circuit under an
-  imported PlonK `.zkey`.
+- **snarkjs PlonK `.zkey` import is unsupported.** `PlonKZkeyImporterBLS381.importZkey(...)` fails
+  explicitly with `UnsupportedOperationException` (snarkjs PlonK `.zkey` layout and wire-map
+  sections are not implemented). Use `PtauImporterBLS381.importPtau(...)` with a BLS12-381 `.ptau`
+  ceremony SRS and `PlonKSetupBLS381.setup(...)` for ZeroJ-authored circuits instead.
 - **No large-circuit work.** The memory and speed work that makes Groth16 practical at millions of
   constraints hasn't been applied to PlonK.
 - **Not audited,** and on-chain use is limited to bounded profiles (below).

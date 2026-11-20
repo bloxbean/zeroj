@@ -225,7 +225,7 @@ public final class PlonKSetupBLS381 {
         Objects.requireNonNull(srs, "srs");
         AffineG1[] tauG1 = srs.tauG1();
         AffineG2[] tauG2 = srs.tauG2();
-        int requiredG1 = 2 * domainSize;
+        int requiredG1 = domainSize + 6;
         if (tauG1 == null || tauG1.length < requiredG1) {
             throw new IllegalArgumentException("BLS12-381 SRS G1 length must be at least " + requiredG1);
         }

@@ -38,7 +38,7 @@ remaining production gates are tracked in
 | Circuit definition (DSL, symbolic annotations, gadgets) | `zeroj-circuit-dsl`, `zeroj-circuit-annotation-*`, `zeroj-circuit-lib` ([per-gadget table](zeroj-circuit-lib/README.md)) | **Beta** |
 | Groth16 BLS12-381 — pure Java prove + verify | `zeroj-crypto`, `zeroj-verifier-groth16` | **Beta** (production trusted setup requires an external snarkjs MPC ceremony; in-repo setup is dev-only and flag-gated) |
 | Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16BLS12381TxOutRefBindingVerifier`) |
-| PlonK BLS12-381 — pure Java prove + verify, `.ptau`/`.zkey` import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Beta** |
+| PlonK BLS12-381 — pure Java prove + verify, `.ptau` SRS import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** — universal `.ptau` SRS import (`PtauImporterBLS381`) + pure-Java prove/verify; snarkjs PlonK `.zkey` import is unsupported ([ADR-0066](docs/adr/0066-plonk-bls12381-ptau-and-zkey-import.md)) |
 | PlonK BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Experimental** — full KZG check implemented; labeled testnet trials only |
 | BBS (CFRG draft-10) — verification | `zeroj-bbs` | **Beta** (spec is an IRTF draft, not yet an RFC) |
 | BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — offline/isolated only: no provider (pure Java or blst) has an evidenced side-channel contract ([ADR-0062](docs/adr/0062-bls12381-independent-review-and-remediation.md)) |
@@ -61,7 +61,7 @@ remaining production gates are tracked in
 - **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible. Allocation-lean flat arithmetic, an `mmap`-able proving key, and a streaming trusted setup keep large circuits (millions of constraints) within commodity memory, no JNI (ADR-0029/0033/0034/0035).
 - **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); a faster Groth16 proving backend, bit-identical proofs. The MSM's `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
 - **snarkjs CLI** — external CLI for circom-based circuits
-- **snarkjs key import** — import `.zkey` files, prove with the pure Java prover
+- **snarkjs key & SRS import** — import Groth16 `.zkey` files and streaming BLS12-381 `.ptau` SRS files, prove with the pure Java prover
 
 ### Verify ZK Proofs (Pure Java, Zero Native Deps)
 - **Groth16 BLS12-381** — pure Java verification; optional blst-backed native verifier is also available

@@ -181,7 +181,7 @@ public final class PlonkSetupCache {
         requireFrArrayLength("s1", s1, domainSize);
         requireFrArrayLength("s2", s2, domainSize);
         requireFrArrayLength("s3", s3, domainSize);
-        if (srsG1.length < 2 * domainSize || srsG1Lagrange.length < domainSize) {
+        if (srsG1.length < domainSize + 6 || srsG1Lagrange.length < domainSize) {
             throw new IOException("PlonK proving key SRS is too small for domain size " + domainSize);
         }
     }
