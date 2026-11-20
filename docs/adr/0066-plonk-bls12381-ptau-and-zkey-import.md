@@ -41,11 +41,12 @@ Three coupled defects broke BLS12-381 PlonK ceremony-SRS interoperability agains
   ADR-0022's original bounded-buffer `.ptau` importer buffered up to 64 MiB in memory and verified
   `expectedSha256` before reading headers. Because real BLS12-381 `.ptau` files exceed 64 MiB above
   power ~15, this ADR amends that boundary to a single streaming pass: only minimal section framing
-  and raw requested point bytes (`min(availableG1, maxPoints) * 96 + 384` bytes, capped at
-  `(2^24 + 6) * 96` bytes) are buffered while `DigestInputStream` hashes the entire stream. **Zero
-  elliptic-curve decoding, subgroup checks, or pairing checks run before `expectedSha256` matches**,
-  so a substituted file from a mirror fails on SHA-256 without spending elliptic-curve validation
-  CPU.
+  and incrementally acquired raw point chunks (`<= 768 KiB` per chunk, tracking received bytes up
+  to `min(availableG1, maxPoints) * 96 + 384` bytes, capped at `(2^24 + 6) * 96` bytes) are
+  allocated while `DigestInputStream` hashes the entire stream. Truncated large-power headers fail
+  with `IOException` without pre-allocating the declared size, and **zero elliptic-curve decoding,
+  subgroup checks, or pairing checks run before `expectedSha256` matches**, so a substituted file
+  from a mirror fails on SHA-256 without spending elliptic-curve validation CPU.
 - **Ceremony trust:** SRS soundness still depends on at least one honest phase-1 ceremony
   participant; `PtauImporterBLS381` verifies algebraic structure and optional SHA-256 pinning, not
   ceremony provenance.
@@ -141,11 +142,13 @@ sequentially without buffering the entire file:
   `[domainSize + 6, 2 * domainSize)` that were previously rejected. Forward compatibility note:
   proving keys or setup caches built from fewer than `2 * domainSize` G1 powers will be rejected by
   earlier ZeroJ releases that required `2 * domainSize`.
-- **Unsatisfying witnesses in `PlonKProverBLS381.prove`:** Because `t(X)` is now checked for exact
-  divisibility (`deg(t) <= 3n + 5`, matching `snarkjs@0.7.6`), proving with a witness that does not
-  satisfy the PlonK constraints now fails fast with `IllegalStateException` instead of producing an
-  unverifiable proof. Downstream negative tests expecting `verify == false` from a bad witness
-  should expect the prover exception or tamper with an honest proof/public input.
+- **Quotient degree check in `PlonKProverBLS381.prove`:** Because `t(X)` is now checked for
+  `deg(t) <= 3n + 5` (matching `snarkjs@0.7.6` `plonk_prove.js:649-651`), proving with an
+  unsatisfying witness may now fail fast with `IllegalStateException` when the interpolated
+  quotient polynomial has non-zero coefficients above `3n + 5`, rather than always emitting an
+  unverifiable proof. This degree check is a consistency guard, not a complete witness-satisfaction
+  check; downstream negative tests expecting `verify == false` should tamper with an honest proof
+  or public input.
 
 ## Milestones
 

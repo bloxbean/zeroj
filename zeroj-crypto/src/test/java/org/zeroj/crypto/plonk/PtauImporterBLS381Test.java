@@ -237,6 +237,23 @@ class PtauImporterBLS381Test {
     }
 
     @Test
+    void importPtau_truncatedLargePowerHeader_failsWithIOExceptionWithoutOom() throws IOException {
+        // 96-byte input claiming power=23 and (2^24 - 1)*96 bytes (~1.5 GiB) in Section 2 with 0 payload bytes.
+        // Incremental chunked reads must reject immediately on EOF without pre-allocating ~1.5 GiB.
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(new byte[]{'p', 't', 'a', 'u'});
+        out.write(leInt(1));
+        out.write(leInt(3));
+        writeSection(out, 1, buildValidSection1(23, 23));
+        out.write(leInt(2));
+        out.write(leLong(((1L << 24) - 1L) * 96L)); // declared ~1.5 GiB, 0 bytes follow
+
+        IOException ex = assertThrows(IOException.class,
+                () -> PtauImporterBLS381.importPtau(new ByteArrayInputStream(out.toByteArray())));
+        assertTrue(ex.getMessage().contains("Truncated"), ex.getMessage());
+    }
+
+    @Test
     void importPtau_rejectsDuplicateSectionsWithValidFirstHeader() throws IOException {
         byte[] validSec1 = buildValidSection1(2, 2);
         ByteArrayOutputStream out = new ByteArrayOutputStream();

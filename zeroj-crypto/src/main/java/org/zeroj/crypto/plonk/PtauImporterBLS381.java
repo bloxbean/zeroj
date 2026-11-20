@@ -21,8 +21,10 @@ import java.nio.ByteOrder;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -56,6 +58,8 @@ public final class PtauImporterBLS381 {
      * ({@code 2^24}) plus the 6 blinding powers required by {@code T3} ({@code 2^24 + 6}).
      */
     static final int MAX_IMPORT_POINTS = (1 << 24) + 6;
+    /** Chunk size for incremental G1 raw reads (8,192 points = 768 KiB, exact multiple of 96B). */
+    private static final int G1_CHUNK_POINTS = 8192;
     private static final int SECTION1_LEN = 4 + 48 + 4 + 4; // n8 + prime(48) + power + ceremonyPower
     private static final int G1_LEM_BYTES = 96;
     private static final int G2_LEM_BYTES = 192;
@@ -129,7 +133,7 @@ public final class PtauImporterBLS381 {
         boolean hasHeader = false;
         int power = -1;
         int nG1 = -1;
-        byte[] rawG1 = null;
+        List<byte[]> rawG1Chunks = null;
         byte[] rawG2 = null;
         byte[] skipScratch = new byte[8192];
 
@@ -182,7 +186,7 @@ public final class PtauImporterBLS381 {
                             + expectedSize + " bytes for power " + power + ", got " + ssize);
                 }
                 nG1 = resolvedG1Count(availableG1, maxPoints);
-                rawG1 = readExact(stream, nG1 * G1_LEM_BYTES, "BLS12-381 .ptau G1 points");
+                rawG1Chunks = readG1ChunksIncrementally(stream, nG1);
                 long remainingBytes = (availableG1 - nG1) * G1_LEM_BYTES;
                 skipExact(stream, remainingBytes, skipScratch, ".ptau section 2 trailing G1 points");
             } else if (stype == 3) {
@@ -209,7 +213,7 @@ public final class PtauImporterBLS381 {
         if (!hasHeader) {
             throw new IOException("Missing .ptau section: 1");
         }
-        if (rawG1 == null) {
+        if (rawG1Chunks == null) {
             throw new IOException("Missing .ptau section: 2");
         }
         if (rawG2 == null) {
@@ -225,8 +229,15 @@ public final class PtauImporterBLS381 {
         }
 
         AffineG1[] tauG1 = new AffineG1[nG1];
-        for (int i = 0; i < nG1; i++) {
-            tauG1[i] = decodeSrsG1(rawG1, i * G1_LEM_BYTES, i);
+        int pointIndex = 0;
+        for (int c = 0; c < rawG1Chunks.size(); c++) {
+            byte[] chunk = rawG1Chunks.get(c);
+            rawG1Chunks.set(c, null); // release raw chunk as soon as decoded
+            int chunkPoints = chunk.length / G1_LEM_BYTES;
+            for (int j = 0; j < chunkPoints; j++) {
+                tauG1[pointIndex] = decodeSrsG1(chunk, j * G1_LEM_BYTES, pointIndex);
+                pointIndex++;
+            }
         }
         AffineG2[] tauG2 = new AffineG2[2];
         for (int i = 0; i < 2; i++) {
@@ -345,6 +356,20 @@ public final class PtauImporterBLS381 {
             be[len - 1 - i] = buf[off + i];
         }
         return new BigInteger(1, be);
+    }
+
+    private static List<byte[]> readG1ChunksIncrementally(InputStream stream, int nG1) throws IOException {
+        // Allocate in <= 768 KiB chunks as bytes actually arrive so a truncated header claiming a
+        // huge power (e.g. power=23 with 0 payload bytes) throws IOException without OOM.
+        List<byte[]> chunks = new ArrayList<>();
+        int remainingPoints = nG1;
+        while (remainingPoints > 0) {
+            int batchPoints = Math.min(remainingPoints, G1_CHUNK_POINTS);
+            byte[] chunk = readExact(stream, batchPoints * G1_LEM_BYTES, "BLS12-381 .ptau G1 points");
+            chunks.add(chunk);
+            remainingPoints -= batchPoints;
+        }
+        return chunks;
     }
 
     private static byte[] readExact(InputStream stream, int len, String label) throws IOException {
