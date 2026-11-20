@@ -59,6 +59,15 @@ constrain anything.
 preimage and Merkle proof forgery) and is not circomlib-compatible. Use `Poseidon` / `ZkPoseidon`
 with `PoseidonParamsBLS12_381T3.INSTANCE` instead.
 
+:::caution[Migrating an existing MiMC deployment]
+Upgrading ZeroJ adds compile-time deprecation warnings, but any existing MiMC commitments, Merkle
+roots, compiled circuits, and verification keys remain bound to the broken relation. To migrate:
+(1) recompute commitments and Merkle roots from trusted source data with BLS12-381 Poseidon
+(`PoseidonParamsBLS12_381T3.INSTANCE`), (2) recompile the circuit, (3) regenerate circuit-specific
+proving and verifying keys (including a new Groth16 phase-2 ceremony where applicable), and
+(4) retire acceptance under the old MiMC verification key.
+:::
+
 ## Merkle membership
 
 `ZkMerkle` proves that a leaf sits under a public root. For Cardano, use the

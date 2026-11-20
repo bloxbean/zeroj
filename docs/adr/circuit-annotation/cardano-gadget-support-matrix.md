@@ -190,18 +190,25 @@ The verifier rejects empty `IC` lists and any mismatch where
 Generated fixed-count validators remain a possible future optimization if
 budget-critical circuits need lower script cost.
 
-### MiMC Is BN254-Only in the Circuit Library
+### MiMC Is Deprecated for Removal (Insecure Invertible Bijection)
 
-The current `MiMC`, `SignalMiMC`, `ZkMiMC`, and `MiMCSponge` path is BN254-only.
-`MiMC.hash(...)` calls `api.requireField(FieldConfig.BN254)`.
+The legacy `MiMC`, `SignalMiMC`, `ZkMiMC`, `MiMCSponge`, and `ZkMerkle.HashType.MIMC`
+APIs are **deprecated for removal (`@Deprecated(forRemoval = true)`)** and must not be
+used in new or existing circuits. `MiMC.hash(...)` computes a 91-round keyed bijection
+on BN254 without Miyaguchi–Preneel / Davies–Meyer feed-forward (allowing trivial
+preimage, collision, and Merkle-proof forgery), derives round constants with SHA-256
+rather than Keccak-256, and is not circomlib-compatible.
 
-This is not a problem for off-chain BN254 circuits, but it is not a good default
-for Cardano. Cardano-facing examples should use BLS12-381 Poseidon instead.
+**Existing-deployment migration:** upgrading ZeroJ only emits compile-time deprecation
+warnings — existing MiMC commitments, Merkle roots, compiled circuits, and verification
+keys remain usable under the broken relation. Deployments that ever used MiMC must:
 
-Existing examples that compute MiMC with a BLS12-381 prime outside the circuit
-should be treated as legacy/test code that needs migration or clarification.
-The in-circuit gadget now correctly prevents compiling that path as a
-BLS12-381 circuit.
+1. Recompute all commitments and Merkle roots from trusted source data using BLS12-381
+   Poseidon (`PoseidonParamsBLS12_381T3.INSTANCE`).
+2. Recompile the circuit with `Poseidon` / `ZkPoseidon` / `ZkMerkle.*Poseidon(...)`.
+3. Regenerate circuit-specific proving and verifying keys (including a new Groth16
+   phase-2 ceremony where applicable).
+4. Retire acceptance under the old MiMC verification key.
 
 ### Poseidon Defaults Are BN254 for Back Compatibility
 

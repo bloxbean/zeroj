@@ -245,6 +245,10 @@ Curve and parameter guidance:
   `ZkMiMC`, and `ZkMerkle.HashType.MIMC` are deprecated for removal because `MiMC.hash`
   computes an invertible keyed bijection without feed-forward (not a collision-resistant
   hash). Do not use; use Poseidon with explicit `PoseidonParamsBLS12_381T3.INSTANCE`.
+  *Migrating existing MiMC deployments:* upgrading only adds compile-time deprecation
+  warnings; recompute commitments and Merkle roots from trusted source data, recompile
+  the circuit with BLS12-381 Poseidon, regenerate circuit-specific keys (including a new
+  Groth16 phase-2 ceremony where applicable), and retire acceptance under the old VK.
 - **Poseidon** — `ZkPoseidonN` requires explicit Poseidon params and is the
   symbolic path for folded multi-input commitments. The no-params Poseidon
   helpers are BN254-oriented for backward compatibility.

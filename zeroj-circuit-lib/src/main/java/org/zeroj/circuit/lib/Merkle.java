@@ -2,12 +2,15 @@ package org.zeroj.circuit.lib;
 
 import org.zeroj.circuit.CircuitAPI;
 import org.zeroj.circuit.Variable;
+import org.zeroj.circuit.lib.poseidon.PoseidonParams;
+import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * Merkle tree proof verification circuit.
  *
  * <p>Parameterized by hash function — use a cryptographically sound 2-to-1 hash such as
- * {@link Poseidon#hash(CircuitAPI, Variable, Variable)} (BLS12-381).</p>
+ * {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} with
+ * {@link PoseidonParamsBLS12_381T3#INSTANCE} on BLS12-381.</p>
  */
 public final class Merkle {
 

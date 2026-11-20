@@ -3,6 +3,8 @@ package org.zeroj.circuit.lib;
 import org.zeroj.circuit.CircuitAPI;
 import org.zeroj.circuit.FieldConfig;
 import org.zeroj.circuit.Variable;
+import org.zeroj.circuit.lib.poseidon.PoseidonParams;
+import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -20,10 +22,13 @@ import java.security.NoSuchAlgorithmException;
  * ({@code "mimc_round_" + round}), not Keccak-256, and this gadget is not compatible with
  * circomlib.</p>
  *
- * <p>Use {@link Poseidon} (BLS12-381) instead.</p>
+ * <p>Use {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} with
+ * {@link PoseidonParamsBLS12_381T3#INSTANCE} on BLS12-381 instead.</p>
  *
  * @deprecated Scheduled for removal because this construction is an invertible keyed bijection
- *             rather than a one-way hash function. Use {@link Poseidon} on BLS12-381 instead.
+ *             rather than a one-way hash function. Use
+ *             {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} with
+ *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
  */
 @Deprecated(forRemoval = true)
 public final class MiMC {
@@ -40,7 +45,9 @@ public final class MiMC {
      * @param left  first input
      * @param right second input (used as key)
      * @return bijection output (trivially invertible in {@code left})
-     * @deprecated Scheduled for removal. Use {@link Poseidon#hash(CircuitAPI, Variable, Variable)} instead.
+     * @deprecated Scheduled for removal. Use
+     *             {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} with
+     *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
      */
     @Deprecated(forRemoval = true)
     public static Variable hash(CircuitAPI api, Variable left, Variable right) {

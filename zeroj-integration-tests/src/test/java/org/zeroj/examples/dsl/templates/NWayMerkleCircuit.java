@@ -30,17 +30,27 @@ import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
  * more flexible than Circom templates which only support integer parameters.</p>
  *
  * @param depth   tree depth (number of sibling levels)
- * @param hashFn  hash function to use (MiMC, Poseidon, or any 2-to-1 hash)
+ * @param hashFn  hash function to use (use {@link HashType#POSEIDON} with BLS12-381;
+ *                {@link HashType#MIMC} is retained solely as a legacy regression fixture)
  */
 public class NWayMerkleCircuit implements CircuitSpec {
 
     /**
-     * Supported hash functions for Merkle nodes.
+     * Hash function selector for the parameterized Merkle template fixture.
      * <p>
-     * `MIMC` is the BN254/off-chain path. `POSEIDON` uses explicit BLS12-381
-     * params and is the Cardano-oriented path.
+     * {@code POSEIDON} uses explicit BLS12-381 params and is the Cardano-oriented path.
+     * {@code MIMC} is retained <b>only as a legacy BN254 regression fixture</b> (exercising the
+     * deprecated invertible {@code SignalMiMC} gadget) and must not be used in real circuits.
      */
-    public enum HashType { MIMC, POSEIDON }
+    public enum HashType {
+        /**
+         * @deprecated Legacy regression fixture only — delegates to the deprecated, invertible
+         *             {@code SignalMiMC} gadget. Use {@link #POSEIDON} instead.
+         */
+        @Deprecated(forRemoval = true)
+        MIMC,
+        POSEIDON
+    }
 
     private final int depth;
     private final HashType hashType;

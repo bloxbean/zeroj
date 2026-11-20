@@ -4,8 +4,8 @@ import org.zeroj.circuit.CircuitAPI;
 import org.zeroj.circuit.Signal;
 import org.zeroj.circuit.SignalBuilder;
 import org.zeroj.circuit.Variable;
-
-import java.math.BigInteger;
+import org.zeroj.circuit.lib.poseidon.PoseidonParams;
+import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * <b>DEPRECATED FOR REMOVAL — INSECURE — DO NOT USE.</b>
@@ -15,10 +15,15 @@ import java.math.BigInteger;
  * <b>It is NOT compatible with {@code iden3/circomlib} {@code MiMCSponge}</b> and should not be
  * used for any cryptographic purpose.</p>
  *
- * <p>Use {@link Poseidon} (or {@link PoseidonN} for fixed-arity inputs) on BLS12-381 instead.</p>
+ * <p>Use {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} (or
+ * {@link PoseidonN#hash(CircuitAPI, PoseidonParams, Variable[])} for fixed-arity inputs) with
+ * {@link PoseidonParamsBLS12_381T3#INSTANCE} on BLS12-381 instead.</p>
  *
  * @deprecated Scheduled for removal. Inherits the broken {@link MiMC} construction and is not
- *             circomlib-compatible. Use {@link Poseidon} on BLS12-381 instead.
+ *             circomlib-compatible. Use
+ *             {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} or
+ *             {@link PoseidonN#hash(CircuitAPI, PoseidonParams, Variable[])} with
+ *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
  */
 @Deprecated(forRemoval = true)
 @SuppressWarnings("removal")
@@ -27,7 +32,10 @@ public final class MiMCSponge {
     private MiMCSponge() {}
 
     /**
-     * @deprecated Scheduled for removal. Use {@link Poseidon} on BLS12-381 instead.
+     * @deprecated Scheduled for removal. Use
+     *             {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} or
+     *             {@link PoseidonN#hash(CircuitAPI, PoseidonParams, Variable[])} with
+     *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
      */
     @Deprecated(forRemoval = true)
     public static Variable hash(CircuitAPI api, Variable[] inputs) {
@@ -35,7 +43,10 @@ public final class MiMCSponge {
     }
 
     /**
-     * @deprecated Scheduled for removal. Use {@link Poseidon} on BLS12-381 instead.
+     * @deprecated Scheduled for removal. Use
+     *             {@link Poseidon#hash(CircuitAPI, PoseidonParams, Variable, Variable)} or
+     *             {@link PoseidonN#hash(CircuitAPI, PoseidonParams, Variable[])} with
+     *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
      */
     @Deprecated(forRemoval = true)
     public static Variable[] hashMulti(CircuitAPI api, Variable[] inputs, int nOutputs) {
@@ -71,7 +82,11 @@ public final class MiMCSponge {
 
     // --- Signal API wrappers ---
 
-    /** @deprecated Scheduled for removal. Use {@link SignalPoseidon} instead. */
+    /**
+     * @deprecated Scheduled for removal. Use
+     *             {@link SignalPoseidon#hash(SignalBuilder, PoseidonParams, Signal, Signal)} with
+     *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
+     */
     @Deprecated(forRemoval = true)
     public static Signal hash(SignalBuilder c, Signal[] inputs) {
         Variable[] vars = new Variable[inputs.length];
@@ -79,7 +94,11 @@ public final class MiMCSponge {
         return c.wrap(hash(c.api(), vars));
     }
 
-    /** @deprecated Scheduled for removal. Use {@link SignalPoseidon} instead. */
+    /**
+     * @deprecated Scheduled for removal. Use
+     *             {@link SignalPoseidon#hash(SignalBuilder, PoseidonParams, Signal, Signal)} with
+     *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
+     */
     @Deprecated(forRemoval = true)
     public static Signal[] hashMulti(SignalBuilder c, Signal[] inputs, int nOutputs) {
         Variable[] vars = new Variable[inputs.length];

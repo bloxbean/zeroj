@@ -1,18 +1,23 @@
 package org.zeroj.circuit.lib;
 
+import org.zeroj.circuit.FieldConfig;
 import org.zeroj.circuit.Signal;
 import org.zeroj.circuit.SignalBuilder;
-import org.zeroj.circuit.FieldConfig;
+import org.zeroj.circuit.lib.poseidon.PoseidonParams;
+import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 /**
  * <b>DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.</b>
  *
  * <p>Signal API copy of {@link MiMC}: computes an invertible keyed bijection {@code E_right(left)}
  * without feed-forward on BN254. Preimages and Merkle membership proofs are trivially forgeable.
- * Use {@link SignalPoseidon} on BLS12-381 instead.</p>
+ * Use {@link SignalPoseidon#hash(SignalBuilder, PoseidonParams, Signal, Signal)} with
+ * {@link PoseidonParamsBLS12_381T3#INSTANCE} on BLS12-381 instead.</p>
  *
  * @deprecated Scheduled for removal because the underlying permutation omits feed-forward and is
- *             trivially invertible. Use {@link SignalPoseidon} instead.
+ *             trivially invertible. Use
+ *             {@link SignalPoseidon#hash(SignalBuilder, PoseidonParams, Signal, Signal)} with
+ *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
  */
 @Deprecated(forRemoval = true)
 @SuppressWarnings("removal")
@@ -25,7 +30,9 @@ public final class SignalMiMC {
     /**
      * <b>INSECURE:</b> Invertible MiMC-7 keyed bijection on BN254. Do not use.
      *
-     * @deprecated Scheduled for removal. Use {@link SignalPoseidon#hash(SignalBuilder, Signal, Signal)} instead.
+     * @deprecated Scheduled for removal. Use
+     *             {@link SignalPoseidon#hash(SignalBuilder, PoseidonParams, Signal, Signal)} with
+     *             {@link PoseidonParamsBLS12_381T3#INSTANCE} instead.
      */
     @Deprecated(forRemoval = true)
     public static Signal hash(SignalBuilder c, Signal left, Signal right) {

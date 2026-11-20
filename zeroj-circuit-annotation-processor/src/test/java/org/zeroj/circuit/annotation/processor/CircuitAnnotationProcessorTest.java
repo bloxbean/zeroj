@@ -388,6 +388,7 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void parameterizedMerkleMembershipGeneratesBuildWithCircuitParams() throws Exception {
         var compilation = compile("test.MerkleMembership", """
                 package test;
