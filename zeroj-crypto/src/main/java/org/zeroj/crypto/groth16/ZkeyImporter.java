@@ -269,20 +269,21 @@ public final class ZkeyImporter {
     // --- .wtns witness file parsing ---
 
     private static final byte[] WTNS_MAGIC = {0x77, 0x74, 0x6e, 0x73}; // "wtns"
+    private static final int MAX_WTNS_VERSION = 2; // matches snarkjs 0.7.6 src/wtns_utils.js readBinFile(fd, "wtns", 2)
     private static final int MAX_WTNS_BYTES = 128 * 1024 * 1024;
     private static final int MAX_WTNS_SECTIONS = 16;
     private static final int MAX_WITNESS_VALUES = 1 << 22;
     private static final BigInteger BN254_FR = MontFr254.modulus();
 
     /**
-     * Parse a legacy BN254 snarkjs {@code .wtns} binary witness file.
+     * Parse a legacy BN254 snarkjs {@code .wtns} binary witness file (versions {@code 1..2}).
      *
      * <p>Requires {@link LegacyCurvePolicy#requireLegacyBn254Enabled()} (disabled by default).</p>
      *
      * @param input the {@code .wtns} file contents
      * @return canonical BN254 witness vector in {@code [0, Fr)}
      * @throws IllegalStateException if legacy BN254 support is not explicitly enabled
-     * @throws IOException if the file format, prime, section bounds, or witness scalars are invalid
+     * @throws IOException if the file format, version, prime, section bounds, or witness scalars are invalid
      */
     public static BigInteger[] importWtns(InputStream input) throws IOException {
         LegacyCurvePolicy.requireLegacyBn254Enabled();
@@ -301,8 +302,8 @@ public final class ZkeyImporter {
 
         int version = buf.getInt();
         int numSections = buf.getInt();
-        if (version <= 0) {
-            throw new IOException("Invalid .wtns version: " + version);
+        if (version < 1 || version > MAX_WTNS_VERSION) {
+            throw new IOException("Unsupported .wtns version: " + version + " (supported: 1.." + MAX_WTNS_VERSION + ")");
         }
         if (numSections <= 0 || numSections > MAX_WTNS_SECTIONS) {
             throw new IOException("Invalid .wtns section count: " + numSections);

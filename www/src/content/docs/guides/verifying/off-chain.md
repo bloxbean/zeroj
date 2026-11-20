@@ -207,7 +207,9 @@ The Groth16 backends fail closed on malformed input before any pairing work:
   `curve()`, `circuitId()`, `material.vkHash()`, and `ByHash` `vkRef()` match the provided
   `VerificationMaterial` (`VK_MISMATCH` on mismatch; `MALFORMED_ENVELOPE` on invalid version,
   unsupported `proofFormat`, or unparseable JSON/CBOR). The Groth16 backends also verify the
-  parsed JSON `protocol` (`"groth16"`) and `curve` (`"bls12-381"`).
+  parsed JSON `protocol` (`"groth16"`) and `curve` (`"bls12-381"`). For BBS, authenticated
+  disclosures are carried inside the canonical CBOR presentation in `proofBytes()`, so
+  `BbsZkVerifier` requires `envelope.publicInputs()` to be empty (`INVALID_PUBLIC_INPUTS` otherwise).
 
 Your application gate must still decide *which* `circuitId` and pinned VK hash an endpoint expects
 (for example, rejecting a valid proof for `circuit-a` on an endpoint that requires `circuit-b`), as

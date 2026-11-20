@@ -18,6 +18,11 @@ import java.util.Objects;
 
 /**
  * ZeroJ verifier adapter for CFRG BBS draft-10 presentations.
+ *
+ * <p>Authenticated BBS disclosures (revealed messages, header, and presentation header) are carried
+ * inside the canonical CBOR presentation in {@code envelope.proofBytes()}, not in the SNARK-oriented
+ * {@code envelope.publicInputs()} field-element vector. Consequently, {@code envelope.publicInputs()}
+ * must be empty.</p>
  */
 public final class BbsZkVerifier implements ZkVerifier {
     private static final BackendDescriptor DESCRIPTOR =
@@ -59,6 +64,11 @@ public final class BbsZkVerifier implements ZkVerifier {
             return VerificationResult.error(
                     VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
                     "Unsupported BBS proof format: " + envelope.proofFormat().get());
+        }
+        if (envelope.publicInputs().size() != 0) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                    "BBS proof envelopes carry disclosures in the CBOR presentation; publicInputs must be empty");
         }
 
         try {

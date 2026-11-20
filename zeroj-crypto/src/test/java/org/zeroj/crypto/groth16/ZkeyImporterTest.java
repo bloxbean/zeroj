@@ -125,15 +125,35 @@ class ZkeyImporterTest {
         byte[] trailing = java.util.Arrays.copyOf(validWtns, validWtns.length + 1);
         assertThrows(IOException.class,
                 () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(trailing)));
+
+        // Supported WTNS version 1 succeeds; version 0 and version 3 (> snarkjs 0.7.6 max 2) rejected
+        byte[] wtnsV1 = buildWtns(1, org.zeroj.crypto.field.MontFr254.modulus(),
+                new BigInteger[]{BigInteger.ONE, BigInteger.valueOf(33)});
+        assertArrayEquals(new BigInteger[]{BigInteger.ONE, BigInteger.valueOf(33)},
+                ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(wtnsV1)));
+
+        byte[] wtnsV0 = buildWtns(0, org.zeroj.crypto.field.MontFr254.modulus(),
+                new BigInteger[]{BigInteger.ONE});
+        assertThrows(IOException.class,
+                () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(wtnsV0)));
+
+        byte[] wtnsV3 = buildWtns(3, org.zeroj.crypto.field.MontFr254.modulus(),
+                new BigInteger[]{BigInteger.ONE});
+        assertThrows(IOException.class,
+                () -> ZkeyImporter.importWtns(new java.io.ByteArrayInputStream(wtnsV3)));
     }
 
     private static byte[] buildWtns(BigInteger prime, BigInteger[] values) {
+        return buildWtns(2, prime, values);
+    }
+
+    private static byte[] buildWtns(int version, BigInteger prime, BigInteger[] values) {
         int sec1Size = 4 + 32 + 4;
         int sec2Size = values.length * 32;
         var buf = java.nio.ByteBuffer.allocate(12 + 12 + sec1Size + 12 + sec2Size)
                 .order(java.nio.ByteOrder.LITTLE_ENDIAN);
         buf.put(new byte[]{'w', 't', 'n', 's'});
-        buf.putInt(2);
+        buf.putInt(version);
         buf.putInt(2);
         // Section 1
         buf.putInt(1);

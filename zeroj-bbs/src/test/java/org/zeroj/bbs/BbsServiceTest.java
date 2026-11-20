@@ -295,6 +295,25 @@ class BbsServiceTest {
                 .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT).build();
         assertEquals(org.zeroj.api.VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
                 verifier.verify(malformedCbor, material).reasonCode().orElse(null));
+
+        // Non-empty publicInputs vector must be rejected on both direct and orchestrated BBS calls
+        ZkProofEnvelope nonEmptyPublicInputs = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS).curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-a")).proofBytes(proofBytes)
+                .publicInputs(new PublicInputs(List.of(java.math.BigInteger.ONE)))
+                .vkRef(new VerificationKeyRef.ByHash(pkHash))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT).build();
+        assertEquals(org.zeroj.api.VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                verifier.verify(nonEmptyPublicInputs, material).reasonCode().orElse(null));
+
+        var registry = org.zeroj.verifier.core.VerifierRegistry.empty();
+        registry.register(verifier);
+        var vkRegistry = new org.zeroj.backend.spi.InMemoryVerificationKeyRegistry();
+        vkRegistry.register(material);
+        var orchestrator = new org.zeroj.verifier.core.VerifierOrchestrator(registry, vkRegistry);
+        assertTrue(orchestrator.verify(matchingHash).proofValid());
+        assertEquals(org.zeroj.api.VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                orchestrator.verify(nonEmptyPublicInputs).reasonCode().orElse(null));
     }
 
     @Test
