@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.zeroj.api.CurveId;
+import org.zeroj.circuit.halo2.Halo2CircuitSystem;
+import org.zeroj.circuit.halo2.Halo2Compiler;
 import org.zeroj.circuit.plonk.PlonKCompiler;
 import org.zeroj.circuit.plonk.PlonKConstraintSystem;
 import org.zeroj.circuit.r1cs.R1CSCompiler;
@@ -29,7 +31,7 @@ class ArrayAccessSoundnessTest {
 
     @ParameterizedTest
     @EnumSource(value = CurveId.class, names = {"BLS12_381", "BN254"})
-    @DisplayName("in-bounds arrayAccess succeeds and satisfies both R1CS and PlonK")
+    @DisplayName("in-bounds arrayAccess succeeds and satisfies R1CS, PlonK, and Halo2")
     void inBoundsArrayAccessSucceeds(CurveId curve) {
         var circuit = CircuitBuilder.create("array-access-in-bounds")
                 .publicVar("expected")
@@ -45,6 +47,7 @@ class ArrayAccessSoundnessTest {
         var field = FieldConfig.forCurve(curve);
         var r1cs = R1CSCompiler.compile(circuit.constraintGraph(), field);
         var plonk = PlonKCompiler.compile(circuit.constraintGraph(), field);
+        var halo2 = Halo2Compiler.compile(circuit.constraintGraph(), field);
 
         long[] expected = {10, 20, 30, 40};
         for (int idx = 0; idx < expected.length; idx++) {
@@ -54,6 +57,7 @@ class ArrayAccessSoundnessTest {
             BigInteger[] witness = circuit.calculateWitness(inputs, curve);
             assertTrue(r1csSatisfied(r1cs, witness), "R1CS must accept valid index=" + idx);
             assertTrue(plonkSatisfied(plonk, witness), "PlonK must accept valid index=" + idx);
+            assertTrue(halo2Satisfied(halo2, witness), "Halo2 must accept valid index=" + idx);
         }
     }
 
@@ -94,30 +98,58 @@ class ArrayAccessSoundnessTest {
 
     @ParameterizedTest
     @EnumSource(value = CurveId.class, names = {"BLS12_381", "BN254"})
-    @DisplayName("raw forged OOB witness is rejected directly by R1CS and PlonK constraint matrices")
+    @DisplayName("forged OOB witnesses for {n, n+1, p-1} fail R1CS, PlonK, and Halo2 while passing arrayAccessOrZero control")
     void forgedOobWitnessFailsConstraintMatricesDirectly(CurveId curve) {
-        var circuit = CircuitBuilder.create("array-access-matrix-check")
+        var strictCircuit = CircuitBuilder.create("array-access-matrix-check")
                 .secretVar("index")
                 .define(api -> {
                     Variable[] arr = {api.constant(7), api.constant(9)};
                     Variable out = api.arrayAccess(arr, api.var("index"));
                     api.assertEqual(out, api.constant(0));
                 });
+        var controlCircuit = CircuitBuilder.create("array-access-or-zero-control")
+                .secretVar("index")
+                .define(api -> {
+                    Variable[] arr = {api.constant(7), api.constant(9)};
+                    Variable out = api.arrayAccessOrZero(arr, api.var("index"));
+                    api.assertEqual(out, api.constant(0));
+                });
 
-        // Construct the exact witness an adversary would produce for index = 2 (OOB) with all
-        // selectors = 0 and output = 0; every gate except the ADR-0065 selectorSum == 1 check
-        // would hold. Verify R1CS and PlonK both reject it.
-        var graph = circuit.constraintGraph();
+        var strictGraph = strictCircuit.constraintGraph();
+        var controlGraph = controlCircuit.constraintGraph();
         var field = FieldConfig.forCurve(curve);
-        var r1cs = R1CSCompiler.compile(graph, field);
-        var plonk = PlonKCompiler.compile(graph, field);
-        BigInteger p = FieldConfig.forCurve(curve).prime();
-        BigInteger[] forged = computeForgedWitnessIgnoringFinalAssert(graph, BigInteger.TWO, p);
+        var strictR1cs = R1CSCompiler.compile(strictGraph, field);
+        var strictPlonk = PlonKCompiler.compile(strictGraph, field);
+        var strictHalo2 = Halo2Compiler.compile(strictGraph, field);
+        var controlR1cs = R1CSCompiler.compile(controlGraph, field);
+        var controlPlonk = PlonKCompiler.compile(controlGraph, field);
+        var controlHalo2 = Halo2Compiler.compile(controlGraph, field);
 
-        assertFalse(r1csSatisfied(r1cs, forged),
-                "R1CS matrix must reject forged OOB witness on " + curve);
-        assertFalse(plonkSatisfied(plonk, forged),
-                "PlonK constraint system must reject forged OOB witness on " + curve);
+        BigInteger p = field.prime();
+        BigInteger[] oobIndices = {
+                BigInteger.valueOf(2),
+                BigInteger.valueOf(3),
+                p.subtract(BigInteger.ONE)
+        };
+        for (BigInteger oob : oobIndices) {
+            BigInteger[] forgedStrict = computeForgedWitnessIgnoringFinalAssert(strictGraph, oob, p);
+            assertFalse(r1csSatisfied(strictR1cs, forgedStrict),
+                    "R1CS matrix must reject forged OOB index=" + oob + " on " + curve);
+            assertFalse(plonkSatisfied(strictPlonk, forgedStrict),
+                    "PlonK constraint system must reject forged OOB index=" + oob + " on " + curve);
+            assertFalse(halo2Satisfied(strictHalo2, forgedStrict),
+                    "Halo2 constraint system must reject forged OOB index=" + oob + " on " + curve);
+
+            // Positive control: the exact same forged OOB assignment satisfies arrayAccessOrZero
+            // on all three backends, proving rejection comes specifically from the ADR-0065 check.
+            BigInteger[] forgedControl = computeForgedWitnessIgnoringFinalAssert(controlGraph, oob, p);
+            assertTrue(r1csSatisfied(controlR1cs, forgedControl),
+                    "R1CS control (arrayAccessOrZero) must accept OOB index=" + oob + " on " + curve);
+            assertTrue(plonkSatisfied(controlPlonk, forgedControl),
+                    "PlonK control (arrayAccessOrZero) must accept OOB index=" + oob + " on " + curve);
+            assertTrue(halo2Satisfied(controlHalo2, forgedControl),
+                    "Halo2 control (arrayAccessOrZero) must accept OOB index=" + oob + " on " + curve);
+        }
     }
 
     @ParameterizedTest
@@ -185,11 +217,36 @@ class ArrayAccessSoundnessTest {
                 escapedApi.get().arrayAccessOrZero(new Variable[]{escapedIndex.get()}, escapedIndex.get()));
     }
 
+    @Test
+    @DisplayName("published Gate.LinComb term lists reject post-build mutation")
+    void linCombTermsAreImmutableAfterGraphConstruction() {
+        var graph = CircuitBuilder.create("lincomb-immutable")
+                .secretVar("index")
+                .secretVar("bit0")
+                .secretVar("bit1")
+                .define(api -> {
+                    api.arrayAccess(new Variable[]{api.constant(10), api.constant(20)}, api.var("index"));
+                    api.fromBinary(new Variable[]{api.var("bit0"), api.var("bit1")});
+                })
+                .constraintGraph();
+
+        List<Gate.LinComb> linCombs = graph.gates().stream()
+                .filter(Gate.LinComb.class::isInstance)
+                .map(Gate.LinComb.class::cast)
+                .toList();
+        assertFalse(linCombs.isEmpty(), "expected LinComb gates from arrayAccess and fromBinary");
+        for (Gate.LinComb linComb : linCombs) {
+            assertThrows(UnsupportedOperationException.class, () -> linComb.terms().clear(),
+                    "Gate.LinComb.terms() must be immutable after graph construction");
+        }
+    }
+
     @ParameterizedTest
     @EnumSource(value = CurveId.class, names = {"BLS12_381", "BN254"})
-    @DisplayName("arrayAccessOrZero preserves opt-in total semantics and costs 1 fewer R1CS row")
+    @DisplayName("arrayAccessOrZero preserves opt-in total semantics and per-backend cost deltas")
     void arrayAccessOrZeroTotalSemanticsAndCost(CurveId curve) {
         BigInteger p = FieldConfig.forCurve(curve).prime();
+        int n = 3;
         var strictCircuit = CircuitBuilder.create("cost-strict")
                 .secretVar("index")
                 .defineSignals(c -> c.arrayAccess(
@@ -210,20 +267,27 @@ class ArrayAccessSoundnessTest {
                         new Signal[]{c.constant(5), c.constant(6), c.constant(7)},
                         c.privateInput("index")));
 
-        int strictRows = strictCircuit.compileR1CS(curve).numConstraints();
-        int totalRows = totalNoAssert.compileR1CS(curve).numConstraints();
-        assertEquals(totalRows + 1, strictRows,
-                "strict arrayAccess must cost exactly 1 additional R1CS constraint");
-
         var field = FieldConfig.forCurve(curve);
+        assertEquals(totalNoAssert.compileR1CS(curve).numConstraints() + 1,
+                strictCircuit.compileR1CS(curve).numConstraints(),
+                "strict arrayAccess must cost +1 R1CS constraint when selector sum is inlined");
+        assertEquals(PlonKCompiler.compile(totalNoAssert.constraintGraph(), field).numGates() + n,
+                PlonKCompiler.compile(strictCircuit.constraintGraph(), field).numGates(),
+                "strict arrayAccess must cost +n PlonK gates");
+        assertEquals(Halo2Compiler.compile(totalNoAssert.constraintGraph(), field).numRows() + n,
+                Halo2Compiler.compile(strictCircuit.constraintGraph(), field).numRows(),
+                "strict arrayAccess must cost +n Halo2 rows");
+
         var r1cs = R1CSCompiler.compile(totalCircuit.constraintGraph(), field);
         var plonk = PlonKCompiler.compile(totalCircuit.constraintGraph(), field);
+        var halo2 = Halo2Compiler.compile(totalCircuit.constraintGraph(), field);
 
         // In-bounds reads return arr[index].
         BigInteger[] inBoundsWitness = totalCircuit.calculateWitness(
                 Map.of("index", List.of(BigInteger.ONE), "expected", List.of(BigInteger.valueOf(6))), curve);
         assertTrue(r1csSatisfied(r1cs, inBoundsWitness));
         assertTrue(plonkSatisfied(plonk, inBoundsWitness));
+        assertTrue(halo2Satisfied(halo2, inBoundsWitness));
 
         // Out-of-bounds reads return 0 explicitly.
         for (BigInteger oob : new BigInteger[]{BigInteger.valueOf(3), p.subtract(BigInteger.ONE)}) {
@@ -231,6 +295,7 @@ class ArrayAccessSoundnessTest {
                     Map.of("index", List.of(oob), "expected", List.of(BigInteger.ZERO)), curve);
             assertTrue(r1csSatisfied(r1cs, oobWitness));
             assertTrue(plonkSatisfied(plonk, oobWitness));
+            assertTrue(halo2Satisfied(halo2, oobWitness));
         }
 
         // Empty array returns 0 under arrayAccessOrZero.
@@ -280,7 +345,7 @@ class ArrayAccessSoundnessTest {
                     }
                 }
                 case Gate.AssertEq ignored -> {
-                    // Intentionally ignored so we can test the compiled R1CS/PlonK matrices directly.
+                    // Intentionally ignored so we can test the compiled R1CS/PlonK/Halo2 matrices directly.
                 }
                 default -> throw new IllegalStateException("Unexpected gate: " + gate);
             }
@@ -322,6 +387,33 @@ class ArrayAccessSoundnessTest {
                     .add(row.qO().multiply(c))
                     .add(row.qM().multiply(a).multiply(b))
                     .add(row.qC())
+                    .mod(p);
+            if (!eval.equals(BigInteger.ZERO)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean halo2Satisfied(Halo2CircuitSystem system, BigInteger[] witness) {
+        BigInteger[] extended = system.extendWitness(witness);
+        BigInteger p = system.fieldConfig().prime();
+        var selectors = system.selectorColumns();
+        var advice = system.adviceColumns();
+        for (int i = 0; i < system.numRows(); i++) {
+            BigInteger ql = selectors.get(0).values()[i];
+            BigInteger qr = selectors.get(1).values()[i];
+            BigInteger qo = selectors.get(2).values()[i];
+            BigInteger qm = selectors.get(3).values()[i];
+            BigInteger qc = selectors.get(4).values()[i];
+            BigInteger a = extended[advice.get(0).wireIndices()[i]];
+            BigInteger b = extended[advice.get(1).wireIndices()[i]];
+            BigInteger c = extended[advice.get(2).wireIndices()[i]];
+            BigInteger eval = ql.multiply(a)
+                    .add(qr.multiply(b))
+                    .add(qo.multiply(c))
+                    .add(qm.multiply(a).multiply(b))
+                    .add(qc)
                     .mod(p);
             if (!eval.equals(BigInteger.ZERO)) {
                 return false;

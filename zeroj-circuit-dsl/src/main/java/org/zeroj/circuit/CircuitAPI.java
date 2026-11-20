@@ -178,9 +178,9 @@ public interface CircuitAPI {
      *
      * <p><b>Soundness warning (ADR-0065):</b> only use this when the caller independently
      * constrains {@code index} on every active row and masks out-of-bounds results on inactive
-     * padding rows (for example, {@code ZkMpf} padding rows that pass {@code queryIndex = 64}
-     * and discard the result via {@code valid.select(...)}). For general dynamic indexing, use
-     * {@link #arrayAccess(Variable[], Variable)}.
+     * padding rows (for example, {@code ZkMpf} padding rows that evaluate the final cursor, which
+     * can be {@code 64}, and discard the result via {@code valid.select(...)}). For general
+     * dynamic indexing, use {@link #arrayAccess(Variable[], Variable)}.
      */
     default Variable arrayAccessOrZero(Variable[] arr, Variable index) {
         Objects.requireNonNull(arr, "arr");
