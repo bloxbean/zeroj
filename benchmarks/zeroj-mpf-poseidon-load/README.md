@@ -39,10 +39,11 @@ RocksDB nodes: it verifies the root and deterministic proofs before and after, c
   --rocksdb-profile=high-throughput"
 ```
 
-The current build uses published CCL `0.8.0-pre5`. A v1 store whose manifest records the
-source-identical `0.8.0-pre5-dev1` predecessor may be reopened without relabelling its provenance.
-This is an exact, one-way exception; every other CCL mismatch still fails closed until separately
-qualified or explicitly migrated.
+The current build uses published CCL `0.8.0-pre8`, which intentionally breaks store-manifest
+compatibility with `0.8.0-pre5` and `0.8.0-pre5-dev1` to deliver CCL's MPF terminal-fork
+verification fix (see the 2026-11-20 addendum to ADR-0042). Older `pre5` / `pre5-dev1` manifests
+fail closed on open; a fresh `0.8.0-pre8` load requires a new `--work-dir`. Every other CCL
+mismatch likewise fails closed until separately qualified or explicitly migrated.
 
 The locally generated Groth16 setup is deliberately insecure and benchmark-only. Use
 `--setup=none` to measure load, CCL proof generation, strict CCL MPF v1 verification, circuit

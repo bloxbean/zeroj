@@ -132,7 +132,10 @@ wire-proof drift requires a separate migration ADR.
 The non-published load tools retain the original CCL version as dataset provenance. They accept
 exactly `0.8.0-pre5-dev1` stores when the running build is `0.8.0-pre5`; the exception is one-way
 and does not accept pre4, a different development build, or any future CCL release. Every later
-dependency change must repeat this qualification or provide an explicit migration.
+dependency change must repeat this qualification or provide an explicit migration. *(Update
+2026-11-20: see the [CCL `0.8.0-pre8` addendum](#addendum-2026-11-20-ccl-080-pre8-and-compact-2-child-mpf-witness-normalization)
+below for the maintainer-approved `0.8.0-pre8` exception, compact 2-child witness normalization,
+and open fresh-5M pre8 qualification gate.)*
 
 ### 2. Retain the full-semantics `ZkMpf` circuit, but relocate it into the MPF module
 
@@ -726,7 +729,7 @@ derived from constrained data.
 | Wrong verification key or operation accepted on-chain | Embed or explicitly allowlist VK identifiers and bind the operation in validator policy |
 | MPF/JMT domain confusion | Structure-specific domains, persistent descriptors, golden vectors, and no root-conversion API |
 | The unreleased `v2` label is mistaken for a supported legacy profile | Document the rename, migrate only benchmark metadata explicitly, and publish only v1 |
-| A CCL upgrade regresses preserved MPF/JMT state | Mandatory five-million-entry reopen/root/proof gate before accepting the pin change; only the source-identical dev1-to-pre5 promotion is allowlisted |
+| A CCL upgrade regresses preserved MPF/JMT state | Mandatory five-million-entry reopen/root/proof gate before accepting the pin change; only the source-identical dev1-to-pre5 promotion is allowlisted *(2026-11-20 maintainer exception for `0.8.0-pre8` and open fresh-5M pre8 gate recorded in the [addendum](#addendum-2026-11-20-ccl-080-pre8-and-compact-2-child-mpf-witness-normalization))* |
 | A small path-bound circuit fails on production data | Complete depth scan or maintained bound, fail-closed overflow, and optional full-bound fallback |
 | Transition circuit disagrees with canonical host updates | Randomized state-machine testing against CCL before/after roots |
 | JMT tombstones are mistaken for absence | Name and document tombstone update as inclusion; use a real non-inclusion primitive for absence |

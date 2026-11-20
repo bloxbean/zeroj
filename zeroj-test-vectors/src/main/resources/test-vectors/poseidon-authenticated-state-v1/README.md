@@ -1,6 +1,6 @@
 # `zeroj-poseidon-authenticated-state-v1` Test Vectors
 
-Self-generated deterministic vectors for the `zeroj-poseidon-mpf-v1` and `zeroj-poseidon-jmt-v1` commitment and wire-proof profiles (governed by [ADR-0042](../../../../../docs/adr/0042-operation-specific-poseidon-mpf-and-jmt-circuits.md) and [`docs/merkle/poseidon-authenticated-state-v1.md`](../../../../../docs/merkle/poseidon-authenticated-state-v1.md)).
+Self-generated deterministic vectors for the `zeroj-poseidon-mpf-v1` and `zeroj-poseidon-jmt-v1` commitment and wire-proof profiles (governed by [ADR-0042](../../../../../../docs/adr/0042-operation-specific-poseidon-mpf-and-jmt-circuits.md) and [`docs/merkle/poseidon-authenticated-state-v1.md`](../../../../../../docs/merkle/poseidon-authenticated-state-v1.md)).
 
 ## Provenance & Tool Versions
 

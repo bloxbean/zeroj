@@ -42,7 +42,7 @@ During internal security review, a **total presentation forgery** was discovered
   - §4.2.4.4 (`proof_to_octets`): requires all serialized proof scalars (`e^`, `r1^`, `r3^`, `m^_j`, `c`) in `[1, r - 1]`.
   - §4.2.4.5 (`octets_to_proof`): step 7 rejects `Identity_G1` on `Abar`, `Bbar`, `D`; step 14 rejects `s_j == 0` or `s_j >= r` for all serialized proof scalars (`e^`, `r1^`, `r3^`, `m^_j`, `c`); step 17 rejects trailing bytes.
 - CIP-0381 (`86b89208`): Plutus V3 BLS12-381 builtins and Zcash compressed point serialization (`0xc0 || 0x00^47` for G1 identity, `0xc0 || 0x00^95` for G2 identity).
-- [ADR-0019](0019-cfrg-bbs-pure-java-and-wasm-providers.md) (off-chain CFRG BBS pure-Java and WASM providers), [ADR-0050](0050-julc-pre17-org-julclang-and-typed-bls.md) (JuLC toolchain upgrades), [ADR-0042](0042-operation-specific-poseidon-mpf-and-jmt-circuits.md) (CCL pin & MPF/JMT circuits), and [ADR-0056](0056-single-decompression-groth16-plutus-v3.md) (single-decompression Plutus V3 verification discipline).
+- [ADR-0019](0019-cfrg-bbs-pure-java-and-wasm-providers.md) (off-chain CFRG BBS pure-Java and WASM providers), [ADR-0050](0050-julc-pre17-org-julclang-and-typed-bls.md) (JuLC toolchain upgrades), [ADR-0042](0042-operation-specific-poseidon-mpf-and-jmt-circuits.md) (CCL pin & MPF/JMT circuits), and [ADR-0056](0056-groth16-onchain-ic-single-decompression.md) (single-decompression Plutus V3 verification discipline).
 - JuLC `v0.1.0-pre22` / Cardano Client Lib `v0.8.0-pre8`.
 
 ## Decision
