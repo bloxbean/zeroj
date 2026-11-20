@@ -20,6 +20,7 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -64,11 +65,15 @@ class AnnotatedPedersenProfilesTest {
                 () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BLS12_381));
 
         // Isolate the fee's range: in = out + 2^32 balances and both commitments are correct, so
-        // only the public fee's 32-bit constraint can reject it.
-        var oversizedFee = transfer(BigInteger.ONE.shiftLeft(32).add(BigInteger.valueOf(990)).longValueExact(),
-                990, 0).fee(BigInteger.ONE.shiftLeft(32));
+        // both the typed Inputs setter (ADR-0068) and the public fee's 32-bit R1CS constraint reject it.
+        var baseOversizedFee = transfer(BigInteger.ONE.shiftLeft(32).add(BigInteger.valueOf(990)).longValueExact(),
+                990, 0);
+        assertThrows(IllegalArgumentException.class,
+                () -> baseOversizedFee.fee(BigInteger.ONE.shiftLeft(32)));
+        var oversizedFeeMap = new HashMap<>(baseOversizedFee.toWitnessMap());
+        oversizedFeeMap.put(AnnotatedConfidentialTransferCircuit.FEE, List.of(BigInteger.ONE.shiftLeft(32)));
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(oversizedFee.toWitnessMap(), CurveId.BLS12_381));
+                () -> circuit.calculateWitness(oversizedFeeMap, CurveId.BLS12_381));
 
         assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
     }
@@ -110,12 +115,16 @@ class AnnotatedPedersenProfilesTest {
                 .add(PedersenVectorBases.valueBase(1).scalarMul(oversizedAsset))
                 .add(PedersenVectorBases.blindingBase().scalarMul(r))
                 .normalized();
-        var tooWide = AnnotatedVectorCommitmentCircuit.inputs()
-                .amount(1).asset(oversizedAsset).blinding(r)
+        assertThrows(IllegalArgumentException.class, () -> AnnotatedVectorCommitmentCircuit.inputs()
+                .amount(1).asset(oversizedAsset));
+        var tooWideMap = new HashMap<>(AnnotatedVectorCommitmentCircuit.inputs()
+                .amount(1).asset(0).blinding(r)
                 .schemaDigest(AnnotatedVectorCommitment.SCHEMA.digest())
-                .u(matching.affineU()).v(matching.affineV());
+                .u(matching.affineU()).v(matching.affineV())
+                .toWitnessMap());
+        tooWideMap.put(AnnotatedVectorCommitmentCircuit.ASSET, List.of(oversizedAsset));
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(tooWide.toWitnessMap(), CurveId.BLS12_381));
+                () -> circuit.calculateWitness(tooWideMap, CurveId.BLS12_381));
 
         assertThrows(IllegalStateException.class, () -> circuit.compileR1CS(CurveId.BN254));
     }

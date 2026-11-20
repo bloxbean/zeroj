@@ -8,9 +8,11 @@ import java.util.*;
  */
 class CircuitAPIImpl implements CircuitAPI {
 
-    // Max bit decomposition: 253 for BN254, safe upper bound for all supported curves.
-    // BN254 ~253.6 bits, BLS12-381 ~254.8 bits, Pallas ~254.9 bits.
-    // We use 253 because it's the tightest constraint (BN254 field order < 2^254).
+    // Max bit decomposition width: 253 bits.
+    // BN254 scalar order r ~ 2^253.57, BLS12-381 r ~ 2^254.85, Pallas r ~ 2^254.99.
+    // 2^bits < p suffices for unique bit decomposition (up to 253 bits on BN254), whereas
+    // difference-underflow checks (lessThan, ZkUInt.sub) require 2^(bits + 1) <= p, i.e. at
+    // most MAX_SAFE_BITS - 1 = 252 bits on BN254 (ADR-0068).
     static final int MAX_SAFE_BITS = 253;
 
     private final List<Gate> gates = new ArrayList<>();
@@ -77,6 +79,7 @@ class CircuitAPIImpl implements CircuitAPI {
         this.nextId = 1;
         gates.add(new Gate.Const(oneWire, BigInteger.ONE));
         constantWireValues.put(oneWire.id(), BigInteger.ONE);
+        booleanWires.add(oneWire.id());
 
         // Public inputs
         for (String name : publicVarNames) {
@@ -357,6 +360,9 @@ class CircuitAPIImpl implements CircuitAPI {
             var out = newIntermediate();
             gates.add(new Gate.Const(out, v));
             constantWireValues.put(out.id(), v);
+            if (BigInteger.ZERO.equals(v) || BigInteger.ONE.equals(v)) {
+                booleanWires.add(out.id());
+            }
             return out;
         });
     }
@@ -462,9 +468,16 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public Variable fromBinary(Variable[] bits) {
-        var terms = new ArrayList<Gate.Term>();
+        requireNotFrozen();
+        Objects.requireNonNull(bits, "bits");
+        if (bits.length == 0 || bits.length > MAX_SAFE_BITS) {
+            throw new IllegalArgumentException(
+                    "fromBinary bits length must be in [1, " + MAX_SAFE_BITS + "], got " + bits.length);
+        }
+        var terms = new ArrayList<Gate.Term>(bits.length);
         BigInteger pow2 = BigInteger.ONE;
-        for (Variable bit : bits) {
+        for (int i = 0; i < bits.length; i++) {
+            Variable bit = Objects.requireNonNull(bits[i], "bits[" + i + "]");
             terms.add(new Gate.Term(pow2, bit));
             pow2 = pow2.shiftLeft(1);
         }
@@ -478,26 +491,41 @@ class CircuitAPIImpl implements CircuitAPI {
 
     @Override
     public Variable xor(Variable a, Variable b) {
-        // a ^ b = a + b - 2*a*b (both must be boolean)
+        // a ^ b = a + b - 2*a*b (operands must be boolean; result is boolean)
+        assertBoolean(a);
+        assertBoolean(b);
         var ab = mul(a, b);
         var twoAb = add(ab, ab);
-        return sub(add(a, b), twoAb);
+        var out = sub(add(a, b), twoAb);
+        booleanWires.add(out.id());
+        return out;
     }
 
     @Override
     public Variable and(Variable a, Variable b) {
-        return mul(a, b);
+        assertBoolean(a);
+        assertBoolean(b);
+        var out = mul(a, b);
+        booleanWires.add(out.id());
+        return out;
     }
 
     @Override
     public Variable or(Variable a, Variable b) {
         // a | b = a + b - a*b
-        return sub(add(a, b), mul(a, b));
+        assertBoolean(a);
+        assertBoolean(b);
+        var out = sub(add(a, b), mul(a, b));
+        booleanWires.add(out.id());
+        return out;
     }
 
     @Override
     public Variable not(Variable a) {
-        return sub(oneWire, a);
+        assertBoolean(a);
+        var out = sub(oneWire, a);
+        booleanWires.add(out.id());
+        return out;
     }
 
     // --- Assertions ---
@@ -540,6 +568,8 @@ class CircuitAPIImpl implements CircuitAPI {
         assertEqual(aTimesInv, sub(oneWire, result));
         var aTimesResult = mul(a, result);
         assertEqual(aTimesResult, constant(0));
+        // Algebraically forces result in {0, 1} for every field element a.
+        booleanWires.add(result.id());
         return result;
     }
 

@@ -2,14 +2,9 @@ package org.zeroj.crypto.plonk;
 
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
-import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
-import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
-import org.zeroj.bls12381.field.Fp;
-import org.zeroj.bls12381.field.Fp2;
 import org.zeroj.bls12381.field.MontFr381;
-import org.zeroj.bls12381.pairing.BLS12381Pairing;
 import org.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import org.zeroj.crypto.poly.FieldFFTBLS381;
 
@@ -94,18 +89,24 @@ public final class PlonKSetupBLS381 {
         MontFr381 k1Fr = MontFr381.fromBigInteger(k1);
         MontFr381 k2Fr = MontFr381.fromBigInteger(k2);
 
+        MontFr381[] omegaPows = new MontFr381[domainSize];
+        omegaPows[0] = MontFr381.ONE;
+        for (int i = 1; i < domainSize; i++) {
+            omegaPows[i] = omegaPows[i - 1].mul(omega);
+        }
+
         for (int i = 0; i < domainSize; i++) {
             // Default: identity permutation
             // Position i in col A -> omega^i
             // Position i in col B -> k1 * omega^i
             // Position i in col C -> k2 * omega^i
-            MontFr381 omegaI = evalOmegaPow(omega, i);
+            MontFr381 omegaI = omegaPows[i];
 
             if (i < numGates) {
                 // sigma_a[i] gives the flattened target: target = row + col * numGates
-                s1[i] = decodeSigmaTarget(sigmaA[i], numGates, omega, k1Fr, k2Fr);
-                s2[i] = decodeSigmaTarget(sigmaB[i], numGates, omega, k1Fr, k2Fr);
-                s3[i] = decodeSigmaTarget(sigmaC[i], numGates, omega, k1Fr, k2Fr);
+                s1[i] = decodeSigmaTarget(sigmaA[i], numGates, omegaPows, k1Fr, k2Fr);
+                s2[i] = decodeSigmaTarget(sigmaB[i], numGates, omegaPows, k1Fr, k2Fr);
+                s3[i] = decodeSigmaTarget(sigmaC[i], numGates, omegaPows, k1Fr, k2Fr);
             } else {
                 // Padding rows: identity permutation
                 s1[i] = omegaI;
@@ -146,10 +147,10 @@ public final class PlonKSetupBLS381 {
 
     /** Decode a sigma permutation target from flattened index. */
     private static MontFr381 decodeSigmaTarget(int flatIdx, int numGates,
-                                                 MontFr381 omega, MontFr381 k1, MontFr381 k2) {
+                                                 MontFr381[] omegaPows, MontFr381 k1, MontFr381 k2) {
         int row = flatIdx % numGates;
         int col = flatIdx / numGates;
-        MontFr381 omegaRow = evalOmegaPow(omega, row);
+        MontFr381 omegaRow = omegaPows[row];
         return switch (col) {
             case 0 -> omegaRow;                 // column A: omega^row
             case 1 -> k1.mul(omegaRow);          // column B: k1 * omega^row
@@ -232,12 +233,15 @@ public final class PlonKSetupBLS381 {
         if (tauG2 == null || tauG2.length < 2) {
             throw new IllegalArgumentException("BLS12-381 SRS G2 length must be at least 2");
         }
+        if (SrsConsistencyBLS381.isUnmodifiedVerified(srs, requiredG1)) {
+            return;
+        }
         for (int i = 0; i < requiredG1; i++) {
             requireValidSrsG1(tauG1[i], "tauG1[" + i + "]");
         }
         requireValidSrsG2(tauG2[0], "tauG2[0]");
         requireValidSrsG2(tauG2[1], "tauG2[1]");
-        validateSrsConsistency(tauG1, tauG2, requiredG1);
+        SrsConsistencyBLS381.verifyConsistency(tauG1, tauG2, requiredG1, "BLS12-381");
     }
 
     private static void requireScalar(BigInteger value, String label) {
@@ -250,7 +254,7 @@ public final class PlonKSetupBLS381 {
         if (point == null || point.isInfinity() || !point.isOnCurve()) {
             throw new IllegalArgumentException(label + " must be a non-infinity BLS12-381 G1 point");
         }
-        G1Point p = new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
+        G1Point p = SrsConsistencyBLS381.toG1(point);
         if (!p.isValid()) {
             throw new IllegalArgumentException(label + " must be in the BLS12-381 G1 subgroup");
         }
@@ -260,47 +264,9 @@ public final class PlonKSetupBLS381 {
         if (point == null || point.isInfinity() || !point.isOnCurve()) {
             throw new IllegalArgumentException(label + " must be a non-infinity BLS12-381 G2 point");
         }
-        G2Point p = new G2Point(
-                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
-                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
+        G2Point p = SrsConsistencyBLS381.toG2(point);
         if (!p.isValid()) {
             throw new IllegalArgumentException(label + " must be in the BLS12-381 G2 subgroup");
         }
-    }
-
-    private static void validateSrsConsistency(AffineG1[] tauG1, AffineG2[] tauG2, int count) {
-        if (!tauG1[0].equals(JacobianG1BLS381.GENERATOR.toAffine())) {
-            throw new IllegalArgumentException("BLS12-381 SRS G1 generator anchor mismatch");
-        }
-        if (!tauG2[0].equals(JacobianG2BLS381.GENERATOR.toAffine())) {
-            throw new IllegalArgumentException("BLS12-381 SRS G2 generator anchor mismatch");
-        }
-        G2Point g2 = toG2(tauG2[0]);
-        G2Point tauG2Point = toG2(tauG2[1]);
-        for (int i = 1; i < count; i++) {
-            boolean consistent = BLS12381Pairing.pairingCheck(
-                    new G1Point[]{toG1(tauG1[i]), toG1(tauG1[i - 1]).negate()},
-                    new G2Point[]{g2, tauG2Point});
-            if (!consistent) {
-                throw new IllegalArgumentException("BLS12-381 SRS powers are inconsistent at G1 index " + i);
-            }
-        }
-    }
-
-    private static G1Point toG1(AffineG1 point) {
-        return new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
-    }
-
-    private static G2Point toG2(AffineG2 point) {
-        return new G2Point(
-                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
-                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
-    }
-
-    private static MontFr381 evalOmegaPow(MontFr381 omega, int exp) {
-        if (exp == 0) return MontFr381.ONE;
-        MontFr381 result = omega;
-        for (int i = 1; i < exp; i++) result = result.mul(omega);
-        return result;
     }
 }
