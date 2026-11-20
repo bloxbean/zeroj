@@ -826,7 +826,12 @@ public final class ZkMpf {
         }
 
         ZkUInt at(ZkContext zk, Signal index) {
-            return ZkUInt.wrap(zk, zk.builder().arrayAccess(signals, index), 4);
+            // ADR-0065: every active lookup in ZkMpf already constrains index <= 63
+            // (prepareBranchProof:249 and computeRoot:323 lteConst on active rows;
+            // differentLeafRoot:131 and verifyDifferentLeafInsertion:168 lteConst on
+            // divergenceIndex), while inactive padding rows evaluate the final cursor (which can
+            // be 64) and discard the result via valid.select.
+            return ZkUInt.wrap(zk, zk.builder().arrayAccessOrZero(signals, index), 4);
         }
     }
 }

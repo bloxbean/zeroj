@@ -2,6 +2,7 @@ package org.zeroj.circuit;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * An operation (gate) in the arithmetic circuit.
@@ -30,7 +31,12 @@ public sealed interface Gate {
     record Select(Variable output, Variable cond, Variable ifTrue, Variable ifFalse) implements Gate {}
 
     /** Linear combination: output = sum(coefficient_i * variable_i). Free in R1CS. */
-    record LinComb(Variable output, List<Term> terms) implements Gate {}
+    record LinComb(Variable output, List<Term> terms) implements Gate {
+        public LinComb {
+            Objects.requireNonNull(output, "output");
+            terms = List.copyOf(Objects.requireNonNull(terms, "terms"));
+        }
+    }
 
     /** A term in a linear combination. */
     record Term(BigInteger coefficient, Variable variable) {}

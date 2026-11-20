@@ -1,7 +1,9 @@
 # ADR-0010: Java DSL for ZK Circuit Definition
 
 ## Status
-Updated by ADR-0020
+Updated by ADR-0020. **Amended by [ADR-0065](0065-array-access-bounds-soundness.md)** (2026-11-20):
+`CircuitAPI.arrayAccess` now rejects empty arrays and constrains `0 <= index < arr.length`
+(`sum_i isEqual(index, i) == 1`), with `arrayAccessOrZero` added as the explicit total-function opt-in.
 
 ## Date
 2026-03-28

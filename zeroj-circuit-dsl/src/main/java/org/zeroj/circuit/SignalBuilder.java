@@ -1,6 +1,7 @@
 package org.zeroj.circuit;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
  * Builder for the {@link Signal}-based circuit API.
@@ -82,11 +83,37 @@ public final class SignalBuilder {
 
     // --- Array access ---
 
-    /** Access arr[index] via MUX tree. */
+    /**
+     * Access {@code arr[index]} via MUX scan, constraining {@code 0 <= index < arr.length}
+     * (ADR-0065).
+     *
+     * @throws IllegalArgumentException if {@code arr} is empty
+     */
     public Signal arrayAccess(Signal[] arr, Signal index) {
+        Objects.requireNonNull(arr, "arr");
+        Objects.requireNonNull(index, "index");
         var vars = new Variable[arr.length];
-        for (int i = 0; i < arr.length; i++) vars[i] = arr[i].variable();
+        for (int i = 0; i < arr.length; i++) {
+            vars[i] = Objects.requireNonNull(arr[i], "arr[" + i + "]").variable();
+        }
         return new Signal(api.arrayAccess(vars, index.variable()), api);
+    }
+
+    /**
+     * Total-function lookup returning {@code arr[index]} when {@code 0 <= index < arr.length} and
+     * {@code 0} otherwise, without emitting an index bounds constraint (ADR-0065).
+     *
+     * <p>Only use this when the caller independently constrains {@code index} on active rows and
+     * masks inactive padding rows; otherwise use {@link #arrayAccess(Signal[], Signal)}.</p>
+     */
+    public Signal arrayAccessOrZero(Signal[] arr, Signal index) {
+        Objects.requireNonNull(arr, "arr");
+        Objects.requireNonNull(index, "index");
+        var vars = new Variable[arr.length];
+        for (int i = 0; i < arr.length; i++) {
+            vars[i] = Objects.requireNonNull(arr[i], "arr[" + i + "]").variable();
+        }
+        return new Signal(api.arrayAccessOrZero(vars, index.variable()), api);
     }
 
     /** Wrap a Variable as a Signal (for stdlib interop). */

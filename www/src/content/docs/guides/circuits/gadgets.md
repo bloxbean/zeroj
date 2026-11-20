@@ -124,7 +124,7 @@ makes honest witnesses fail.
 | Decompose or recompose bits | `SignalBinary.num2Bits` / `bits2Num`, `Binary.*`; `ZkBits` for fixed bit-vector inputs |
 | Bitwise logic | `SignalBinary.bitAnd/bitOr/bitXor`, `rotateLeft` (a free re-indexing) |
 | Choose between values | `ZkBool.select(a, b)`; `Mux.mux1`, `Mux.mux2` |
-| Dynamic array lookup | `Mux.arrayAccess(api, array, index)` or `SignalBuilder.arrayAccess` (cost grows with length) |
+| Dynamic array lookup | `Mux.arrayAccess(api, array, index)` or `SignalBuilder.arrayAccess` (constrains `0 <= index < array.length`, rejects empty arrays; use `arrayAccessOrZero` only for masked padding rows) |
 | Canonical field representation | `AliasCheck.check(c, value, nBits)`, a decomposition that proves `value < 2^nBits` |
 
 ## Jubjub, Pedersen and EdDSA
