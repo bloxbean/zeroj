@@ -138,10 +138,11 @@ public class VectorCommitmentConsumerValidator {
 
     /** The inline datum; a missing or hashed datum yields an integer, which never matches. */
     private static PlutusData inlineDatum(TxOut output) {
+        PlutusData missing = Builtins.iData(BigInteger.ZERO);
         return switch (output.datum()) {
             case OutputDatum.OutputDatumInline inline -> inline.datum();
-            case OutputDatum.OutputDatumHash ignored -> Builtins.iData(BigInteger.ZERO);
-            case OutputDatum.NoOutputDatum ignored -> Builtins.iData(BigInteger.ZERO);
+            case OutputDatum.OutputDatumHash ignored -> missing;
+            case OutputDatum.NoOutputDatum ignored -> missing;
         };
     }
 

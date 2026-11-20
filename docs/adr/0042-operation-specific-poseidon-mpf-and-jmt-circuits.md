@@ -132,7 +132,10 @@ wire-proof drift requires a separate migration ADR.
 The non-published load tools retain the original CCL version as dataset provenance. They accept
 exactly `0.8.0-pre5-dev1` stores when the running build is `0.8.0-pre5`; the exception is one-way
 and does not accept pre4, a different development build, or any future CCL release. Every later
-dependency change must repeat this qualification or provide an explicit migration.
+dependency change must repeat this qualification or provide an explicit migration. *(Update
+2026-11-20: see the [CCL `0.8.0-pre8` addendum](#addendum-2026-11-20-ccl-080-pre8-and-compact-2-child-mpf-witness-normalization)
+below for the maintainer-approved `0.8.0-pre8` exception, compact 2-child witness normalization,
+and open fresh-5M pre8 qualification gate.)*
 
 ### 2. Retain the full-semantics `ZkMpf` circuit, but relocate it into the MPF module
 
@@ -726,7 +729,7 @@ derived from constrained data.
 | Wrong verification key or operation accepted on-chain | Embed or explicitly allowlist VK identifiers and bind the operation in validator policy |
 | MPF/JMT domain confusion | Structure-specific domains, persistent descriptors, golden vectors, and no root-conversion API |
 | The unreleased `v2` label is mistaken for a supported legacy profile | Document the rename, migrate only benchmark metadata explicitly, and publish only v1 |
-| A CCL upgrade regresses preserved MPF/JMT state | Mandatory five-million-entry reopen/root/proof gate before accepting the pin change; only the source-identical dev1-to-pre5 promotion is allowlisted |
+| A CCL upgrade regresses preserved MPF/JMT state | Mandatory five-million-entry reopen/root/proof gate before accepting the pin change; only the source-identical dev1-to-pre5 promotion is allowlisted *(2026-11-20 maintainer exception for `0.8.0-pre8` and open fresh-5M pre8 gate recorded in the [addendum](#addendum-2026-11-20-ccl-080-pre8-and-compact-2-child-mpf-witness-normalization))* |
 | A small path-bound circuit fails on production data | Complete depth scan or maintained bound, fail-closed overflow, and optional full-bound fallback |
 | Transition circuit disagrees with canonical host updates | Randomized state-machine testing against CCL before/after roots |
 | JMT tombstones are mistaken for absence | Name and document tombstone update as inclusion; use a real non-inclusion primitive for absence |
@@ -813,3 +816,38 @@ structure or any new circuit production-ready until external operation-specific 
 exact-fingerprint production setup, Yaci/current-protocol-budget validation, and public target-
 network transaction gates pass. Local scale, proof, artifact, and Julc VM qualification is
 complete and is evidence for those gates, not a substitute for them.
+
+---
+
+## Addendum (2026-11-20): CCL `0.8.0-pre8` and Compact 2-Child MPF Witness Normalization
+
+### Context and Motivation
+
+Cardano Client Lib `0.8.0-pre8` ships two changes in `cardano-client-merkle-patricia-forestry` (`verified-structures`):
+
+1. **Critical terminal-fork exclusion security fix (`WireProof.doExcluding`):** In `0.8.0-pre5`, `ProofVerifier.verify` accepted an attacker-chosen opaque root in a terminal `ForkStep` exclusion proof. CCL `0.8.0-pre8` fixes this by hashing `combine(prefix || forkNibble || forkPrefix, forkRoot)` and rejecting forged roots (verified in `PoseidonMpfAdapterTest.zerojHostVerifierFailsClosedForCclTerminalForkExclusion`).
+2. **Aiken-compatible compact 2-child branch wire encoding (`ProofSerializer` / `WireProof.rollUp`):** On any 2-child branch node (queried path + 1 sibling), CCL `0.8.0-pre8` emits a compact `ForkStep` (CBOR tag 122, when the single sibling is a branch/extension) or `LeafStep` (CBOR tag 123, when the single sibling is a leaf) instead of a 128-byte 4-sibling `BranchStep` (CBOR tag 121). `WireProof.rollUp` rolls up both via `sparseMerkle16(meNibble, meHash, otherNibble, siblingHash)`.
+
+JMT root hashes and wire proofs (`zeroj-jmt-poseidon`) and MPF root/commitment digests (`zeroj-mpf-poseidon`) are bit-identical between `0.8.0-pre5` and `0.8.0-pre8`.
+
+### Accepted Proof-Step Forms and Soundness Argument (R2)
+
+`PoseidonMpfBranchWitness.normalizeBranches` (together with `PoseidonMpfCodec.Step.forkPrefixBytes()`) expands compact 2-child `ForkStep` and non-terminal `LeafStep` steps into their exact 4-sibling binary-Merkle branch form `[n0, n1, n2, n3]` (where the 15 unoccupied slots hold `ZERO_DIGEST` and `otherNibble` holds the authenticated sibling hash) before populating the fixed-shape circuit witness:
+
+| Operation / Factory | Prefix steps `0 .. k-2` | Terminal step `k-1` |
+|---|---|---|
+| `PoseidonMpfBranchWitness.inclusion` | `KIND_BRANCH`, `KIND_FORK`, `KIND_LEAF` | `KIND_BRANCH`, `KIND_FORK`, `KIND_LEAF` |
+| `PoseidonMpfBranchWitness.emptyNonInclusion` | `KIND_BRANCH`, `KIND_FORK`, `KIND_LEAF` | `KIND_BRANCH` only (or `k == 0` for empty trie) |
+| `PoseidonMpfDifferentLeafWitness.nonInclusion` | `KIND_BRANCH`, `KIND_FORK`, `KIND_LEAF` | `KIND_LEAF` only |
+| Terminal `KIND_FORK` exclusion | Rejected fail-closed | Rejected fail-closed by `PoseidonMpfReference.excluding` and both non-inclusion factories |
+
+**Soundness argument:**
+- Witness normalization is purely an off-chain prover preprocessor. The R1CS circuits (`ZkMpfInclusion`, `ZkMpfNonInclusionEmpty`, `ZkMpfNonInclusionDifferentLeaf`, and all transition templates) are **100% unchanged** — same constraint counts, same wire counts, and identical canonical R1CS SHA-256 digests.
+- At every active branch step, the circuit enforces the complete 4-level binary Merkle fold `merkle16(meNibble, childHash, n0, n1, n2, n3)` and extension prefix hash `H(prefixNibbles || subRoot)` up to the public input `root`. Because `sparseMerkle16(meNibble, meHash, otherNibble, otherHash)` is algebraically identical to `merkle16(meNibble, meHash, n0, n1, n2, n3)` over the 16-leaf tree with `leaves[otherNibble] = otherHash` and `ZERO_DIGEST` elsewhere, any malformed or malicious normalization cannot forge a statement for a fixed public `root` without breaking Poseidon collision resistance over BLS12-381 `Fr`.
+- Proof-language separation is preserved: `emptyNonInclusion` enforces `requireFinalBranch = true` so a terminal `KIND_LEAF` or `KIND_FORK` step can never be normalized as an empty child, and `PoseidonMpfReference.excluding` continues to reject terminal `KIND_FORK` proofs fail-closed.
+
+### Qualification and Persistence Gate Notes
+
+- **Dependency resolution:** Root `cclVersion` is pinned to `0.8.0-pre8` across all `com.bloxbean.cardano:cardano-client-*` artifacts (confirmed via `dependencyInsight`).
+- **Golden vectors & legacy compatibility:** `zeroj-test-vectors/.../poseidon-authenticated-state-v1/vectors.json` updates `mpf.fixture.inclusionWireBase64` to CCL `0.8.0-pre8`'s compact 44-byte `ForkStep` while retaining the `0.8.0-pre5` 135-byte `BranchStep` wire (`legacyBranchInclusionWireBase64`) and asserting that both verify and normalize to bit-identical `PoseidonMpfBranchWitness` outputs. Non-empty odd (`3`), even (`4`), and multi-chunk (`35`) `ForkStep` prefixes, non-terminal `LeafStep` inclusion/empty-non-inclusion proofs, and all negative `IllegalArgumentException` rejection paths are covered in `PoseidonMpfOperationWitnessTest`.
+- **Persisted RocksDB benchmark stores (breaking change by design):** Per maintainer confirmation, CCL `0.8.0-pre8` intentionally breaks compatibility with `0.8.0-pre5` / `0.8.0-pre5-dev1` benchmark store manifests. `BuildInfo.isVerifiedStructuresCompatibleCclVersion` fails closed on older manifests (verified by updated opt-in tests in `PoseidonMpfLoadIntegrationTest` and `PoseidonJmtLoadIntegrationTest`). Because pre5 5M stores are rejected rather than reopened under pre8, a fresh 5M load + proof qualification on `0.8.0-pre8` remains an open gate before any production large-state claim on pre8.

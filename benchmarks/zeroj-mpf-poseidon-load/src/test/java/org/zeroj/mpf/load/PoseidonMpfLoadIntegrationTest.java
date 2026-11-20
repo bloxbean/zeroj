@@ -12,33 +12,26 @@ import static org.junit.jupiter.api.Assertions.*;
 class PoseidonMpfLoadIntegrationTest {
 
     @Test
-    void pre5ReleaseReopensTheSourceIdenticalDev1StoreButNoOtherCclVersion(
-            @TempDir Path directory) throws Exception {
+    void pre8ReleaseRejectsOlderPre5AndDev1StoreManifests(@TempDir Path directory) throws Exception {
         LoadOptions options = options(directory, 20, 10, 4, 8, "none", false);
-        var loaded = new PoseidonMpfLoadRunner(options).run();
+        new PoseidonMpfLoadRunner(options).run();
         RunFiles files = new RunFiles(directory);
         RunFiles.Manifest current = files.readManifestUnchecked();
-        RunFiles.Manifest dev1 = new RunFiles.Manifest(
-                current.profileId(), "0.8.0-pre5-dev1", current.poseidonFingerprint(),
-                current.datasetSchema(), current.seed(), current.targetEntries(),
-                current.batchSize(), current.keyBytes(), current.valueBytes(),
-                current.completedEntries(), current.rootHex(), current.status(),
-                current.createdAt(), current.updatedAt());
-        files.writeManifest(dev1);
+        assertEquals("0.8.0-pre8", current.cclVersion());
 
-        assertEquals(loaded.rootHex(), new PoseidonMpfLoadRunner(options).run().rootHex());
-        assertEquals(4, new PoseidonMpfProofRunner(options).run().artifacts().size());
-
-        RunFiles.Manifest unqualified = new RunFiles.Manifest(
-                current.profileId(), "0.8.0-pre5-dev2", current.poseidonFingerprint(),
-                current.datasetSchema(), current.seed(), current.targetEntries(),
-                current.batchSize(), current.keyBytes(), current.valueBytes(),
-                current.completedEntries(), current.rootHex(), current.status(),
-                current.createdAt(), current.updatedAt());
-        files.writeManifest(unqualified);
-        IllegalStateException rejected = assertThrows(
-                IllegalStateException.class, () -> new PoseidonMpfLoadRunner(options).run());
-        assertTrue(rejected.getMessage().contains("verified-structures-compatible baseline"));
+        for (String olderVersion : new String[]{"0.8.0-pre5-dev1", "0.8.0-pre5", "0.8.0-pre5-dev2"}) {
+            RunFiles.Manifest older = new RunFiles.Manifest(
+                    current.profileId(), olderVersion, current.poseidonFingerprint(),
+                    current.datasetSchema(), current.seed(), current.targetEntries(),
+                    current.batchSize(), current.keyBytes(), current.valueBytes(),
+                    current.completedEntries(), current.rootHex(), current.status(),
+                    current.createdAt(), current.updatedAt());
+            files.writeManifest(older);
+            IllegalStateException rejected = assertThrows(
+                    IllegalStateException.class, () -> new PoseidonMpfLoadRunner(options).run(),
+                    "CCL 0.8.0-pre8 must fail closed on older store manifest version " + olderVersion);
+            assertTrue(rejected.getMessage().contains("verified-structures-compatible baseline"));
+        }
     }
 
     @Test
@@ -134,7 +127,7 @@ class PoseidonMpfLoadIntegrationTest {
 
         RunFiles.Manifest migrated = files.readManifestUnchecked();
         assertEquals("zeroj-poseidon-mpf-v1", migrated.profileId());
-        assertEquals("0.8.0-pre5", migrated.cclVersion());
+        assertEquals("0.8.0-pre8", migrated.cclVersion());
         assertEquals(BuildInfo.poseidonFingerprint(), migrated.poseidonFingerprint());
         assertEquals(load.rootHex(), migrated.rootHex());
         assertEquals(legacy, new com.fasterxml.jackson.databind.ObjectMapper().readValue(

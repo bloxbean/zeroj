@@ -122,6 +122,15 @@ public final class WasmBbsProvider implements BbsProvider {
         if (publicKey.ciphersuite() != ciphersuite || proof.ciphersuite() != ciphersuite) {
             return false;
         }
+        // ADR-0064 I2 provider consistency: enforce draft-10 §4.2.4.5 proof-octet validation
+        // ([1, r - 1] scalars and non-identity G1 points) before forwarding to zkryptium 0.6.1,
+        // whose PoKSignature::from_bytes accepts zero scalars and surfaces s >= r as a WASM error
+        // rather than returning false.
+        try {
+            BbsCodec.octetsToProof(proof.bytes(), ciphersuite);
+        } catch (IllegalArgumentException invalidProof) {
+            return false;
+        }
         return client.proofVerify(
                 ciphersuite,
                 publicKey.bytes(),

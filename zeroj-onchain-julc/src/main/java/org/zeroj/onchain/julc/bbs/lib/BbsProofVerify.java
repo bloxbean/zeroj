@@ -26,9 +26,18 @@ import java.math.BigInteger;
  * values match, payout, and — critically for replay — binding the presentation header to the spend).
  * See {@code zeroj-usecases} reusable-kyc for a worked claim validator.</p>
  *
+ * <p><b>Input validation (ADR-0064 / CFRG BBS draft-10 §4.2.4.5).</b> Before any decompression or
+ * hashing, {@link #verify} requires all seven proof scalars ({@code eHat, r1Hat, r3Hat, mHat0..2, c})
+ * to be in {@code [1, r - 1]}, {@code domain} in {@code [0, r - 1]}, proof points {@code abar, bbar, d}
+ * to be 48-byte non-identity compressed G1 points (rejecting {@code 0xc0‖0^47}), and issuer key
+ * {@code w} to be a 96-byte non-identity compressed G2 point. Canonicality, curve membership, and
+ * prime-order subgroup membership are then enforced by the CIP-0381 {@code uncompress} builtins
+ * (single decompression per point).</p>
+ *
  * <p>Verification-key material (issuer PK {@code W}, generators, {@code domain}, DSTs) is baked in by
  * the caller as validator params; the proof + disclosed messages + presentation header come from the
- * redeemer.</p>
+ * redeemer. {@code domain} is not re-hashed from {@code W} on-chain, so deployers must compute it from
+ * the exact same {@code W}, header, and generators (as {@code BbsToCardano.verifierParams} does).</p>
  */
 @OnchainLibrary
 public final class BbsProofVerify {
@@ -40,8 +49,8 @@ public final class BbsProofVerify {
      * @param p1,q1,h0..h4 ciphersuite P1 + the 6 BBS generators (compressed G1, 48 B)
      * @param domain       precomputed BBS domain scalar (depends only on PK/generators/header)
      * @param dstH2S,dstMap the H2S and message-map domain separation tags
-     * @param abar,bbar,d  proof points (compressed G1)
-     * @param eHat,r1Hat,r3Hat,mHat0,mHat1,mHat2,c proof responses + challenge (undisclosed indexes 0,1,4)
+     * @param abar,bbar,d  proof points (compressed G1, 48 B, non-identity)
+     * @param eHat,r1Hat,r3Hat,mHat0,mHat1,mHat2,c proof responses + challenge in {@code [1, r - 1]} (undisclosed indexes 0,1,4)
      * @param msg2,msg3    disclosed message bytes for indexes 2 and 3
      * @param ph           presentation header (binds the presentation to a claim/session)
      */
@@ -53,6 +62,35 @@ public final class BbsProofVerify {
             BigInteger eHat, BigInteger r1Hat, BigInteger r3Hat,
             BigInteger mHat0, BigInteger mHat1, BigInteger mHat2, BigInteger c,
             byte[] msg2, byte[] msg3, byte[] ph) {
+
+        // ADR-0064 I2/I3: validate all 7 proof scalars in [1, r - 1] (draft-10 §4.2.4.5 step 14)
+        // and domain in [0, r - 1] before any decompression or hashing. Compute r once.
+        BigInteger r = BbsHashToScalar.scalarFieldOrder();
+        if (!isValidProofScalar(eHat, r)
+                || !isValidProofScalar(r1Hat, r)
+                || !isValidProofScalar(r3Hat, r)
+                || !isValidProofScalar(mHat0, r)
+                || !isValidProofScalar(mHat1, r)
+                || !isValidProofScalar(mHat2, r)
+                || !isValidProofScalar(c, r)
+                || domain.signum() < 0
+                || domain.compareTo(r) >= 0) {
+            return false;
+        }
+
+        // ADR-0064 I1/I3: reject wrong-length or compressed G1 identity (0xc0‖0^47) on Abar, Bbar, D
+        // before uncompressing (draft-10 §4.2.4.5 step 7 — closes the identity-point forgery).
+        byte[] g1Identity = Builtins.consByteString(192L, Builtins.replicateByte(47L, 0L));
+        if (!isNonIdentityG1Bytes(abar, g1Identity)
+                || !isNonIdentityG1Bytes(bbar, g1Identity)
+                || !isNonIdentityG1Bytes(d, g1Identity)) {
+            return false;
+        }
+        // Defense-in-depth: reject wrong-length or compressed G2 identity (0xc0‖0^95) on issuer PK W.
+        byte[] g2Identity = Builtins.consByteString(192L, Builtins.replicateByte(95L, 0L));
+        if (Builtins.lengthOfByteString(w) != 96L || Builtins.equalsByteString(w, g2Identity)) {
+            return false;
+        }
 
         JulcG1 abarE = Builtins.bls12_381_G1_uncompress(abar);
         JulcG1 bbarE = Builtins.bls12_381_G1_uncompress(bbar);
@@ -94,6 +132,15 @@ public final class BbsProofVerify {
         return Builtins.bls12_381_finalVerify(
                 Builtins.bls12_381_millerLoop(abarE, Builtins.bls12_381_G2_uncompress(w)),
                 Builtins.bls12_381_millerLoop(bbarE, Builtins.bls12_381_G2_uncompress(bp2)));
+    }
+
+    private static boolean isValidProofScalar(BigInteger value, BigInteger r) {
+        return value.signum() > 0 && value.compareTo(r) < 0;
+    }
+
+    private static boolean isNonIdentityG1Bytes(byte[] encoded, byte[] g1Identity) {
+        return Builtins.lengthOfByteString(encoded) == 48L
+                && !Builtins.equalsByteString(encoded, g1Identity);
     }
 
     private static JulcG1 g1mul(BigInteger scalar, JulcG1 pointElement) {

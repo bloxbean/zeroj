@@ -4,6 +4,10 @@
 
 Accepted. The **packaging** of the WASM provider is superseded by
 [ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
+**Amended by [ADR-0064](0064-onchain-bbs-proof-verify-hardening.md)** (2026-11-20):
+adds governance for the on-chain Plutus V3 verifier (`BbsProofVerify`), enforces strict
+CFRG draft-10 `[1, r - 1]` proof-scalar bounds across `BbsCodec` (encode and decode) and
+`WasmBbsProvider.proofVerify`, and validates issuer public keys in `BbsToCardano`.
 
 The zkryptium WASM provider moved to `assurance/zeroj-bbs-wasm`, outside the
 default build and no longer published; select it with `-PincludeAssurance`.

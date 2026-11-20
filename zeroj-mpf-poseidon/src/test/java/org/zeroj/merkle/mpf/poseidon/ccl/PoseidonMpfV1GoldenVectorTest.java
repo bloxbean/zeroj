@@ -9,10 +9,12 @@ import org.zeroj.circuit.FieldConfig;
 import org.zeroj.circuit.lib.poseidon.PoseidonHash;
 import org.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfHash;
 import org.zeroj.merkle.mpf.poseidon.profile.PoseidonMpfProfile;
+import org.zeroj.merkle.mpf.poseidon.witness.PoseidonMpfBranchWitness;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -93,13 +95,27 @@ class PoseidonMpfV1GoldenVectorTest {
         byte[] expectedRoot = HEX.parseHex(fixture.path("rootHex").asText());
         assertArrayEquals(expectedRoot, trie.getRootHash());
 
+        assertEquals("0.8.0-pre8", fixture.path("cclVersion").asText());
         byte[] inclusionKey = fixture.path("inclusionKey").asText().getBytes(StandardCharsets.UTF_8);
-        assertEquals("branch-path", fixture.path("inclusionProofForm").asText());
+        byte[] inclusionValue = trie.get(inclusionKey);
+        assertEquals("compact-fork-path", fixture.path("inclusionProofForm").asText());
         byte[] inclusion = Base64.getDecoder().decode(fixture.path("inclusionWireBase64").asText());
         assertArrayEquals(inclusion, trie.getProofWire(inclusionKey).orElseThrow());
-        assertBranchWireFixture(inclusion, fixture.path("inclusionDecoded"));
+        assertForkWireFixture(
+                expectedRoot, inclusionKey, inclusionValue, inclusion, fixture.path("inclusionDecoded"));
         assertTrue(PoseidonMpfReference.including(
-                expectedRoot, inclusionKey, trie.get(inclusionKey), inclusion));
+                expectedRoot, inclusionKey, inclusionValue, inclusion));
+
+        byte[] legacyInclusion =
+                Base64.getDecoder().decode(fixture.path("legacyBranchInclusionWireBase64").asText());
+        assertTrue(PoseidonMpfReference.including(
+                expectedRoot, inclusionKey, inclusionValue, legacyInclusion));
+        PoseidonMpfBranchWitness compactWitness =
+                PoseidonMpfBranchWitness.inclusion(expectedRoot, inclusionKey, inclusionValue, inclusion, 1);
+        PoseidonMpfBranchWitness legacyWitness =
+                PoseidonMpfBranchWitness.inclusion(expectedRoot, inclusionKey, inclusionValue, legacyInclusion, 1);
+        assertEquals(legacyWitness.siblings(), compactWitness.siblings());
+        assertEquals(legacyWitness.skip(), compactWitness.skip());
 
         byte[] exclusionKey = fixture.path("exclusionKey").asText().getBytes(StandardCharsets.UTF_8);
         assertEquals("missing-branch", fixture.path("exclusionProofForm").asText());
@@ -107,6 +123,55 @@ class PoseidonMpfV1GoldenVectorTest {
         assertArrayEquals(exclusion, trie.getProofWire(exclusionKey).orElseThrow());
         assertBranchWireFixture(exclusion, fixture.path("exclusionDecoded"));
         assertTrue(PoseidonMpfReference.excluding(expectedRoot, exclusionKey, exclusion));
+    }
+
+    private static void assertForkWireFixture(
+            byte[] expectedRoot, byte[] key, byte[] value, byte[] wire, JsonNode decoded) {
+        assertEquals("fork", decoded.path("kind").asText());
+        int skip = decoded.path("skip").asInt();
+        int neighborNibble = decoded.path("neighborNibble").asInt();
+        byte[] prefix = HEX.parseHex(decoded.path("prefixHex").asText());
+        byte[] forkRoot = HEX.parseHex(decoded.path("rootHex").asText());
+        assertArrayEquals(wire, independentForkWire(skip, neighborNibble, prefix, forkRoot));
+
+        var steps = PoseidonMpfCodec.decode(wire);
+        assertEquals(1, steps.size());
+        assertEquals(PoseidonMpfCodec.KIND_FORK, steps.getFirst().kind());
+        assertEquals(skip, steps.getFirst().skip());
+        assertEquals(neighborNibble, steps.getFirst().neighborNibble());
+        assertArrayEquals(prefix, steps.getFirst().forkPrefixBytes());
+        assertEquals(canonical(forkRoot), steps.getFirst().forkRoot());
+
+        PoseidonMpfBranchWitness normalized =
+                PoseidonMpfBranchWitness.inclusion(expectedRoot, key, value, wire, 1);
+        JsonNode expectedNeighbors = decoded.path("normalizedNeighborsHex");
+        assertEquals(4, expectedNeighbors.size());
+        for (int index = 0; index < 4; index++) {
+            assertEquals(
+                    canonical(HEX.parseHex(expectedNeighbors.get(index).asText())),
+                    normalized.siblings().getFirst().get(index));
+        }
+    }
+
+    private static byte[] independentForkWire(int skip, int neighborNibble, byte[] prefix, byte[] root) {
+        try {
+            Array neighbor = new Array();
+            neighbor.setTag(121);
+            neighbor.add(new UnsignedInteger(neighborNibble));
+            neighbor.add(new ByteString(prefix));
+            neighbor.add(new ByteString(root));
+            Array step = new Array();
+            step.setTag(122);
+            step.add(new UnsignedInteger(skip));
+            step.add(neighbor);
+            Array proof = new Array();
+            proof.add(step);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            new CborEncoder(output).encode(proof);
+            return output.toByteArray();
+        } catch (Exception failure) {
+            throw new IllegalArgumentException("failed to encode independent fork fixture", failure);
+        }
     }
 
     private static void assertBranchWireFixture(byte[] wire, JsonNode decoded) {
@@ -143,7 +208,7 @@ class PoseidonMpfV1GoldenVectorTest {
             step.add(new ByteString(packed));
             Array proof = new Array();
             proof.add(step);
-            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
             new CborEncoder(output).encode(proof);
             return output.toByteArray();
         } catch (Exception failure) {

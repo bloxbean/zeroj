@@ -299,9 +299,8 @@ class ZkMpfTransitionCircuitTest {
                     ? !steps.isEmpty()
                         && steps.getLast().kind() == PoseidonMpfCodec.KIND_LEAF
                         && steps.size() > 1
-                        && steps.subList(0, steps.size() - 1).stream()
-                            .allMatch(step -> step.kind() == PoseidonMpfCodec.KIND_BRANCH)
-                    : steps.stream().allMatch(step -> step.kind() == PoseidonMpfCodec.KIND_BRANCH);
+                    : !steps.isEmpty()
+                        && steps.getLast().kind() == PoseidonMpfCodec.KIND_BRANCH;
             if (matches) return candidate;
         }
         throw new AssertionError("failed to find deterministic "

@@ -18,7 +18,9 @@ import java.math.BigInteger;
 @OnchainLibrary
 public class PlonkBLS12381Lib {
 
-    private static final BigInteger MAX_PUBLIC_INPUT_COUNT = BigInteger.valueOf(8);
+    private static BigInteger maxPublicInputCount() {
+        return BigInteger.valueOf(8);
+    }
 
     public static boolean verifyOneInput(
             PlutusData datum,
@@ -299,7 +301,7 @@ public class PlonkBLS12381Lib {
             BigInteger fr, BigInteger nInv,
             byte[] g1Gen, byte[] g2Gen) {
         return publicInputCount.compareTo(BigInteger.ONE) >= 0
-                && publicInputCount.compareTo(MAX_PUBLIC_INPUT_COUNT) <= 0
+                && publicInputCount.compareTo(maxPublicInputCount()) <= 0
                 && publicInputCount.compareTo(domainSize) <= 0
                 && Builtins.lengthOfByteString(profileTag) == 40
                 && validParamsBase(vkQm, vkQl, vkQr, vkQo, vkQc, vkS1, vkS2, vkS3, vkX2,
@@ -434,8 +436,8 @@ public class PlonkBLS12381Lib {
     private static BigInteger boundedLength(PlutusData cursor, BigInteger count) {
         if (Builtins.nullList(cursor)) {
             return count;
-        } else if (count.equals(MAX_PUBLIC_INPUT_COUNT)) {
-            return MAX_PUBLIC_INPUT_COUNT.add(BigInteger.ONE);
+        } else if (count.equals(maxPublicInputCount())) {
+            return maxPublicInputCount().add(BigInteger.ONE);
         } else {
             return boundedLength(Builtins.tailList(cursor), count.add(BigInteger.ONE));
         }

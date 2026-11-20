@@ -64,7 +64,7 @@ public final class BbsHashToScalar {
     }
 
     /** BLS12-381 scalar field order r (built from limbs — Julc can't parse a 77-digit literal). */
-    private static BigInteger scalarFieldOrder() {
+    public static BigInteger scalarFieldOrder() {
         BigInteger base = BigInteger.valueOf(1000000000000000000L);
         return BigInteger.valueOf(52435L).multiply(base)
                 .add(BigInteger.valueOf(875175126190479447L)).multiply(base)

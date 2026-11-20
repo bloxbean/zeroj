@@ -306,6 +306,10 @@ public final class PoseidonMpfCodec {
         }
 
         static Step fork(int skip, int neighborNibble, byte[] prefix, byte[] root) {
+            if (prefix.length > PoseidonMpfHash.KEY_PATH_NIBBLES) {
+                throw new IllegalArgumentException(
+                        "fork prefix length exceeds " + PoseidonMpfHash.KEY_PATH_NIBBLES + ": " + prefix.length);
+            }
             return new Step(KIND_FORK, skip, List.of(), neighborNibble, prefix.length,
                     prefixChunksForTrailingDigest(prefix),
                     PoseidonMpfHash.fieldFromDigestBytes(root),
@@ -320,12 +324,61 @@ public final class PoseidonMpfCodec {
                     PoseidonMpfHash.fieldFromDigestBytes(valueHash));
         }
 
+        /** Reconstructs the exact fork prefix byte sequence encoded in {@link #forkPrefixChunks()}. */
+        public byte[] forkPrefixBytes() {
+            if (forkPrefixLength == 0) {
+                if (!forkPrefixChunks.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "forkPrefixChunks must be empty when forkPrefixLength is 0");
+                }
+                return new byte[0];
+            }
+            int expectedChunks = (forkPrefixLength + PoseidonMpfHash.DIGEST_LENGTH - 1)
+                    / PoseidonMpfHash.DIGEST_LENGTH;
+            if (forkPrefixChunks.size() != expectedChunks) {
+                throw new IllegalArgumentException(
+                        "expected " + expectedChunks + " forkPrefixChunks for length "
+                                + forkPrefixLength + ", got " + forkPrefixChunks.size());
+            }
+            byte[] out = new byte[forkPrefixLength];
+            int remainder = forkPrefixLength % PoseidonMpfHash.DIGEST_LENGTH;
+            int offset = 0;
+            int chunkIndex = 0;
+            if (remainder != 0) {
+                writeUnsignedBigEndian(forkPrefixChunks.get(chunkIndex++), out, offset, remainder);
+                offset += remainder;
+            }
+            while (offset < forkPrefixLength) {
+                writeUnsignedBigEndian(
+                        forkPrefixChunks.get(chunkIndex++), out, offset, PoseidonMpfHash.DIGEST_LENGTH);
+                offset += PoseidonMpfHash.DIGEST_LENGTH;
+            }
+            return out;
+        }
+
+        private static void writeUnsignedBigEndian(BigInteger value, byte[] dst, int offset, int length) {
+            if (value == null || value.signum() < 0) {
+                throw new IllegalArgumentException("fork prefix chunk must be non-negative");
+            }
+            byte[] raw = value.toByteArray();
+            int srcOffset = (raw.length > 1 && raw[0] == 0) ? 1 : 0;
+            int rawLen = raw.length - srcOffset;
+            if (rawLen > length) {
+                throw new IllegalArgumentException(
+                        "fork prefix chunk overflows " + length + " bytes");
+            }
+            System.arraycopy(raw, srcOffset, dst, offset + length - rawLen, rawLen);
+        }
+
         public Step {
             if (skip < 0) {
                 throw new IllegalArgumentException("skip must be >= 0");
             }
             if (neighborNibble < 0 || neighborNibble > 15) {
                 throw new IllegalArgumentException("neighbor nibble out of range: " + neighborNibble);
+            }
+            if (forkPrefixLength < 0 || forkPrefixLength > PoseidonMpfHash.KEY_PATH_NIBBLES) {
+                throw new IllegalArgumentException("fork prefix length out of range: " + forkPrefixLength);
             }
             neighbors = List.copyOf(Objects.requireNonNull(neighbors, "neighbors"));
             forkPrefixChunks = List.copyOf(Objects.requireNonNull(forkPrefixChunks, "forkPrefixChunks"));

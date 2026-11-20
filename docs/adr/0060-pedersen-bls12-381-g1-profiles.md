@@ -704,7 +704,8 @@ work.
 ## Related findings (out of scope)
 
 - `BbsProofVerify` passes redeemer scalars to `scalarMul` without a range check. That is the BBS
-  library's own design and is not changed here; it deserves its own review issue.
+  library's own design and is not changed here; **resolved by [ADR-0064](0064-onchain-bbs-proof-verify-hardening.md)**
+  (enforces `[1, r - 1]` proof scalars and non-identity proof points before decompression).
 - `ScriptBudgetEstimator` uses pre-PV11 cost constants.
 - The repository's docs disagree on the `ConfidentialNoteValidator` cost (3.66e9 against 3.85e9
   steps) and on the transaction memory limit (14M against 16.5M).
