@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "994ca61c567373413245f9388cd923836c2eb106",
+  "sourceRevision": "6c5da74c2e172633e4aa91ee91fc53c25fbd92dc",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -183,14 +183,14 @@
       "description": "Write circuits directly with CircuitSpec, Signal and the inline CircuitAPI DSL, compile them, compute witnesses, and use hints without breaking soundness.",
       "url": "https://zeroj.dev/guides/circuits/circuit-dsl/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/circuit-dsl.md",
-      "sha256": "79622416571f53d5d4cfaf21342fa879d2d03d299bf8d2c54e363abf3547abc9"
+      "sha256": "a6f9150613630733894a968bce5aa79ef6ed84a40ca3754334d0180057e08e03"
     },
     {
       "title": "Gadget library",
       "description": "The circuit building blocks in zeroj-circuit-lib (hashes, Merkle proofs, ranges, Jubjub, and Cardano key derivation), with status and cost.",
       "url": "https://zeroj.dev/guides/circuits/gadgets/",
       "markdown": "https://zeroj.dev/ai/pages/guides/circuits/gadgets.md",
-      "sha256": "fbc9aa5afcd0e3e010c42061f9b5d4ffac89fcc5c75f7af5f9d808cfb650d626"
+      "sha256": "c72389e5813ec3a379840e837945f05370fb0bb06146997446e7bf8d8c5eced9"
     },
     {
       "title": "Test your circuits for soundness",
@@ -452,7 +452,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "0b33e036bd06b97bde95c235101d44bcc5079bc058c10533d1f96f831e7c13d0"
+      "sha256": "316bc5b265e94ba979a4fd4045ece11a8297450302361885fa0ae8c2e41dd5d9"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",

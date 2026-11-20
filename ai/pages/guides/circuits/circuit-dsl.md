@@ -113,7 +113,7 @@ var circuit = CircuitBuilder.create("range")
 | `cond.select(x, y)` | `cond ? x : y`, with `cond` boolean | Small constant |
 | `a.assertBoolean()`, `a.assertInRange(n)` | Constrain to {0,1} or to `[0, 2ⁿ)` | 1, about `n + 1` |
 | `c.assertEqual(a, b)`, `c.assertNotEqual(a, b)` | Equality constraints | Small constant |
-| `c.constant(v)`, `c.fromBinary(bits)`, `c.arrayAccess(arr, idx)` | Constants, recomposition, MUX lookup | Free, free, O(length) |
+| `c.constant(v)`, `c.fromBinary(bits)`, `c.arrayAccess(arr, idx)` | Constants, recomposition, bounds-checked MUX lookup (`0 <= idx < arr.length`) | Free, free, O(length) |
 
 The golden rule of R1CS cost: additions are free, multiplications are not. Reuse intermediate
 results instead of recomputing them, and prefer `select` over any "branching".

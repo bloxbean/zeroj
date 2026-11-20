@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: 994ca61c567373413245f9388cd923836c2eb106
+Source revision: 6c5da74c2e172633e4aa91ee91fc53c25fbd92dc
 
 ## Key facts
 
@@ -6467,7 +6467,7 @@ var circuit = CircuitBuilder.create("range")
 | `cond.select(x, y)` | `cond ? x : y`, with `cond` boolean | Small constant |
 | `a.assertBoolean()`, `a.assertInRange(n)` | Constrain to {0,1} or to `[0, 2ⁿ)` | 1, about `n + 1` |
 | `c.assertEqual(a, b)`, `c.assertNotEqual(a, b)` | Equality constraints | Small constant |
-| `c.constant(v)`, `c.fromBinary(bits)`, `c.arrayAccess(arr, idx)` | Constants, recomposition, MUX lookup | Free, free, O(length) |
+| `c.constant(v)`, `c.fromBinary(bits)`, `c.arrayAccess(arr, idx)` | Constants, recomposition, bounds-checked MUX lookup (`0 <= idx < arr.length`) | Free, free, O(length) |
 
 The golden rule of R1CS cost: additions are free, multiplications are not. Reuse intermediate
 results instead of recomputing them, and prefer `select` over any "branching".
@@ -6722,7 +6722,7 @@ makes honest witnesses fail.
 | Decompose or recompose bits | `SignalBinary.num2Bits` / `bits2Num`, `Binary.*`; `ZkBits` for fixed bit-vector inputs |
 | Bitwise logic | `SignalBinary.bitAnd/bitOr/bitXor`, `rotateLeft` (a free re-indexing) |
 | Choose between values | `ZkBool.select(a, b)`; `Mux.mux1`, `Mux.mux2` |
-| Dynamic array lookup | `Mux.arrayAccess(api, array, index)` or `SignalBuilder.arrayAccess` (cost grows with length) |
+| Dynamic array lookup | `Mux.arrayAccess(api, array, index)` or `SignalBuilder.arrayAccess` (constrains `0 <= index < array.length`, rejects empty arrays; use `arrayAccessOrZero` only for masked padding rows) |
 | Canonical field representation | `AliasCheck.check(c, value, nBits)`, a decomposition that proves `value < 2^nBits` |
 
 ### Jubjub, Pedersen and EdDSA
