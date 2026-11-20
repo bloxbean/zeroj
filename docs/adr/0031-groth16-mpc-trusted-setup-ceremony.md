@@ -2,8 +2,9 @@
 
 ## Status
 
-Proposed (2026-07-08) — planned on `feat/adr_0031_mpc_ceremony`. The **CLI
-artifact boundary** is superseded by
+Proposed (2026-07-08; amended 2026-11-20 for R3 contributor input validation, secret-scalar
+routing, atomic writes, and fail-closed CI interop) — planned on `feat/adr_0031_mpc_ceremony`. The
+**CLI artifact boundary** is superseded by
 [ADR-0044](0044-focused-module-surface-and-optional-provider-isolation.md).
 
 ADR-0044 merged the `zeroj-ceremony` Gradle module into `zeroj-tools`. This is a
@@ -198,3 +199,150 @@ proceed in parallel with the audit; only the production ceremony itself must wai
   `.zkey` by SHA-256.
 - The dev single-party path stays flag-gated (`zeroj.allowInsecureTrustedSetup`) and prints its
   warning; production docs must point exclusively at the ceremony flow.
+
+---
+
+## 2026-11-20 Amendment — R3 Contributor Hardening & Fail-Closed CI Interop
+
+### Risk classification
+
+- **R3:** `ZkeyContributor` (`zeroj-tools`) applies contributor secret scalars (`k`, `k⁻¹`, `s`) to
+  untrusted elliptic-curve points read from an input `.zkey` file.
+- **R1 / Process:** Fail-closed CI execution of the four ceremony and streaming `.zkey`
+  interoperability suites against pinned `snarkjs@0.7.6`.
+
+### Threat model & trust assumptions
+
+1. **Untrusted input `.zkey`:** The input `.zkey` file supplied to `zeroj-ceremony contribute` is
+   treated as untrusted (for example, a compromised coordinator or malicious prior participant). An
+   attacker may inject off-curve points, small-subgroup (cofactor) points, non-canonical field
+   coordinates (`>= p`), identity `delta1`/`delta2`, mismatched `delta1`/`delta2` pairings, a broken
+   prior-contribution chain, malformed/overlapping section tables, or invalid TLV parameters.
+   Because short-Weierstrass Jacobian formulas do not depend on `b`, multiplying thousands of
+   unvalidated `L`/`H` points by the same secret `k⁻¹` via variable-time `scalarMul` creates an
+   invalid-curve and small-subgroup leakage surface against the contributor's secret.
+2. **Secret values & ADR-0062 I3 contract:** The freshly sampled scalars `k`, `k⁻¹ mod r`, and `s`
+   are secret. Routing all secret multiplications through `JacobianG1BLS381.ctScalarMul` /
+   `JacobianG2BLS381.ctScalarMul` ([ADR-0062](0062-bls12381-independent-review-and-remediation.md)
+   D1: Clavier–Joye additive scalar splitting + fixed-schedule Montgomery ladder + built-in on-curve
+   and prime-order subgroup check) removes variable-time bit-length/operation-schedule leakage and
+   blocks invalid-curve/subgroup inputs. Per **ADR-0062 I3**, this is **not** a JVM constant-time
+   guarantee (`BigInteger`, field reductions, Java branches, JIT, and GC remain variable-time);
+   production ceremony contributions MUST still run on an **offline, isolated host**.
+3. **Independent verification unchanged:** `snarkjs zkey verify` (`0.7.6`) remains the independent
+   verifier of the complete ceremony transcript. `zeroj-ceremony` implements `export-r1cs`,
+   `contribute`, and `finalize`; `verify` and `beacon` remain executed directly with `snarkjs`.
+
+### Pinned normative references
+
+- `snarkjs@0.7.6`: `src/zkey_contribute.js`, `src/zkey_utils.js`, `src/zkey_new.js`,
+  `src/zkey_verify_frominit.js`, `src/mpc_applykey.js`, `src/misc.js`.
+- `ffjavascript@0.3.1`: `src/wasm_curve.js` (LEM affine zero encoding `0^96` for G1 and `0^192` for
+  G2; `batchApplyKey` preserves infinity).
+- [ADR-0062](0062-bls12381-independent-review-and-remediation.md) (D1 `ctScalarMul`, I3 honest
+  secret-path contract, D7 raw pairing validation).
+- [ADR-0047](0047-snarkjs-bidirectional-interop-export-and-ci.md) (pinned `snarkjs@0.7.6` CI oracle
+  and `-PrequireSnarkjs`).
+
+### Exact security invariants (`S1`–`S7`)
+
+- **S1 — File & section table framing:** Require `inSize >= 12`, magic `0x79656b7a` (`"zkey"` LE),
+  version `∈ {1, 2}`, exactly 10 unique sections (`1..10`), no negative/out-of-bounds sizes, no
+  duplicate or unsupported section types, exact consumption (`pos == inSize`, zero trailing bytes),
+  section 1 size `== 4` with protocol `== 1` (Groth16), and section 2 size `== 964`.
+- **S2 — Exact BLS12-381 primes & section dimensions:** Require `n8q == 48`, exact unsigned LE
+  `q == MontFp381.modulus()`, `n8r == 32`, exact unsigned LE `r == MontFr381.modulus()`. Validate
+  `nVars >= 1`, `nVars >= nPublic + 1`, `domainSize` positive power of 2, exact section sizes for
+  sections 3 (`(nPublic + 1) * 96`), 4 (`4 + nCoeffs * 44`), 5 (`nVars * 96`), 6 (`nVars * 96`),
+  7 (`nVars * 192`), 8 (`(nVars - nPublic - 1) * 96`), and 9 (`domainSize * 96`).
+- **S3 — Canonical Montgomery decoding & G2 infinity sentinel:** Decode every 48-byte LEM coordinate
+  via `MontFp381.fromMontLimbs(...)`, which rejects raw values `>= p` without silent modular
+  reduction. `g2FromLem` explicitly detects the 192-byte all-zero infinity sentinel and returns
+  `AffineG2.INFINITY`.
+- **S4 — Pre-secret header, pairing, and contribution chain validation:** Before sampling `k` or `s`:
+  - All six header points (`alpha1`, `beta1`, `beta2`, `gamma2`, `delta1`, `delta2`) and every prior
+    contribution's `deltaAfter`, `g1_s`, `g1_sx`, `g2_spx` MUST be canonical (`< p`), non-infinity,
+    on-curve, and in the prime-order subgroup (`[r]P = O`).
+  - Header deltas MUST satisfy `e(delta1, G2) == e(G1, delta2)`.
+  - Section 10 MUST be structurally exact (`size >= 68`, bounded `nContrib`, `type ∈ {0, 1}`,
+    strictly ascending TLV parameter tags `{1, 2, 3}` matching `snarkjs zkey_utils.js`, zero
+    trailing bytes).
+  - Chain continuity: `delta1` MUST equal `G1` when `nContrib == 0`, and MUST equal
+    `priors[nContrib - 1].deltaAfter` when `nContrib > 0` (matching
+    `snarkjs zkey_verify_frominit.js:48,141`).
+- **S5 — Pinned `snarkjs 0.7.6` infinity semantics for `L` and `H`:** Per `snarkjs@0.7.6`
+  (`zkey_new.js:460-466`, `mpc_applykey.js:44`) and `ffjavascript@0.3.1` (`wasm_curve.js`), the
+  all-zero 96-byte LEM infinity sentinel is legal in `L` (e.g. private wires unused in constraints)
+  and preserved unchanged (`k⁻¹ · O = O`, leaking zero bits of `k⁻¹`). Every non-infinity point in
+  `L` (section 8) and `H` (section 9) MUST have canonical `< p` coordinates, lie on BLS12-381 G1,
+  and lie in the prime-order subgroup. Any violation aborts the contribution with `IOException`.
+- **S6 — Secret-scalar routing (`ctScalarMul`):** Every multiplication by `s`, `k`, or `k⁻¹`
+  (`g1_s`, `g1_sx`, `g2_spx`, `delta1New`, `delta2New`, and every non-infinity `L`/`H` point) is
+  routed through `JacobianG1BLS381.ctScalarMul` / `JacobianG2BLS381.ctScalarMul`. For `L`/`H`,
+  validation relies on `ctScalarMul`'s built-in on-curve + prime-order subgroup check (avoiding a
+  duplicate subgroup check per point) and maps `IllegalArgumentException` across parallel worker
+  threads into a deterministic `IOException`.
+- **S7 — Atomic output writes, overwrite guard, and UTF-8 `--name` safety:**
+  - In-place overwrite (`in` and `out` resolving to the same file, including symlinks via
+    `Files.isSameFile`) is unconditionally rejected, even when overwrite is requested.
+  - Existing `out` is rejected by default (`ZkeyContributor.contribute(in, out, name)` and CLI
+    `contribute`) unless explicit `overwrite = true` / `--overwrite` is supplied.
+  - Output is written to a sibling temp file in `out`'s parent directory, forced to storage
+    (`FileChannel.force(true)`), unmapped/closed, and published atomically (`Files.createLink` for
+    non-clobbering publish when `!overwrite`, or `Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)`
+    when `overwrite`). On any error, the temp file is deleted and any existing `out` remains
+    untouched.
+  - `--name` truncates up to 64 code points and `<= 255` UTF-8 bytes on code-point boundaries,
+    matching `snarkjs 0.7.6` while preventing surrogate splits and 1-byte TLV length overflow.
+
+### Alternatives considered & measured performance trade-off
+
+- **Measured throughput (16-core Apple Silicon, Java 25, 4,096 affine G1 points after warmup):**
+  - Previous unvalidated variable-time `scalarMul`: **19,006 muls/s** (`0.216 s`).
+  - Hardened ADR-0062 `ctScalarMul` (includes single on-curve + subgroup check + additive scalar
+    splitting + 2×255 Montgomery ladder): **5,326 muls/s** (`0.769 s`), a **`3.57×`** factor.
+  - Extrapolated to a 19M-constraint circuit (~77M L+H points): ~**4.0 h** on 16 cores (vs ~1.1 h
+    unvalidated variable-time).
+- **Alternative rejected:** Inventing an unpinned batched subgroup test to skip per-point subgroup
+  checks in `L`/`H`. Rejected under `AGENTS.md` (do not invent cryptography; never trade
+  cryptographic soundness/secret safety for performance without an explicit reviewed design).
+
+### Compatibility & breaking notes
+
+- **Behavioral change:** `ZkeyContributor.contribute(Path, Path, String)` now throws `IOException`
+  if `out` already exists (previously it deleted `out` first). Callers intending replacement must
+  call `contribute(in, out, name, true)` or pass `--overwrite` to `zeroj-ceremony contribute`.
+  In-place `--in == --out` is always rejected.
+- **Stricter input validation:** Malformed or synthetic `.zkey` files with wrong primes, non-canonical
+  coordinates, invalid points, mismatched `delta1`/`delta2` pairings, or broken `deltaAfter` chains
+  are now rejected before secret generation.
+- **Wire compatibility:** Produced `.zkey` files remain 100% bit-compatible with `snarkjs@0.7.6`.
+
+### CI interop wiring
+
+- Shared test-fixture locator `SnarkjsCliLocator` (`zeroj-crypto` `testFixtures`, excluded from
+  published artifacts per ADR-0046) resolves `snarkjs@0.7.6` via `-Dzeroj.snarkjs`, `SNARKJS_BIN`,
+  `PATH`, and common npm directories.
+- `zeroj-crypto/build.gradle`, `zeroj-tools/build.gradle`, and `zeroj-integration-tests/build.gradle`
+  forward `-Dzeroj.snarkjs` and honor `-PrequireSnarkjs` (`zeroj.assurance.requireSnarkjs=true`,
+  disabling up-to-date caching).
+- `.github/workflows/assurance.yml` (`snarkjs-interop` job) runs all four ceremony / `.zkey` interop
+  suites (`R1csSnarkjsCeremonyRoundTripTest`, `ZkeyPkStoreImporterTest`,
+  `ZkeyContributorInteropTest`, `CeremonyCliTest`) fail-closed under `-PrequireSnarkjs`.
+
+### Amendment milestones & audit gates
+
+| Milestone | Scope | Status |
+|---|---|---|
+| M7 | Implement S1–S7 in `ZkeyContributor` and `CeremonyCli` (`--overwrite`) | Implemented |
+| M8 | Offline unit/negative test suite (`ZkeyContributorTest`) covering framing, primes, canonical `< p`, infinity, off-curve, small-subgroup, pairing mismatch, chain break, TLV, overwrite/atomic rollback | Implemented |
+| M9 | `SnarkjsCliLocator` + `-PrequireSnarkjs` + `assurance.yml` wiring for all 4 ceremony/streaming `.zkey` suites | Implemented |
+| M10 | External cryptographic review & ceremony rehearsal sign-off before production value-bearing ceremony | Open (mandatory gate) |
+
+### Revision history
+
+- **2026-07-08:** Initial `Proposed` ADR covering Option A/B ceremony architecture and M1–M6 results.
+- **2026-08-31:** CLI artifact boundary superseded by ADR-0044 (`zeroj-ceremony` merged into `zeroj-tools`).
+- **2026-11-20:** Added R3 contributor hardening amendment (`S1`–`S7`), measured `ctScalarMul`
+  throughput trade-off (`3.57×`), pinned `snarkjs@0.7.6` `L`/`H` infinity semantics, and fail-closed
+  CI interop wiring (`SnarkjsCliLocator` + `assurance.yml`). Status remains `Proposed` pending review.

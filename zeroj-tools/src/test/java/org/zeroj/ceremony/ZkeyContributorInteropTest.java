@@ -1,12 +1,16 @@
 package org.zeroj.ceremony;
 
 import org.zeroj.api.CurveId;
+import org.zeroj.crypto.groth16.Groth16PkStore;
+import org.zeroj.crypto.groth16.Groth16ProverBLS381;
+import org.zeroj.crypto.groth16.ProverBackend;
+import org.zeroj.crypto.groth16.ZkeyPkStoreImporter;
+import org.zeroj.crypto.testsupport.SnarkjsCliLocator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.math.BigInteger;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +30,7 @@ class ZkeyContributorInteropTest {
 
     @Test
     void zerojContribution_verifiedBySnarkjs_mixedTranscript(@TempDir Path dir) throws Exception {
-        String snarkjs = findSnarkjs();
-        assumeTrue(snarkjs != null, "snarkjs not found");
+        String snarkjs = requireSnarkjs();
 
         // ceremony genesis (snarkjs)
         Path r1cs = dir.resolve("mul.r1cs");
@@ -69,26 +72,27 @@ class ZkeyContributorInteropTest {
                 "out", List.of(BigInteger.valueOf(391)),
                 "a", List.of(BigInteger.valueOf(17)),
                 "b", List.of(BigInteger.valueOf(23))), CurveId.BLS12_381);
-        try (var loaded = org.zeroj.crypto.groth16.Groth16PkStore.load(store)) {
-            var cons = org.zeroj.crypto.groth16.ZkeyPkStoreImporter
+        try (var loaded = Groth16PkStore.load(store)) {
+            var cons = ZkeyPkStoreImporter
                     .snarkjsConstraints(compiled.constraints(), compiled.numPublicInputs());
-            var proof = org.zeroj.crypto.groth16.Groth16ProverBLS381.proveWithReaders(
+            var proof = Groth16ProverBLS381.proveWithReaders(
                     loaded.pk(), loaded.readers(),
-                    org.zeroj.crypto.groth16.ProverBackend.PURE_JAVA,
+                    ProverBackend.PURE_JAVA,
                     witness, cons, compiled.numWires(), loaded.domain());
             assertTrue(proof.a().isOnCurve() && proof.b().isOnCurve() && proof.c().isOnCurve());
         }
         System.out.println("[M5] ZeroJ contribute -> snarkjs verify OK -> mixed-tool chain verify OK -> proves PASSED");
     }
 
-    private static String findSnarkjs() {
-        String prop = System.getProperty("zeroj.snarkjs");
-        for (String cand : new String[]{prop,
-                System.getProperty("user.home") + "/.npm-global/bin/snarkjs",
-                "/usr/local/bin/snarkjs", "/opt/homebrew/bin/snarkjs"}) {
-            if (cand != null && Files.isExecutable(Path.of(cand))) return cand;
+    private static String requireSnarkjs() {
+        var res = SnarkjsCliLocator.resolvePinned();
+        if (!res.isReady()) {
+            if (SnarkjsCliLocator.isRequired()) {
+                fail(res.reason() + " — required by -PrequireSnarkjs");
+            }
+            assumeTrue(false, res.reason() + " — skipping");
         }
-        return null;
+        return res.binary();
     }
 
     private static void run(Path dir, String... cmd) throws IOException, InterruptedException {

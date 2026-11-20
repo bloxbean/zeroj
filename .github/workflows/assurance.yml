@@ -101,12 +101,18 @@ jobs:
 
       # Both directions, with negatives: ZeroJ Groth16/PlonK proofs and ZeroJ-native verification
       # keys are checked by `snarkjs groth16 verify` / `snarkjs plonk verify` (tampered proofs and
-      # public inputs must be rejected), and live `snarkjs ... prove` output is checked by the
-      # pure-Java and blst ZeroJ verifiers. -PrequireSnarkjs makes a missing oracle a failure.
-      - name: Run the bidirectional interop suites
+      # public inputs must be rejected), live `snarkjs ... prove` output is checked by the
+      # pure-Java and blst ZeroJ verifiers, and the ADR-0031 ceremony / streaming .zkey interop
+      # suites exercise export-r1cs, contribute, snarkjs zkey verify, and finalize end to end.
+      # -PrequireSnarkjs makes a missing or wrong-version oracle a hard failure across all modules.
+      - name: Run the bidirectional and ceremony interop suites
         run: |
           ./gradlew -PrequireSnarkjs \
             :zeroj-integration-tests:test --tests 'org.zeroj.it.snarkjs.*' \
+            :zeroj-crypto:test --tests 'org.zeroj.crypto.groth16.R1csSnarkjsCeremonyRoundTripTest' \
+                               --tests 'org.zeroj.crypto.groth16.ZkeyPkStoreImporterTest' \
+            :zeroj-tools:test --tests 'org.zeroj.ceremony.ZkeyContributorInteropTest' \
+                              --tests 'org.zeroj.ceremony.CeremonyCliTest' \
             --stacktrace
 
       - name: Upload test reports
@@ -114,7 +120,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: snarkjs-interop-test-reports
-          path: 'zeroj-integration-tests/build/reports/tests/'
+          path: |
+            zeroj-integration-tests/build/reports/tests/
+            zeroj-crypto/build/reports/tests/
+            zeroj-tools/build/reports/tests/
           retention-days: 14
 
   gnark-fixtures:

@@ -10,6 +10,7 @@ import org.zeroj.bls12381.field.Fp2;
 import org.zeroj.bls12381.field.MontFr381;
 import org.zeroj.bls12381.pairing.BLS12381Pairing;
 import org.zeroj.codec.SnarkjsJsonCodec;
+import org.zeroj.crypto.testsupport.SnarkjsCliLocator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -38,8 +39,7 @@ class ZkeyPkStoreImporterTest {
 
     @Test
     void ceremonyZkey_streamImport_provesFromStore(@TempDir Path dir) throws Exception {
-        String snarkjs = findSnarkjs();
-        assumeTrue(snarkjs != null, "snarkjs not found");
+        String snarkjs = requireSnarkjs();
 
         // snarkjs ceremony over an exported ZeroJ circuit (M1 flow)
         int n = 64, numWires = n + 2, numPublic = 1;
@@ -126,14 +126,15 @@ class ZkeyPkStoreImporterTest {
         return w;
     }
 
-    private static String findSnarkjs() {
-        String prop = System.getProperty("zeroj.snarkjs");
-        for (String cand : new String[]{prop,
-                System.getProperty("user.home") + "/.npm-global/bin/snarkjs",
-                "/usr/local/bin/snarkjs", "/opt/homebrew/bin/snarkjs"}) {
-            if (cand != null && Files.isExecutable(Path.of(cand))) return cand;
+    private static String requireSnarkjs() {
+        var res = SnarkjsCliLocator.resolvePinned();
+        if (!res.isReady()) {
+            if (SnarkjsCliLocator.isRequired()) {
+                fail(res.reason() + " — required by -PrequireSnarkjs");
+            }
+            assumeTrue(false, res.reason() + " — skipping");
         }
-        return null;
+        return res.binary();
     }
 
     private static void run(Path dir, String... cmd) throws IOException, InterruptedException {

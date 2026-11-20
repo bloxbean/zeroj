@@ -43,16 +43,21 @@ public class SnarkjsProver {
      * Find snarkjs binary by checking common locations.
      */
     public static String findSnarkjs() {
-        // 1. Environment variable
-        String envBin = System.getenv("SNARKJS_BIN");
-        if (envBin != null && !envBin.isBlank()) return envBin;
+        // 1. Explicit system property override
+        String propBin = System.getProperty("zeroj.snarkjs");
+        if (propBin != null && !propBin.isBlank()) return propBin.trim();
 
-        // 2. Common npm global install locations
+        // 2. Environment variable
+        String envBin = System.getenv("SNARKJS_BIN");
+        if (envBin != null && !envBin.isBlank()) return envBin.trim();
+
+        // 3. Common npm global install locations
         String home = System.getProperty("user.home");
         String[] candidates = {
                 "snarkjs",
                 home + "/.npm-global/bin/snarkjs",
                 "/usr/local/bin/snarkjs",
+                "/opt/homebrew/bin/snarkjs",
                 home + "/.nvm/versions/node/current/bin/snarkjs",
         };
         for (String candidate : candidates) {

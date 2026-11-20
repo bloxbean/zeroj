@@ -30,6 +30,13 @@ test {
     // zeroj-crypto still exercises legacy BN254 arithmetic/prover regression
     // coverage. Runtime users must opt in explicitly to BN254.
     systemProperty 'zeroj.allowLegacyBn254', 'true'
+    if (System.getProperty('zeroj.snarkjs') != null) {
+        systemProperty 'zeroj.snarkjs', System.getProperty('zeroj.snarkjs')
+    }
+    if (project.hasProperty('requireSnarkjs')) {
+        systemProperty 'zeroj.assurance.requireSnarkjs', 'true'
+        outputs.upToDateWhen { false }
+    }
 }
 
 // ADR-0027 M7: opt-in prover-scale benchmark. Heavy (minutes, multi-GB); never part of

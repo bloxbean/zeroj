@@ -15,6 +15,7 @@ import org.zeroj.crypto.groth16.Groth16ProverBLS381;
 import org.zeroj.crypto.groth16.ProverBackend;
 import org.zeroj.crypto.groth16.R1CSImporter;
 import org.zeroj.crypto.groth16.ZkeyPkStoreImporter;
+import org.zeroj.crypto.testsupport.SnarkjsCliLocator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -90,9 +91,33 @@ class CeremonyCliTest {
     }
 
     @Test
+    void contributeOverwriteAndSamePath_rejectedBeforeParsing(@TempDir Path dir) throws Exception {
+        Path input = dir.resolve("input.zkey");
+        Path existing = dir.resolve("existing.zkey");
+        byte[] sentinelIn = new byte[]{1, 2, 3, 4};
+        byte[] sentinelOut = new byte[]{5, 6, 7, 8};
+        Files.write(input, sentinelIn);
+        Files.write(existing, sentinelOut);
+
+        var samePath = capture("contribute", "--in", input.toString(), "--out", input.toString());
+        assertEquals(2, samePath.exitCode(), samePath.stderr());
+        assertTrue(samePath.stderr().contains("in-place overwrite"), samePath.stderr());
+        assertArrayEquals(sentinelIn, Files.readAllBytes(input), "input must remain untouched");
+
+        var samePathForced = capture("contribute", "--overwrite", "--in", input.toString(), "--out", input.toString());
+        assertEquals(2, samePathForced.exitCode(), samePathForced.stderr());
+        assertTrue(samePathForced.stderr().contains("in-place overwrite"), samePathForced.stderr());
+        assertArrayEquals(sentinelIn, Files.readAllBytes(input), "input must remain untouched even with --overwrite");
+
+        var existsNoFlag = capture("contribute", "--in", input.toString(), "--out", existing.toString());
+        assertEquals(2, existsNoFlag.exitCode(), existsNoFlag.stderr());
+        assertTrue(existsNoFlag.stderr().contains("--overwrite"), existsNoFlag.stderr());
+        assertArrayEquals(sentinelOut, Files.readAllBytes(existing), "existing output must remain untouched");
+    }
+
+    @Test
     void fullOptionA_ceremonyViaCli_provesAndVerifies(@TempDir Path dir) throws Exception {
-        String snarkjs = findSnarkjs();
-        assumeTrue(snarkjs != null, "snarkjs not found");
+        String snarkjs = requireSnarkjs();
 
         // 1. export via CLI
         Path r1cs = dir.resolve("mul.r1cs");
@@ -173,14 +198,15 @@ class CeremonyCliTest {
         }
     }
 
-    private static String findSnarkjs() {
-        String prop = System.getProperty("zeroj.snarkjs");
-        for (String cand : new String[]{prop,
-                System.getProperty("user.home") + "/.npm-global/bin/snarkjs",
-                "/usr/local/bin/snarkjs", "/opt/homebrew/bin/snarkjs"}) {
-            if (cand != null && Files.isExecutable(Path.of(cand))) return cand;
+    private static String requireSnarkjs() {
+        var res = SnarkjsCliLocator.resolvePinned();
+        if (!res.isReady()) {
+            if (SnarkjsCliLocator.isRequired()) {
+                fail(res.reason() + " — required by -PrequireSnarkjs");
+            }
+            assumeTrue(false, res.reason() + " — skipping");
         }
-        return null;
+        return res.binary();
     }
 
     private static void run(Path dir, String... cmd) throws IOException, InterruptedException {
