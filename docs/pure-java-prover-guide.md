@@ -440,8 +440,8 @@ testImplementation 'com.bloxbean.cardano:cardano-client-lib'
 
 | Test | Circuit | What It Proves |
 |------|---------|---------------|
-| `SealedBidPureJavaE2ETest` | Sealed bid auction (497 constraints) | MiMC hash + range comparison; BN254/off-chain reference unless migrated to BLS12-381 Poseidon |
-| `AnonymousVotingPureJavaE2ETest` | Anonymous voting (367 constraints) | MiMC commitment + boolean; BN254/off-chain reference unless migrated to BLS12-381 Poseidon |
+| `SealedBidPureJavaE2ETest` | Sealed bid auction | BLS12-381 Poseidon commitment + range comparison |
+| `AnonymousVotingPureJavaE2ETest` | Anonymous voting | BLS12-381 Poseidon commitment + boolean constraint |
 | `BalanceThresholdPureJavaE2ETest` | Balance threshold (132 constraints) | Range comparison |
 | `PureJavaProverYaciE2ETest` | Multiplier | **Full stack: prove → Yaci DevKit on-chain** |
 | `Groth16BLS381ZkeyEndToEndTest` | Multiplier + Cubic | snarkjs .zkey import → Java prove → pairing verify |

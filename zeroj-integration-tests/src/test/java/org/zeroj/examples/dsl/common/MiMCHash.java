@@ -6,16 +6,17 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Standalone BN254/off-chain MiMC-7 hash computation (outside ZK circuits).
+ * <b>LEGACY TEST REGRESSION FIXTURE ONLY — INSECURE / INVERTIBLE — DO NOT USE IN REAL CIRCUITS.</b>
  *
- * <p>Produces the same output as the circuit-based {@code SignalMiMC.hash()} / {@code MiMC.hash()},
- * allowing the prover to compute hash values before constructing the witness.</p>
+ * <p>Host-side mirror of the deprecated {@code MiMC.hash()} / {@code SignalMiMC.hash()} gadgets,
+ * retained solely so legacy BN254 regression tests can compute expected outputs for the deprecated
+ * invertible keyed bijection (91 rounds of {@code (state + rc_i + key)^7}, returning
+ * {@code state + key}, with SHA-256 round constants and no Miyaguchi–Preneel feed-forward).</p>
  *
- * <p>MiMC-7 parameters: 91 rounds, S-box x^7, round constants = SHA-256("mimc_round_N").</p>
- *
- * <p>The in-circuit MiMC gadget is BN254-only. Cardano-facing examples should
- * use BLS12-381 Poseidon instead.</p>
+ * <p>Do not copy this helper into application code; use
+ * {@code PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, left, right)} instead.</p>
  */
+@Deprecated(forRemoval = true)
 public final class MiMCHash {
 
     private MiMCHash() {}

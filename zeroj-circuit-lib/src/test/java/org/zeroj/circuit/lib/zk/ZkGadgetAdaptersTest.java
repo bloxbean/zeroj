@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("removal")
 class ZkGadgetAdaptersTest {
     private static final BigInteger EDDSA_SK = new BigInteger(
             "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", 16)

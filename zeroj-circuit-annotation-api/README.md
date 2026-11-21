@@ -61,9 +61,11 @@ ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, owner, assetId, nonce);
 ZkMerkle.isMemberPoseidon(zk, PoseidonParamsBLS12_381T3.INSTANCE, leaf, root, siblings, pathBits);
 ```
 
-Do not rely on no-params Poseidon or MiMC for Cardano defaults. The no-params
-Poseidon path is BN254-compatible behavior, and `ZkMiMC` delegates to the
-BN254-only MiMC gadget.
+Do not rely on no-params Poseidon for Cardano defaults, and do not use `ZkMiMC`
+or `ZkMerkle.HashType.MIMC` at all: the no-params Poseidon path is
+BN254-compatible behavior, and the entire `MiMC` gadget family is deprecated
+for removal as an insecure, invertible keyed bijection (not a collision-resistant
+hash).
 
 Important API rules:
 
@@ -93,13 +95,16 @@ Known limitations:
   commitments. For Cardano, pass BLS12-381 Poseidon params explicitly; the
   symbolic API intentionally does not provide a no-params `ZkPoseidonN`
   overload.
-- `ZkMiMC` is BN254-only because it delegates to the existing MiMC gadget. Use
-  `ZkPoseidon` with explicit BLS12-381 parameters for Cardano/BLS12-381
-  circuits.
-- `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON` convenience
-  path are BN254-oriented today. For Cardano Merkle circuits, use
-  `ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
-  explicit BLS12-381 Poseidon params.
+- `ZkMiMC` and `ZkMerkle.HashType.MIMC` are **deprecated for removal (insecure)**:
+  the underlying `MiMC` gadget is a trivially invertible keyed permutation
+  (missing Davies-Meyer / Miyaguchi-Preneel feed-forward) and is not a
+  collision-resistant hash or circomlib-compatible. Use `ZkPoseidon` /
+  `ZkMerkle.*Poseidon(...)` with explicit `PoseidonParamsBLS12_381T3.INSTANCE`
+  instead.
+- The no-params `ZkMerkle.HashType.POSEIDON` convenience path is BN254-oriented
+  today. For Cardano Merkle circuits, use `ZkMerkle.computeRootPoseidon`,
+  `isMemberPoseidon`, or `verifyPoseidon` with explicit BLS12-381 Poseidon
+  params.
 - Elliptic-curve composite symbolic types are available for the shipped Jubjub
   use cases (`ZkJubjubPoint`, Pedersen, EdDSA-Jubjub). Add a curve-specific
   symbolic wrapper before using another curve family. Their readiness is tracked

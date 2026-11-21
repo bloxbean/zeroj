@@ -13,8 +13,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for production-ready stdlib functions: AliasCheck, MiMCSponge, PoseidonN.
+ * Tests for stdlib gadgets: AliasCheck, deprecated legacy MiMCSponge, and PoseidonN.
  */
+@SuppressWarnings("removal")
 class NewStdlibTest {
 
     private static final BigInteger BN254_FR = FieldConfig.BN254.prime();

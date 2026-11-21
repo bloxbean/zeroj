@@ -55,10 +55,10 @@ const GROUPS = [
 ];
 
 const NOTES = {
-  ZkMiMC: 'BN254-only. Do not use for Cardano (BLS12-381) circuits.',
+  ZkMiMC: 'DEPRECATED FOR REMOVAL (INSECURE): invertible keyed bijection on BN254 without feed-forward. Do not use; use ZkPoseidon on BLS12-381.',
   ZkPoseidon: 'For Cardano pass PoseidonParamsBLS12_381T3.INSTANCE explicitly.',
   ZkPoseidonN: 'For Cardano pass PoseidonParamsBLS12_381T3.INSTANCE explicitly.',
-  ZkMerkle: 'For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC and no-params POSEIDON are BN254/off-chain paths.',
+  ZkMerkle: 'For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC is deprecated for removal (insecure) and no-params POSEIDON is BN254.',
   ZkUInt: 'Declare inputs with @UInt(bits = N); construction adds range constraints.',
 };
 

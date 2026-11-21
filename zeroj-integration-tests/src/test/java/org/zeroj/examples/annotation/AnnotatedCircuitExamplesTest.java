@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("removal")
 class AnnotatedCircuitExamplesTest {
 
     @Test
@@ -309,6 +310,7 @@ class AnnotatedCircuitExamplesTest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void parameterizedMerkleMembershipUsesBn254MiMCDepthAndHashType() {
         int depth = 2;
         var hashType = ZkMerkle.HashType.MIMC;
