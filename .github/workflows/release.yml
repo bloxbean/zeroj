@@ -113,6 +113,10 @@ jobs:
           echo "Version $VERSION (final: $IS_FINAL), Maven Central: $MAVEN_CENTRAL_PUBLISH," \
             "BloxBean repository: $BLOXBEAN_REPO_PUBLISH, GitHub release: ${GITHUB_RELEASE:-false}"
 
+      - name: Assert release POMs and classpaths contain no -SNAPSHOT dependencies
+        if: github.ref_type == 'tag'
+        run: ./gradlew verifyNoSnapshotDependenciesInReleasePoms -PrequireNoSnapshotDependencies=true -PskipSigning=true --stacktrace
+
   # ================================================================
   # Stage 1: Build libblst from source for every supported platform
   # (pinned tag in zeroj-blst/scripts/build-blst.sh) so released jars
@@ -268,8 +272,8 @@ jobs:
       - name: Build and test
         run: ./gradlew build --stacktrace
 
-      - name: Assert the default graph has no assurance/benchmark/removed-provider edge
-        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine --stacktrace
+      - name: Assert module boundaries and release POMs have no -SNAPSHOT dependencies
+        run: ./gradlew verifyDefaultModuleSurface verifyNoBuiltinProfileDefine verifyNoSnapshotDependenciesInReleasePoms -PrequireNoSnapshotDependencies=true --stacktrace
 
       # Learns the artifactIds this build owns; unsigned, its staged files are discarded.
       - name: Discover the Maven publications
