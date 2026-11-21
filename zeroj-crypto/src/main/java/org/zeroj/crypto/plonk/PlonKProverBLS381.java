@@ -309,16 +309,27 @@ public final class PlonKProverBLS381 {
         var tCoeffs = cosetIFFT(tCoset, shift, n4, logN4);
 
         // Split t into three parts; T1/T2 reserve degree n for quotient-split blinders.
-        var t1 = new MontFr381[n + 1]; var t2 = new MontFr381[n + 1];
-        // T3 gets all remaining coefficients (degree 2n onwards) — may exceed n due to blinding
-        int t3Len = Math.max(n, tCoeffs.length - 2 * n);
+        // deg(aBlind), deg(bBlind), deg(cBlind) <= n + 1 and deg(zBlind) <= n + 2, so the
+        // numerator has degree <= 4n + 5 and t(X) has degree <= 3n + 5 (3n + 6 coefficients).
+        // Therefore T3 has exact length n + 6 (indices 2n .. 3n + 5), matching snarkjs 0.7.6
+        // plonk_prove.js and allowing a same-power .ptau (2n - 1 >= n + 6 for n >= 8).
+        var t1 = new MontFr381[n + 1];
+        var t2 = new MontFr381[n + 1];
+        int t3Len = n + 6;
         var t3 = new MontFr381[t3Len];
         for (int i = 0; i < n; i++) {
-            t1[i] = i < tCoeffs.length ? tCoeffs[i] : MontFr381.ZERO;
-            t2[i] = i + n < tCoeffs.length ? tCoeffs[i + n] : MontFr381.ZERO;
+            t1[i] = tCoeffs[i];
+            t2[i] = tCoeffs[i + n];
         }
         for (int i = 0; i < t3Len; i++) {
-            t3[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr381.ZERO;
+            t3[i] = tCoeffs[i + 2 * n];
+        }
+        for (int i = 3 * n + 6; i < tCoeffs.length; i++) {
+            if (!tCoeffs[i].isZero()) {
+                throw new IllegalStateException(
+                        "PlonK quotient polynomial t(X) exceeds degree 3n+5 (non-zero coefficient at index "
+                                + i + "; witness likely does not satisfy the circuit constraints)");
+            }
         }
 
         // PLONK 8.4 / snarkjs v0.7.6: randomize the split without changing T(X).
@@ -623,8 +634,9 @@ public final class PlonKProverBLS381 {
         if (pk.omega() == null) {
             throw new IllegalArgumentException("omega must not be null");
         }
-        if (pk.srsG1() == null || pk.srsG1().length < 2 * n) {
-            throw new IllegalArgumentException("SRS G1 length must be at least " + (2 * n));
+        int requiredSrsG1 = n + 6;
+        if (pk.srsG1() == null || pk.srsG1().length < requiredSrsG1) {
+            throw new IllegalArgumentException("SRS G1 length must be at least " + requiredSrsG1);
         }
 
         requireWireArray("wireA", wireA, n);

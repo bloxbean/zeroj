@@ -50,14 +50,30 @@ class PlonKBLS381InvariantTest {
 
     @Test
     void setup_rejectsSrsTooShortForBlindedPlonkPolynomials() {
+        // domainSize = 8 requires domainSize + 6 = 14 G1 powers; 13 must fail
         var shortSrs = new PtauImporterBLS381.SRS(
-                Arrays.copyOf(fixture.srs().tauG1(), 15),
+                Arrays.copyOf(fixture.srs().tauG1(), 13),
                 fixture.srs().tauG2(),
                 fixture.srs().power(),
                 fixture.srs().tauScalar());
 
         assertThrows(IllegalArgumentException.class, () -> setupWith(fixture.gateSelectors(),
                 fixture.sigmaA(), fixture.sigmaB(), fixture.sigmaC(), shortSrs));
+    }
+
+    @Test
+    void setupAndProve_acceptsExactDomainPlus6Srs() {
+        // Exact domainSize + 6 = 14 G1 powers (matching a same-power snarkjs .ptau with 2n - 1 = 15 >= 14)
+        var exactSrs = new PtauImporterBLS381.SRS(
+                Arrays.copyOf(fixture.srs().tauG1(), 14),
+                fixture.srs().tauG2(),
+                fixture.srs().power(),
+                fixture.srs().tauScalar());
+        var pk = setupWith(fixture.gateSelectors(),
+                fixture.sigmaA(), fixture.sigmaB(), fixture.sigmaC(), exactSrs);
+        var proof = PlonKProverBLS381.prove(
+                pk, fixture.wireA(), fixture.wireB(), fixture.wireC(), fixture.pubInputs());
+        assertTrue(proof.commitT3().isOnCurve());
     }
 
     @Test
