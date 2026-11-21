@@ -22,6 +22,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
+import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URLClassLoader;
@@ -1409,7 +1410,7 @@ class CircuitAnnotationProcessorTest {
                 """);
         assertTrue(singlePass.success(), singlePass.diagnosticsText());
         Class<?> gen = singlePass.load("test.SinglePassAndBoxedCircuit");
-        var nullEx = assertThrows(java.lang.reflect.InvocationTargetException.class,
+        var nullEx = assertThrows(InvocationTargetException.class,
                 () -> gen.getMethod("build", Integer.class, String.class).invoke(null, null, "x"));
         assertTrue(nullEx.getCause() instanceof IllegalArgumentException);
         assertTrue(nullEx.getCause().getMessage().contains("must not be null"));
@@ -1424,7 +1425,7 @@ class CircuitAnnotationProcessorTest {
         CircuitBuilder fakeSameName = CircuitBuilder.create(schema.name())
                 .publicVar("wrong_pub")
                 .define(api -> {});
-        var mismatchEx = assertThrows(java.lang.reflect.InvocationTargetException.class,
+        var mismatchEx = assertThrows(InvocationTargetException.class,
                 () -> gen.getMethod("calculateWitness", CircuitBuilder.class, inputsObj.getClass(), CurveId.class)
                         .invoke(null, fakeSameName, inputsObj, CurveId.BLS12_381));
         assertTrue(mismatchEx.getCause() instanceof IllegalArgumentException);

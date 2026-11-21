@@ -5,15 +5,20 @@ import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.Bls12381Generators;
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
+import org.zeroj.bls12381.field.Fp;
+import org.zeroj.bls12381.field.Fp2;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Groth16VerificationKeyCodecTest {
     @Test
@@ -49,28 +54,54 @@ class Groth16VerificationKeyCodecTest {
     }
 
     @Test
-    void decodeRejectsInfinityAndInvalidCompressedPoints() {
+    void encodeAndDecodeRejectInfinityOffSubgroupAndInvalidCompressedPoints() {
         var valid = validKey();
         byte[] g1Inf = Bls12381Codecs.g1ToCompressed(G1Point.INFINITY);
         byte[] g2Inf = Bls12381Codecs.g2ToCompressed(G2Point.INFINITY);
 
-        var infAlpha = new SnarkjsToCardano.VkCompressed(g1Inf, valid.beta(), valid.gamma(), valid.delta(), valid.ic());
-        assertThrows(IllegalArgumentException.class,
-                () -> Groth16VerificationKeyCodec.decode(Groth16VerificationKeyCodec.encode(infAlpha)));
+        G1Point g1Torsion = new G1Point(Fp.ZERO, Fp.of(2));
+        assertTrue(g1Torsion.isOnCurve());
+        assertFalse(g1Torsion.isInSubgroup());
+        byte[] g1OffSubgroup = Bls12381Codecs.g1ToCompressed(g1Torsion);
 
-        var infBeta = new SnarkjsToCardano.VkCompressed(valid.alpha(), g2Inf, valid.gamma(), valid.delta(), valid.ic());
-        assertThrows(IllegalArgumentException.class,
-                () -> Groth16VerificationKeyCodec.decode(Groth16VerificationKeyCodec.encode(infBeta)));
+        Fp2 x2 = Fp2.of(Fp.ZERO, Fp.ONE);
+        Fp2 y2 = x2.square().mul(x2).add(Fp2.of(Fp.of(4), Fp.of(4))).sqrt().orElseThrow();
+        G2Point g2Torsion = new G2Point(x2, y2);
+        assertTrue(g2Torsion.isOnCurve());
+        assertFalse(g2Torsion.isInSubgroup());
+        byte[] g2OffSubgroup = Bls12381Codecs.g2ToCompressed(g2Torsion);
 
-        var infIc = new SnarkjsToCardano.VkCompressed(
-                valid.alpha(), valid.beta(), valid.gamma(), valid.delta(), List.of(valid.ic().get(0), g1Inf));
-        assertThrows(IllegalArgumentException.class,
-                () -> Groth16VerificationKeyCodec.decode(Groth16VerificationKeyCodec.encode(infIc)));
+        List<SnarkjsToCardano.VkCompressed> badKeys = List.of(
+                new SnarkjsToCardano.VkCompressed(g1Inf, valid.beta(), valid.gamma(), valid.delta(), valid.ic()),
+                new SnarkjsToCardano.VkCompressed(valid.alpha(), g2Inf, valid.gamma(), valid.delta(), valid.ic()),
+                new SnarkjsToCardano.VkCompressed(valid.alpha(), valid.beta(), valid.gamma(), valid.delta(),
+                        List.of(valid.ic().get(0), g1Inf)),
+                new SnarkjsToCardano.VkCompressed(filled(48, 1), valid.beta(), valid.gamma(), valid.delta(), valid.ic()),
+                new SnarkjsToCardano.VkCompressed(g1OffSubgroup, valid.beta(), valid.gamma(), valid.delta(), valid.ic()),
+                new SnarkjsToCardano.VkCompressed(valid.alpha(), g2OffSubgroup, valid.gamma(), valid.delta(), valid.ic())
+        );
 
-        var garbage = new SnarkjsToCardano.VkCompressed(
-                filled(48, 1), valid.beta(), valid.gamma(), valid.delta(), valid.ic());
-        assertThrows(IllegalArgumentException.class,
-                () -> Groth16VerificationKeyCodec.decode(Groth16VerificationKeyCodec.encode(garbage)));
+        for (var bad : badKeys) {
+            assertThrows(IllegalArgumentException.class, () -> Groth16VerificationKeyCodec.encode(bad));
+            byte[] rawWire = rawEncodeUnchecked(bad);
+            assertThrows(IllegalArgumentException.class, () -> Groth16VerificationKeyCodec.decode(rawWire));
+        }
+    }
+
+    private static byte[] rawEncodeUnchecked(SnarkjsToCardano.VkCompressed key) {
+        byte[] magic = "ZJG1VK01".getBytes(StandardCharsets.US_ASCII);
+        int size = magic.length + 4 + 48 + 3 * 96 + key.ic().size() * 48;
+        ByteBuffer buf = ByteBuffer.allocate(size);
+        buf.put(magic);
+        buf.putInt(key.ic().size());
+        buf.put(key.alpha());
+        buf.put(key.beta());
+        buf.put(key.gamma());
+        buf.put(key.delta());
+        for (byte[] p : key.ic()) {
+            buf.put(p);
+        }
+        return buf.array();
     }
 
     private static SnarkjsToCardano.VkCompressed validKey() {

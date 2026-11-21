@@ -103,6 +103,52 @@ class Fe25519HintTest {
         assertTrue(c > 0 && c < 8051, "mulHint should be cheaper than deterministic mul: " + c);
     }
 
+    @Test
+    void configureHintsOverridesSingleCircuitWithoutMutatingGlobalDefault() {
+        BigInteger a = randFe();
+        BigInteger b = randFe();
+        BigInteger expected = a.multiply(b).mod(P);
+        BigInteger[] al = Fe25519.toLimbValues(a);
+        BigInteger[] bl = Fe25519.toLimbValues(b);
+        BigInteger[] el = Fe25519.toLimbValues(expected);
+
+        var hintCircuit = CircuitBuilder.create("fe25519-per-circuit-hint");
+        var defaultCircuit = CircuitBuilder.create("fe25519-default-det");
+        for (int i = 0; i < 5; i++) {
+            hintCircuit.secretVar("a" + i).secretVar("b" + i).publicVar("e" + i);
+            defaultCircuit.secretVar("a" + i).secretVar("b" + i).publicVar("e" + i);
+        }
+        hintCircuit.define(api -> {
+            Fe25519.configureHints(api, new Fe25519.HintConfig(true, true));
+            Variable[] av = new Variable[5], bv = new Variable[5];
+            for (int i = 0; i < 5; i++) { av[i] = api.var("a" + i); bv[i] = api.var("b" + i); }
+            Variable[] rl = Fe25519.ofLimbsTrusted(api, av).mul(Fe25519.ofLimbsTrusted(api, bv)).canonical().limbs();
+            for (int i = 0; i < 5; i++) api.assertEqual(rl[i], api.var("e" + i));
+        });
+        defaultCircuit.define(api -> {
+            Variable[] av = new Variable[5], bv = new Variable[5];
+            for (int i = 0; i < 5; i++) { av[i] = api.var("a" + i); bv[i] = api.var("b" + i); }
+            Variable[] rl = Fe25519.ofLimbsTrusted(api, av).mul(Fe25519.ofLimbsTrusted(api, bv)).canonical().limbs();
+            for (int i = 0; i < 5; i++) api.assertEqual(rl[i], api.var("e" + i));
+        });
+
+        int hintConstraints = hintCircuit.compileR1CS(CurveId.BLS12_381).numConstraints();
+        int defaultConstraints = defaultCircuit.compileR1CS(CurveId.BLS12_381).numConstraints();
+        assertTrue(hintConstraints < defaultConstraints,
+                "Per-circuit hint config should route mul() through mulHint: hint="
+                        + hintConstraints + ", default=" + defaultConstraints);
+        assertFalse(Fe25519.hintConfig(null).useHintMul(), "Global default must remain unchanged");
+
+        Map<String, List<BigInteger>> inputs = new HashMap<>();
+        for (int i = 0; i < 5; i++) {
+            inputs.put("a" + i, List.of(al[i]));
+            inputs.put("b" + i, List.of(bl[i]));
+            inputs.put("e" + i, List.of(el[i]));
+        }
+        assertDoesNotThrow(() -> hintCircuit.calculateWitness(inputs, CurveId.BLS12_381));
+        assertDoesNotThrow(() -> defaultCircuit.calculateWitness(inputs, CurveId.BLS12_381));
+    }
+
     // ------------------------------------------------------------------
     // 2. Soundness: adversarial (q, r) fed to mulFromQR must be REJECTED
     // ------------------------------------------------------------------

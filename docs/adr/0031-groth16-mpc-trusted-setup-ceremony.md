@@ -65,9 +65,9 @@ Java developers calling APIs — each role gets one command:
 | command | who | what | milestone |
 |---|---|---|---|
 | `export-r1cs --circuit <FQCN of @ZKCircuit> --out c.r1cs` | coordinator | compile the ZeroJ circuit → iden3 `.r1cs` (used by **both** options) | M4 |
-| `contribute in.zkey out.zkey` | contributor | Option B phase-2 contribution (entropy prompt + hash printout) | M5 |
+| `contribute --in in.zkey --out out.zkey` | contributor | Option B phase-2 contribution (entropy prompt + hash printout) | M5 |
 | `verify c.r1cs pot.ptau final.zkey` | anyone | *not implemented in `zeroj-ceremony`* — use **`snarkjs zkey verify`** directly so verification remains completely independent | N/A |
-| `beacon in.zkey out.zkey --hash <pub randomness>` | coordinator | final beacon contribution | M5 |
+| `beacon` | coordinator | *not implemented in `zeroj-ceremony`* — use **`snarkjs zkey beacon`** for the final beacon contribution | N/A |
 | `finalize final.zkey --pk-store <dir>` | coordinator | import + persist via `Groth16PkStore`, export the VK for the validator | M2/M4 |
 
 Same module family later hosts the planned end-user proving CLI (seed phrase → ownership proof) —

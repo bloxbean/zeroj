@@ -1,6 +1,9 @@
 package org.zeroj.crypto.groth16;
 
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
 import org.zeroj.bls12381.field.Fp;
 import org.zeroj.bls12381.field.MontFp2_381;
@@ -300,12 +303,18 @@ public final class Groth16PkStore {
         if (p == null || p.isInfinity() || !p.isOnCurve()) {
             throw new IOException("Groth16 " + label + " must be a non-infinity point on BLS12-381 G1");
         }
+        if (!JacobianG1BLS381.fromAffine(p.x(), p.y()).scalarMul(G1Point.R).isInfinity()) {
+            throw new IOException("Groth16 " + label + " is not in the BLS12-381 G1 prime-order subgroup");
+        }
         return p;
     }
 
     private static AffineG2 requireNonInfinityG2(AffineG2 p, String label) throws IOException {
         if (p == null || p.isInfinity() || !p.isOnCurve()) {
             throw new IOException("Groth16 " + label + " must be a non-infinity point on BLS12-381 G2");
+        }
+        if (!JacobianG2BLS381.fromAffine(p.x(), p.y()).scalarMul(G1Point.R).isInfinity()) {
+            throw new IOException("Groth16 " + label + " is not in the BLS12-381 G2 prime-order subgroup");
         }
         return p;
     }

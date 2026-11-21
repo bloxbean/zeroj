@@ -6,6 +6,7 @@ import org.zeroj.api.PublicInputs;
 import org.zeroj.api.VerificationKeyRef;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.Signal;
+import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -14,8 +15,10 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZkSymbolicTypesTest {
 
@@ -544,14 +547,12 @@ class ZkSymbolicTypesTest {
                 "bit_1", List.of(BigInteger.ZERO));
         BigInteger[] witness = circuit.calculateWitness(validInputs, CurveId.BLS12_381);
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        org.junit.jupiter.api.Assertions.assertTrue(
-                satisfiesR1cs(r1cs, witness), "Honest BLS12-381 witness must satisfy R1CS");
+        assertTrue(satisfiesR1cs(r1cs, witness), "Honest BLS12-381 witness must satisfy R1CS");
 
         // Adversarial R1CS witness tampering: flip one witness wire and verify R1CS rejects it.
         BigInteger[] tampered = witness.clone();
         tampered[2] = BigInteger.valueOf(43); // pub byte_1 != sec sbyte_1
-        org.junit.jupiter.api.Assertions.assertFalse(
-                satisfiesR1cs(r1cs, tampered), "Tampered BLS12-381 witness must fail R1CS");
+        assertFalse(satisfiesR1cs(r1cs, tampered), "Tampered BLS12-381 witness must fail R1CS");
 
         // Container constructors must reject elements from different builders.
         ZkUInt[] foreignByte = new ZkUInt[1];
@@ -573,7 +574,7 @@ class ZkSymbolicTypesTest {
                 });
     }
 
-    private static boolean satisfiesR1cs(org.zeroj.circuit.r1cs.R1CSConstraintSystem r1cs, BigInteger[] witness) {
+    private static boolean satisfiesR1cs(R1CSConstraintSystem r1cs, BigInteger[] witness) {
         BigInteger p = r1cs.fieldConfig().prime();
         for (var c : r1cs.constraints()) {
             BigInteger a = BigInteger.ZERO;

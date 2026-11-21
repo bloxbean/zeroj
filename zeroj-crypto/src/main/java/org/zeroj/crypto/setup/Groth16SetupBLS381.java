@@ -88,7 +88,7 @@ public final class Groth16SetupBLS381 {
     private Groth16SetupBLS381() {}
 
     private static final BigInteger FR = MontFr381.modulus();
-    private static final int MAX_CONSTRAINTS = 1 << 29;
+    public static final int MAX_CONSTRAINTS = 1 << 29;
 
     /**
      * Generate a Groth16 proving key from R1CS constraints and known tau.
@@ -307,6 +307,29 @@ public final class Groth16SetupBLS381 {
      * cancelled its public-query combination, an event of probability on the order of
      * {@code N/r}. The key is not produced; a re-run with fresh randomness resolves it.
      */
+    private static IllegalStateException zeroPublicQuery(int s, int numPublic) {
+        return new IllegalStateException("Groth16 setup aborted: the public-query scalar for public wire " + s
+                + " (of " + numPublic + ") is zero, so IC[" + s + "] would be the point at infinity, which every"
+                + " verifier profile rejects (ADR-0045). The relation binds the wire; the sampled setup"
+                + " randomness cancelled its combination (probability ~N/r). Re-run setup with fresh randomness.");
+    }
+
+    /**
+     * Validate Groth16 setup constraint count and {@code tau} before creating directories or
+     * allocating key buffers.
+     */
+    public static void validateSetupParameters(int nConstraints, BigInteger tau) {
+        if (nConstraints < 1 || nConstraints > MAX_CONSTRAINTS) {
+            throw new IllegalArgumentException("nConstraints (" + nConstraints
+                    + ") must be in [1, " + MAX_CONSTRAINTS + "]");
+        }
+        int domainSize = Integer.highestOneBit(nConstraints);
+        if (domainSize < nConstraints) domainSize <<= 1;
+        if (domainSize < 4) domainSize = 4;
+        BigInteger tauVal = requireValidSetupScalar(tau, "tau");
+        requireTauOutsideDomain(tauVal, domainSize);
+    }
+
     private static BigInteger requireValidSetupScalar(BigInteger value, String name) {
         if (value == null) {
             throw new IllegalArgumentException(name + " must not be null");
@@ -322,13 +345,6 @@ public final class Groth16SetupBLS381 {
         if (tau.modPow(BigInteger.valueOf(2L * domainSize), FR).equals(BigInteger.ONE)) {
             throw new IllegalArgumentException("tau must not be a 2N-th root of unity for domain size " + domainSize);
         }
-    }
-
-    private static IllegalStateException zeroPublicQuery(int s, int numPublic) {
-        return new IllegalStateException("Groth16 setup aborted: the public-query scalar for public wire " + s
-                + " (of " + numPublic + ") is zero, so IC[" + s + "] would be the point at infinity, which every"
-                + " verifier profile rejects (ADR-0045). The relation binds the wire; the sampled setup"
-                + " randomness cancelled its combination (probability ~N/r). Re-run setup with fresh randomness.");
     }
 
     /**

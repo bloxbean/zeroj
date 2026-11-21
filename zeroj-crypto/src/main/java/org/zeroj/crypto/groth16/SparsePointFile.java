@@ -120,6 +120,36 @@ public final class SparsePointFile {
                 throw new IllegalArgumentException(
                         "ZJSP segment size mismatch: expected " + expectedSize + ", got " + seg.byteSize());
             }
+            validateBitmapAndRanks(words);
+        }
+
+        private void validateBitmapAndRanks(long words) {
+            int remBits = (int) (count & 63L);
+            long running = 0L;
+            long block = 0L;
+            for (long w = 0L; w < words; w++) {
+                if ((w & 7L) == 0L) {
+                    long storedRank = Integer.toUnsignedLong(seg.get(LE_INT, rankOff + block * 4L));
+                    if (storedRank != running) {
+                        throw new IllegalArgumentException(
+                                "ZJSP rank mismatch at block " + block + ": stored " + storedRank
+                                        + " != computed " + running);
+                    }
+                    block++;
+                }
+                long word = seg.get(LE_LONG, 32L + w * 8L);
+                if (w == words - 1L && remBits != 0) {
+                    long trailingMask = ~((1L << remBits) - 1L);
+                    if ((word & trailingMask) != 0L) {
+                        throw new IllegalArgumentException("ZJSP bitmap has set bits beyond logical count");
+                    }
+                }
+                running += Long.bitCount(word);
+            }
+            if (running != nnz) {
+                throw new IllegalArgumentException(
+                        "ZJSP bitmap popcount (" + running + ") does not match header nnz (" + nnz + ")");
+            }
         }
 
         public int count() { return (int) count; }

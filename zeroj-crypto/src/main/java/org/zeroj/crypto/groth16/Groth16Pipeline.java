@@ -66,8 +66,9 @@ public final class Groth16Pipeline {
 
         public Compiled(R1CSFlat flat, int numConstraints, int numWires, int numPublic) {
             if (flat == null) throw new NullPointerException("flat");
-            if (numConstraints < 1 || numConstraints > (1 << 30)) {
-                throw new IllegalArgumentException("numConstraints must be in [1, 2^30]");
+            if (numConstraints < 1 || numConstraints > Groth16SetupBLS381.MAX_CONSTRAINTS) {
+                throw new IllegalArgumentException(
+                        "numConstraints must be in [1, " + Groth16SetupBLS381.MAX_CONSTRAINTS + "]");
             }
             if (numWires < 1) throw new IllegalArgumentException("numWires must be >= 1");
             if (numPublic < 0 || numPublic >= numWires) {
@@ -146,8 +147,9 @@ public final class Groth16Pipeline {
     public record Dims(int numConstraints, int numWires, int numPublic) {
         /** FFT domain: next power of two ≥ constraint count (min 4), as the setup computes it. */
         public int domain() {
-            if (numConstraints < 1 || numConstraints > (1 << 30)) {
-                throw new IllegalArgumentException("numConstraints must be in [1, 2^30]");
+            if (numConstraints < 1 || numConstraints > Groth16SetupBLS381.MAX_CONSTRAINTS) {
+                throw new IllegalArgumentException(
+                        "numConstraints must be in [1, " + Groth16SetupBLS381.MAX_CONSTRAINTS + "]");
             }
             int d = Integer.highestOneBit(numConstraints);
             if (d < numConstraints) d <<= 1;
@@ -197,6 +199,7 @@ public final class Groth16Pipeline {
         // the failure happens before the r1cs.bin cache or any store file exists; setupToStore
         // re-checks it at its own ingress.
         R1CSValidation.requirePublicWiresConstrained(cc.flat(), cc.numPublic(), MontFr381.modulus());
+        Groth16SetupBLS381.validateSetupParameters(cc.numConstraints(), tau);
         Files.createDirectories(dir);
         Path cache = dir.resolve(R1CS_CACHE);
         try {

@@ -10,22 +10,32 @@ import org.zeroj.crypto.groth16.Groth16Keys;
 import org.zeroj.crypto.groth16.Groth16Pipeline;
 import org.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
 import org.zeroj.crypto.kzg.KZGCommitmentBLS381;
+import org.zeroj.crypto.msm.FlatScalars;
 import org.zeroj.crypto.plonk.PlonKProvingKeyBLS381;
 import org.zeroj.crypto.plonk.PlonKSetupBLS381;
+import org.zeroj.crypto.plonk.PtauImporterBLS381;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -81,7 +91,7 @@ class SetupCacheTest {
         bytes[bytes.length - 1] ^= 0x01;
         Files.write(path, bytes);
 
-        assertThrows(java.io.IOException.class, () -> Groth16SetupCache.loadBls12381Srs(path));
+        assertThrows(IOException.class, () -> Groth16SetupCache.loadBls12381Srs(path));
     }
 
     @Test
@@ -116,7 +126,7 @@ class SetupCacheTest {
             Path pipelineDir = tempDir.resolve("pipeline-denied");
             assertThrows(IllegalStateException.class,
                     () -> Groth16Pipeline.setup(compiled, srs.tauScalar(), pipelineDir, false));
-            org.junit.jupiter.api.Assertions.assertFalse(Files.exists(pipelineDir),
+            assertFalse(Files.exists(pipelineDir),
                     "Groth16Pipeline.setup must fail before creating output directory");
             assertThrows(IllegalStateException.class,
                     () -> Groth16Keys.setupInMemory(constraints, 4, 1, srs.tauScalar()));
@@ -194,6 +204,99 @@ class SetupCacheTest {
         var loaded = PlonkSetupCache.loadBls12381ProvingKey(path);
 
         assertPlonkProvingKeyEquals(pk, loaded);
+    }
+
+    @Test
+    void partialPrefixSrsCacheRoundTripsAndSupportsPlonkSetup() throws Exception {
+        var full = PowersOfTauBLS381.generate(4);
+
+        // Partial 14-point prefix (e.g. domainSize=8 + 6) of a power-4 ceremony round-trips cleanly.
+        var partial14 = new PtauImporterBLS381.SRS(
+                Arrays.copyOf(full.tauG1(), 14), full.tauG2(), full.power(), null);
+        Path path14 = tempDir.resolve("srs-partial-14.bin");
+        Groth16SetupCache.saveBls12381Srs(partial14, path14);
+        var loaded14 = Groth16SetupCache.loadBls12381Srs(path14);
+        assertEquals(4, loaded14.power());
+        assertEquals(14, loaded14.tauG1().length);
+        assertArrayEquals(partial14.tauG1(), loaded14.tauG1());
+        assertArrayEquals(partial14.tauG2(), loaded14.tauG2());
+
+        // Partial 16-point prefix (< 2^(power+1) = 32) round-trips and feeds PlonKSetupBLS381.setup.
+        var partial16 = new PtauImporterBLS381.SRS(
+                Arrays.copyOf(full.tauG1(), 16), full.tauG2(), full.power(), null);
+        Path path16 = tempDir.resolve("srs-partial-16.bin");
+        Groth16SetupCache.saveBls12381Srs(partial16, path16);
+        var loaded16 = Groth16SetupCache.loadBls12381Srs(path16);
+        assertEquals(16, loaded16.tauG1().length);
+
+        var circuit = CircuitBuilder.create("plonk-partial-srs")
+                .publicVar("c").secretVar("a").secretVar("b")
+                .define(api -> api.assertEqual(api.mul(api.var("a"), api.var("b")), api.var("c")));
+        var plonk = circuit.compilePlonK(CurveId.BLS12_381);
+        BigInteger[][] gateSelectors = new BigInteger[plonk.numGates()][5];
+        for (int i = 0; i < plonk.numGates(); i++) {
+            var row = plonk.gateRows().get(i);
+            gateSelectors[i] = new BigInteger[]{row.qL(), row.qR(), row.qO(), row.qM(), row.qC()};
+        }
+        var pk = PlonKSetupBLS381.setup(plonk.numGates(), plonk.numPublicInputs(), gateSelectors,
+                plonk.sigmaA(), plonk.sigmaB(), plonk.sigmaC(), plonk.numWires(), loaded16);
+        assertNotNull(pk);
+    }
+
+    @Test
+    void srsCacheRejectsTauMismatchAndNonMinimalScalarEncoding() throws Exception {
+        var srs = PowersOfTauBLS381.generate(4);
+        BigInteger wrongTau = srs.tauScalar().add(BigInteger.ONE).mod(MontFr381.modulus());
+        var mismatchedSrs = new PtauImporterBLS381.SRS(srs.tauG1(), srs.tauG2(), srs.power(), wrongTau);
+
+        assertThrows(IOException.class,
+                () -> Groth16SetupCache.saveBls12381InsecureDevSrsWithTau(mismatchedSrs, tempDir.resolve("bad-save.bin")));
+
+        Path forgedPath = tempDir.resolve("forged-tau.bin");
+        SetupCacheIO.writeCacheFile(forgedPath, SetupCacheIO.TYPE_BLS12381_SRS, out -> {
+            out.writeInt(srs.power());
+            SetupCacheIO.writeG1Array(out, srs.tauG1());
+            SetupCacheIO.writeG2Array(out, srs.tauG2());
+            out.writeBoolean(true);
+            SetupCacheIO.writeScalar(out, wrongTau, "tau scalar");
+        });
+        assertThrows(IOException.class, () -> Groth16SetupCache.loadBls12381Srs(forgedPath));
+
+        // Non-minimal big-endian two's-complement scalar encoding (extra leading zero byte on 1).
+        ByteArrayOutputStream nonMinimal = new ByteArrayOutputStream();
+        try (var out = new DataOutputStream(nonMinimal)) {
+            out.writeInt(2);
+            out.write(new byte[]{0x00, 0x01});
+        }
+        assertThrows(IOException.class, () -> SetupCacheIO.readScalar(
+                new DataInputStream(new ByteArrayInputStream(nonMinimal.toByteArray())), "test"));
+    }
+
+    @Test
+    void groth16SetupAndPipelineRejectDegenerateTauAndFlatScalarsWrapRejectsBadBounds() {
+        var constraints = List.of(
+                new R1CSConstraint(Map.of(2, BigInteger.ONE), Map.of(3, BigInteger.ONE), Map.of(1, BigInteger.ONE)),
+                new R1CSConstraint(Map.of(0, BigInteger.ONE), Map.of(0, BigInteger.ONE), Map.of(0, BigInteger.ONE)));
+        var flatBuilder = R1CSFlat.builder();
+        for (var c : constraints) flatBuilder.add(c.a(), c.b(), c.c());
+        var flat = flatBuilder.build();
+        var compiled = new Groth16Pipeline.Compiled(flat, constraints.size(), 4, 1);
+
+        // tau == 0 and tau == 1 (a 2N-th root of unity) must both be rejected before directory creation.
+        for (BigInteger badTau : List.of(BigInteger.ZERO, BigInteger.ONE)) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> Groth16SetupBLS381.setup(constraints, 4, 1, badTau));
+            Path dir = tempDir.resolve("bad-tau-" + badTau);
+            assertThrows(IllegalArgumentException.class,
+                    () -> Groth16Pipeline.setup(compiled, badTau, dir, false));
+            assertFalse(Files.exists(dir), "Groth16Pipeline.setup must fail before creating directory for bad tau");
+        }
+
+        // FlatScalars.wrap bounds validation.
+        assertThrows(IllegalArgumentException.class, () -> FlatScalars.wrap(new long[4], -1));
+        assertThrows(IllegalArgumentException.class, () -> FlatScalars.wrap(new long[3], 1));
+        assertThrows(IllegalArgumentException.class, () -> FlatScalars.wrap(new long[4], 2));
+        assertEquals(1, FlatScalars.wrap(new long[4], 1).count());
     }
 
     private static void assertGroth16SetupEquals(

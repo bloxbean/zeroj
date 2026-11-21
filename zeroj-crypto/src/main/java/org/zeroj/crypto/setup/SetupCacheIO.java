@@ -317,13 +317,15 @@ final class SetupCacheIO {
     }
 
     static void validateBls12381Srs(AffineG1[] tauG1, AffineG2[] tauG2, int power) throws IOException {
-        if (power < 1 || power > 28) {
+        if (power < 1 || power > 32) {
             throw new IOException("Invalid BLS12-381 SRS power: " + power);
         }
-        long minG1 = (1L << power) + 1L;
-        if (tauG1.length < minG1) {
+        if (tauG1.length < 2) {
+            throw new IOException("BLS12-381 SRS must contain at least two G1 powers");
+        }
+        if (power <= 29 && tauG1.length > (2L << power) + 1L) {
             throw new IOException("BLS12-381 SRS G1 power count " + tauG1.length
-                    + " is smaller than required minimum " + minG1 + " for power " + power);
+                    + " exceeds ceremony power " + power);
         }
         if (tauG2.length < 2) {
             throw new IOException("BLS12-381 SRS must contain at least two G2 powers");

@@ -245,11 +245,19 @@ class CircuitAPIImpl implements CircuitAPI {
                 if (params.length != 4) {
                     throw new IllegalArgumentException("MUL_MOD_REDUCE requires 4 params [modulus, radixBits, numLimbsAB, numLimbsQ]");
                 }
-                int radixBits = params[1].intValueExact();
-                int nAB = params[2].intValueExact();
-                int nQ = params[3].intValueExact();
-                if (params[0].signum() <= 0 || radixBits <= 0 || nAB <= 0 || nQ <= 0) {
-                    throw new IllegalArgumentException("MUL_MOD_REDUCE params must be positive");
+                int radixBits;
+                int nAB;
+                int nQ;
+                try {
+                    radixBits = params[1].intValueExact();
+                    nAB = params[2].intValueExact();
+                    nQ = params[3].intValueExact();
+                } catch (ArithmeticException e) {
+                    throw new IllegalArgumentException("MUL_MOD_REDUCE limb params must fit in a 32-bit int", e);
+                }
+                if (params[0].signum() <= 0 || radixBits <= 0 || radixBits > MAX_SAFE_BITS || nAB <= 0 || nQ <= 0) {
+                    throw new IllegalArgumentException(
+                            "MUL_MOD_REDUCE params must be positive and radixBits <= " + MAX_SAFE_BITS);
                 }
                 if (inputs.length != 2 * nAB || numOutputs != nQ + nAB) {
                     throw new IllegalArgumentException("MUL_MOD_REDUCE input/output counts do not match limb params");
@@ -259,10 +267,17 @@ class CircuitAPIImpl implements CircuitAPI {
                 if (params.length != 3) {
                     throw new IllegalArgumentException("INV_MOD requires 3 params [modulus, radixBits, numLimbs]");
                 }
-                int radixBits = params[1].intValueExact();
-                int numLimbs = params[2].intValueExact();
-                if (params[0].signum() <= 0 || radixBits <= 0 || numLimbs <= 0) {
-                    throw new IllegalArgumentException("INV_MOD params must be positive");
+                int radixBits;
+                int numLimbs;
+                try {
+                    radixBits = params[1].intValueExact();
+                    numLimbs = params[2].intValueExact();
+                } catch (ArithmeticException e) {
+                    throw new IllegalArgumentException("INV_MOD limb params must fit in a 32-bit int", e);
+                }
+                if (params[0].signum() <= 0 || radixBits <= 0 || radixBits > MAX_SAFE_BITS || numLimbs <= 0) {
+                    throw new IllegalArgumentException(
+                            "INV_MOD params must be positive and radixBits <= " + MAX_SAFE_BITS);
                 }
                 if (inputs.length != numLimbs || numOutputs != numLimbs) {
                     throw new IllegalArgumentException("INV_MOD input/output counts do not match numLimbs");

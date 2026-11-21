@@ -77,6 +77,7 @@ public final class Groth16AuthenticatedStateTransitionScriptFactory {
         // Snapshot every caller-owned byte array before validating or applying it. All subsequent
         // identity and script operations use only these snapshots.
         SnarkjsToCardano.VkCompressed key = snapshot(verificationKey);
+        Groth16VerificationKeyCodec.validate(key);
         byte[] policyId = snapshot("statePolicyId", statePolicyId);
         byte[] tokenName = snapshot("stateTokenName", stateTokenName);
         byte[] signer = snapshot("authorizedSigner", authorizedSigner);

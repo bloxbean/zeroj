@@ -236,6 +236,9 @@ public final class Groth16ProverBLS381 {
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
             FlatScalars hCoeffs, BigInteger r, BigInteger s) {
 
+        if (readers == null) {
+            throw new IllegalArgumentException("Proving key readers must not be null");
+        }
         G2AffineReader b2 = readers.b2() != null
                 ? readers.b2() : new G2AffineReader.HeapG2Reader(pk.pointsB2());
         requireKeyDimensions(pk, readers, b2, witness, hCoeffs);

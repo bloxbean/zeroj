@@ -31,6 +31,22 @@ public final class Groth16VerificationKeyCodec {
     private Groth16VerificationKeyCodec() {}
 
     public static byte[] encode(SnarkjsToCardano.VkCompressed key) {
+        validate(key);
+        List<byte[]> ic = List.copyOf(key.ic());
+        int size = Math.toIntExact(Math.addExact(
+                FIXED_BYTES, Math.multiplyExact((long) ic.size(), G1_BYTES)));
+        ByteBuffer output = ByteBuffer.allocate(size).order(ByteOrder.BIG_ENDIAN);
+        output.put(MAGIC).putInt(ic.size());
+        output.put(key.alpha()).put(key.beta()).put(key.gamma()).put(key.delta());
+        for (byte[] point : ic) output.put(point);
+        return output.array();
+    }
+
+    /**
+     * Validate that every point in {@code key} has canonical compressed length, lies on BLS12-381
+     * G1/G2, is in the prime-order subgroup, and is not the point at infinity.
+     */
+    public static void validate(SnarkjsToCardano.VkCompressed key) {
         Objects.requireNonNull(key, "key");
         requireLength("alpha", key.alpha(), G1_BYTES);
         requireLength("beta", key.beta(), G2_BYTES);
@@ -40,16 +56,14 @@ public final class Groth16VerificationKeyCodec {
         if (ic.isEmpty() || ic.size() > MAX_IC_POINTS) {
             throw new IllegalArgumentException("IC count must be in [1, " + MAX_IC_POINTS + "]");
         }
+        requireNonInfinityG1("alpha", key.alpha());
+        requireNonInfinityG2("beta", key.beta());
+        requireNonInfinityG2("gamma", key.gamma());
+        requireNonInfinityG2("delta", key.delta());
         for (int index = 0; index < ic.size(); index++) {
             requireLength("ic[" + index + "]", ic.get(index), G1_BYTES);
+            requireNonInfinityG1("ic[" + index + "]", ic.get(index));
         }
-        int size = Math.toIntExact(Math.addExact(
-                FIXED_BYTES, Math.multiplyExact((long) ic.size(), G1_BYTES)));
-        ByteBuffer output = ByteBuffer.allocate(size).order(ByteOrder.BIG_ENDIAN);
-        output.put(MAGIC).putInt(ic.size());
-        output.put(key.alpha()).put(key.beta()).put(key.gamma()).put(key.delta());
-        for (byte[] point : ic) output.put(point);
-        return output.array();
     }
 
     public static SnarkjsToCardano.VkCompressed decode(byte[] encoded) {

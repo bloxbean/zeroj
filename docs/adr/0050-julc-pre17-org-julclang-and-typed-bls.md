@@ -358,7 +358,7 @@ ZeroJ upgrades `julcVersion` from `0.1.0-pre18` to `0.1.0-pre22` alongside [ADR-
 |---|---:|---|
 | `Groth16BLS12381Verifier` | 1,117 | `59f37dc68c0dd3a9f1aeeef7dbbdc3b57ab7acf0e75ddb28d1385db6` |
 | `Groth16BLS12381TxOutRefBindingVerifier` | 1,325 | `5c2f90090a78275d2b5eb26195bfeeebf9633daec452e01deef01b13` |
-| `Groth16AuthenticatedStateTransitionValidator` | 2,817 | `46c77c445f4d16b156797d05aee6964f9c93d7446dd4f12d26824d4d` |
+| `Groth16AuthenticatedStateTransitionValidator` | 2,845 | `5192732cf2c70ce2f03859f1e9f728d986f6a0e1c18e1a1ab86f8eb2` |
 | `PlonkBLS12381Verifier` | 4,262 | `7e36f398c0d0c1d3f141563c4766118cb6ea1496dfaab269fc30b2de` |
 | `PlonkBLS12381MultiInputVerifier` | 4,668 | `4172c86d5e8e8e69dfd91f92776176b567c4c2200108dc98273d4a1e` |
 | `PlonkBLS12381MultiInputParamVerifier` | 4,707 | `7e78ad1bbf6ef553a4401fab1025250f14e3f5271816bcc8a732f38f` |
