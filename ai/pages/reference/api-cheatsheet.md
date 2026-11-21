@@ -24,7 +24,8 @@ See [Annotations](https://zeroj.dev/guides/circuits/annotations/) and [Circuit D
 | `PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, a, b)` (off-circuit, same hash) | `PoseidonHash` (`org.zeroj.circuit.lib.poseidon`) |
 
 For Cardano circuits, always pass the BLS12-381 Poseidon parameters explicitly. The overloads
-without parameters and MiMC are oriented to legacy BN254 use.
+without parameters are oriented to legacy BN254 use; the `MiMC` gadget family is deprecated for
+removal as an insecure invertible bijection and must not be used.
 
 ## Compile and compute the witness
 

@@ -816,7 +816,7 @@
           "name": "ZkMerkle",
           "qualifiedName": "org.zeroj.circuit.lib.zk.ZkMerkle",
           "doc": "Symbolic fixed-depth Merkle helpers for annotation-based circuits.",
-          "note": "For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC and no-params POSEIDON are BN254/off-chain paths.",
+          "note": "For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC is deprecated for removal (insecure) and no-params POSEIDON is BN254.",
           "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkMerkle.java",
           "members": [
             {
@@ -1168,15 +1168,15 @@
         {
           "name": "ZkMiMC",
           "qualifiedName": "org.zeroj.circuit.lib.zk.ZkMiMC",
-          "doc": "Symbolic MiMC adapter for annotation-based circuits.",
-          "note": "BN254-only. Do not use for Cardano (BLS12-381) circuits.",
+          "doc": "DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.",
+          "note": "DEPRECATED FOR REMOVAL (INSECURE): invertible keyed bijection on BN254 without feed-forward. Do not use; use ZkPoseidon on BLS12-381.",
           "source": "zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/ZkMiMC.java",
           "members": [
             {
               "name": "hash",
               "static": true,
               "signature": "static ZkField hash(ZkContext zk, ZkField left, ZkField right)",
-              "doc": ""
+              "doc": "ZkPoseidon#hash(ZkContext, PoseidonParams, ZkField, ZkField) with PoseidonParamsBLS12_381T3#INSTANCE instead."
             }
           ]
         }

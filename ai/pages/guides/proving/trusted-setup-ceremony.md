@@ -132,14 +132,18 @@ shasum -a 256 key_0008.zkey
 | Option | Required | Meaning |
 |--------|----------|---------|
 | `--in <file>` | yes | The `.zkey` you received |
-| `--out <file>` | yes | The `.zkey` you send back |
+| `--out <file>` | yes | The `.zkey` you send back (must not equal `--in`, and must not already exist unless `--overwrite` is passed) |
 | `--name <text>` | no | Your name in the public transcript (default `zeroj contributor`) |
+| `--overwrite` | no | Atomically replace an existing `--out` file (in-place `--in == --out` is always rejected) |
 
-The tool draws your secret from the OS secure random source, uses it once, and never writes it
-anywhere. It prints a **Contribution Hash**; copy it into your attestation. The equivalent snarkjs
-command is `snarkjs zkey contribute key_0007.zkey key_0008.zkey --name="..."`. ZeroJ's
-documentation reports its contributor at roughly 0.9 hours versus 2.5 to 3 hours for snarkjs on a
-19M-constraint key (about 30 GB); budget about twice the `.zkey` size in free disk.
+The tool validates the input `.zkey`, draws your secret from the OS secure random source, applies
+it via ADR-0062 `ctScalarMul`, uses it once, and never writes it anywhere. Run contributions on an
+**offline, isolated machine** (pure-Java `ctScalarMul` is not a JVM constant-time guarantee). It
+prints a **Contribution Hash**; copy it into your attestation. The equivalent snarkjs command is
+`snarkjs zkey contribute key_0007.zkey key_0008.zkey --name="..."`. With per-point subgroup
+validation and `ctScalarMul`, ZeroJ's contributor extrapolates to roughly 4.0 hours on 16 cores
+(versus roughly 2.5 to 3 hours for snarkjs) on a 19M-constraint key (about 30 GB); budget about
+twice the `.zkey` size in free disk.
 
 **Publish an attestation**, for example as a gist or a pull request to the ceremony's transcript
 repository:
@@ -158,7 +162,9 @@ After contributing there's nothing left to keep secret. What matters is that nob
 machine during the contribution.
 
 To embed contributions in your own service or wallet, `zeroj-tools` exposes the same step as a
-library call: `ZkeyContributor.contribute(in, out, name)` returns the contribution hash.
+library call: `ZkeyContributor.contribute(in, out, name)` fails if `out` already exists (or
+resolves to `in`) and returns the contribution hash; pass `ZkeyContributor.contribute(in, out, name, true)`
+to atomically replace an existing `out` file (in-place overwrite is still rejected).
 
 ## Close the ceremony (coordinator)
 

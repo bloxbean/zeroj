@@ -222,7 +222,7 @@ example by returning <code dir="auto">VerificationResult.ok()</code> after its o
 
 
 
-<table><thead><tr><th>Code</th><th>Typically set by</th></tr></thead><tbody><tr><td><code dir="auto">INVALID_PROOF</code></td><td>A backend: the pairing check failed, or a point was malformed</td></tr><tr><td><code dir="auto">INVALID_PUBLIC_INPUTS</code></td><td>A backend: wrong count, or a value outside <code dir="auto">[0, r)</code></td></tr><tr><td><code dir="auto">INTERNAL_ERROR</code></td><td>A backend: an unexpected exception, e.g. unparseable proof bytes</td></tr><tr><td><code dir="auto">UNKNOWN_VERIFICATION_KEY</code></td><td>The orchestrator: the envelope’s <code dir="auto">vkRef</code> isn’t registered</td></tr><tr><td><code dir="auto">UNSUPPORTED_PROOF_SYSTEM</code></td><td>The orchestrator (no backend registered) or a backend given the wrong proof system</td></tr><tr><td><code dir="auto">VK_MISMATCH</code>, <code dir="auto">UNSUPPORTED_CURVE</code>, <code dir="auto">MALFORMED_ENVELOPE</code></td><td>Consistency checks in the PlonK and BBS backends, and in your own gate</td></tr><tr><td><code dir="auto">UNKNOWN_CIRCUIT</code>, <code dir="auto">RETIRED_CIRCUIT</code>, <code dir="auto">STALE_STATE_ROOT</code>, <code dir="auto">DUPLICATE_NONCE</code>, <code dir="auto">UNAUTHORIZED_SUBMITTER</code>, <code dir="auto">USED_NULLIFIER</code></td><td>Your policy layer</td></tr></tbody></table>
+<table><thead><tr><th>Code</th><th>Typically set by</th></tr></thead><tbody><tr><td><code dir="auto">INVALID_PROOF</code></td><td>A backend: the pairing check failed, or a point was malformed</td></tr><tr><td><code dir="auto">INVALID_PUBLIC_INPUTS</code></td><td>A backend: wrong count, or a value outside <code dir="auto">[0, r)</code></td></tr><tr><td><code dir="auto">INTERNAL_ERROR</code></td><td>A backend: an unexpected internal or native-loading error</td></tr><tr><td><code dir="auto">UNKNOWN_VERIFICATION_KEY</code></td><td>The orchestrator: the envelope’s <code dir="auto">vkRef</code> isn’t registered</td></tr><tr><td><code dir="auto">UNSUPPORTED_PROOF_SYSTEM</code></td><td>The orchestrator (no backend registered) or a backend given the wrong proof system</td></tr><tr><td><code dir="auto">VK_MISMATCH</code>, <code dir="auto">UNSUPPORTED_CURVE</code>, <code dir="auto">MALFORMED_ENVELOPE</code></td><td>Envelope-to-material binding and format checks in <code dir="auto">VerifierOrchestrator</code> and all BLS12-381 backends (Groth16, PlonK, BBS), plus your own policy gate</td></tr><tr><td><code dir="auto">UNKNOWN_CIRCUIT</code>, <code dir="auto">RETIRED_CIRCUIT</code>, <code dir="auto">STALE_STATE_ROOT</code>, <code dir="auto">DUPLICATE_NONCE</code>, <code dir="auto">UNAUTHORIZED_SUBMITTER</code>, <code dir="auto">USED_NULLIFIER</code></td><td>Your policy layer</td></tr></tbody></table>
 <div class="sl-heading-wrapper level-h2"><h2 id="choose-a-backend">Choose a backend</h2><a class="sl-anchor-link" href="#choose-a-backend"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Choose a backend”</span></a></div>
 
 
@@ -265,9 +265,10 @@ verifier on this page. <code dir="auto">org.zeroj.onchain.julc.groth16.validator
 <strong>on-chain</strong> Plutus validator. Check your imports.</p></div></aside>
 <aside aria-label="PlonK is experimental" class="starlight-aside starlight-aside--caution"><p class="starlight-aside__title" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" class="starlight-aside__icon"><path d="M12 16a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm10.67 1.47-8.05-14a3 3 0 0 0-5.24 0l-8 14A3 3 0 0 0 3.94 22h16.12a3 3 0 0 0 2.61-4.53Zm-1.73 2a1 1 0 0 1-.88.51H3.94a1 1 0 0 1-.88-.51 1 1 0 0 1 0-1l8-14a1 1 0 0 1 1.78 0l8.05 14a1 1 0 0 1 .05 1.02v-.02ZM12 8a1 1 0 0 0-1 1v4a1 1 0 0 0 2 0V9a1 1 0 0 0-1-1Z"></path></svg>PlonK is experimental</p><div class="starlight-aside__content"><p>The PlonK verifier is an experimental, opt-in path. Groth16 on BLS12-381 is the supported focus of
 the current release; don’t treat PlonK verification as production evidence.</p></div></aside>
-<p>The legacy BN254 verifiers are not registered with <code dir="auto">ServiceLoader</code> and refuse to run unless you
-start the JVM with <code dir="auto">-Dzeroj.allowLegacyBn254=true</code>. BN254 is not a Cardano curve; ignore it
-unless you are running old off-chain experiments.</p>
+<p>The legacy BN254 verifiers are not registered with <code dir="auto">ServiceLoader</code>, report <code dir="auto">isAvailable() == false</code>
+by default, and refuse to run unless you start the JVM with <code dir="auto">-Dzeroj.allowLegacyBn254=true</code>. They
+are <strong>unsound against adversarial input</strong> and BN254 is not a Cardano curve; ignore them unless you
+are running trusted local off-chain experiments.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="route-proofs-with-registries">Route proofs with registries</h2><a class="sl-anchor-link" href="#route-proofs-with-registries"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Route proofs with registries”</span></a></div>
 <p>When a service handles more than one circuit or proof system, let the orchestrator pick the key and
 the backend.</p>
@@ -296,20 +297,35 @@ pattern below.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="what-the-verifiers-enforce">What the verifiers enforce</h2><a class="sl-anchor-link" href="#what-the-verifiers-enforce"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “What the verifiers enforce”</span></a></div>
 <p>The Groth16 backends fail closed on malformed input before any pairing work:</p>
 <ul>
-<li><strong>Bounded, strict JSON.</strong> The snarkjs codec caps documents at 8 MiB, rejects duplicate keys,
-and accepts only canonical decimal strings (no sign, no leading zeros).</li>
-<li><strong>Public inputs.</strong> The count must equal the VK’s <code dir="auto">nPublic</code>, and every value must be a canonical
+<li>
+<p><strong>Bounded, strict JSON.</strong> The snarkjs codec caps documents at 8 MiB, rejects duplicate keys,
+and accepts only canonical decimal strings (no sign, no leading zeros).</p>
+</li>
+<li>
+<p><strong>Public inputs.</strong> The count must equal the VK’s <code dir="auto">nPublic</code>, and every value must be a canonical
 scalar in <code dir="auto">[0, r)</code>. A value like <code dir="auto">x + r</code> is rejected with <code dir="auto">INVALID_PUBLIC_INPUTS</code>, never
-silently reduced.</li>
-<li><strong>Points.</strong> Every proof and VK point, including every <code dir="auto">IC</code> entry, must have coordinates in
+silently reduced.</p>
+</li>
+<li>
+<p><strong>Points.</strong> Every proof and VK point, including every <code dir="auto">IC</code> entry, must have coordinates in
 <code dir="auto">[0, p)</code>, lie on the curve, be in the prime-order subgroup, and <strong>not be the point at infinity</strong>.
 An infinity <code dir="auto">IC</code> entry would leave a public input unbound, so ZeroJ’s setup refuses to create
-one and every verifier rejects it.</li>
+one and every verifier rejects it.</p>
+</li>
+<li>
+<p><strong>Envelope-to-material binding.</strong> <code dir="auto">VerifierOrchestrator</code> and every BLS12-381 backend (Groth16
+pure-Java, Groth16 blst, PlonK, and BBS) verify that <code dir="auto">envelope.version()</code>, <code dir="auto">proofSystem()</code>,
+<code dir="auto">curve()</code>, <code dir="auto">circuitId()</code>, <code dir="auto">material.vkHash()</code>, and <code dir="auto">ByHash</code> <code dir="auto">vkRef()</code> match the provided
+<code dir="auto">VerificationMaterial</code> (<code dir="auto">VK_MISMATCH</code> on mismatch; <code dir="auto">MALFORMED_ENVELOPE</code> on invalid version,
+unsupported <code dir="auto">proofFormat</code>, or unparseable JSON/CBOR). The Groth16 backends also verify the
+parsed JSON <code dir="auto">protocol</code> (<code dir="auto">"groth16"</code>) and <code dir="auto">curve</code> (<code dir="auto">"bls12-381"</code>). For BBS, authenticated
+disclosures are carried inside the canonical CBOR presentation in <code dir="auto">proofBytes()</code>, so
+<code dir="auto">BbsZkVerifier</code> requires <code dir="auto">envelope.publicInputs()</code> to be empty (<code dir="auto">INVALID_PUBLIC_INPUTS</code> otherwise).</p>
+</li>
 </ul>
-<p>What the Groth16 backends do <strong>not</strong> check: that <code dir="auto">envelope.circuitId()</code> or <code dir="auto">envelope.vkRef()</code>
-matches the <code dir="auto">VerificationMaterial</code> you passed. They verify the proof against whatever key you give
-them. (The experimental PlonK verifier does compare them and returns <code dir="auto">VK_MISMATCH</code>.) Do that
-comparison yourself, as the next section shows.</p>
+<p>Your application gate must still decide <em>which</em> <code dir="auto">circuitId</code> and pinned VK hash an endpoint expects
+(for example, rejecting a valid proof for <code dir="auto">circuit-a</code> on an endpoint that requires <code dir="auto">circuit-b</code>), as
+the next section shows.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="build-a-verification-service">Build a verification service</h2><a class="sl-anchor-link" href="#build-a-verification-service"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Build a verification service”</span></a></div>
 <p>A verification endpoint should trust nothing in the envelope except the proof and public inputs.
 Pin each circuit’s VK by hash in configuration, look it up by the circuit <em>your endpoint expects</em>,
@@ -337,11 +353,14 @@ file (whitespace, key order) changes the hash, so pin the exact bytes you ship.<
 <p><code dir="auto">zeroj-codec</code> gives you two helpers for transport and content addressing:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="java"><code><div class="ec-line"><div class="code"><span style="--0:#F97583;--1:#BF3441">import</span><span style="--0:#E1E4E8;--1:#24292E"> org.zeroj.codec.CanonicalHash;</span></div></div><div class="ec-line"><div class="code"><span style="--0:#F97583;--1:#BF3441">import</span><span style="--0:#E1E4E8;--1:#24292E"> org.zeroj.codec.CborEnvelopeCodec;</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#F97583;--1:#BF3441">byte</span><span style="--0:#E1E4E8;--1:#24292E">[] cbor </span><span style="--0:#F97583;--1:#BF3441">=</span><span style="--0:#E1E4E8;--1:#24292E"> CborEnvelopeCodec.</span><span style="--0:#B392F0;--1:#6F42C1">encode</span><span style="--0:#E1E4E8;--1:#24292E">(envelope);          </span><span style="--0:#99A0A6;--1:#616972">// integer-keyed CBOR map</span></div></div><div class="ec-line"><div class="code"><span style="--0:#E1E4E8;--1:#24292E">ZkProofEnvelope decoded </span><span style="--0:#F97583;--1:#BF3441">=</span><span style="--0:#E1E4E8;--1:#24292E"> CborEnvelopeCodec.</span><span style="--0:#B392F0;--1:#6F42C1">decode</span><span style="--0:#E1E4E8;--1:#24292E">(cbor);  </span><span style="--0:#99A0A6;--1:#616972">// bounded, typed CodecException on bad input</span></div></div><div class="ec-line"><div class="code"><span style="--0:#F97583;--1:#BF3441">byte</span><span style="--0:#E1E4E8;--1:#24292E">[] id </span><span style="--0:#F97583;--1:#BF3441">=</span><span style="--0:#E1E4E8;--1:#24292E"> CanonicalHash.</span><span style="--0:#B392F0;--1:#6F42C1">hash</span><span style="--0:#E1E4E8;--1:#24292E">(envelope);                  </span><span style="--0:#99A0A6;--1:#616972">// SHA-256 over the core fields</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="import org.zeroj.codec.CanonicalHash;import org.zeroj.codec.CborEnvelopeCodec;byte[] cbor = CborEnvelopeCodec.encode(envelope);          // integer-keyed CBOR mapZkProofEnvelope decoded = CborEnvelopeCodec.decode(cbor);  // bounded, typed CodecException on bad inputbyte[] id = CanonicalHash.hash(envelope);                  // SHA-256 over the core fields"><div></div></button></div></figure></div>
-<p>The CBOR encoding carries the core fields only: version, proof system, curve, circuit ID, proof
-bytes, public inputs, and the VK reference. Optional fields such as <code dir="auto">metadata()</code> (where annotated
-circuits put their version) and <code dir="auto">proofFormat()</code> are <strong>not</strong> carried, and <code dir="auto">CanonicalHash</code> ignores
-them too. If your policy depends on them, send them another way, or rely on the pinned VK hash,
-which already distinguishes circuit versions.</p>
+<p>The CBOR encoding is strictly canonical (RFC 8949 §4.2): keys <code dir="auto">1..7</code> carry version, proof system,
+curve, circuit ID, proof bytes, minimal non-negative <code dir="auto">BigInteger</code> public inputs, and the VK
+reference, while optional keys <code dir="auto">8</code> (<code dir="auto">domainTag</code>), <code dir="auto">9</code> (<code dir="auto">metadata</code>, sorted canonically), and <code dir="auto">10</code>
+(<code dir="auto">proofFormat</code>) are included whenever populated and omitted when empty. <code dir="auto">CborEnvelopeCodec.decode</code>
+fails closed on duplicate keys, unknown keys, non-minimal integers, indefinite lengths, padded
+<code dir="auto">BigInteger</code> bytes, or any non-canonical re-encoding. Local builder metadata (<code dir="auto">proofUri</code>,
+<code dir="auto">proofHash</code>, <code dir="auto">createdAt</code>, <code dir="auto">producerId</code>) is not carried in CBOR, and <code dir="auto">CanonicalHash</code> hashes the core
+fields (<code dir="auto">1..7</code>) only.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="write-a-custom-backend">Write a custom backend</h2><a class="sl-anchor-link" href="#write-a-custom-backend"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Write a custom backend”</span></a></div>
 <p>A backend implements <code dir="auto">ZkVerifier</code> from <code dir="auto">zeroj-backend-spi</code>: a <code dir="auto">descriptor()</code> naming the proof
 system and curve it handles, and a <code dir="auto">verify(envelope, material)</code> that returns a crypto-only result.</p>

@@ -5,7 +5,7 @@
 zerojVersion: 0.1.0-pre13
 Site: https://zeroj.dev
 Repository: https://github.com/bloxbean/zeroj
-Source revision: 6c5da74c2e172633e4aa91ee91fc53c25fbd92dc
+Source revision: 534c629b832e2127cc3683bfe6b5206e0a55c2dc
 
 ## Key facts
 
@@ -15,7 +15,7 @@ Source revision: 6c5da74c2e172633e4aa91ee91fc53c25fbd92dc
 - Maven group and Java packages are `org.zeroj` (from 0.1.0-pre12). Current version: 0.1.0-pre13. Import the BOM `org.zeroj:zeroj-bom-core:0.1.0-pre13`; opt-in modules (zeroj-verifier-plonk, zeroj-bbs, zeroj-mpf-poseidon, zeroj-jmt-poseidon) need explicit versions. Releases up to 0.1.0-pre11 used `com.bloxbean.cardano`.
 - Java 25+. Nothing beyond a JDK is required for the default path (no Rust, Node.js, native toolchain or external CLIs); blst acceleration and snarkjs/circom interop are optional. `zeroj-verifier-groth16` bundles a source-built libblst (FFM, no JNI) for its native verifier on Linux amd64/aarch64 and Apple-silicon macOS; `VerifierRegistry.withServiceLoader()` picks that verifier where the library is bundled and the pure-Java one elsewhere: construct `Groth16BLS12381PureJavaVerifier` explicitly for a pure-Java path everywhere.
 - Write application circuits with annotations: `@ZKCircuit`, `@Prove`, `@Public`/`@Secret`, symbolic types `ZkField`, `ZkBool`, `ZkUInt` (always with `@UInt(bits = N)`), `ZkArray`/`ZkBits`/`ZkBytes` (with `@FixedSize`). The annotation processor generates a `<Name>Circuit` companion. Never use Java `if`, `&&`, `||` on secret values — use `ZkBool.and/or/not/select`.
-- For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). MiMC and the no-params Poseidon overload are BN254-oriented; do not use them for Cardano.
+- For Cardano circuits hash with Poseidon using explicit BLS12-381 parameters (`PoseidonParamsBLS12_381T3.INSTANCE`). The no-params Poseidon overload is BN254-oriented, and the entire `MiMC` gadget family (`MiMC`, `SignalMiMC`, `MiMCSponge`, `ZkMiMC`, `ZkMerkle.HashType.MIMC`) is deprecated for removal as an insecure invertible bijection — do not use it.
 - Single-party trusted setup (`PowersOfTauBLS381.generate`, `Groth16Keys.setupInMemory`) is for development and tests only and requires `-Dzeroj.allowInsecureTrustedSetup=true`. Production keys come from a multi-party ceremony (snarkjs `.zkey`, imported into ZeroJ).
 - Every proof is freshly blinded; there is no public deterministic/unblinded prove API.
 - A valid proof is not authorization. On-chain, the reusable `Groth16BLS12381Verifier` only checks the math; real validators compose `Groth16BLS12381Lib`, bind the proof to the spend and recipient using values computed from ScriptContext, prevent replay with nullifiers or state, and enforce business policy. Do not lock funds with `Groth16BLS12381TxOutRefBindingVerifier`: it reads its spend binding from the guarded UTxO's own datum, which no real UTxO can satisfy.
@@ -1203,7 +1203,7 @@ current release and the default in every recommendation.
 
 | Area | Modules | Status |
 |------|---------|--------|
-| PlonK BLS12-381: pure-Java prove and verify, `.ptau`/`.zkey` import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** |
+| PlonK BLS12-381: pure-Java prove and verify, streaming `.ptau` SRS import (snarkjs PlonK `.zkey` import unsupported) | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** |
 | PlonK BLS12-381: on-chain (JuLC / Plutus V3) | `zeroj-onchain-julc` | **Experimental**. Labeled testnet trials only. |
 
 > **Caution: PlonK is experimental everywhere**
@@ -3316,8 +3316,8 @@ the trapdoor.
 
    `ZkPoseidon`, `ZkMerkle.*Poseidon` and the off-circuit `PoseidonHash` all take a
    `PoseidonParams` argument. For Cardano (BLS12-381) pass `PoseidonParamsBLS12_381T3.INSTANCE`
-   explicitly. The no-params Poseidon overloads and MiMC are aimed at BN254 and aren't Cardano
-   defaults.
+   explicitly. The no-params Poseidon overloads are aimed at legacy BN254 use, and the `MiMC`
+   gadget family is deprecated for removal (insecure).
 
    
 
@@ -6342,7 +6342,9 @@ When the symbolic types can't express something, drop to `CircuitSpec` and the `
 - `ZkArray` elements must be `ZkField`, `ZkBool`, `ZkUInt`, or one nested `ZkArray` of those.
 - `ZkBits` and `ZkBytes` store one constrained field element per bit or byte. Packed encodings
   aren't available yet, and symbolic bitwise operations on `ZkBits` are limited.
-- `ZkMiMC` and `ZkMerkle.HashType.MIMC` are BN254-only, so they aren't usable for Cardano circuits.
+- `ZkMiMC` and `ZkMerkle.HashType.MIMC` are **deprecated for removal (insecure)** — the underlying
+  `MiMC` gadget is an invertible keyed bijection rather than a collision-resistant hash. Use
+  `ZkPoseidon` / `ZkMerkle.*Poseidon(...)` with explicit `PoseidonParamsBLS12_381T3.INSTANCE`.
 
 ### Next steps
 
@@ -6496,7 +6498,7 @@ byte[] iden3 = R1CSSerializer.serialize(r1cs);   // .r1cs file for snarkjs tooli
 | `compileR1CSWithDiagnostics(curve)` | `R1CSCompiler.CompilationResult` | Same compilation plus diagnostics. Use it in build tooling to catch changes in the R1CS shape before you generate keys. |
 | `compilePlonK(curve)` | `PlonKConstraintSystem` | Experimental. See [Prove with PlonK](https://zeroj.dev/guides/proving/plonk/). |
 
-Gadgets that depend on field constants (Poseidon, MiMC) record the field they need. If you
+Gadgets that depend on field constants (such as Poseidon) record the field they need. If you
 compile or compute a witness for a different curve, `CircuitBuilder` throws
 `IllegalStateException` instead of producing a circuit with mismatched constants.
 
@@ -6652,8 +6654,19 @@ permutation, so its outputs differ from a native `t = N + 1` Poseidon. `ZkPoseid
 no-parameter overload at all. `PoseidonHash` is host-side code: it computes values, it doesn't
 constrain anything.
 
-**MiMC is BN254-only.** `MiMC`, `SignalMiMC`, `ZkMiMC` and `MiMCSponge` require the BN254 field
-and refuse to compile for BLS12-381. Treat them as legacy, off-chain gadgets.
+**Do not use MiMC (`MiMC`, `SignalMiMC`, `ZkMiMC`, `MiMCSponge`) — deprecated for removal.**
+`MiMC.hash` computes an invertible keyed bijection without feed-forward on BN254 (allowing trivial
+preimage and Merkle proof forgery) and is not circomlib-compatible. Use `Poseidon` / `ZkPoseidon`
+with `PoseidonParamsBLS12_381T3.INSTANCE` instead.
+
+> **Caution: Migrating an existing MiMC deployment**
+>
+> Upgrading ZeroJ adds compile-time deprecation warnings, but any existing MiMC commitments, Merkle
+> roots, compiled circuits, and verification keys remain bound to the broken relation. To migrate:
+> (1) recompute commitments and Merkle roots from trusted source data with BLS12-381 Poseidon
+> (`PoseidonParamsBLS12_381T3.INSTANCE`), (2) recompile the circuit, (3) regenerate circuit-specific
+> proving and verifying keys (including a new Groth16 phase-2 ceremony where applicable), and
+> (4) retire acceptance under the old MiMC verification key.
 
 ### Merkle membership
 
@@ -6693,8 +6706,9 @@ for (int i = 0; i < siblings.size(); i++) {
 }
 ```
 
-`ZkMerkle.HashType.MIMC` and the enum `HashType.POSEIDON` path are BN254-oriented conveniences.
-Avoid them for Cardano. For large, updatable state (millions of entries, inclusion and
+`ZkMerkle.HashType.MIMC` is **deprecated for removal (insecure)** because `ZkMiMC` is invertible,
+and the enum `HashType.POSEIDON` path is a BN254-oriented convenience. Avoid both for Cardano; use
+the explicit `*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` methods. For large, updatable state (millions of entries, inclusion and
 non-inclusion, updates), see the experimental Poseidon MPF/JMT modules in
 [Authenticated state](https://zeroj.dev/guides/credentials/authenticated-state/).
 
@@ -7081,7 +7095,7 @@ authorization or replay rules.
 | Binary decomposition, comparators, selection | Any | Ready on BLS12-381 Groth16 |
 | Poseidon T3, folded Poseidon N | BN254 default; BLS12-381 with explicit params | Ready with `PoseidonParamsBLS12_381T3.INSTANCE` |
 | Merkle membership | Hash-dependent | Ready with the params-aware Poseidon helpers |
-| MiMC, MiMC sponge | BN254 only | Not Cardano-ready |
+| MiMC, MiMC sponge | BN254 only | **Deprecated for removal (insecure)** — invertible keyed bijection, not a collision-resistant hash |
 | Jubjub point arithmetic | BLS12-381 only | Ready for algebraic and public-data use, pending external review |
 | Pedersen commitment (in-circuit, `ZkPedersen`) | BLS12-381 only | Ready, pending external review |
 | Pedersen homomorphic API (`ZkPedersenCommitment`, `ZkPedersen.assertBalanced`) and vector commitments (`ZkPedersenVector`) | BLS12-381 only | Experimental |
@@ -7851,14 +7865,18 @@ shasum -a 256 key_0008.zkey
 | Option | Required | Meaning |
 |--------|----------|---------|
 | `--in <file>` | yes | The `.zkey` you received |
-| `--out <file>` | yes | The `.zkey` you send back |
+| `--out <file>` | yes | The `.zkey` you send back (must not equal `--in`, and must not already exist unless `--overwrite` is passed) |
 | `--name <text>` | no | Your name in the public transcript (default `zeroj contributor`) |
+| `--overwrite` | no | Atomically replace an existing `--out` file (in-place `--in == --out` is always rejected) |
 
-The tool draws your secret from the OS secure random source, uses it once, and never writes it
-anywhere. It prints a **Contribution Hash**; copy it into your attestation. The equivalent snarkjs
-command is `snarkjs zkey contribute key_0007.zkey key_0008.zkey --name="..."`. ZeroJ's
-documentation reports its contributor at roughly 0.9 hours versus 2.5 to 3 hours for snarkjs on a
-19M-constraint key (about 30 GB); budget about twice the `.zkey` size in free disk.
+The tool validates the input `.zkey`, draws your secret from the OS secure random source, applies
+it via ADR-0062 `ctScalarMul`, uses it once, and never writes it anywhere. Run contributions on an
+**offline, isolated machine** (pure-Java `ctScalarMul` is not a JVM constant-time guarantee). It
+prints a **Contribution Hash**; copy it into your attestation. The equivalent snarkjs command is
+`snarkjs zkey contribute key_0007.zkey key_0008.zkey --name="..."`. With per-point subgroup
+validation and `ctScalarMul`, ZeroJ's contributor extrapolates to roughly 4.0 hours on 16 cores
+(versus roughly 2.5 to 3 hours for snarkjs) on a 19M-constraint key (about 30 GB); budget about
+twice the `.zkey` size in free disk.
 
 **Publish an attestation**, for example as a gist or a pull request to the ceremony's transcript
 repository:
@@ -7877,7 +7895,9 @@ After contributing there's nothing left to keep secret. What matters is that nob
 machine during the contribution.
 
 To embed contributions in your own service or wallet, `zeroj-tools` exposes the same step as a
-library call: `ZkeyContributor.contribute(in, out, name)` returns the contribution hash.
+library call: `ZkeyContributor.contribute(in, out, name)` fails if `out` already exists (or
+resolves to `in`) and returns the contribution hash; pass `ZkeyContributor.contribute(in, out, name, true)`
+to atomically replace an existing `out` file (in-place overwrite is still rejected).
 
 ### Close the ceremony (coordinator)
 
@@ -8191,10 +8211,10 @@ Source: https://zeroj.dev/guides/proving/plonk/
 > **Caution: Experimental, with no correctness claims**
 >
 > ZeroJ's PlonK support is **experimental everywhere**: pure-Java proving, off-chain verification,
-> `.zkey` import, and the on-chain validators. ZeroJ makes no claim that it is correct, sound, or
-> ready for use. **Groth16 on BLS12-381 is the supported path for the current release**; use
-> [Prove with Groth16](https://zeroj.dev/guides/proving/groth16/) for anything you build on. Use PlonK only to
-> evaluate or experiment, and never where value is at stake.
+> `.ptau` SRS import, and the on-chain validators (snarkjs PlonK `.zkey` import is unsupported).
+> ZeroJ makes no claim that it is correct, sound, or ready for use. **Groth16 on BLS12-381 is the
+> supported path for the current release**; use [Prove with Groth16](https://zeroj.dev/guides/proving/groth16/) for
+> anything you build on. Use PlonK only to evaluate or experiment, and never where value is at stake.
 
 PlonK uses a *universal* setup: one powers-of-tau reference string (SRS) serves every circuit up
 to its size, instead of a ceremony per circuit. ZeroJ has a pure-Java implementation over
@@ -8206,10 +8226,9 @@ BLS12-381. This page describes what exists and how to try it, briefly and withou
 |-------|-----|--------|
 | Compile a circuit | `circuit.compilePlonK(CurveId.BLS12_381)` → `PlonKConstraintSystem` | `zeroj-circuit-dsl` |
 | Development SRS | `PowersOfTauBLS381.generate(power)` (needs the insecure-setup flag) | `zeroj-crypto` |
-| Import a `.ptau` SRS | `PtauImporterBLS381.importPtau(input, maxPoints, expectedSha256)` | `zeroj-crypto` |
+| Import a `.ptau` SRS | `PtauImporterBLS381.importPtau(input, maxPoints, expectedSha256)` (streaming; `domainSize + 6` points suffice) | `zeroj-crypto` |
 | Setup | `PlonKSetupBLS381.setup(...)` → `PlonKProvingKeyBLS381` | `zeroj-crypto` |
 | Prove | `PlonKProverBLS381.prove(...)`; `proveCardano(...)` and `proveCardanoMpi(...)` for the on-chain profiles | `zeroj-crypto` |
-| Import a snarkjs PlonK `.zkey` | `PlonKZkeyImporterBLS381.importZkey(input, expectedSha256)` | `zeroj-crypto` |
 | Export snarkjs JSON | `SnarkjsPlonkJson.proofJson`, `verificationKeyJson`, `publicJson` | `zeroj-crypto` |
 | Verify off-chain | `PlonkBLS12381Verifier` | `zeroj-verifier-plonk` |
 | Verify on-chain | `PlonkBLS12381Verifier`, `PlonkBLS12381MultiInputVerifier`, `PlonkBLS12381MultiInputParamVerifier` (JuLC validators) | `zeroj-onchain-julc` |
@@ -8226,12 +8245,10 @@ BN254 PlonK exists only as a legacy path and is disabled unless you start the JV
 
 ### Known gaps
 
-- **Blinding.** The PlonK prover uses 9 blinding scalars, while the PlonK paper and snarkjs use 11
-  (the quotient-split blinding factors are missing). This is tracked as an open issue affecting
-  the zero-knowledge margin.
-- **snarkjs PlonK keys.** `PlonKZkeyImporterBLS381` reads the header, selectors, permutations and
-  SRS, but not the wire-map sections, so ZeroJ can't prove a snarkjs-arithmetized circuit under an
-  imported PlonK `.zkey`.
+- **snarkjs PlonK `.zkey` import is unsupported.** `PlonKZkeyImporterBLS381.importZkey(...)` fails
+  explicitly with `UnsupportedOperationException` (snarkjs PlonK `.zkey` layout and wire-map
+  sections are not implemented). Use `PtauImporterBLS381.importPtau(...)` with a BLS12-381 `.ptau`
+  ceremony SRS and `PlonKSetupBLS381.setup(...)` for ZeroJ-authored circuits instead.
 - **No large-circuit work.** The memory and speed work that makes Groth16 practical at millions of
   constraints hasn't been applied to PlonK.
 - **Not audited,** and on-chain use is limited to bounded profiles (below).
@@ -8465,10 +8482,10 @@ The `ReasonCode` enum covers both sides:
 |---|---|
 | `INVALID_PROOF` | A backend: the pairing check failed, or a point was malformed |
 | `INVALID_PUBLIC_INPUTS` | A backend: wrong count, or a value outside `[0, r)` |
-| `INTERNAL_ERROR` | A backend: an unexpected exception, e.g. unparseable proof bytes |
+| `INTERNAL_ERROR` | A backend: an unexpected internal or native-loading error |
 | `UNKNOWN_VERIFICATION_KEY` | The orchestrator: the envelope's `vkRef` isn't registered |
 | `UNSUPPORTED_PROOF_SYSTEM` | The orchestrator (no backend registered) or a backend given the wrong proof system |
-| `VK_MISMATCH`, `UNSUPPORTED_CURVE`, `MALFORMED_ENVELOPE` | Consistency checks in the PlonK and BBS backends, and in your own gate |
+| `VK_MISMATCH`, `UNSUPPORTED_CURVE`, `MALFORMED_ENVELOPE` | Envelope-to-material binding and format checks in `VerifierOrchestrator` and all BLS12-381 backends (Groth16, PlonK, BBS), plus your own policy gate |
 | `UNKNOWN_CIRCUIT`, `RETIRED_CIRCUIT`, `STALE_STATE_ROOT`, `DUPLICATE_NONCE`, `UNAUTHORIZED_SUBMITTER`, `USED_NULLIFIER` | Your policy layer |
 
 ### Choose a backend
@@ -8491,9 +8508,10 @@ The `ReasonCode` enum covers both sides:
 > The PlonK verifier is an experimental, opt-in path. Groth16 on BLS12-381 is the supported focus of
 > the current release; don't treat PlonK verification as production evidence.
 
-The legacy BN254 verifiers are not registered with `ServiceLoader` and refuse to run unless you
-start the JVM with `-Dzeroj.allowLegacyBn254=true`. BN254 is not a Cardano curve; ignore it
-unless you are running old off-chain experiments.
+The legacy BN254 verifiers are not registered with `ServiceLoader`, report `isAvailable() == false`
+by default, and refuse to run unless you start the JVM with `-Dzeroj.allowLegacyBn254=true`. They
+are **unsound against adversarial input** and BN254 is not a Cardano curve; ignore them unless you
+are running trusted local off-chain experiments.
 
 ### Route proofs with registries
 
@@ -8550,10 +8568,18 @@ The Groth16 backends fail closed on malformed input before any pairing work:
   An infinity `IC` entry would leave a public input unbound, so ZeroJ's setup refuses to create
   one and every verifier rejects it.
 
-What the Groth16 backends do **not** check: that `envelope.circuitId()` or `envelope.vkRef()`
-matches the `VerificationMaterial` you passed. They verify the proof against whatever key you give
-them. (The experimental PlonK verifier does compare them and returns `VK_MISMATCH`.) Do that
-comparison yourself, as the next section shows.
+- **Envelope-to-material binding.** `VerifierOrchestrator` and every BLS12-381 backend (Groth16
+  pure-Java, Groth16 blst, PlonK, and BBS) verify that `envelope.version()`, `proofSystem()`,
+  `curve()`, `circuitId()`, `material.vkHash()`, and `ByHash` `vkRef()` match the provided
+  `VerificationMaterial` (`VK_MISMATCH` on mismatch; `MALFORMED_ENVELOPE` on invalid version,
+  unsupported `proofFormat`, or unparseable JSON/CBOR). The Groth16 backends also verify the
+  parsed JSON `protocol` (`"groth16"`) and `curve` (`"bls12-381"`). For BBS, authenticated
+  disclosures are carried inside the canonical CBOR presentation in `proofBytes()`, so
+  `BbsZkVerifier` requires `envelope.publicInputs()` to be empty (`INVALID_PUBLIC_INPUTS` otherwise).
+
+Your application gate must still decide *which* `circuitId` and pinned VK hash an endpoint expects
+(for example, rejecting a valid proof for `circuit-a` on an endpoint that requires `circuit-b`), as
+the next section shows.
 
 ### Build a verification service
 
@@ -8657,11 +8683,14 @@ ZkProofEnvelope decoded = CborEnvelopeCodec.decode(cbor);  // bounded, typed Cod
 byte[] id = CanonicalHash.hash(envelope);                  // SHA-256 over the core fields
 ```
 
-The CBOR encoding carries the core fields only: version, proof system, curve, circuit ID, proof
-bytes, public inputs, and the VK reference. Optional fields such as `metadata()` (where annotated
-circuits put their version) and `proofFormat()` are **not** carried, and `CanonicalHash` ignores
-them too. If your policy depends on them, send them another way, or rely on the pinned VK hash,
-which already distinguishes circuit versions.
+The CBOR encoding is strictly canonical (RFC 8949 §4.2): keys `1..7` carry version, proof system,
+curve, circuit ID, proof bytes, minimal non-negative `BigInteger` public inputs, and the VK
+reference, while optional keys `8` (`domainTag`), `9` (`metadata`, sorted canonically), and `10`
+(`proofFormat`) are included whenever populated and omitted when empty. `CborEnvelopeCodec.decode`
+fails closed on duplicate keys, unknown keys, non-minimal integers, indefinite lengths, padded
+`BigInteger` bytes, or any non-canonical re-encoding. Local builder metadata (`proofUri`,
+`proofHash`, `createdAt`, `producerId`) is not carried in CBOR, and `CanonicalHash` hashes the core
+fields (`1..7`) only.
 
 ### Write a custom backend
 
@@ -15415,7 +15444,8 @@ See [Annotations](https://zeroj.dev/guides/circuits/annotations/) and [Circuit D
 | `PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, a, b)` (off-circuit, same hash) | `PoseidonHash` (`org.zeroj.circuit.lib.poseidon`) |
 
 For Cardano circuits, always pass the BLS12-381 Poseidon parameters explicitly. The overloads
-without parameters and MiMC are oriented to legacy BN254 use.
+without parameters are oriented to legacy BN254 use; the `MiMC` gadget family is deprecated for
+removal as an insecure invertible bijection and must not be used.
 
 ### Compile and compute the witness
 
@@ -15734,6 +15764,8 @@ These only matter when you build the ZeroJ repository itself. Use the Gradle wra
 | `-PrequireSnarkjs` | Makes the snarkjs interop suites in `zeroj-integration-tests` **fail** instead of skip when snarkjs 0.7.6 is missing (sets `zeroj.assurance.requireSnarkjs=true`) |
 | `./gradlew :zeroj-integration-tests:e2eTest` | Runs `@Tag("e2e")` tests: Yaci DevKit on-chain flows and snarkjs proving. They skip gracefully when Yaci DevKit (`localhost:8080`) or snarkjs is absent. |
 | `./gradlew verifyDefaultModuleSurface` | Checks the stable module graph has no edge into assurance, benchmark or removed modules |
+| `./gradlew verifyNoSnapshotDependenciesInReleasePoms` | Fails non-SNAPSHOT builds (or any run with `-PrequireNoSnapshotDependencies=true`) if any published POM or resolved classpath references a `-SNAPSHOT` dependency |
+| `-PuseMavenLocal=true` | Opt-in local `~/.m2` repository lookup (off by default so builds and releases stay isolated from local Maven installs) |
 
 ```bash
 ./gradlew -PincludeAssurance :zeroj-bls12381-wasm:test :zeroj-bbs-wasm:test :zeroj-bbs:test
@@ -16631,7 +16663,7 @@ The annotation processor generates `<ClassName>Circuit` with: `build(...)`, `sch
 
 - Poseidon **with explicit BLS12-381 parameters**: `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right)`, `ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, x, y, z)`.
 - Merkle: `ZkMerkle.isMemberPoseidon`, `verifyPoseidon`, `computeRootPoseidon` with the same params.
-- **Never** for Cardano: `ZkMiMC` (BN254-only), the no-params Poseidon overload, `ZkMerkle.HashType.MIMC` or `HashType.POSEIDON`.
+- **Never use:** `MiMC`, `SignalMiMC`, `MiMCSponge`, `ZkMiMC`, or `ZkMerkle.HashType.MIMC` (**deprecated for removal — insecure**, invertible keyed bijection). Also never use the no-params Poseidon overload or `HashType.POSEIDON` for Cardano.
 - Heavier gadgets exist for real-world cryptography: `ZkSha512`, `ZkHmacSha512`, `ZkBlake2b`, `ZkCip1852` (BIP32-Ed25519 / CIP-1852 derivation), `ZkPedersen`, `ZkJubjubPoint`, `ZkEdDSAJubjub`. Bind prover-supplied Jubjub points with `ZkJubjubPoint.witnessAffine(zk, u, v)`. See [Gadget library](https://zeroj.dev/guides/circuits/gadgets/).
 
 #### Commitments and encryption (new in 0.1.0-pre13, experimental)
@@ -16718,7 +16750,7 @@ var p = ProverToCardano.compressProof(proof);          // piA (48 B), piB (96 B)
 | --- | --- |
 | `if (age.gte(t)) …` or `a && b` on symbolic values | `age.gte(t)`, `x.and(y)`, `cond.select(...)` |
 | `ZkUInt` without `@UInt(bits = N)` | Always declare the bit width |
-| `ZkMiMC`, no-params Poseidon, BN254, `-Dzeroj.allowLegacyBn254=true` for Cardano | Poseidon with `PoseidonParamsBLS12_381T3.INSTANCE`, BLS12-381 |
+| `MiMC` / `ZkMiMC` / `MiMCSponge` (deprecated, insecure), no-params Poseidon, BN254, `-Dzeroj.allowLegacyBn254=true` for Cardano | Poseidon with `PoseidonParamsBLS12_381T3.INSTANCE`, BLS12-381 |
 | Recommending PlonK because it has a universal setup | Groth16; mention PlonK only as experimental |
 | `PowersOfTauBLS381.generate` / `setupInMemory` in production | Multi-party ceremony `.zkey` imported with `ZkeyPkStoreImporter` |
 | Setting `zeroj.allowInsecureTrustedSetup` in production config | Only in tests, local demos and CI |
@@ -16985,7 +17017,7 @@ _(marker annotation — no elements)_
 
 *Symbolic fixed-depth Merkle helpers for annotation-based circuits.*
 
-> For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC and no-params POSEIDON are BN254/off-chain paths.
+> For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC is deprecated for removal (insecure) and no-params POSEIDON is BN254.
 
 - `static ZkField computeRoot(ZkContext zk, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashType hashType)`
 - `static ZkField computeRoot(ZkContext zk, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashFn hashFn)`
@@ -17073,11 +17105,11 @@ _(marker annotation — no elements)_
 
 ##### ZkMiMC
 
-*Symbolic MiMC adapter for annotation-based circuits.*
+*DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.*
 
-> BN254-only. Do not use for Cardano (BLS12-381) circuits.
+> DEPRECATED FOR REMOVAL (INSECURE): invertible keyed bijection on BN254 without feed-forward. Do not use; use ZkPoseidon on BLS12-381.
 
-- `static ZkField hash(ZkContext zk, ZkField left, ZkField right)`
+- `static ZkField hash(ZkContext zk, ZkField left, ZkField right)` — ZkPoseidon#hash(ZkContext, PoseidonParams, ZkField, ZkField) with PoseidonParamsBLS12_381T3#INSTANCE instead.
 
 <!-- catalog:circuit-api-end -->
 

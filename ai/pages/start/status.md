@@ -52,7 +52,7 @@ current release and the default in every recommendation.
 
 | Area | Modules | Status |
 |------|---------|--------|
-| PlonK BLS12-381: pure-Java prove and verify, `.ptau`/`.zkey` import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** |
+| PlonK BLS12-381: pure-Java prove and verify, streaming `.ptau` SRS import (snarkjs PlonK `.zkey` import unsupported) | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** |
 | PlonK BLS12-381: on-chain (JuLC / Plutus V3) | `zeroj-onchain-julc` | **Experimental**. Labeled testnet trials only. |
 
 > **Caution: PlonK is experimental everywhere**

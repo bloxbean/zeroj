@@ -179,8 +179,8 @@ the trapdoor.
 
    `ZkPoseidon`, `ZkMerkle.*Poseidon` and the off-circuit `PoseidonHash` all take a
    `PoseidonParams` argument. For Cardano (BLS12-381) pass `PoseidonParamsBLS12_381T3.INSTANCE`
-   explicitly. The no-params Poseidon overloads and MiMC are aimed at BN254 and aren't Cardano
-   defaults.
+   explicitly. The no-params Poseidon overloads are aimed at legacy BN254 use, and the `MiMC`
+   gadget family is deprecated for removal (insecure).
 
    
 

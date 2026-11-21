@@ -178,7 +178,7 @@ The annotation processor generates `<ClassName>Circuit` with: `build(...)`, `sch
 
 - Poseidon **with explicit BLS12-381 parameters**: `ZkPoseidon.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, left, right)`, `ZkPoseidonN.hash(zk, PoseidonParamsBLS12_381T3.INSTANCE, x, y, z)`.
 - Merkle: `ZkMerkle.isMemberPoseidon`, `verifyPoseidon`, `computeRootPoseidon` with the same params.
-- **Never** for Cardano: `ZkMiMC` (BN254-only), the no-params Poseidon overload, `ZkMerkle.HashType.MIMC` or `HashType.POSEIDON`.
+- **Never use:** `MiMC`, `SignalMiMC`, `MiMCSponge`, `ZkMiMC`, or `ZkMerkle.HashType.MIMC` (**deprecated for removal — insecure**, invertible keyed bijection). Also never use the no-params Poseidon overload or `HashType.POSEIDON` for Cardano.
 - Heavier gadgets exist for real-world cryptography: `ZkSha512`, `ZkHmacSha512`, `ZkBlake2b`, `ZkCip1852` (BIP32-Ed25519 / CIP-1852 derivation), `ZkPedersen`, `ZkJubjubPoint`, `ZkEdDSAJubjub`. Bind prover-supplied Jubjub points with `ZkJubjubPoint.witnessAffine(zk, u, v)`. See [Gadget library](https://zeroj.dev/guides/circuits/gadgets/).
 
 ### Commitments and encryption (new in 0.1.0-pre13, experimental)
@@ -265,7 +265,7 @@ var p = ProverToCardano.compressProof(proof);          // piA (48 B), piB (96 B)
 | --- | --- |
 | `if (age.gte(t)) …` or `a && b` on symbolic values | `age.gte(t)`, `x.and(y)`, `cond.select(...)` |
 | `ZkUInt` without `@UInt(bits = N)` | Always declare the bit width |
-| `ZkMiMC`, no-params Poseidon, BN254, `-Dzeroj.allowLegacyBn254=true` for Cardano | Poseidon with `PoseidonParamsBLS12_381T3.INSTANCE`, BLS12-381 |
+| `MiMC` / `ZkMiMC` / `MiMCSponge` (deprecated, insecure), no-params Poseidon, BN254, `-Dzeroj.allowLegacyBn254=true` for Cardano | Poseidon with `PoseidonParamsBLS12_381T3.INSTANCE`, BLS12-381 |
 | Recommending PlonK because it has a universal setup | Groth16; mention PlonK only as experimental |
 | `PowersOfTauBLS381.generate` / `setupInMemory` in production | Multi-party ceremony `.zkey` imported with `ZkeyPkStoreImporter` |
 | Setting `zeroj.allowInsecureTrustedSetup` in production config | Only in tests, local demos and CI |
@@ -532,7 +532,7 @@ _(marker annotation — no elements)_
 
 *Symbolic fixed-depth Merkle helpers for annotation-based circuits.*
 
-> For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC and no-params POSEIDON are BN254/off-chain paths.
+> For Cardano use the *Poseidon methods with PoseidonParamsBLS12_381T3.INSTANCE; HashType.MIMC is deprecated for removal (insecure) and no-params POSEIDON is BN254.
 
 - `static ZkField computeRoot(ZkContext zk, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashType hashType)`
 - `static ZkField computeRoot(ZkContext zk, ZkField leaf, ZkArray<ZkField> siblings, ZkArray<ZkBool> pathBits, HashFn hashFn)`
@@ -620,11 +620,11 @@ _(marker annotation — no elements)_
 
 #### ZkMiMC
 
-*Symbolic MiMC adapter for annotation-based circuits.*
+*DEPRECATED FOR REMOVAL — INSECURE / INVERTIBLE — DO NOT USE.*
 
-> BN254-only. Do not use for Cardano (BLS12-381) circuits.
+> DEPRECATED FOR REMOVAL (INSECURE): invertible keyed bijection on BN254 without feed-forward. Do not use; use ZkPoseidon on BLS12-381.
 
-- `static ZkField hash(ZkContext zk, ZkField left, ZkField right)`
+- `static ZkField hash(ZkContext zk, ZkField left, ZkField right)` — ZkPoseidon#hash(ZkContext, PoseidonParams, ZkField, ZkField) with PoseidonParamsBLS12_381T3#INSTANCE instead.
 
 <!-- catalog:circuit-api-end -->
 

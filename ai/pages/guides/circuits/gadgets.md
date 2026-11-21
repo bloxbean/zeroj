@@ -53,8 +53,19 @@ permutation, so its outputs differ from a native `t = N + 1` Poseidon. `ZkPoseid
 no-parameter overload at all. `PoseidonHash` is host-side code: it computes values, it doesn't
 constrain anything.
 
-**MiMC is BN254-only.** `MiMC`, `SignalMiMC`, `ZkMiMC` and `MiMCSponge` require the BN254 field
-and refuse to compile for BLS12-381. Treat them as legacy, off-chain gadgets.
+**Do not use MiMC (`MiMC`, `SignalMiMC`, `ZkMiMC`, `MiMCSponge`) — deprecated for removal.**
+`MiMC.hash` computes an invertible keyed bijection without feed-forward on BN254 (allowing trivial
+preimage and Merkle proof forgery) and is not circomlib-compatible. Use `Poseidon` / `ZkPoseidon`
+with `PoseidonParamsBLS12_381T3.INSTANCE` instead.
+
+> **Caution: Migrating an existing MiMC deployment**
+>
+> Upgrading ZeroJ adds compile-time deprecation warnings, but any existing MiMC commitments, Merkle
+> roots, compiled circuits, and verification keys remain bound to the broken relation. To migrate:
+> (1) recompute commitments and Merkle roots from trusted source data with BLS12-381 Poseidon
+> (`PoseidonParamsBLS12_381T3.INSTANCE`), (2) recompile the circuit, (3) regenerate circuit-specific
+> proving and verifying keys (including a new Groth16 phase-2 ceremony where applicable), and
+> (4) retire acceptance under the old MiMC verification key.
 
 ## Merkle membership
 
@@ -94,8 +105,9 @@ for (int i = 0; i < siblings.size(); i++) {
 }
 ```
 
-`ZkMerkle.HashType.MIMC` and the enum `HashType.POSEIDON` path are BN254-oriented conveniences.
-Avoid them for Cardano. For large, updatable state (millions of entries, inclusion and
+`ZkMerkle.HashType.MIMC` is **deprecated for removal (insecure)** because `ZkMiMC` is invertible,
+and the enum `HashType.POSEIDON` path is a BN254-oriented convenience. Avoid both for Cardano; use
+the explicit `*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` methods. For large, updatable state (millions of entries, inclusion and
 non-inclusion, updates), see the experimental Poseidon MPF/JMT modules in
 [Authenticated state](https://zeroj.dev/guides/credentials/authenticated-state/).
 
@@ -482,7 +494,7 @@ authorization or replay rules.
 | Binary decomposition, comparators, selection | Any | Ready on BLS12-381 Groth16 |
 | Poseidon T3, folded Poseidon N | BN254 default; BLS12-381 with explicit params | Ready with `PoseidonParamsBLS12_381T3.INSTANCE` |
 | Merkle membership | Hash-dependent | Ready with the params-aware Poseidon helpers |
-| MiMC, MiMC sponge | BN254 only | Not Cardano-ready |
+| MiMC, MiMC sponge | BN254 only | **Deprecated for removal (insecure)** — invertible keyed bijection, not a collision-resistant hash |
 | Jubjub point arithmetic | BLS12-381 only | Ready for algebraic and public-data use, pending external review |
 | Pedersen commitment (in-circuit, `ZkPedersen`) | BLS12-381 only | Ready, pending external review |
 | Pedersen homomorphic API (`ZkPedersenCommitment`, `ZkPedersen.assertBalanced`) and vector commitments (`ZkPedersenVector`) | BLS12-381 only | Experimental |
