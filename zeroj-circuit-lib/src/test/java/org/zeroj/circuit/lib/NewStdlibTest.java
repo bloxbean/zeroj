@@ -24,6 +24,7 @@ class NewStdlibTest {
     // ===================================================================
 
     @Test
+    @SuppressWarnings("removal")
     void aliasCheck_validValue_passes() {
         var circuit = CircuitBuilder.create("alias-test")
                 .secretVar("value")
@@ -34,6 +35,7 @@ class NewStdlibTest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void aliasCheck_largeValid_passes() {
         var circuit = CircuitBuilder.create("alias-test")
                 .secretVar("value")

@@ -151,27 +151,28 @@ class ZkMpfOperationCircuitTest {
         }
     }
 
-    // Template names identify semantic/schema versions. ADR-0063 direct Boolean lowering
-    // changes the exact R1CS pins and requires fresh circuit-specific keys.
+    // Template names identify semantic/schema versions. ADR-0068 canonical < Fr key-path
+    // constraints and derived-boolean deduplication update the exact R1CS pins and require
+    // fresh circuit-specific keys.
     @Test
     void branchProfileConstraintCountsArePinned() {
         int[][] expected = {
-                {0, 3_051, 13_259, 65},
-                {1, 8_921, 46_095, 71},
-                {3, 20_163, 111_749, 83},
-                {8, 48_268, 275_884, 113},
-                {9, 53_889, 308_711, 119},
-                {12, 70_752, 407_192, 137},
-                {64, 363_045, 2_114_196, 449}
+                {0, 3_879, 14_731, 65},
+                {1, 9_747, 47_567, 71},
+                {3, 20_985, 113_221, 83},
+                {8, 49_080, 277_356, 113},
+                {9, 54_699, 310_183, 119},
+                {12, 71_556, 408_664, 137},
+                {64, 363_745, 2_115_668, 449}
         };
         String[] digests = {
-                "29b7aa4d9c198c94017a26432008ac9ad6feb8eb2010a3047033661a9d884847",
-                "c163d744f308044b5aaea66b301be2e42bec907d14d3bef0e560f3dacd98cadb",
-                "14b8718f15e8181e9d24eb02a781e523181cb3fa941b8d0ad54adb967f042647",
-                "ff0c5c68e02fd7418d014fc1ec74d89626611d9aedad1907f8dc8fba25e0e2a5",
-                "dd69a34951612ab67283ecf6ffbd6c5cdf47003db3bdb2ecc6b0da2f72eb3b7d",
-                "baa1ce903d9bf95a669477dd7032187a663e0f8c0e5b5c05d872f9e80b41d9b9",
-                "3517e47361e51c47c5ca190c494b15fd6278da49f1818da55a4e6ebb7d9a07a4"
+                "3893593eb165646cf488ed2a7a6a9cdbb69eed3e5cc68be6da3c9c483f7c028d",
+                "e1e8f031df19a35eecbb50eeb31f6757f6c8c13ccf956db06df692a4ee20cecc",
+                "3c7a3726a67247f70037b448c99161d295c6f215c91ed4f73ede09a44f4c9ecb",
+                "434051064e5c75e9b0a475fa35d5dbfefff218202ab392934824551071813afb",
+                "3e646c58603d06834be66bde5df18cef24d3313b730dd36f4f8590a60ef38a1f",
+                "53a2d3db06463f1acf53a84828b13dfdf35b3a4a8882a7c21f657e23744f3857",
+                "113cac537c007cfb6d5a506dc0cc87e67ce60ab12872da71e25f029f5342ffb7"
         };
         for (int index = 0; index < expected.length; index++) {
             int[] profile = expected[index];
@@ -206,16 +207,17 @@ class ZkMpfOperationCircuitTest {
                 () -> PoseidonMpfCircuitTemplates.inclusion(-1));
         assertThrows(IllegalArgumentException.class,
                 () -> PoseidonMpfCircuitTemplates.inclusion(65));
-        assertExactProfile(
-                PoseidonMpfCircuitTemplates.nonInclusionEmpty(8),
-                "zeroj-mpf-v1-non-inclusion-empty-s8-p1",
-                45_165, 263_282, 112,
-                "aea0fbe7a19badb27df3db6dd8851681464b55d8e897344de2226eee20ad2a0a");
-        assertExactProfile(
-                PoseidonMpfCircuitTemplates.nonInclusionDifferentLeaf(8),
-                "zeroj-mpf-v1-non-inclusion-different-leaf-s8-p1",
-                50_881, 279_787, 178,
-                "22c45307ee886d545013d6ce0f38b6d0ed32ff0c43233cf7cb1b759b2c3f196c");
+        assertAll(
+                () -> assertExactProfile(
+                        PoseidonMpfCircuitTemplates.nonInclusionEmpty(8),
+                        "zeroj-mpf-v1-non-inclusion-empty-s8-p1",
+                        45_979, 264_754, 112,
+                        "cf3ae294b80deb308e3dc978603bf3484d1f84b13cf8aa54f3d989ffb78828a5"),
+                () -> assertExactProfile(
+                        PoseidonMpfCircuitTemplates.nonInclusionDifferentLeaf(8),
+                        "zeroj-mpf-v1-non-inclusion-different-leaf-s8-p1",
+                        52_523, 282_731, 178,
+                        "d03b5b62654d8d4d27b40c0669682eaba95e5482b94cba8022f06fa9368cc5a5"));
     }
 
     private static void assertExactProfile(
@@ -227,12 +229,13 @@ class ZkMpfOperationCircuitTest {
             String sha256) {
         assertEquals(templateId, circuit.constraintGraph().name());
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        assertEquals(constraints, r1cs.numConstraints());
-        assertEquals(wires, r1cs.numWires());
-        assertEquals(1, r1cs.numPublicInputs());
-        assertEquals(privateInputs, r1cs.numPrivateInputs());
-        assertEquals(sha256, R1CSFlatIO.canonicalSha256(
-                r1cs.flat(), r1cs.numWires(), r1cs.numPublicInputs()));
+        assertAll(templateId,
+                () -> assertEquals(constraints, r1cs.numConstraints()),
+                () -> assertEquals(wires, r1cs.numWires()),
+                () -> assertEquals(1, r1cs.numPublicInputs()),
+                () -> assertEquals(privateInputs, r1cs.numPrivateInputs()),
+                () -> assertEquals(sha256, R1CSFlatIO.canonicalSha256(
+                        r1cs.flat(), r1cs.numWires(), r1cs.numPublicInputs())));
     }
 
     @Test

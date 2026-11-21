@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -295,12 +296,16 @@ class AnnotatedCircuitExamplesTest {
                 () -> circuit.calculateWitness(wrongCommitment.toWitnessMap(), CurveId.BLS12_381));
 
         var invalidVote = BigInteger.valueOf(2);
-        var invalidVoteInputs = AnnotatedAnonymousVotingCircuit.inputs()
+        assertThrows(IllegalArgumentException.class, () -> AnnotatedAnonymousVotingCircuit.inputs()
+                .vote(invalidVote));
+        var invalidVoteMap = new HashMap<>(AnnotatedAnonymousVotingCircuit.inputs()
                 .commitment(PoseidonHash.hash(PoseidonParamsBLS12_381T3.INSTANCE, invalidVote, nullifier))
-                .vote(invalidVote)
-                .nullifier(nullifier);
+                .vote(BigInteger.ZERO)
+                .nullifier(nullifier)
+                .toWitnessMap());
+        invalidVoteMap.put(AnnotatedAnonymousVotingCircuit.VOTE, List.of(invalidVote));
         assertThrows(ArithmeticException.class,
-                () -> circuit.calculateWitness(invalidVoteInputs.toWitnessMap(), CurveId.BLS12_381));
+                () -> circuit.calculateWitness(invalidVoteMap, CurveId.BLS12_381));
     }
 
     @Test

@@ -410,7 +410,7 @@ public final class PlonKProverBLS381 {
 
         // L1(zeta) = omega^0 * zh / (n * (zeta - omega^0)) = zh / (n * (zeta - 1))
         MontFr381 zetaN = zeta;
-        for (int i = 1; i < n; i++) zetaN = zetaN.mul(zeta);
+        for (int i = 0; i < logN; i++) zetaN = zetaN.square();
         MontFr381 zh = zetaN.sub(MontFr381.ONE);
         MontFr381 l1Zeta = zh.mul(MontFr381.fromLong(n).mul(zeta.sub(MontFr381.ONE)).inverse());
 
@@ -481,11 +481,18 @@ public final class PlonKProverBLS381 {
 
     // --- Polynomial helpers ---
 
-    /** Evaluate polynomial on coset {shift * omega^i}: IFFT → shift coeffs by shift^i → FFT */
+    /** Evaluate polynomial on coset {shift * omega^i}: shift coeffs by shift^i → FFT */
     private static MontFr381[] cosetEval(MontFr381[] coeffs, MontFr381 shift, int n, int logN) {
         MontFr381[] padded = new MontFr381[n];
-        for (int i = 0; i < n; i++)
-            padded[i] = i < coeffs.length ? coeffs[i].mul(powFr(shift, i)) : MontFr381.ZERO;
+        MontFr381 power = MontFr381.ONE;
+        int limit = Math.min(coeffs.length, n);
+        for (int i = 0; i < limit; i++) {
+            padded[i] = coeffs[i].mul(power);
+            power = power.mul(shift);
+        }
+        for (int i = limit; i < n; i++) {
+            padded[i] = MontFr381.ZERO;
+        }
         return FieldFFTBLS381.fft(padded);
     }
 
@@ -570,10 +577,22 @@ public final class PlonKProverBLS381 {
     }
 
     private static MontFr381 powFr(MontFr381 base, int exp) {
-        if (exp == 0) return MontFr381.ONE;
-        MontFr381 r = base;
-        for (int i = 1; i < exp; i++) r = r.mul(base);
-        return r;
+        if (exp < 0) {
+            throw new IllegalArgumentException("Exponent must be non-negative: " + exp);
+        }
+        MontFr381 result = MontFr381.ONE;
+        MontFr381 cur = base;
+        int e = exp;
+        while (e > 0) {
+            if ((e & 1) != 0) {
+                result = result.mul(cur);
+            }
+            e >>>= 1;
+            if (e > 0) {
+                cur = cur.square();
+            }
+        }
+        return result;
     }
 
     private static void addG1(FiatShamirTranscript t, AffineG1 p, TranscriptEncoding encoding) {

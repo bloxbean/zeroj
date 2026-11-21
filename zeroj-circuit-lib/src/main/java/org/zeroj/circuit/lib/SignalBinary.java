@@ -3,6 +3,8 @@ package org.zeroj.circuit.lib;
 import org.zeroj.circuit.Signal;
 import org.zeroj.circuit.SignalBuilder;
 
+import java.util.Objects;
+
 /**
  * Bit manipulation using the Signal API.
  *
@@ -49,12 +51,23 @@ public final class SignalBinary {
         return result;
     }
 
-    /** Circular left rotation (free — just index shift). */
+    /**
+     * Circular left rotation of an LSB-first bit array (free — index remapping only).
+     *
+     * <p>Moves bit {@code j} to bit position {@code (j + n) mod len}, so {@code rotateLeft(0x01, 1)}
+     * produces {@code 0x02}. Negative {@code n} rotates right by {@code -n}.</p>
+     */
     public static Signal[] rotateLeft(Signal[] bits, int n) {
+        Objects.requireNonNull(bits, "bits");
         int len = bits.length;
-        n = n % len;
+        if (len == 0) {
+            throw new IllegalArgumentException("bits must not be empty");
+        }
+        int shift = Math.floorMod(n, len);
         var result = new Signal[len];
-        for (int i = 0; i < len; i++) result[i] = bits[(i + n) % len];
+        for (int i = 0; i < len; i++) {
+            result[i] = bits[(i - shift + len) % len];
+        }
         return result;
     }
 }

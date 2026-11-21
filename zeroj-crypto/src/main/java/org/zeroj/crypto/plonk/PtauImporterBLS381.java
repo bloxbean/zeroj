@@ -1,16 +1,9 @@
 package org.zeroj.crypto.plonk;
 
-import org.zeroj.bls12381.ec.G1Point;
-import org.zeroj.bls12381.ec.G2Point;
-import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
-import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
-import org.zeroj.bls12381.field.Fp;
-import org.zeroj.bls12381.field.Fp2;
 import org.zeroj.bls12381.field.MontFp2_381;
 import org.zeroj.bls12381.field.MontFp381;
-import org.zeroj.bls12381.pairing.BLS12381Pairing;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -245,7 +238,9 @@ public final class PtauImporterBLS381 {
         }
 
         validateSrsConsistency(tauG1, tauG2, tauG1.length);
-        return new SRS(tauG1, tauG2, power);
+        SRS srs = new SRS(tauG1, tauG2, power);
+        SrsConsistencyBLS381.recordVerified(srs);
+        return srs;
     }
 
     /**
@@ -284,7 +279,7 @@ public final class PtauImporterBLS381 {
         if (!point.isOnCurve()) {
             throw new IOException("BLS12-381 .ptau G1[" + index + "] is not on curve");
         }
-        if (!toG1(point).isValid()) {
+        if (!SrsConsistencyBLS381.toG1(point).isValid()) {
             throw new IOException("BLS12-381 .ptau G1[" + index + "] is not in subgroup");
         }
         return point;
@@ -302,7 +297,7 @@ public final class PtauImporterBLS381 {
         if (!point.isOnCurve()) {
             throw new IOException("BLS12-381 .ptau G2[" + index + "] is not on curve");
         }
-        if (!toG2(point).isValid()) {
+        if (!SrsConsistencyBLS381.toG2(point).isValid()) {
             throw new IOException("BLS12-381 .ptau G2[" + index + "] is not in subgroup");
         }
         return point;
@@ -320,34 +315,11 @@ public final class PtauImporterBLS381 {
     }
 
     private static void validateSrsConsistency(AffineG1[] tauG1, AffineG2[] tauG2, int count) throws IOException {
-        if (!tauG1[0].equals(JacobianG1BLS381.GENERATOR.toAffine())) {
-            throw new IOException("BLS12-381 .ptau G1 generator anchor mismatch");
+        try {
+            SrsConsistencyBLS381.verifyConsistency(tauG1, tauG2, count, "BLS12-381 .ptau");
+        } catch (IllegalArgumentException e) {
+            throw new IOException(e.getMessage(), e);
         }
-        if (!tauG2[0].equals(JacobianG2BLS381.GENERATOR.toAffine())) {
-            throw new IOException("BLS12-381 .ptau G2 generator anchor mismatch");
-        }
-        G2Point g2 = toG2(tauG2[0]);
-        G2Point tauG2Point = toG2(tauG2[1]);
-        for (int i = 1; i < count; i++) {
-            boolean consistent = BLS12381Pairing.pairingCheck(
-                    new G1Point[]{toG1(tauG1[i]), toG1(tauG1[i - 1]).negate()},
-                    new G2Point[]{g2, tauG2Point});
-            if (!consistent) {
-                throw new IOException("BLS12-381 .ptau SRS powers are inconsistent at G1 index " + i);
-            }
-        }
-    }
-
-    private static G1Point toG1(AffineG1 point) {
-        if (point.isInfinity()) return G1Point.INFINITY;
-        return new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
-    }
-
-    private static G2Point toG2(AffineG2 point) {
-        if (point.isInfinity()) return G2Point.INFINITY;
-        return new G2Point(
-                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
-                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
     }
 
     private static BigInteger readUnsignedLE(byte[] buf, int off, int len) {

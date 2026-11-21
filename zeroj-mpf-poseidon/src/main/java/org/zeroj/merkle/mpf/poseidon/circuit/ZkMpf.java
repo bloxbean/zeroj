@@ -37,6 +37,7 @@ public final class ZkMpf {
     private static final int MAX_PREFIX_NIBBLES = KEY_PATH_NIBBLES;
     private static final int LEAF_CHUNK_BYTES = 31;
     private static final int BYTE_DIGEST_CHUNK_BYTES = 32;
+    private static final int[] BLS12_381_MODULUS_NIBBLES = bls12381ModulusNibbles();
 
     private ZkMpf() {}
 
@@ -400,6 +401,7 @@ public final class ZkMpf {
             }
 
             PathSignals leafPath = PathSignals.of(proof.leafKeyPath().get(i));
+            requireKeyPath(zk, proof.leafKeyPath().get(i));
             ZkUInt leafNibble = leafPath.at(zk, queryIndex.signal());
             ZkField neighborLeaf = commitLeafFromPath(
                     zk,
@@ -787,13 +789,34 @@ public final class ZkMpf {
             throw new IllegalArgumentException(
                     "keyPath must contain " + KEY_PATH_NIBBLES + " nibbles, got " + keyPath.size());
         }
+        Signal equalPrefix = zk.builder().constant(1);
+        Signal less = zk.builder().constant(0);
         for (int i = 0; i < keyPath.size(); i++) {
-            ZkUInt nibble = keyPath.get(i);
+            ZkUInt nibble = Objects.requireNonNull(keyPath.get(i), "keyPath[" + i + "]");
             if (nibble.bits() != 4) {
                 throw new IllegalArgumentException("keyPath[" + i + "] must be a 4-bit ZkUInt");
             }
             zk.requireSignal(nibble.signal());
+            nibble.assertWellFormed();
+            // Enforce canonical BLS12-381 scalar encoding (< Fr) matching PoseidonMpfHash.digestToNibbles
+            // and poseidon-authenticated-state-v1.md invariant #8 (ADR-0068).
+            Signal modulusNibble = zk.builder().constant(BLS12_381_MODULUS_NIBBLES[i]);
+            Signal nibbleEqual = nibble.signal().isEqual(modulusNibble);
+            Signal nibbleLess = nibble.signal().lessThan(modulusNibble, 4);
+            less = less.or(equalPrefix.and(nibbleLess));
+            equalPrefix = equalPrefix.and(nibbleEqual);
         }
+        zk.builder().assertEqual(less, zk.builder().constant(1));
+    }
+
+    private static int[] bls12381ModulusNibbles() {
+        String hex = FieldConfig.BLS12_381.prime().toString(16);
+        hex = "0".repeat(KEY_PATH_NIBBLES - hex.length()) + hex;
+        int[] out = new int[KEY_PATH_NIBBLES];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = Character.digit(hex.charAt(i), 16);
+        }
+        return out;
     }
 
     private static void requireRoot(ZkContext zk, ZkField root) {

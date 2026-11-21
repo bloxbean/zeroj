@@ -368,8 +368,9 @@ class ZkJmtOperationCircuitTest {
         assertProfile("insert-empty", 8, 2, 17_174, 95_176, 105,
                 "ca6dcee1a07d90b20676ec432db79807ec6d361faaa3604444e693c49ee71fe6",
                 PoseidonJmtCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 8, 2, 85_146, 485_464, 170,
-                "4f8e96a33cac777f9c782c99f742b7f32aa8f1d711acda700edc7e567a33effa",
+        // ADR-0068 derived-boolean tracking eliminates 160 redundant AssertBoolean rows here.
+        assertProfile("insert-different-leaf", 8, 2, 84_986, 485_464, 170,
+                "456d9aee32cd03489f04230d873a80dbdae407bc8c8f5985344687727a08a213",
                 PoseidonJmtCircuitTemplates::insertDifferentLeaf);
         assertProfile("tombstone-update", 8, 3, 17_419, 96_597, 105,
                 "e2e242ea426a5db45ddad220a342664f8d85ac76df14c4f5d0cfa42b0d6b979b",
@@ -389,12 +390,13 @@ class ZkJmtOperationCircuitTest {
         assertEquals("zeroj-jmt-v1-" + operation + "-s" + bound + "-p" + publicInputs,
                 circuit.constraintGraph().name());
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        assertEquals(constraints, r1cs.numConstraints());
-        assertEquals(wires, r1cs.numWires());
-        assertEquals(publicInputs, r1cs.numPublicInputs());
-        assertEquals(privateInputs, r1cs.numPrivateInputs());
-        assertEquals(sha256, R1CSFlatIO.canonicalSha256(
-                r1cs.flat(), r1cs.numWires(), r1cs.numPublicInputs()));
+        assertAll(operation + "-s" + bound,
+                () -> assertEquals(constraints, r1cs.numConstraints()),
+                () -> assertEquals(wires, r1cs.numWires()),
+                () -> assertEquals(publicInputs, r1cs.numPublicInputs()),
+                () -> assertEquals(privateInputs, r1cs.numPrivateInputs()),
+                () -> assertEquals(sha256, R1CSFlatIO.canonicalSha256(
+                        r1cs.flat(), r1cs.numWires(), r1cs.numPublicInputs())));
     }
 
     private static void assertSyntheticS0Inclusion(BigInteger key, BigInteger value) {

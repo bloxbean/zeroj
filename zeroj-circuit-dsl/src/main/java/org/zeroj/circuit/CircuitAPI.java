@@ -78,19 +78,25 @@ public interface CircuitAPI {
      */
     BitDecomposition decompose(Variable a, int nBits);
 
-    /** Recompose a field element from binary variables (LSB first). */
+    /**
+     * Recompose a field element from binary variables (LSB first).
+     *
+     * <p>{@code bits.length} must be in {@code [1, 253]} so the recomposition stays below
+     * every supported scalar field prime when each bit is in {@code {0, 1}}. Callers are
+     * responsible for ensuring each bit wire is constrained to {@code {0, 1}}.</p>
+     */
     Variable fromBinary(Variable[] bits);
 
-    /** Bitwise XOR: a ^ b. Both must be boolean. */
+    /** Bitwise XOR: a ^ b. Enforces {@link #assertBoolean} on both operands and returns a proven boolean. */
     Variable xor(Variable a, Variable b);
 
-    /** Bitwise AND: a & b. Both must be boolean. */
+    /** Bitwise AND: a & b. Enforces {@link #assertBoolean} on both operands and returns a proven boolean. */
     Variable and(Variable a, Variable b);
 
-    /** Bitwise OR: a | b. Both must be boolean. */
+    /** Bitwise OR: a | b. Enforces {@link #assertBoolean} on both operands and returns a proven boolean. */
     Variable or(Variable a, Variable b);
 
-    /** Bitwise NOT: !a. Must be boolean. Returns 1 - a. */
+    /** Bitwise NOT: !a. Enforces {@link #assertBoolean} on {@code a} and returns a proven boolean {@code 1 - a}. */
     Variable not(Variable a);
 
     // --- Assertions ---

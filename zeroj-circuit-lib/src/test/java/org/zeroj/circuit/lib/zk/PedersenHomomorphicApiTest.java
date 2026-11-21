@@ -370,12 +370,13 @@ class PedersenHomomorphicApiTest {
         R1CSConstraintSystem transfer = transferCircuit().compileR1CS(CurveId.BLS12_381);
 
         // witnessAffine (5 rows) + [l]·P (EdDSA's verifyStrict − verifyWithRegisteredKey gap)
-        // + the local Z ≠ 0 guard of isIdentity. The low-level, self-validating entry point on
+        // + the local Z ≠ 0 guard of isIdentity (minus 1 redundant AssertBoolean saved by
+        // ADR-0068 derived-boolean tracking). The low-level, self-validating entry point on
         // raw coordinates is pinned at 5,304 in InCircuitJubjubSubgroupTest.
         assertAll(
-                () -> assertEquals(5_294, subgroupOnEstablished.constraints().size(), "subgroup assertion rows"),
-                () -> assertEquals(340_431, nnz(subgroupOnEstablished), "subgroup assertion nonzeros"),
-                () -> assertEquals(5_294, witnessed.constraints().size(), "witnessInSubgroup rows"),
+                () -> assertEquals(5_293, subgroupOnEstablished.constraints().size(), "subgroup assertion rows"),
+                () -> assertEquals(340_428, nnz(subgroupOnEstablished), "subgroup assertion nonzeros"),
+                () -> assertEquals(5_293, witnessed.constraints().size(), "witnessInSubgroup rows"),
                 () -> assertEquals(5_545, transfer.constraints().size(), "2-in/1-out + fee transfer rows"),
                 () -> assertEquals(30_027, nnz(transfer), "2-in/1-out + fee transfer nonzeros"));
     }

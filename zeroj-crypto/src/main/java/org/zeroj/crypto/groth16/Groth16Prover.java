@@ -71,7 +71,7 @@ public final class Groth16Prover {
         if (witness == null || witness.length == 0)
             throw new IllegalArgumentException("Witness must not be null or empty");
         if (!BigInteger.ONE.equals(witness[0]))
-            throw new IllegalArgumentException("witness[0] must be 1 (the constant wire), got " + witness[0]);
+            throw new IllegalArgumentException("witness[0] must be 1 (the constant wire)");
         if (witness.length != numWires)
             throw new IllegalArgumentException(
                     "witness.length (" + witness.length + ") must match numWires (" + numWires + ")");
@@ -404,16 +404,45 @@ public final class Groth16Prover {
     }
 
     /**
-     * Validate that the witness satisfies all non-empty R1CS constraints.
-     * Throws IllegalArgumentException if any constraint is violated.
+     * Validate that a BN254 witness satisfies all non-empty R1CS constraints.
      *
-     * <p>Use this with standard R1CS constraints (from .r1cs files), NOT with .zkey
-     * Section 4 constraints which use a different encoding where C is implicit.</p>
+     * <p><b>Deprecated:</b> This method is hard-wired to the legacy BN254 scalar field modulus and
+     * requires explicit legacy opt-in via {@link LegacyCurvePolicy}. Use the curve-generic
+     * {@link org.zeroj.circuit.r1cs.R1CSConstraintSystem#verifyWitness} instead.</p>
+     *
+     * @deprecated Hard-wired to BN254; use {@link org.zeroj.circuit.r1cs.R1CSConstraintSystem#verifyWitness}
+     *             for curve-generic witness verification.
      */
+    @Deprecated(forRemoval = true)
     public static void validateWitness(List<R1CSConstraint> constraints, BigInteger[] witness, int numConstraints) {
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
+        if (constraints == null) {
+            throw new IllegalArgumentException("constraints must not be null");
+        }
+        if (witness == null || witness.length == 0) {
+            throw new IllegalArgumentException("Witness must not be null or empty");
+        }
+        if (numConstraints < 0 || numConstraints > constraints.size()) {
+            throw new IllegalArgumentException(
+                    "numConstraints (" + numConstraints + ") out of bounds for size " + constraints.size());
+        }
         BigInteger mod = MontFr254.modulus();
+        for (int i = 0; i < witness.length; i++) {
+            BigInteger v = witness[i];
+            if (v == null || v.signum() < 0 || v.compareTo(mod) >= 0) {
+                throw new IllegalArgumentException(
+                        "Witness entry at wire " + i + " is not a canonical BN254 scalar");
+            }
+        }
+        if (!BigInteger.ONE.equals(witness[0])) {
+            throw new IllegalArgumentException(
+                    "witness[0] must be 1 (the constant wire)");
+        }
         for (int i = 0; i < numConstraints; i++) {
             var c = constraints.get(i);
+            if (c == null) {
+                throw new IllegalArgumentException("constraints[" + i + "] must not be null");
+            }
             // Empty constraints (0*0=0) are trivially satisfied — skip
             if (c.a().isEmpty() && c.b().isEmpty() && c.c().isEmpty()) continue;
 
@@ -424,8 +453,7 @@ public final class Groth16Prover {
 
             if (!lhs.equals(cVal)) {
                 throw new IllegalArgumentException(
-                        "Witness does not satisfy R1CS constraint " + i
-                                + ": A·w * B·w = " + lhs + " but C·w = " + cVal);
+                        "Witness does not satisfy R1CS constraint " + i);
             }
         }
     }
@@ -434,11 +462,15 @@ public final class Groth16Prover {
         BigInteger sum = BigInteger.ZERO;
         for (var entry : lc.entrySet()) {
             int wireIdx = entry.getKey();
-            if (wireIdx >= witness.length)
+            if (wireIdx < 0 || wireIdx >= witness.length)
                 throw new IllegalArgumentException(
-                        "Constraint references wire " + wireIdx + " but witness has only " + witness.length + " entries");
-            if (entry.getValue().signum() != 0) {
-                sum = sum.add(entry.getValue().multiply(witness[wireIdx]));
+                        "Constraint references wire " + wireIdx + " outside witness length " + witness.length);
+            BigInteger coeff = entry.getValue();
+            if (coeff == null) {
+                throw new IllegalArgumentException("Null coefficient at wire " + wireIdx);
+            }
+            if (coeff.signum() != 0) {
+                sum = sum.add(coeff.multiply(witness[wireIdx]));
             }
         }
         return sum.mod(mod);

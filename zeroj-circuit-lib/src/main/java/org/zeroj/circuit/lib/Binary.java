@@ -3,6 +3,8 @@ package org.zeroj.circuit.lib;
 import org.zeroj.circuit.CircuitAPI;
 import org.zeroj.circuit.Variable;
 
+import java.util.Objects;
+
 /**
  * Bit manipulation circuit utilities.
  */
@@ -44,21 +46,41 @@ public final class Binary {
         return result;
     }
 
-    /** Circular left rotation of a bit array (free — just index shifting). */
+    /**
+     * Circular left rotation of an LSB-first bit array (free — index remapping only).
+     *
+     * <p>Moves bit {@code j} to bit position {@code (j + n) mod len}, so {@code rotateLeft(0x01, 1)}
+     * produces {@code 0x02}. Negative {@code n} rotates right by {@code -n}.</p>
+     */
     public static Variable[] rotateLeft(Variable[] bits, int n) {
+        Objects.requireNonNull(bits, "bits");
         int len = bits.length;
-        n = n % len;
+        if (len == 0) {
+            throw new IllegalArgumentException("bits must not be empty");
+        }
+        int shift = Math.floorMod(n, len);
         var result = new Variable[len];
-        for (int i = 0; i < len; i++) result[i] = bits[(i + n) % len];
+        for (int i = 0; i < len; i++) {
+            result[i] = bits[(i - shift + len) % len];
+        }
         return result;
     }
 
-    /** Logical right shift of a bit array with zero fill (free — index shifting). */
+    /**
+     * Logical right shift of an LSB-first bit array with zero fill (free — index remapping only).
+     *
+     * @throws IllegalArgumentException if {@code n < 0}
+     */
     public static Variable[] shiftRight(CircuitAPI api, Variable[] bits, int n) {
+        Objects.requireNonNull(api, "api");
+        Objects.requireNonNull(bits, "bits");
+        if (n < 0) {
+            throw new IllegalArgumentException("Shift amount must be non-negative: " + n);
+        }
         var result = new Variable[bits.length];
         var zero = api.constant(0);
         for (int i = 0; i < bits.length; i++) {
-            result[i] = (i + n < bits.length) ? bits[i + n] : zero;
+            result[i] = (n < bits.length - i) ? bits[i + n] : zero;
         }
         return result;
     }

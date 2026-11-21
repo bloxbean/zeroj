@@ -77,7 +77,12 @@ public final class ZkUInt implements ZkValue {
 
     public ZkUInt sub(ZkUInt other) {
         requireSameContext(other);
-        return constrained(context, signal.sub(other.signal), Math.max(bits, other.bits));
+        int width = Math.max(bits, other.bits);
+        if (width >= MAX_BITS) {
+            throw new IllegalArgumentException(
+                    "ZkUInt subtraction requires bit width < " + MAX_BITS + ", got " + width);
+        }
+        return constrained(context, signal.sub(other.signal), width);
     }
 
     public ZkUInt mul(ZkUInt other) {

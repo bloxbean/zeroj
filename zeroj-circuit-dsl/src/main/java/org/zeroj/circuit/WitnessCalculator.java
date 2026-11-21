@@ -2,6 +2,7 @@ package org.zeroj.circuit;
 
 import java.math.BigInteger;
 import java.util.BitSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -141,26 +142,31 @@ public final class WitnessCalculator {
 
     private static void evaluate(ConstraintGraph graph, Map<String, List<BigInteger>> inputs,
                                  FieldConfig config, Store witness) {
+        Objects.requireNonNull(inputs, "inputs");
         graph.requireCompatibleField(config);
         BigInteger p = config.prime();
+
+        var declaredInputs = new HashSet<String>(
+                graph.publicInputs().size() + graph.secretInputs().size());
+        for (var v : graph.publicInputs()) declaredInputs.add(v.name());
+        for (var v : graph.secretInputs()) declaredInputs.add(v.name());
+        for (String key : inputs.keySet()) {
+            if (!declaredInputs.contains(key)) {
+                throw new IllegalArgumentException("Unknown circuit input: " + key);
+            }
+        }
 
         // Wire 0 = 1
         witness.set(graph.oneWire().id(), BigInteger.ONE);
 
-        // Set public inputs
+        // Set public inputs (strict canonical [0, p) without silent modular reduction)
         for (var v : graph.publicInputs()) {
-            var vals = inputs.get(v.name());
-            if (vals == null || vals.isEmpty())
-                throw new IllegalArgumentException("Missing public input: " + v.name());
-            witness.set(v.id(), vals.getFirst().mod(p));
+            witness.set(v.id(), requireCanonicalInput(inputs, v.name(), "public", p));
         }
 
-        // Set secret inputs
+        // Set secret inputs (strict canonical [0, p) without silent modular reduction)
         for (var v : graph.secretInputs()) {
-            var vals = inputs.get(v.name());
-            if (vals == null || vals.isEmpty())
-                throw new IllegalArgumentException("Missing secret input: " + v.name());
-            witness.set(v.id(), vals.getFirst().mod(p));
+            witness.set(v.id(), requireCanonicalInput(inputs, v.name(), "secret", p));
         }
 
         // Evaluate gates in topological order
@@ -191,8 +197,8 @@ public final class WitnessCalculator {
 
                 case Gate.AssertEq(var left, var right) -> {
                     if (!witness.get(left.id()).equals(witness.get(right.id()))) {
-                        throw new ArithmeticException("Constraint violation: "
-                                + left + "=" + witness.get(left.id()) + " != " + right + "=" + witness.get(right.id()));
+                        throw new ArithmeticException("Constraint violation: wire "
+                                + left.id() + " != wire " + right.id());
                     }
                 }
 
@@ -261,5 +267,27 @@ public final class WitnessCalculator {
                 }
             }
         }
+    }
+
+    private static BigInteger requireCanonicalInput(
+            Map<String, List<BigInteger>> inputs, String name, String visibility, BigInteger prime) {
+        List<BigInteger> vals = inputs.get(name);
+        if (vals == null || vals.isEmpty()) {
+            throw new IllegalArgumentException("Missing " + visibility + " input: " + name);
+        }
+        if (vals.size() != 1) {
+            throw new IllegalArgumentException(
+                    "Input " + name + " must have exactly 1 value, got " + vals.size());
+        }
+        BigInteger value = vals.getFirst();
+        if (value == null) {
+            throw new IllegalArgumentException("Null value for " + visibility + " input: " + name);
+        }
+        if (value.signum() < 0 || value.compareTo(prime) >= 0) {
+            throw new IllegalArgumentException(
+                    "Non-canonical " + visibility + " input " + name
+                            + ": expected value in [0, p)");
+        }
+        return value;
     }
 }

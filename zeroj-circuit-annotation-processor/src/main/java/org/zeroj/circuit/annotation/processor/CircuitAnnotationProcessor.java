@@ -585,7 +585,14 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         if (proveMethod.getReturnType().getKind() == TypeKind.VOID) {
             out.append("            ").append(call).append(";\n");
         } else {
-            out.append("            ").append(call).append(".assertTrue();\n");
+            String resultLocal = uniqueLocalName("__zerojResult", usedLocalNames);
+            out.append("            ZkBool ").append(resultLocal).append(" = ").append(call).append(";\n")
+                    .append("            if (").append(resultLocal).append(" == null) {\n")
+                    .append("                throw new NullPointerException(\"@Prove method returned null ZkBool\");\n")
+                    .append("            }\n")
+                    .append("            ").append(zkLocal).append(".requireSignal(")
+                    .append(resultLocal).append(".signal());\n")
+                    .append("            ").append(resultLocal).append(".assertTrue();\n");
         }
         out.append("        });\n")
                 .append("    }\n");
@@ -813,6 +820,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("        }\n\n")
                 .append("        public BigInteger[] calculateWitness(CircuitBuilder circuit, CurveId curve) {\n")
                 .append("            validateCircuit(circuit, __zerojSchema);\n")
+                .append("            __zerojInputs.validate(__zerojSchema, curve);\n")
                 .append("            return circuit.calculateWitness(toWitnessMap(), curve);\n")
                 .append("        }\n")
                 .append("    }\n");
@@ -820,7 +828,8 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
     private void renderScalarInputMethods(StringBuilder out, InputModel input) {
         out.append("        public Inputs ").append(input.javaName()).append("(BigInteger value) {\n")
-                .append("            __zerojInputs.put(").append(input.constantName()).append(", value);\n")
+                .append("            __zerojInputs.putChecked(__zerojSchema.input(")
+                .append(input.constantName()).append("), ").append(input.constantName()).append(", value);\n")
                 .append("            return this;\n")
                 .append("        }\n\n");
         if (!"wait".equals(input.javaName())) {
@@ -831,14 +840,15 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private void renderArrayInputMethods(StringBuilder out, InputModel input) {
-        String sizeExpression = "__zerojSchema.input(" + input.constantName() + ").size()";
+        String inputExpr = "__zerojSchema.input(" + input.constantName() + ")";
+        String sizeExpression = inputExpr + ".size()";
         out.append("        public Inputs ").append(input.javaName()).append("(int index, BigInteger value) {\n")
                 .append("            if (index < 0 || index >= ").append(sizeExpression).append(") {\n")
                 .append("                throw new IllegalArgumentException(")
                 .append(stringLiteral("index out of bounds for " + input.baseName())).append(");\n")
                 .append("            }\n")
-                .append("            __zerojInputs.put(").append(input.constantName())
-                .append(" + \"_\" + index, value);\n")
+                .append("            __zerojInputs.putChecked(").append(inputExpr).append(", ")
+                .append(input.constantName()).append(" + \"_\" + index, value);\n")
                 .append("            return this;\n")
                 .append("        }\n\n")
                 .append("        public Inputs ").append(input.javaName()).append("(int index, long value) {\n")
@@ -846,12 +856,16 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("(index, BigInteger.valueOf(value));\n")
                 .append("        }\n\n")
                 .append("        public Inputs ").append(input.javaName()).append("(List<BigInteger> values) {\n")
+                .append("            if (values == null) {\n")
+                .append("                throw new NullPointerException(")
+                .append(stringLiteral(input.baseName() + " values must not be null")).append(");\n")
+                .append("            }\n")
                 .append("            if (values.size() != ").append(sizeExpression).append(") {\n")
                 .append("                throw new IllegalArgumentException(")
                 .append(stringLiteral(input.baseName() + " expects ")).append(" + ").append(sizeExpression)
                 .append(" + \" values\");\n")
                 .append("            }\n")
-                .append("            __zerojInputs.putArray(").append(input.constantName()).append(", values);\n")
+                .append("            __zerojInputs.putArrayChecked(").append(inputExpr).append(", values);\n")
                 .append("            return this;\n")
                 .append("        }\n\n");
     }
@@ -870,8 +884,8 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("                throw new IllegalArgumentException(")
                 .append(stringLiteral("col out of bounds for " + input.baseName())).append(");\n")
                 .append("            }\n")
-                .append("            __zerojInputs.put(").append(input.constantName())
-                .append(" + \"_\" + row + \"_\" + col, value);\n")
+                .append("            __zerojInputs.putChecked(").append(inputExpression).append(", ")
+                .append(input.constantName()).append(" + \"_\" + row + \"_\" + col, value);\n")
                 .append("            return this;\n")
                 .append("        }\n\n")
                 .append("        public Inputs ").append(input.javaName()).append("(int row, int col, long value) {\n")
@@ -880,6 +894,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("        }\n\n")
                 .append("        public Inputs ").append(input.javaName())
                 .append("(List<? extends List<BigInteger>> values) {\n")
+                .append("            if (values == null) {\n")
+                .append("                throw new NullPointerException(")
+                .append(stringLiteral(input.baseName() + " values must not be null")).append(");\n")
+                .append("            }\n")
                 .append("            if (values.size() != ").append(outerSizeExpression).append(") {\n")
                 .append("                throw new IllegalArgumentException(")
                 .append(stringLiteral(input.baseName() + " expects ")).append(" + ").append(outerSizeExpression)
@@ -897,7 +915,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append(" + \" values per row\");\n")
                 .append("                }\n")
                 .append("            }\n")
-                .append("            __zerojInputs.putNestedArray(").append(input.constantName()).append(", values);\n")
+                .append("            __zerojInputs.putNestedArrayChecked(").append(inputExpression).append(", values);\n")
                 .append("            return this;\n")
                 .append("        }\n\n");
     }
