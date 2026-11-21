@@ -7,7 +7,7 @@
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "534c629b832e2127cc3683bfe6b5206e0a55c2dc",
+  "sourceRevision": "362744e12a685b09ce2849bbee61b99136716f0f",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -36,7 +36,7 @@
       "description": "What ZeroJ's Beta, Experimental, Disabled and Assurance-only labels mean, the full support matrix, and what \"not for production\" means in practice.",
       "url": "https://zeroj.dev/start/status/",
       "markdown": "https://zeroj.dev/ai/pages/start/status.md",
-      "sha256": "28c7fd50c2222b76e8c3eab06fdc5668976c9d5f6087d5b3cc84ac4b76ce9317"
+      "sha256": "5d53a7b99783a0dfff95b5de24dbcb57d000cb8a2597be07cfe6e405bf413320"
     },
     {
       "title": "Zero-knowledge in plain English",
@@ -442,7 +442,7 @@
       "description": "Everything an AI coding agent needs to write correct ZeroJ code on the first try. Ingest it before generating circuits, proofs or validators.",
       "url": "https://zeroj.dev/ai/starter-pack/",
       "markdown": "https://zeroj.dev/ai/pages/ai/starter-pack.md",
-      "sha256": "67324340a765aaeed09984f52a11557381e6184413c920eb4fd140070940e1a0"
+      "sha256": "887602b77e38bf842b5ed304d68a8138056234a708cce81e4a8eb7ec2b6e3d2e"
     }
   ],
   "artifacts": [
@@ -452,11 +452,11 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "e7bf55799c9cf0b543421a9fa8bbee75cadd58abceb8cd0b13f125b745e32bf3"
+      "sha256": "96a0d0bf908330ea92a9f6d11939d01b35d8a6f5b22edaaec6df103848f938b0"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
-      "sha256": "d174cead03da121b107da530cd6bc1600b9d28eb8121f491c55658dfe20cd225"
+      "sha256": "22c1393173940d12477f5e06fcdd76f23c425551dc954a46da2cd36f18655c75"
     },
     {
       "url": "https://zeroj.dev/ai/index.md",
@@ -464,7 +464,7 @@
     },
     {
       "url": "https://zeroj.dev/ai/catalog.json",
-      "sha256": "19adca979b3dba542cc591cbaff8b5afd1038d3653762e199bae8d5fbd62f961"
+      "sha256": "ab5e29d2ffd26cfa0fbf4812a4d2d0da4364ac029487c9c00851a5dfffec8951"
     }
   ]
 }

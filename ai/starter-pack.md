@@ -386,6 +386,9 @@ _(marker annotation — no elements)_
 - `void requireSignal(Signal signal)`
 - `ZkField constant(long value)`
 - `ZkField constant(BigInteger value)`
+- `ZkBool constantBool(boolean value)`
+- `ZkUInt constantUInt(long value, int bits)`
+- `ZkUInt constantUInt(BigInteger value, int bits)`
 - `ZkField field(Signal signal)`
 
 #### ZkField

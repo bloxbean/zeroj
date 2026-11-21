@@ -178,6 +178,24 @@
               "doc": ""
             },
             {
+              "name": "constantBool",
+              "static": false,
+              "signature": "ZkBool constantBool(boolean value)",
+              "doc": ""
+            },
+            {
+              "name": "constantUInt",
+              "static": false,
+              "signature": "ZkUInt constantUInt(long value, int bits)",
+              "doc": ""
+            },
+            {
+              "name": "constantUInt",
+              "static": false,
+              "signature": "ZkUInt constantUInt(BigInteger value, int bits)",
+              "doc": ""
+            },
+            {
               "name": "field",
               "static": false,
               "signature": "ZkField field(Signal signal)",
