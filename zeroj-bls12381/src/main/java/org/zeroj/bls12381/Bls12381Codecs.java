@@ -32,13 +32,9 @@ public final class Bls12381Codecs {
     private Bls12381Codecs() {}
 
     public static byte[] scalarToLittleEndian32(BigInteger scalar) {
-        Objects.requireNonNull(scalar, "scalar required");
-        if (scalar.signum() < 0 || scalar.compareTo(Bls12381Generators.SCALAR_FIELD_ORDER) >= 0) {
-            throw new IllegalArgumentException("Scalar is outside BLS12-381 Fr");
-        }
-        byte[] be = fixedBigEndian(scalar, SCALAR_BYTES);
-        reverse(be);
-        return be;
+        byte[] out = scalarToBigEndian32(scalar);
+        reverse(out);
+        return out;
     }
 
     public static byte[] scalarToLittleEndian32Reduced(BigInteger scalar) {

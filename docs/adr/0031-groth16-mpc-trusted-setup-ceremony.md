@@ -66,7 +66,7 @@ Java developers calling APIs — each role gets one command:
 |---|---|---|---|
 | `export-r1cs --circuit <FQCN of @ZKCircuit> --out c.r1cs` | coordinator | compile the ZeroJ circuit → iden3 `.r1cs` (used by **both** options) | M4 |
 | `contribute in.zkey out.zkey` | contributor | Option B phase-2 contribution (entropy prompt + hash printout) | M5 |
-| `verify c.r1cs pot.ptau final.zkey` | anyone | convenience wrapper; **independent check remains `snarkjs zkey verify`** | M5 |
+| `verify c.r1cs pot.ptau final.zkey` | anyone | *not implemented in `zeroj-ceremony`* — use **`snarkjs zkey verify`** directly so verification remains completely independent | N/A |
 | `beacon in.zkey out.zkey --hash <pub randomness>` | coordinator | final beacon contribution | M5 |
 | `finalize final.zkey --pk-store <dir>` | coordinator | import + persist via `Groth16PkStore`, export the VK for the validator | M2/M4 |
 
@@ -99,7 +99,8 @@ Phase-2 contribution (BGM17): contributor samples random `d`, then
 - every **H** and **L** query point ← `d⁻¹·point` (the delta-divided sections),
 - appends a proof-of-knowledge of `d` (the s-pair construction) + running transcript hash,
 in exactly the snarkjs `.zkey` contributions-section layout, so `snarkjs zkey verify` accepts the
-chain. CLI shape: `zeroj-ceremony contribute in.zkey out.zkey` (+ `verify`, `beacon`).
+chain. CLI shape: `zeroj-ceremony contribute --in in.zkey --out out.zkey` (transcript verification
+and final beacon remain in `snarkjs zkey verify` / `snarkjs zkey beacon`).
 
 **Honest cost estimate:** a contribution rescales ~77M G1 points (H+L) by one scalar — independent
 variable-base muls, embarrassingly parallel. Expected ~1 h-class per contribution at 19M on a
@@ -155,7 +156,7 @@ that stays with the circuit's ceremony (minimum viable: coordinator contribution
 | M2 | `.zkey` import at 19M + `Groth16PkStore` integration | ownership-circuit-scale zkey imports within memory budget; persisted; warm prove works |
 | M3 | Phase-1 source decision (spike) | own-ptau vs Filecoin-conversion measured; one selected + documented |
 | M4 | **Option A runbook** | scripted, documented snarkjs ceremony (coordinator + contributor guides, transcript publication, beacon procedure); dry-run on a small circuit |
-| M5 | **Option B contributor** | `zeroj-ceremony contribute/verify` producing snarkjs-verifiable contributions; cross-verified against snarkjs on the same transcript; timing measured at 19M |
+| M5 | **Option B contributor** | `zeroj-ceremony contribute` producing snarkjs-verifiable contributions; independently verified with `snarkjs zkey verify` on the same transcript; timing measured at 19M |
 | M6 | Dry-run ceremony on the ownership circuit | ≥3 contributors (mixed A/B tooling on the same transcript), beacon, published transcript, `snarkjs zkey verify` green, imported key proves + verifies on-chain (testnet) |
 
 ## Results (2026-07-08) — M1–M6 delivered

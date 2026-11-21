@@ -25,13 +25,7 @@ public final class SignalMerkle {
      */
     public static void verifyProof(SignalBuilder c, Signal leaf, Signal root,
                                     Signal[] siblings, Signal[] pathBits, HashFn hashFn) {
-        Signal current = leaf;
-        for (int i = 0; i < siblings.length; i++) {
-            pathBits[i].assertBoolean();
-            Signal left = pathBits[i].select(siblings[i], current);
-            Signal right = pathBits[i].select(current, siblings[i]);
-            current = hashFn.hash(c, left, right);
-        }
+        Signal current = computeRoot(c, leaf, siblings, pathBits, hashFn);
         c.assertEqual(current, root);
     }
 
@@ -40,6 +34,12 @@ public final class SignalMerkle {
      */
     public static Signal computeRoot(SignalBuilder c, Signal leaf,
                                       Signal[] siblings, Signal[] pathBits, HashFn hashFn) {
+        if (siblings == null || pathBits == null) {
+            throw new IllegalArgumentException("siblings and pathBits must not be null");
+        }
+        if (siblings.length != pathBits.length) {
+            throw new IllegalArgumentException("siblings and pathBits must have equal length");
+        }
         Signal current = leaf;
         for (int i = 0; i < siblings.length; i++) {
             pathBits[i].assertBoolean();

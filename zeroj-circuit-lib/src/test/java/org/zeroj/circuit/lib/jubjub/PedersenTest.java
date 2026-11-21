@@ -2,7 +2,10 @@ package org.zeroj.circuit.lib.jubjub;
 
 import org.zeroj.api.CurveId;
 import org.zeroj.circuit.CircuitBuilder;
+import org.zeroj.circuit.annotation.ZkContext;
+import org.zeroj.circuit.annotation.ZkUInt;
 import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T5;
+import org.zeroj.circuit.lib.zk.ZkPedersen;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -265,5 +268,33 @@ class PedersenTest {
                 "354423b163d1078b0dd645be56316e34a9b98e52dcf9f469be44b108be46c107", 16);
         assertEquals(expected, PoseidonParamsBLS12_381T5.INSTANCE.m()[0],
                 "BLS12-381 t=5 MDS[0][0] must match hadeshash Sage script output");
+    }
+
+    @Test
+    @DisplayName("InCircuitPedersen and ZkPedersen reject value and blinding sharing the same wire")
+    void pedersenRejectsSharedValueAndBlindingWire() {
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("pedersen-shared-var")
+                .secretVar("x")
+                .define(api -> {
+                    var x = api.var("x");
+                    InCircuitPedersen.commit(api, x, 64, x);
+                }));
+
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("pedersen-shared-decomp")
+                .secretVar("x")
+                .define(api -> {
+                    var x = api.var("x");
+                    var d1 = api.decompose(x, 250);
+                    var d2 = api.decompose(x, 250);
+                    InCircuitPedersen.commit(api, d1, d2);
+                }));
+
+        assertThrows(IllegalArgumentException.class, () -> CircuitBuilder.create("pedersen-shared-zk")
+                .secretVar("x")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    var x = ZkUInt.secret(c, "x", 250);
+                    ZkPedersen.commit(zk, x, x);
+                }));
     }
 }

@@ -234,7 +234,8 @@ final class SetupCacheIO {
         byte[] bytes = new byte[len];
         in.readFully(bytes);
         BigInteger value = new BigInteger(bytes);
-        if (value.signum() < 0 || value.compareTo(MontFr381.modulus()) >= 0) {
+        if (value.signum() < 0 || value.compareTo(MontFr381.modulus()) >= 0
+                || !Arrays.equals(bytes, value.toByteArray())) {
             throw new IOException(label + " must be a canonical BLS12-381 scalar");
         }
         return value;
@@ -316,11 +317,13 @@ final class SetupCacheIO {
     }
 
     static void validateBls12381Srs(AffineG1[] tauG1, AffineG2[] tauG2, int power) throws IOException {
-        if (power < 1 || power > 32) {
+        if (power < 1 || power > 28) {
             throw new IOException("Invalid BLS12-381 SRS power: " + power);
         }
-        if (tauG1.length == 0) {
-            throw new IOException("BLS12-381 SRS contains no G1 powers");
+        long minG1 = (1L << power) + 1L;
+        if (tauG1.length < minG1) {
+            throw new IOException("BLS12-381 SRS G1 power count " + tauG1.length
+                    + " is smaller than required minimum " + minG1 + " for power " + power);
         }
         if (tauG2.length < 2) {
             throw new IOException("BLS12-381 SRS must contain at least two G2 powers");

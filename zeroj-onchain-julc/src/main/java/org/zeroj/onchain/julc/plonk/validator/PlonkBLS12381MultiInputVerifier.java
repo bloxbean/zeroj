@@ -11,6 +11,12 @@ import java.math.BigInteger;
 /**
  * Cardano-profile BLS12-381 PlonK verifier for bounded datum-supplied
  * multi-public-input circuits.
+ *
+ * <p><b>SECURITY WARNING — NOT FOR VALUE-BEARING UTxOs:</b> This standalone
+ * validator performs cryptographic proof verification only and ignores
+ * {@code ScriptContext} (no signer, output, value, replay, or nullifier checks).
+ * Do not lock funds under this validator directly; compose
+ * {@link PlonkBLS12381Lib} into an application-bound validator.</p>
  */
 @SpendingValidator
 public class PlonkBLS12381MultiInputVerifier {

@@ -1,6 +1,10 @@
 package org.zeroj.merkle.jmt.poseidon.ccl;
 
+import co.nstant.in.cbor.CborEncoder;
+import co.nstant.in.cbor.model.Array;
+import co.nstant.in.cbor.model.ByteString;
 import com.bloxbean.cardano.vds.core.NibblePath;
+import com.bloxbean.cardano.vds.jmt.JmtInternalNode;
 import com.bloxbean.cardano.vds.jmt.JmtProof;
 import com.bloxbean.cardano.vds.jmt.JmtProofVerifier;
 import com.bloxbean.cardano.vds.jmt.store.InMemoryJmtStore;
@@ -8,6 +12,7 @@ import org.zeroj.merkle.jmt.poseidon.profile.PoseidonJmtCommitments;
 import org.zeroj.merkle.jmt.poseidon.profile.PoseidonJmtHash;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -91,6 +96,20 @@ class PoseidonJmtSecurityRegressionTest {
                 new PoseidonJmtHashFunction(), new PoseidonJmtCommitmentScheme()));
         assertFalse(new PoseidonJmtTree(new InMemoryJmtStore())
                 .verifyNonInclusionProof(root, key, forged));
+
+        // Wire-level equivalent: compressedPath on an internal node attempting to skip depth 0.
+        int bitmap = 1 << path[0];
+        var compressedInternal = JmtInternalNode.of(
+                bitmap, new byte[][]{children[path[0]]}, new byte[]{(byte) path[0]});
+        Array wireArr = new Array();
+        wireArr.add(new ByteString(compressedInternal.encode()));
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        new CborEncoder(baos).encode(wireArr);
+        byte[] forgedWire = baos.toByteArray();
+
+        assertFalse(PoseidonJmtReference.verifyWire(root, key, null, false, forgedWire));
+        assertFalse(new PoseidonJmtTree(new InMemoryJmtStore())
+                .verifyProofWire(root, key, null, false, forgedWire));
     }
 
     private static JmtProof nonInclusionEmpty(List<JmtProof.BranchStep> steps) throws Exception {

@@ -236,7 +236,8 @@ public final class BbsCodec {
         Objects.requireNonNull(messages, "messages required");
         List<byte[]> copy = new ArrayList<>(messages.size());
         for (byte[] message : messages) {
-            copy.add(copy(message));
+            Objects.requireNonNull(message, "message element required");
+            copy.add(message.clone());
         }
         return List.copyOf(copy);
     }

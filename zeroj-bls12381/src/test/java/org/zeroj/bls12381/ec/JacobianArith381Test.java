@@ -118,6 +118,21 @@ class JacobianArith381Test {
         assertSame("P + inf == P", j, o, 0);
         JacobianArith381.dbl(o, 0, inf, 0, s);
         assertNull(flatAffine(o, 0), "dbl(inf) == inf");
+
+        // (0, 0) affine infinity sentinel parity with JacobianG1BLS381
+        long[] zeroCoord = new long[6];
+        long[] fromZero = new long[18];
+        JacobianArith381.fromAffine(fromZero, 0, zeroCoord, 0, zeroCoord, 0);
+        assertNull(flatAffine(fromZero, 0), "fromAffine(0, 0) must be infinity");
+        assertTrue(JacobianArith381.isInfinity(fromZero, 0));
+
+        // addAffine(P, (0, 0)) == P
+        JacobianArith381.addAffine(o, 0, P, 0, zeroCoord, 0, zeroCoord, 0, s);
+        assertSame("addAffine(P, inf) == P", j, o, 0);
+
+        // addAffine(inf, (0, 0)) == inf
+        JacobianArith381.addAffine(o, 0, inf, 0, zeroCoord, 0, zeroCoord, 0, s);
+        assertTrue(JacobianArith381.isInfinity(o, 0), "addAffine(inf, inf) must be infinity");
     }
 
     @Test

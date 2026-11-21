@@ -49,7 +49,18 @@ public final class KZGCommitmentBLS381 {
 
     public static MontFr381[] syntheticDivision(MontFr381[] coeffs, MontFr381 z, MontFr381 v) {
         int n = coeffs.length;
-        if (n <= 1) return new MontFr381[]{MontFr381.ZERO};
+        if (n == 0) {
+            if (!v.isZero()) {
+                throw new IllegalArgumentException("Polynomial does not evaluate to claimed value at z (non-zero remainder)");
+            }
+            return new MontFr381[]{MontFr381.ZERO};
+        }
+        if (n == 1) {
+            if (!coeffs[0].sub(v).isZero()) {
+                throw new IllegalArgumentException("Polynomial does not evaluate to claimed value at z (non-zero remainder)");
+            }
+            return new MontFr381[]{MontFr381.ZERO};
+        }
 
         MontFr381[] f = new MontFr381[n];
         System.arraycopy(coeffs, 0, f, 0, n);
@@ -59,6 +70,10 @@ public final class KZGCommitmentBLS381 {
         q[n - 2] = f[n - 1];
         for (int i = n - 3; i >= 0; i--) {
             q[i] = f[i + 1].add(z.mul(q[i + 1]));
+        }
+        MontFr381 remainder = f[0].add(z.mul(q[0]));
+        if (!remainder.isZero()) {
+            throw new IllegalArgumentException("Polynomial does not evaluate to claimed value at z (non-zero remainder)");
         }
         return q;
     }

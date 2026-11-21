@@ -125,6 +125,8 @@ tasks.register('nativeDistZip', Zip) {
             filePermissions { unix(0755) }
         }
         from("${rootDir}/docs/ceremony/USER-GUIDE.md") { rename { 'README.md' } }
+        from("${rootDir}/LICENSE")
+        from("${rootDir}/NOTICE")
     }
 }
 

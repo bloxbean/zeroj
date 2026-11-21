@@ -2,12 +2,18 @@ package org.zeroj.crypto.setup;
 
 import org.zeroj.api.CurveId;
 import org.zeroj.api.R1CSConstraint;
+import org.zeroj.api.R1CSFlat;
 import org.zeroj.api.TrustedSetupPolicy;
+import org.zeroj.bls12381.field.MontFr381;
 import org.zeroj.circuit.CircuitBuilder;
+import org.zeroj.crypto.groth16.Groth16Keys;
+import org.zeroj.crypto.groth16.Groth16Pipeline;
 import org.zeroj.crypto.groth16.Groth16ProvingKeyBLS381;
+import org.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import org.zeroj.crypto.plonk.PlonKProvingKeyBLS381;
 import org.zeroj.crypto.plonk.PlonKSetupBLS381;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -79,15 +85,69 @@ class SetupCacheTest {
     }
 
     @Test
-    void insecureTrustedSetupRequiresExplicitOptIn() {
+    void insecureTrustedSetupRequiresExplicitOptInAcrossAllSites() throws Exception {
+        Assumptions.assumeFalse(
+                "true".equalsIgnoreCase(System.getenv(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_ENV)),
+                "Environment variable overrides system property");
+
+        // Prepare valid fixtures while opt-in is enabled.
+        var srs = PowersOfTauBLS381.generate(4);
+        Path srsWithTau = tempDir.resolve("srs-with-tau.insecure");
+        Groth16SetupCache.saveBls12381InsecureDevSrsWithTau(srs, srsWithTau);
+        var constraints = List.of(
+                new R1CSConstraint(Map.of(2, BigInteger.ONE), Map.of(3, BigInteger.ONE), Map.of(1, BigInteger.ONE)),
+                new R1CSConstraint(Map.of(0, BigInteger.ONE), Map.of(0, BigInteger.ONE), Map.of(0, BigInteger.ONE)));
+        var flatBuilder = R1CSFlat.builder();
+        for (var c : constraints) flatBuilder.add(c.a(), c.b(), c.c());
+        var flat = flatBuilder.build();
+        var compiled = new Groth16Pipeline.Compiled(flat, constraints.size(), 4, 1);
+
         try {
             System.clearProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY);
-            if (!"true".equalsIgnoreCase(System.getenv(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_ENV))) {
-                assertThrows(IllegalStateException.class, () -> PowersOfTauBLS381.generate(4));
-            }
+            assertThrows(IllegalStateException.class, () -> PowersOfTauBLS381.generate(4));
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16SetupBLS381.setup(constraints, 4, 1, srs.tauScalar()));
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16SetupBLS381.setupToStore(flat, 4, 1, srs.tauScalar(), tempDir.resolve("store-1")));
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16SetupCache.saveBls12381InsecureDevSrsWithTau(srs, tempDir.resolve("srs-2.insecure")));
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16SetupCache.loadBls12381Srs(srsWithTau));
+            Path pipelineDir = tempDir.resolve("pipeline-denied");
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16Pipeline.setup(compiled, srs.tauScalar(), pipelineDir, false));
+            org.junit.jupiter.api.Assertions.assertFalse(Files.exists(pipelineDir),
+                    "Groth16Pipeline.setup must fail before creating output directory");
+            assertThrows(IllegalStateException.class,
+                    () -> Groth16Keys.setupInMemory(constraints, 4, 1, srs.tauScalar()));
         } finally {
             restoreProperty(TrustedSetupPolicy.ALLOW_INSECURE_TRUSTED_SETUP_PROPERTY, previousInsecureTrustedSetup);
         }
+    }
+
+    @Test
+    void setupAndKzgHardeningRejectsInvalidPowerNonBijectiveSigmaAndNonZeroRemainder() {
+        assertThrows(IllegalArgumentException.class, () -> PowersOfTauBLS381.generate(29));
+
+        // KZG syntheticDivision must reject a claimed evaluation with non-zero remainder.
+        MontFr381[] poly = {MontFr381.fromLong(3), MontFr381.fromLong(2), MontFr381.fromLong(1)}; // x^2 + 2x + 3
+        MontFr381 z = MontFr381.fromLong(5); // p(5) = 25 + 10 + 3 = 38
+        assertThrows(IllegalArgumentException.class,
+                () -> KZGCommitmentBLS381.syntheticDivision(poly, z, MontFr381.fromLong(39)));
+        var q = KZGCommitmentBLS381.syntheticDivision(poly, z, MontFr381.fromLong(38));
+        assertEquals(2, q.length);
+
+        // PlonKSetupBLS381 must reject non-bijective sigma permutations.
+        var srs = PowersOfTauBLS381.generate(4);
+        BigInteger[][] selectors = {
+                {BigInteger.ONE, BigInteger.ZERO, BigInteger.ZERO, BigInteger.ZERO, BigInteger.ZERO},
+                {BigInteger.ZERO, BigInteger.ZERO, BigInteger.ZERO, BigInteger.ZERO, BigInteger.ZERO}
+        };
+        int[] dupSigmaA = {0, 0}; // duplicate target 0
+        int[] sigmaB = {2, 3};
+        int[] sigmaC = {4, 5};
+        assertThrows(IllegalArgumentException.class,
+                () -> PlonKSetupBLS381.setup(2, 0, selectors, dupSigmaA, sigmaB, sigmaC, 4, srs));
     }
 
     @Test

@@ -40,9 +40,10 @@ public record G1Point(Fp x, Fp y) {
 
     /** Create from snarkjs projective [x, y, z] coordinates. */
     public static G1Point fromProjective(BigInteger px, BigInteger py, BigInteger pz) {
-        if (pz.signum() == 0) return INFINITY;
-        if (pz.equals(BigInteger.ONE)) return new G1Point(Fp.of(px), Fp.of(py));
-        var zInv = Fp.of(pz).inv();
+        BigInteger zMod = pz.mod(Fp.P);
+        if (zMod.signum() == 0) return INFINITY;
+        if (zMod.equals(BigInteger.ONE)) return new G1Point(Fp.of(px), Fp.of(py));
+        var zInv = Fp.of(zMod).inv();
         return new G1Point(Fp.of(px).mul(zInv), Fp.of(py).mul(zInv));
     }
 

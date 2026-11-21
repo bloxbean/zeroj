@@ -18,7 +18,7 @@ review says otherwise.
 
 | Label | Meaning in ZeroJ |
 |-------|------------------|
-| **Beta** | Feature-complete and correctness-tested. The repository has more than 3,500 tests, and the full Groth16 flow is verified end-to-end on-chain against Yaci DevKit. **Not externally audited, and not for value-bearing or mainnet use.** |
+| **Beta** | Feature-complete and correctness-tested, including end-to-end Groth16 verification against Yaci DevKit. **Not externally audited, and not for value-bearing or mainnet use.** |
 | **Beta, testnet only** | Beta, and additionally limited to test networks. Nothing of value should depend on it. |
 | **Beta with caveat** | Beta, with a specific known limitation you must design around. The caveat is named in the matrix. |
 | **Beta, opt-in** | Beta, but you have to add it explicitly; it's never pulled in by default. |
@@ -66,7 +66,7 @@ alternative to Groth16, and these docs make no correctness or readiness claims f
 | Area | Modules | Status |
 |------|---------|--------|
 | BBS (IRTF CFRG draft-10): verification | `zeroj-bbs` | **Beta**. The spec is an IRTF draft, not yet an RFC. |
-| BBS: issuance and proof generation | `zeroj-bbs` | **Beta with caveat**. The default pure-Java provider is not constant-time; prefer the blst provider for issuer keys. |
+| BBS: issuance and proof generation | `zeroj-bbs` | **Beta with caveat**. Offline/isolated only: neither the pure-Java provider nor the blst provider has an evidenced constant-time side-channel contract in the JVM (see ADR-0062). |
 
 ### Commitments & encryption
 
@@ -119,10 +119,11 @@ concretely for ZeroJ today:
 - **A valid proof isn't authorization.** The reusable on-chain verifiers only check the math. Your
   validator must still prevent replay, bind the proof to the transaction, track nullifiers, and
   enforce who may do what. See [Application security](/guides/verifying/application-security/).
-- **No constant-time guarantee for Java code.** The BBS pure-Java provider uses fixed-schedule
-  arithmetic for secret scalars, but that is not a full JVM constant-time guarantee. For BBS issuer
-  keys, select the native blst provider. ZeroJ doesn't claim constant-time behavior for its Java
-  code.
+- **No constant-time guarantee for Java/JVM secret paths.** Neither pure-Java secret operations
+  (proving, BBS issuance/proof generation, commitments, encryption) nor FFM calls into `libblst`
+  carry an evidenced constant-time or heap-zeroization guarantee in the JVM (see ADR-0062). Run
+  secret-bearing operations only on isolated/offline hosts where timing and memory side channels are
+  out of scope.
 - **PlonK is experimental,** off-chain and on-chain.
 - **APIs and coordinates can still change.** ZeroJ is pre-1.0. The move to `org.zeroj` in
   `0.1.0-pre12` is one example (see [Migration](/reference/migration/)).

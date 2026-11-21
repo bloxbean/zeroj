@@ -128,6 +128,10 @@ public final class InCircuitPedersen {
         api.requireOwned(blinding);
         validateValueWidth(value.width());
         validateBlindingWidth(blinding.width());
+        if (value.source().id() == blinding.source().id()) {
+            throw new IllegalArgumentException("wire " + blinding.source().id()
+                    + " is used as both the value and the blinding (ADR-0051 D2)");
+        }
         api.requireNotPublicOrConstant(blinding.source());
         api.requireHidingRange(blinding.source(), BLINDING_BITS);
         InCircuitJubjub.Point vG = InCircuitJubjub.scalarMulFixedBase(
@@ -155,6 +159,10 @@ public final class InCircuitPedersen {
         Objects.requireNonNull(value, "value");
         Objects.requireNonNull(blinding, "blinding");
         validateValueWidth(valueBits);
+        if (value.id() == blinding.id()) {
+            throw new IllegalArgumentException("wire " + blinding.id()
+                    + " is used as both the value and the blinding (ADR-0051 D2)");
+        }
         api.requireNotPublicOrConstant(blinding);
         api.requireHidingRange(blinding, BLINDING_BITS);
         Variable[] valueBitVector = api.toBinary(value, valueBits);

@@ -33,22 +33,7 @@ public final class Merkle {
     public static void verifyProof(CircuitAPI api, Variable leaf, Variable root,
                                     Variable[] siblings, Variable[] pathBits,
                                     HashFunction hashFn) {
-        if (siblings.length != pathBits.length) {
-            throw new IllegalArgumentException("siblings and pathBits must have equal length");
-        }
-
-        Variable current = leaf;
-        for (int i = 0; i < siblings.length; i++) {
-            api.assertBoolean(pathBits[i]);
-
-            // If pathBit == 0: current is left, sibling is right
-            // If pathBit == 1: sibling is left, current is right
-            var left = api.select(pathBits[i], siblings[i], current);
-            var right = api.select(pathBits[i], current, siblings[i]);
-
-            current = hashFn.hash(api, left, right);
-        }
-
+        Variable current = computeRoot(api, leaf, siblings, pathBits, hashFn);
         api.assertEqual(current, root);
     }
 
@@ -58,6 +43,12 @@ public final class Merkle {
     public static Variable computeRoot(CircuitAPI api, Variable leaf,
                                         Variable[] siblings, Variable[] pathBits,
                                         HashFunction hashFn) {
+        if (siblings == null || pathBits == null) {
+            throw new IllegalArgumentException("siblings and pathBits must not be null");
+        }
+        if (siblings.length != pathBits.length) {
+            throw new IllegalArgumentException("siblings and pathBits must have equal length");
+        }
         Variable current = leaf;
         for (int i = 0; i < siblings.length; i++) {
             api.assertBoolean(pathBits[i]);

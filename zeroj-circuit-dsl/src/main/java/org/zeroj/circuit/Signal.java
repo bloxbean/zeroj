@@ -33,6 +33,11 @@ public final class Signal {
         return builder != null && api == builder.api();
     }
 
+    /** Return true when both signals belong to the same underlying circuit builder API. */
+    public boolean hasSameBuilder(Signal other) {
+        return other != null && api == other.api;
+    }
+
     // --- Arithmetic ---
 
     /** Field addition: this + other. */

@@ -15,11 +15,17 @@ import java.math.BigInteger;
 /**
  * Groth16 BLS12-381 verifier that binds the proof statement to the UTxO being spent.
  *
+ * <p><b>SECURITY WARNING — DEMONSTRATION ONLY (CANNOT GUARD A REAL UTxO):</b>
+ * Binding the proof to {@code txOutRef} prevents replaying the same proof on a
+ * different UTxO, but this validator does <em>not</em> constrain signers,
+ * outputs, value preservation, recipient addresses, or state transitions — any
+ * party who observes a valid proof in the mempool can front-run the transaction
+ * and redirect the spent funds. Do not use this validator to guard real value;
+ * embed {@link Groth16BLS12381Lib} in an application validator that binds
+ * signers, outputs, value, nullifiers, and business-policy invariants.</p>
+ *
  * <p>The first public input must be
- * {@code blake2b_256(spentTxId || spentOutputIndex32) mod Fr}. This is only an
- * example policy: production validators should bind the statement to the
- * application-specific signer, datum, value, output, nullifier, or authorization
- * fields they require.</p>
+ * {@code blake2b_256(spentTxId || spentOutputIndex32) mod Fr}.</p>
  */
 @SpendingValidator
 public class Groth16BLS12381TxOutRefBindingVerifier {

@@ -48,8 +48,7 @@ public final class Groth16AuthenticatedStateTransitionScriptFactory {
             Set.of(
                     AuthenticatedStateCircuitManifest.Operation.VALUE_UPDATE,
                     AuthenticatedStateCircuitManifest.Operation.INSERT_EMPTY,
-                    AuthenticatedStateCircuitManifest.Operation.INSERT_DIFFERENT_LEAF,
-                    AuthenticatedStateCircuitManifest.Operation.DELETE);
+                    AuthenticatedStateCircuitManifest.Operation.INSERT_DIFFERENT_LEAF);
 
     private Groth16AuthenticatedStateTransitionScriptFactory() {}
 

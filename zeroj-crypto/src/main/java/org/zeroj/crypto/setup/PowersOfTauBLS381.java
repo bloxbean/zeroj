@@ -44,9 +44,9 @@ public final class PowersOfTauBLS381 {
      */
     public static PtauImporterBLS381.SRS generate(int power) {
         TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
-        if (power < 4 || power > 32)
-            throw new IllegalArgumentException("Power must be in [4, 32], got " + power
-                    + " (minimum 4 required for PlonK domain size >= 8)");
+        if (power < 4 || power > 28)
+            throw new IllegalArgumentException("Power must be in [4, 28], got " + power
+                    + " (minimum 4 for PlonK domain >= 8; max 28 so 2^(power+1) + 1 fits in a Java array)");
 
         System.err.println("WARNING: Single-party Powers of Tau generation (BLS12-381) — "
                 + "for DEVELOPMENT and TESTING only. "

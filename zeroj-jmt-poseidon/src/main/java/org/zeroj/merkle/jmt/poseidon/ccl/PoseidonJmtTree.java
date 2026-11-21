@@ -110,7 +110,9 @@ public final class PoseidonJmtTree {
         }
         try {
             PoseidonJmtHash.decode(expectedRoot);
-            return delegate.verifyProofWire(
+            return PoseidonJmtReference.verifyWire(
+                    expectedRoot, key, expectedValue, including, proofWire)
+                    && delegate.verifyProofWire(
                     expectedRoot, key, expectedValue, including, proofWire);
         } catch (RuntimeException malformed) {
             return false;

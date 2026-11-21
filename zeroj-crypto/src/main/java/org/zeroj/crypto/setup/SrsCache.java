@@ -38,6 +38,7 @@ final class SrsCache {
         if (srs.tauScalar() == null) {
             throw new IOException("SRS does not contain a tau scalar");
         }
+        verifyTauMatchesG1(srs.tauScalar(), srs.tauG1());
         saveBls12381Srs(srs, path, true);
         setOwnerOnlyPermissions(path);
     }
@@ -63,12 +64,25 @@ final class SrsCache {
 
             BigInteger tau = null;
             if (in.readBoolean()) {
+                TrustedSetupPolicy.requireInsecureTrustedSetupEnabled();
                 tau = SetupCacheIO.readScalar(in, "tau scalar");
             }
 
             SetupCacheIO.validateBls12381Srs(tauG1, tauG2, power);
+            if (tau != null) {
+                verifyTauMatchesG1(tau, tauG1);
+            }
             return new PtauImporterBLS381.SRS(tauG1, tauG2, power, tau);
         });
+    }
+
+    private static void verifyTauMatchesG1(BigInteger tau, AffineG1[] tauG1) throws IOException {
+        if (tau.signum() <= 0 || tauG1 == null || tauG1.length < 2) {
+            throw new IOException("SRS tau scalar is invalid or missing tau*G1");
+        }
+        if (!FixedBaseG1BLS381.mulAffine(tau).equals(tauG1[1])) {
+            throw new IOException("SRS tau scalar does not match tau*G1");
+        }
     }
 
     private static void saveBls12381Srs(PtauImporterBLS381.SRS srs, Path path, boolean includeTau) throws IOException {

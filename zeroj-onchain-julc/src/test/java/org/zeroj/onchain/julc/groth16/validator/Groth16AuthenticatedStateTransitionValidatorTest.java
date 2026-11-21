@@ -266,7 +266,9 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
         } else {
             outputValue = STATE_VALUE;
         }
-        TxOut continuingOutput = txOut(continuingAddress, outputValue, outputDatum);
+        TxOut continuingOutput = mutation == Mutation.OUTPUT_REFERENCE_SCRIPT
+                ? new TxOut(continuingAddress, outputValue, outputDatum, Optional.of(ScriptHash.of(SCRIPT_HASH)))
+                : txOut(continuingAddress, outputValue, outputDatum);
 
         PlutusData argumentDatum = stateDatum(argumentRoot, argumentVersion);
         PlutusData redeemer = PlutusData.constr(0,
@@ -397,6 +399,7 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
         OUTPUT_NO_DATUM,
         OUTPUT_TOKEN,
         OUTPUT_VALUE,
+        OUTPUT_REFERENCE_SCRIPT,
         MINT,
         MISSING_SIGNER,
         NO_CONTINUING_OUTPUT,

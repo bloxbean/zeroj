@@ -1,6 +1,7 @@
 package org.zeroj.verifier.plonk;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -88,7 +89,7 @@ public class GnarkFiatShamirTranscript {
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
 
             // 1. Write challenge name
-            sha256.update(challengeName.getBytes());
+            sha256.update(challengeName.getBytes(StandardCharsets.UTF_8));
 
             // 2. Write previous challenge hash (if not the first challenge)
             if (state.position != 0) {

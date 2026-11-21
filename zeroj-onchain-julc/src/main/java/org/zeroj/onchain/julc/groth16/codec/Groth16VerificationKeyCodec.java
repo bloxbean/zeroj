@@ -1,5 +1,9 @@
 package org.zeroj.onchain.julc.groth16.codec;
 
+import org.zeroj.bls12381.Bls12381Codecs;
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.G2Point;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -66,14 +70,32 @@ public final class Groth16VerificationKeyCodec {
         if (expected != encoded.length) {
             throw new IllegalArgumentException("Groth16 verification-key length does not match IC count");
         }
-        byte[] alpha = take(input, G1_BYTES);
-        byte[] beta = take(input, G2_BYTES);
-        byte[] gamma = take(input, G2_BYTES);
-        byte[] delta = take(input, G2_BYTES);
+        byte[] alpha = requireNonInfinityG1("alpha", take(input, G1_BYTES));
+        byte[] beta = requireNonInfinityG2("beta", take(input, G2_BYTES));
+        byte[] gamma = requireNonInfinityG2("gamma", take(input, G2_BYTES));
+        byte[] delta = requireNonInfinityG2("delta", take(input, G2_BYTES));
         List<byte[]> ic = new ArrayList<>(icCount);
-        for (int index = 0; index < icCount; index++) ic.add(take(input, G1_BYTES));
+        for (int index = 0; index < icCount; index++) {
+            ic.add(requireNonInfinityG1("ic[" + index + "]", take(input, G1_BYTES)));
+        }
         if (input.hasRemaining()) throw new IllegalArgumentException("trailing verification-key bytes");
         return new SnarkjsToCardano.VkCompressed(alpha, beta, gamma, delta, List.copyOf(ic));
+    }
+
+    private static byte[] requireNonInfinityG1(String name, byte[] bytes) {
+        G1Point point = Bls12381Codecs.g1FromCompressed(bytes);
+        if (point.isInfinity()) {
+            throw new IllegalArgumentException("Groth16 verification key " + name + " must not be infinity");
+        }
+        return bytes;
+    }
+
+    private static byte[] requireNonInfinityG2(String name, byte[] bytes) {
+        G2Point point = Bls12381Codecs.g2FromCompressed(bytes);
+        if (point.isInfinity()) {
+            throw new IllegalArgumentException("Groth16 verification key " + name + " must not be infinity");
+        }
+        return bytes;
     }
 
     private static void requireLength(String name, byte[] value, int expected) {

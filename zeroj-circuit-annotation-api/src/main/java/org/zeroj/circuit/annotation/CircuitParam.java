@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 /**
  * Marks a build-time value that changes circuit shape.
  */
-@Target({ElementType.FIELD, ElementType.PARAMETER})
+@Target({ElementType.PARAMETER})
 @Retention(RetentionPolicy.SOURCE)
 public @interface CircuitParam {
     String value() default "";
