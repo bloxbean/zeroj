@@ -43,8 +43,12 @@ public final class JacobianArith381 {
         System.arraycopy(a, ao, o, oo, POINT_LONGS);
     }
 
-    /** Load an affine (x,y) into a Jacobian point (Z=1) at {@code o[oo..]}. */
+    /** Load an affine (x,y) into a Jacobian point at {@code o[oo..]}, mapping (0, 0) to infinity. */
     public static void fromAffine(long[] o, int oo, long[] ax, int axo, long[] ay, int ayo) {
+        if (FpArith381.isZero(ax, axo) && FpArith381.isZero(ay, ayo)) {
+            setInfinity(o, oo);
+            return;
+        }
         FpArith381.copy(o, X(oo), ax, axo);
         FpArith381.copy(o, Y(oo), ay, ayo);
         System.arraycopy(FP_ONE, 0, o, Z(oo), L);
@@ -129,8 +133,8 @@ public final class JacobianArith381 {
 
     public static void addAffine(long[] o, int oo, long[] a, int ao,
                                  long[] ax, int axo, long[] ay, int ayo, long[] s) {
-        if (isInfinity(a, ao)) { fromAffine(o, oo, ax, axo, ay, ayo); return; }
         if (FpArith381.isZero(ax, axo) && FpArith381.isZero(ay, ayo)) { copyPoint(o, oo, a, ao); return; }
+        if (isInfinity(a, ao)) { fromAffine(o, oo, ax, axo, ay, ayo); return; }
 
         final int Z1Z1 = 0, Z1Z1Z1 = 6, U2 = 12, S2 = 18, H = 24, R = 30,
                 HH = 36, HHH = 42, V = 48, T = 54, X3 = 60, Y3 = 66, Z3 = 72;

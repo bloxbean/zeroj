@@ -36,6 +36,31 @@ public final class ZkContext {
         return ZkField.wrap(this, builder.constant(value));
     }
 
+    public ZkBool constantBool(boolean value) {
+        return ZkBool.trusted(this, builder.constant(value ? 1L : 0L));
+    }
+
+    public ZkUInt constantUInt(long value, int bits) {
+        if (bits <= 0 || bits > ZkUInt.MAX_BITS) {
+            throw new IllegalArgumentException("bits must be in [1, " + ZkUInt.MAX_BITS + "], got " + bits);
+        }
+        if (value < 0 || (bits < 63 && value >= (1L << bits))) {
+            throw new IllegalArgumentException("constantUInt value out of range for " + bits + " bits");
+        }
+        return ZkUInt.trusted(this, builder.constant(value), bits);
+    }
+
+    public ZkUInt constantUInt(BigInteger value, int bits) {
+        Objects.requireNonNull(value, "value");
+        if (bits <= 0 || bits > ZkUInt.MAX_BITS) {
+            throw new IllegalArgumentException("bits must be in [1, " + ZkUInt.MAX_BITS + "], got " + bits);
+        }
+        if (value.signum() < 0 || value.bitLength() > bits) {
+            throw new IllegalArgumentException("constantUInt value out of range for " + bits + " bits");
+        }
+        return ZkUInt.trusted(this, builder.constant(value), bits);
+    }
+
     public ZkField field(Signal signal) {
         return ZkField.wrap(this, signal);
     }

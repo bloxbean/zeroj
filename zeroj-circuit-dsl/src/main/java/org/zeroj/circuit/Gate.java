@@ -71,10 +71,11 @@ public sealed interface Gate {
         /**
          * Non-native modular-reduction advice for {@code a·b mod m}. Given operand limbs, supplies
          * the quotient and remainder of the integer product. Layout — params: {@code [modulus,
-         * radixBits, numLimbs]}; inputs: {@code numLimbs} a-limbs then {@code numLimbs} b-limbs
-         * (radix 2^radixBits, little-endian); outputs: {@code numLimbs} q-limbs then {@code numLimbs}
-         * r-limbs where {@code a·b = q·modulus + r}, {@code 0 <= r < modulus}. The hint is
-         * unconstrained here — the caller MUST range-check q,r and enforce the identity + r<modulus.
+         * radixBits, numLimbsAB, numLimbsQ]}; inputs: {@code numLimbsAB} a-limbs then {@code numLimbsAB}
+         * b-limbs (radix 2^radixBits, little-endian); outputs: {@code numLimbsQ} q-limbs then
+         * {@code numLimbsAB} r-limbs where {@code a·b = q·modulus + r}, {@code 0 <= r < modulus}.
+         * The hint is unconstrained here — the caller MUST range-check q,r and enforce the identity
+         * + r < modulus.
          */
         MUL_MOD_REDUCE,
 

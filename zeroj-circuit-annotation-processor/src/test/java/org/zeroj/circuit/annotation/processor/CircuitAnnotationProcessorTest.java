@@ -1348,6 +1348,95 @@ import java.math.BigInteger;
     }
 
     @Test
+    void processorRejectsAbstractThrowsStaticFieldAndUnannotatedProveParamAndHandlesBoxedIntegerSinglePassTemplate()
+            throws Exception {
+        var abstractCircuit = compile("test.AbstractCircuit", """
+                package test;
+                import org.zeroj.circuit.annotation.*;
+                @ZKCircuit
+                public abstract class AbstractCircuit {
+                    @Prove ZkBool prove(@Public ZkBool ok) { return ok; }
+                }
+                """);
+        assertFalse(abstractCircuit.success());
+        assertTrue(abstractCircuit.diagnosticsText().contains("Abstract @ZKCircuit"));
+
+        var throwsCircuit = compile("test.ThrowsCircuit", """
+                package test;
+                import org.zeroj.circuit.annotation.*;
+                @ZKCircuit
+                public class ThrowsCircuit {
+                    @Prove ZkBool prove(@Public ZkBool ok) throws Exception { return ok; }
+                }
+                """);
+        assertFalse(throwsCircuit.success());
+        assertTrue(throwsCircuit.diagnosticsText().contains("throws"));
+
+        var staticFieldCircuit = compile("test.StaticFieldCircuit", """
+                package test;
+                import org.zeroj.circuit.annotation.*;
+                @ZKCircuit
+                public class StaticFieldCircuit {
+                    @Public static ZkBool ok;
+                    @Prove ZkBool prove() { return ok; }
+                }
+                """);
+        assertFalse(staticFieldCircuit.success());
+        assertTrue(staticFieldCircuit.diagnosticsText().contains("Static symbolic input fields"));
+
+        var unannotatedParam = compile("test.UnannotatedParamCircuit", """
+                package test;
+                import org.zeroj.circuit.annotation.*;
+                @ZKCircuit
+                public class UnannotatedParamCircuit {
+                    @Public ZkBool ok;
+                    @Prove ZkBool prove(ZkField extra) { return ok; }
+                }
+                """);
+        assertFalse(unannotatedParam.success());
+        assertTrue(unannotatedParam.diagnosticsText().contains("@Prove parameters must be ZkContext"));
+
+        // Boxed Integer @FixedSize param null check + single-pass template + param named "suffix"
+        var singlePass = compile("test.SinglePassAndBoxed", """
+                package test;
+                import org.zeroj.circuit.annotation.*;
+                @ZKCircuit(nameTemplate = "c-{suffix}-{tag}")
+                public class SinglePassAndBoxed {
+                    public SinglePassAndBoxed(
+                            @CircuitParam("suffix") Integer suffix,
+                            @CircuitParam("tag") String tag) {}
+                    @Prove ZkBool prove(
+                            @Secret @FixedSize(param = "suffix") ZkArray<ZkField> items,
+                            @Public ZkBool ok) {
+                        return ok;
+                    }
+                }
+                """);
+        assertTrue(singlePass.success(), singlePass.diagnosticsText());
+        Class<?> gen = singlePass.load("test.SinglePassAndBoxedCircuit");
+        var nullEx = assertThrows(InvocationTargetException.class,
+                () -> gen.getMethod("build", Integer.class, String.class).invoke(null, null, "x"));
+        assertTrue(nullEx.getCause() instanceof IllegalArgumentException);
+        assertTrue(nullEx.getCause().getMessage().contains("must not be null"));
+
+        // Single-pass template: if tag contains "{suffix}", it must NOT be substituted again.
+        var schema = (ZkCircuitSchema) gen.getMethod("schema", Integer.class, String.class)
+                .invoke(null, 2, "{suffix}");
+        assertTrue(schema.name().startsWith("c-2-{suffix}--"), "got: " + schema.name());
+
+        // validateCircuit must reject a different circuit with the same name but different inputs.
+        var inputsObj = gen.getMethod("inputs", Integer.class, String.class).invoke(null, 2, "{suffix}");
+        CircuitBuilder fakeSameName = CircuitBuilder.create(schema.name())
+                .publicVar("wrong_pub")
+                .define(api -> {});
+        var mismatchEx = assertThrows(InvocationTargetException.class,
+                () -> gen.getMethod("calculateWitness", CircuitBuilder.class, inputsObj.getClass(), CurveId.class)
+                        .invoke(null, fakeSameName, inputsObj, CurveId.BLS12_381));
+        assertTrue(mismatchEx.getCause() instanceof IllegalArgumentException);
+        assertTrue(mismatchEx.getCause().getMessage().contains("public inputs"));
+    }
+
+    @Test
     void generatedBuildRejectsForeignOrNullProveZkBoolAndValidatesTypedInputs() throws Exception {
         var foreign = compile("test.ForeignZkBoolCircuit", """
                 package test;

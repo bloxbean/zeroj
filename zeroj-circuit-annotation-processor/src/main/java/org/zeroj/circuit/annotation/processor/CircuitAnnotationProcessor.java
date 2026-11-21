@@ -32,11 +32,14 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -85,6 +88,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             throw new GenerationException(sourceType,
                     "Nested @ZKCircuit classes are not supported in Phase 4");
         }
+        if (sourceType.getModifiers().contains(Modifier.ABSTRACT)) {
+            throw new GenerationException(sourceType,
+                    "Abstract @ZKCircuit classes are not supported");
+        }
 
         List<ExecutableElement> proveMethods = sourceType.getEnclosedElements().stream()
                 .filter(e -> e.getKind() == ElementKind.METHOD)
@@ -99,6 +106,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         if (proveMethod.getModifiers().contains(Modifier.PRIVATE)) {
             throw new GenerationException(proveMethod,
                     "@Prove method must be visible to generated code");
+        }
+        if (!proveMethod.getThrownTypes().isEmpty()) {
+            throw new GenerationException(proveMethod,
+                    "@Prove method must not declare a throws clause");
         }
         validateReturnType(proveMethod);
 
@@ -176,7 +187,8 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                                 + "String, BigInteger, or enum");
             }
             params.add(new CircuitParamModel(name, parameter.getSimpleName().toString(),
-                    parameter.asType().toString(), isIntegerCircuitParam(parameter.asType())));
+                    parameter.asType().toString(), isIntegerCircuitParam(parameter.asType()),
+                    isBoxedInteger(parameter.asType())));
         }
         return params;
     }
@@ -220,6 +232,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             }
             if (parameter.getAnnotation(Public.class) != null || parameter.getAnnotation(Secret.class) != null) {
                 parameterInputs.add(parameterInput(parameter, circuitParams));
+            } else {
+                throw new GenerationException(parameter,
+                        "@Prove parameters must be ZkContext or annotated with @Public or @Secret");
             }
         }
 
@@ -241,6 +256,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private InputModel fieldInput(VariableElement field, Map<String, CircuitParamModel> circuitParams) {
+        if (field.getModifiers().contains(Modifier.STATIC)) {
+            throw new GenerationException(field, "Static symbolic input fields are not supported");
+        }
         if (field.getModifiers().contains(Modifier.PRIVATE)) {
             throw new GenerationException(field, "Private symbolic input fields are not supported in Phase 4");
         }
@@ -347,7 +365,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             if (literal <= 0) {
                 throw new GenerationException(element, label + " value must be positive");
             }
-            return new SizeModel(Integer.toString(literal), false, "");
+            return new SizeModel(Integer.toString(literal), false, "", false);
         }
 
         CircuitParamModel param = circuitParams.get(paramName);
@@ -355,7 +373,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             throw new GenerationException(element,
                     label + " \"" + paramName + "\" must reference an integer @CircuitParam");
         }
-        return new SizeModel(param.javaName(), true, param.name());
+        return new SizeModel(param.javaName(), true, param.name(), param.boxedInt());
     }
 
     private List<InputModel> orderInputs(List<InputModel> inputs) {
@@ -390,7 +408,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         }
 
         Set<String> flattenedNames = new HashSet<>();
-        Map<String, InputModel> flattenedOwners = new java.util.HashMap<>();
+        Map<String, InputModel> flattenedOwners = new HashMap<>();
         for (InputModel input : inputs) {
             if (isFixedVector(input.valueKind())) {
                 if (hasLiteralShape(input)) {
@@ -411,7 +429,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             }
         }
 
-        for (InputModel array : inputs.stream().filter(i -> isFixedVector(i.valueKind())).toList()) {
+        for (InputModel array : inputs.stream()
+                .filter(i -> isFixedVector(i.valueKind()) && !hasLiteralShape(i))
+                .toList()) {
             for (InputModel other : inputs.stream().filter(i -> i != array).toList()) {
                 if (mayOverlapParameterizedFlattenedName(array, other.baseName())) {
                     throw new GenerationException(null,
@@ -455,7 +475,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private boolean mayOverlapParameterizedFlattenedName(InputModel array, String otherBaseName) {
-        String prefix = java.util.regex.Pattern.quote(array.baseName());
+        String prefix = Pattern.quote(array.baseName());
         if (isNestedArray(array)) {
             return otherBaseName.matches(prefix + "_\\d+.*");
         }
@@ -500,7 +520,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         String zkLocal = uniqueLocalName("__zeroj", usedLocalNames);
         String loopLocal = uniqueLocalName("__zerojIndex", usedLocalNames);
         String innerLoopLocal = uniqueLocalName("__zerojInnerIndex", usedLocalNames);
-        Map<InputModel, String> inputLocals = new java.util.LinkedHashMap<>();
+        Map<InputModel, String> inputLocals = new LinkedHashMap<>();
         for (int i = 0; i < inputs.size(); i++) {
             inputLocals.put(inputs.get(i), uniqueLocalName("__zerojInput" + i, usedLocalNames));
         }
@@ -551,7 +571,7 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append(") {\n");
         renderFixedSizeParamGuards(out, inputs, "        ");
         if (needsInstance) {
-            out.append("        var ").append(instanceLocal).append(" = new ").append(sourceSimpleName).append("(")
+            out.append("        var ").append(instanceLocal).append(" = new ").append(sourceType.getQualifiedName()).append("(")
                     .append(circuitParams.stream().map(CircuitParamModel::javaName).collect(Collectors.joining(", ")))
                     .append(");\n");
         }
@@ -606,30 +626,31 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
             out.append("\n    private static String circuitName(")
                     .append(renderParamSignature(circuitParams))
                     .append(") {\n")
-                    .append("        String ").append(nameLocal).append(" = ")
-                    .append(hasNameTemplate ? "CIRCUIT_NAME_TEMPLATE" : "CIRCUIT_NAME")
-                    .append(";\n");
+                    .append("        String ").append(nameLocal).append(" = ");
             if (hasNameTemplate) {
-                for (CircuitParamModel param : circuitParams) {
-                    out.append("        ").append(nameLocal).append(" = ").append(nameLocal)
-                            .append(".replace(\"{").append(param.name()).append("}\", circuitParamDisplayValue(")
-                            .append(param.javaName()).append("));\n");
-                }
+                out.append(renderSinglePassTemplateExpression(nameTemplate, circuitParams));
+            } else {
+                out.append("CIRCUIT_NAME");
             }
-            out.append("        return ").append(nameLocal).append(" + circuitParamSuffix(")
+            out.append(";\n")
+                    .append("        return ").append(nameLocal).append(" + circuitParamSuffix(")
                     .append(renderParamNames(circuitParams))
                     .append(");\n")
                     .append("    }\n");
 
+            Set<String> suffixLocals = new HashSet<>(
+                    circuitParams.stream().map(CircuitParamModel::javaName).toList());
+            String suffixLocal = uniqueLocalName("__zerojSuffix", suffixLocals);
             out.append("\n    private static String circuitParamSuffix(")
                     .append(renderParamSignature(circuitParams))
                     .append(") {\n")
-                    .append("        String suffix = \"\";\n");
+                    .append("        String ").append(suffixLocal).append(" = \"\";\n");
             for (CircuitParamModel param : circuitParams) {
-                out.append("        suffix = suffix + \"--").append(param.name()).append("-\" + circuitParamValue(")
+                out.append("        ").append(suffixLocal).append(" = ").append(suffixLocal)
+                        .append(" + \"--").append(param.name()).append("-\" + circuitParamValue(")
                         .append(param.javaName()).append(");\n");
             }
-            out.append("        return suffix;\n")
+            out.append("        return ").append(suffixLocal).append(";\n")
                     .append("    }\n");
 
             out.append("\n    private static String circuitParamDisplayValue(Object value) {\n")
@@ -714,10 +735,23 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
                 .append("        if (schema == null) {\n")
                 .append("            throw new NullPointerException(\"schema\");\n")
                 .append("        }\n")
-                .append("        String circuitName = circuit.constraintGraph().name();\n")
+                .append("        var graph = circuit.constraintGraph();\n")
+                .append("        String circuitName = graph.name();\n")
                 .append("        if (!circuitName.equals(schema.name())) {\n")
                 .append("            throw new IllegalArgumentException(\"Circuit name \" + circuitName\n")
                 .append("                    + \" does not match generated input schema \" + schema.name());\n")
+                .append("        }\n")
+                .append("        List<String> publicNames = graph.publicInputs().stream()\n")
+                .append("                .map(v -> v.name()).toList();\n")
+                .append("        if (!publicNames.equals(schema.publicInputs().names())) {\n")
+                .append("            throw new IllegalArgumentException(\"Circuit public inputs \"\n")
+                .append("                    + \"do not match generated input schema \" + schema.name());\n")
+                .append("        }\n")
+                .append("        List<String> secretNames = graph.secretInputs().stream()\n")
+                .append("                .map(v -> v.name()).toList();\n")
+                .append("        if (!secretNames.equals(schema.secretInputs().names())) {\n")
+                .append("            throw new IllegalArgumentException(\"Circuit secret inputs \"\n")
+                .append("                    + \"do not match generated input schema \" + schema.name());\n")
                 .append("        }\n")
                 .append("    }\n");
 
@@ -725,19 +759,27 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
     }
 
     private void renderFixedSizeParamGuards(StringBuilder out, List<InputModel> inputs, String indent) {
-        Map<String, String> sizeParams = new java.util.LinkedHashMap<>();
+        Map<String, SizeModel> sizeParams = new LinkedHashMap<>();
         for (InputModel input : inputs) {
             if (input.size() != null && input.size().fromCircuitParam()) {
-                sizeParams.putIfAbsent(input.size().expression(), input.size().paramName());
+                sizeParams.putIfAbsent(input.size().expression(), input.size());
             }
             if (input.innerSize() != null && input.innerSize().fromCircuitParam()) {
-                sizeParams.putIfAbsent(input.innerSize().expression(), input.innerSize().paramName());
+                sizeParams.putIfAbsent(input.innerSize().expression(), input.innerSize());
             }
         }
-        for (Map.Entry<String, String> entry : sizeParams.entrySet()) {
+        for (Map.Entry<String, SizeModel> entry : sizeParams.entrySet()) {
+            SizeModel size = entry.getValue();
+            if (size.nullable()) {
+                out.append(indent).append("if (").append(entry.getKey()).append(" == null) {\n")
+                        .append(indent).append("    throw new IllegalArgumentException(")
+                        .append(stringLiteral("@FixedSize(param = \"" + size.paramName() + "\") must not be null"))
+                        .append(");\n")
+                        .append(indent).append("}\n");
+            }
             out.append(indent).append("if (").append(entry.getKey()).append(" <= 0) {\n")
                     .append(indent).append("    throw new IllegalArgumentException(")
-                    .append(stringLiteral("@FixedSize(param = \"" + entry.getValue() + "\") must be positive"))
+                    .append(stringLiteral("@FixedSize(param = \"" + size.paramName() + "\") must be positive"))
                     .append(");\n")
                     .append(indent).append("}\n");
         }
@@ -1046,21 +1088,41 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
         List<String> args = new ArrayList<>();
         for (VariableElement parameter : proveMethod.getParameters()) {
-            if (parameter.getAnnotation(CircuitParam.class) != null) {
-                CircuitParam annotation = parameter.getAnnotation(CircuitParam.class);
-                args.add(annotation.value().isBlank() ? parameter.getSimpleName().toString() : annotation.value());
-            } else if (isType(parameter.asType(), ZK_CONTEXT)) {
+            if (isType(parameter.asType(), ZK_CONTEXT)) {
                 args.add(zkLocal);
             } else {
                 InputModel input = byJavaName.get(parameter.getSimpleName().toString());
                 if (input == null) {
                     throw new GenerationException(parameter,
-                            "@Prove parameters must be ZkContext, @CircuitParam, or symbolic inputs");
+                            "@Prove parameters must be ZkContext or symbolic inputs");
                 }
                 args.add(inputLocals.get(input));
             }
         }
         return receiver + "." + proveMethod.getSimpleName() + "(" + String.join(", ", args) + ")";
+    }
+
+    private String renderSinglePassTemplateExpression(String nameTemplate, List<CircuitParamModel> circuitParams) {
+        Map<String, CircuitParamModel> byName = circuitParams.stream()
+                .collect(Collectors.toMap(CircuitParamModel::name, p -> p));
+        List<String> parts = new ArrayList<>();
+        int index = 0;
+        while (index < nameTemplate.length()) {
+            int start = nameTemplate.indexOf('{', index);
+            if (start < 0) {
+                parts.add(stringLiteral(nameTemplate.substring(index)));
+                break;
+            }
+            if (start > index) {
+                parts.add(stringLiteral(nameTemplate.substring(index, start)));
+            }
+            int end = nameTemplate.indexOf('}', start + 1);
+            String placeholder = nameTemplate.substring(start + 1, end);
+            CircuitParamModel param = byName.get(placeholder);
+            parts.add("circuitParamDisplayValue(" + param.javaName() + ")");
+            index = end + 1;
+        }
+        return parts.isEmpty() ? "\"\"" : String.join(" + ", parts);
     }
 
     private void validateNameTemplate(List<CircuitParamModel> circuitParams, String nameTemplate) {
@@ -1182,6 +1244,10 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
 
     private boolean isIntegerCircuitParam(TypeMirror type) {
         return type.getKind() == TypeKind.INT || erasure(type).equals("java.lang.Integer");
+    }
+
+    private boolean isBoxedInteger(TypeMirror type) {
+        return type.getKind() != TypeKind.INT && erasure(type).equals("java.lang.Integer");
     }
 
     private boolean isSupportedCircuitParamType(TypeMirror type) {
@@ -1338,9 +1404,9 @@ public final class CircuitAnnotationProcessor extends AbstractProcessor {
         BYTES
     }
 
-    private record CircuitParamModel(String name, String javaName, String type, boolean intLike) {}
+    private record CircuitParamModel(String name, String javaName, String type, boolean intLike, boolean boxedInt) {}
 
-    private record SizeModel(String expression, boolean fromCircuitParam, String paramName) {}
+    private record SizeModel(String expression, boolean fromCircuitParam, String paramName, boolean nullable) {}
 
     private record InputModel(
             String javaName,

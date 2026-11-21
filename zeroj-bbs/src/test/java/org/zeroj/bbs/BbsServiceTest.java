@@ -351,6 +351,52 @@ class BbsServiceTest {
     }
 
     @Test
+    void zkVerifierEnforcesSuitePolicyAndEmptyPublicInputsAndCodecRejectsNullMessage() {
+        BbsService sha256Service = BbsService.pureJava(BbsCiphersuite.BLS12381_SHA256);
+        BbsService shakeService = BbsService.pureJava(BbsCiphersuite.BLS12381_SHAKE256);
+        BbsKeyPair shakeKp = shakeService.keyPair(bytes("012345678901234567890123456789uv"), bytes("issuer"));
+        List<byte[]> messages = List.of(bytes("a"), bytes("b"));
+        BbsSignature sig = shakeService.sign(shakeKp.secretKey(), shakeKp.publicKey(), messages, bytes("hdr"));
+        BbsPresentation pres = shakeService.derivePresentation(
+                shakeKp.publicKey(), sig, messages, bytes("hdr"), bytes("nonce"), new int[]{0});
+
+        ZkProofEnvelope shakeEnv = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS)
+                .curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-policy"))
+                .proofBytes(BbsPresentationCodec.encode(pres))
+                .publicInputs(new PublicInputs(List.of()))
+                .vkRef(new VerificationKeyRef.ById("issuer"))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT)
+                .build();
+        VerificationMaterial shakeMat = VerificationMaterial.of(
+                shakeKp.publicKey().bytes(), ProofSystemId.BBS, CurveId.BLS12_381, new CircuitId("bbs-policy"));
+
+        // Pinned SHA-256 verifier must NOT silently downgrade/dispatch to pure-Java SHAKE256.
+        var rejectedSuite = new BbsZkVerifier(sha256Service).verify(shakeEnv, shakeMat);
+        assertFalse(rejectedSuite.proofValid());
+
+        // Non-empty publicInputs must be rejected.
+        ZkProofEnvelope withPubInputs = ZkProofEnvelope.builder()
+                .proofSystem(ProofSystemId.BBS)
+                .curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("bbs-policy"))
+                .proofBytes(BbsPresentationCodec.encode(pres))
+                .publicInputs(new PublicInputs(List.of(BigInteger.ONE)))
+                .vkRef(new VerificationKeyRef.ById("issuer"))
+                .proofFormat(BbsCiphersuite.DEFAULT_PROOF_FORMAT)
+                .build();
+        var rejectedPub = new BbsZkVerifier().verify(withPubInputs, shakeMat);
+        assertFalse(rejectedPub.proofValid());
+
+        // BbsCodec.copyMessages must reject null message elements.
+        List<byte[]> withNull = new ArrayList<>();
+        withNull.add(bytes("ok"));
+        withNull.add(null);
+        assertThrows(NullPointerException.class, () -> BbsCodec.copyMessages(withNull));
+    }
+
+    @Test
     void octetsToProofAndVerifyPresentationRejectZeroAndOutOfRangeScalarsInEverySlot() {
         BbsService service = BbsService.pureJava();
         BbsKeyPair keyPair = service.keyPair(bytes("012345678901234567890123456789qr"), bytes("issuer-key"));

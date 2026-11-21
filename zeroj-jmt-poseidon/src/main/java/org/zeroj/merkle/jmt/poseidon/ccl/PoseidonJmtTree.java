@@ -105,13 +105,21 @@ public final class PoseidonJmtTree {
             boolean including,
             byte[] proofWire) {
         if (expectedRoot == null || key == null || proofWire == null
+                || proofWire.length == 0
+                || proofWire.length > PoseidonJmtReference.MAX_WIRE_BYTES
                 || including != (expectedValue != null)) {
             return false;
         }
+        byte[] rootSnapshot = expectedRoot.clone();
+        byte[] keySnapshot = key.clone();
+        byte[] valueSnapshot = expectedValue == null ? null : expectedValue.clone();
+        byte[] wireSnapshot = proofWire.clone();
         try {
-            PoseidonJmtHash.decode(expectedRoot);
-            return delegate.verifyProofWire(
-                    expectedRoot, key, expectedValue, including, proofWire);
+            PoseidonJmtHash.decode(rootSnapshot);
+            return PoseidonJmtReference.verifyWireSnapshot(
+                    rootSnapshot, keySnapshot, valueSnapshot, including, wireSnapshot)
+                    && delegate.verifyProofWire(
+                    rootSnapshot, keySnapshot, valueSnapshot, including, wireSnapshot);
         } catch (RuntimeException malformed) {
             return false;
         }

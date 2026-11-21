@@ -236,6 +236,9 @@ public final class Groth16ProverBLS381 {
             Groth16ProvingKeyBLS381 pk, G1Readers readers, ProverBackend backend, FlatScalars witness,
             FlatScalars hCoeffs, BigInteger r, BigInteger s) {
 
+        if (readers == null) {
+            throw new IllegalArgumentException("Proving key readers must not be null");
+        }
         G2AffineReader b2 = readers.b2() != null
                 ? readers.b2() : new G2AffineReader.HeapG2Reader(pk.pointsB2());
         requireKeyDimensions(pk, readers, b2, witness, hCoeffs);
@@ -590,8 +593,26 @@ public final class Groth16ProverBLS381 {
      */
     private static void requireKeyDimensions(Groth16ProvingKeyBLS381 pk, G1Readers readers,
                                              G2AffineReader b2, FlatScalars witness, FlatScalars hCoeffs) {
+        if (pk == null) throw new IllegalArgumentException("Proving key must not be null");
+        if (readers == null) throw new IllegalArgumentException("Proving key readers must not be null");
+        if (witness == null || witness.count() == 0) throw new IllegalArgumentException("Witness must not be null or empty");
+        if (hCoeffs == null) throw new IllegalArgumentException("H coefficients must not be null");
+        long[] w0 = new long[4];
+        witness.copyLimbs(0, w0, 0);
+        if (w0[0] != 1L || w0[1] != 0L || w0[2] != 0L || w0[3] != 0L) {
+            throw new IllegalArgumentException("witness[0] must be 1");
+        }
+        if (pk.alphaG1() == null || pk.alphaG1().isInfinity() || !pk.alphaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key alphaG1 is not on curve");
+        if (pk.betaG1() == null || pk.betaG1().isInfinity() || !pk.betaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key betaG1 is not on curve");
+        if (pk.betaG2() == null || pk.betaG2().isInfinity() || !pk.betaG2().isOnCurve())
+            throw new IllegalArgumentException("Proving key betaG2 is not on curve");
+        if (pk.deltaG1() == null || pk.deltaG1().isInfinity() || !pk.deltaG1().isOnCurve())
+            throw new IllegalArgumentException("Proving key deltaG1 is not on curve");
+        if (pk.deltaG2() == null || pk.deltaG2().isInfinity() || !pk.deltaG2().isOnCurve())
+            throw new IllegalArgumentException("Proving key deltaG2 is not on curve");
         int n = witness.count();
-        if (n == 0) throw new IllegalArgumentException("Witness must not be empty");
         if (pk.numPublic() < 0 || pk.numPublic() >= n) {
             throw new IllegalArgumentException("proving key numPublic (" + pk.numPublic()
                     + ") must be in [0, witness count " + n + ")");

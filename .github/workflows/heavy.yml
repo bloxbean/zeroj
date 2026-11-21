@@ -19,9 +19,11 @@ on:
     branches: [ main ]
     paths:
       - 'zeroj-integration-tests/src/test/java/org/zeroj/examples/notes/**'
+      - 'zeroj-integration-tests/src/test/java/org/zeroj/it/sha2/**'
       - 'zeroj-integration-tests/build.gradle'
       - 'zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/zk/**'
       - 'zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/jubjub/**'
+      - 'zeroj-circuit-lib/src/main/java/org/zeroj/circuit/lib/hash/**'
       - '.github/workflows/heavy.yml'
 
 permissions:

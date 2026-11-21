@@ -35,6 +35,7 @@ public final class PlonKProverBLS381 {
     private static final BigInteger FR = MontFr381.modulus();
     private static final int MIN_DOMAIN_SIZE = 8;
     private static final int MAX_DOMAIN_POWER = 24;
+    private static final int MAX_BLINDER_RESAMPLES = 8;
     public static final int MAX_CARDANO_MPI_PUBLIC_INPUTS = 8;
     public static final String CARDANO_MPI_PROFILE_TAG = "zeroj-plonk-bls12381-cardano-mpi-v1-json";
 
@@ -69,9 +70,7 @@ public final class PlonKProverBLS381 {
         if (rng == null) {
             throw new IllegalArgumentException("SecureRandom must not be null");
         }
-        MontFr381[] b = new MontFr381[11];
-        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
-        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.UNCOMPRESSED_AFFINE);
+        return proveWithResampling(pk, wireA, wireB, wireC, pubInputs, rng, TranscriptEncoding.UNCOMPRESSED_AFFINE);
     }
 
     /**
@@ -97,9 +96,7 @@ public final class PlonKProverBLS381 {
             throw new IllegalArgumentException("SecureRandom must not be null");
         }
         requireCardanoV1PublicInputs(pubInputs);
-        MontFr381[] b = new MontFr381[11];
-        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
-        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.COMPRESSED_G1);
+        return proveWithResampling(pk, wireA, wireB, wireC, pubInputs, rng, TranscriptEncoding.COMPRESSED_G1);
     }
 
     /**
@@ -124,9 +121,32 @@ public final class PlonKProverBLS381 {
             throw new IllegalArgumentException("SecureRandom must not be null");
         }
         requireCardanoMpiPublicInputs(pubInputs);
-        MontFr381[] b = new MontFr381[11];
-        for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
-        return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, TranscriptEncoding.COMPRESSED_G1_MPI);
+        return proveWithResampling(pk, wireA, wireB, wireC, pubInputs, rng, TranscriptEncoding.COMPRESSED_G1_MPI);
+    }
+
+    private static PlonKProofBLS381 proveWithResampling(
+            PlonKProvingKeyBLS381 pk, MontFr381[] wireA, MontFr381[] wireB, MontFr381[] wireC,
+            BigInteger[] pubInputs, SecureRandom rng, TranscriptEncoding encoding) {
+        DegenerateProofException last = null;
+        for (int attempt = 0; attempt < MAX_BLINDER_RESAMPLES; attempt++) {
+            MontFr381[] b = new MontFr381[11];
+            for (int i = 0; i < 11; i++) b[i] = randomFr(rng);
+            try {
+                return proveInternal(pk, wireA, wireB, wireC, pubInputs, b, encoding);
+            } catch (DegenerateProofException e) {
+                last = e;
+            }
+        }
+        throw new IllegalStateException(
+                "PlonK prove aborted after " + MAX_BLINDER_RESAMPLES
+                        + " blinding attempts due to degenerate challenge or infinity commitment",
+                last);
+    }
+
+    private static final class DegenerateProofException extends IllegalStateException {
+        private DegenerateProofException(String message) {
+            super(message);
+        }
     }
 
     /** Prove without blinding (for debugging). */
@@ -200,6 +220,9 @@ public final class PlonKProverBLS381 {
             var den = aEvals[i].add(beta.mul(pk.s1()[i])).add(gamma)
                     .mul(bEvals[i].add(beta.mul(pk.s2()[i])).add(gamma))
                     .mul(cEvals[i].add(beta.mul(pk.s3()[i])).add(gamma));
+            if (den.isZero()) {
+                throw new DegenerateProofException("PlonK permutation denominator vanished at row " + i);
+            }
             zEvals[i + 1] = zEvals[i].mul(num).mul(den.inverse());
             wi = wi.mul(omega);
         }
@@ -412,6 +435,9 @@ public final class PlonKProverBLS381 {
         MontFr381 zetaN = zeta;
         for (int i = 0; i < logN; i++) zetaN = zetaN.square();
         MontFr381 zh = zetaN.sub(MontFr381.ONE);
+        if (zh.isZero() || zeta.equals(MontFr381.ONE)) {
+            throw new DegenerateProofException("PlonK challenge zeta lies inside the evaluation domain");
+        }
         MontFr381 l1Zeta = zh.mul(MontFr381.fromLong(n).mul(zeta.sub(MontFr381.ONE)).inverse());
 
         zCoeffInR = zCoeffInR.add(alpha2.mul(l1Zeta));
@@ -471,6 +497,12 @@ public final class PlonKProverBLS381 {
         // W_{zeta*omega} = (Z(X) - Z(zeta*omega)) / (X - zeta*omega)
         var commitWxiw = KZGCommitmentBLS381.openingProof(srs, zBlind, zetaOmega,
                 MontFr381.fromBigInteger(evalZw)).toAffine();
+
+        if (commitA.isInfinity() || commitB.isInfinity() || commitC.isInfinity()
+                || commitZ.isInfinity() || commitT1.isInfinity() || commitT2.isInfinity()
+                || commitT3.isInfinity() || commitWxi.isInfinity() || commitWxiw.isInfinity()) {
+            throw new DegenerateProofException("PlonK proof commitment cancelled to the point at infinity");
+        }
 
         return new PlonKProofBLS381(
                 commitA, commitB, commitC, commitZ,

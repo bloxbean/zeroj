@@ -5,6 +5,10 @@ import org.zeroj.circuit.Gate;
 import org.zeroj.circuit.Variable;
 
 import java.math.BigInteger;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
+import java.util.WeakHashMap;
 
 /**
  * In-circuit non-native field arithmetic over the Ed25519 base field
@@ -137,30 +141,51 @@ public final class Fe25519 {
     /** (this - other) mod p, normalized. */
     public Fe25519 sub(Fe25519 other) { return subLazy(other).reduce(); }
 
+    /** Per-circuit hint configuration for {@link Fe25519} arithmetic (avoids global static mutation). */
+    public record HintConfig(boolean useHintMul, boolean useHintInverse) {}
+
+    private static final Map<CircuitAPI, HintConfig> CIRCUIT_HINTS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    /** Configure hint usage for a single {@link CircuitAPI} instance without mutating global state. */
+    public static void configureHints(CircuitAPI api, HintConfig config) {
+        Objects.requireNonNull(api, "api");
+        Objects.requireNonNull(config, "config");
+        CIRCUIT_HINTS.put(api, config);
+    }
+
+    /** Effective hint configuration for {@code api} (per-circuit override or global default). */
+    public static HintConfig hintConfig(CircuitAPI api) {
+        HintConfig configured = api != null ? CIRCUIT_HINTS.get(api) : null;
+        return configured != null ? configured : new HintConfig(USE_HINT_MUL, USE_HINT_INVERSE);
+    }
+
     /**
      * ADR-0028 Phase C opt-in: when {@code true}, {@link #mul} routes through the hint-based
      * {@link #mulHint}. <b>AUDIT-GATED — do not enable in production until the hint path's
      * integer-identity argument is externally audited</b> (ADR-0028 pillar 5). Default {@code false}
-     * keeps the deterministic path. Used by tests to measure/validate the wired end-to-end circuit.
+     * keeps the deterministic path.
+     *
+     * @deprecated Prefer per-circuit {@link #configureHints(CircuitAPI, HintConfig)} to avoid
+     *             cross-thread global mutable state.
      */
+    @Deprecated
     public static volatile boolean USE_HINT_MUL = false;
 
     /**
      * ADR-0028: when {@code true} (the <b>default</b>), {@link Ed25519Point#encode}-style inversions
      * route through the hint-based {@link #inverseHint} (~380× cheaper than the Fermat
-     * {@link #inverse}). Enabled by default because the inverse hint is <b>trivially sound and
-     * standard practice</b>: its check {@code a·a⁻¹ == 1} uniquely pins the inverse (adversarially
-     * reviewed, no forgery), and it uses the <b>deterministic</b> mul, so it is independent of the
-     * audit-gated CRT-mul.
+     * {@link #inverse}).
      *
-     * <p>To disable (fully-deterministic Fermat inverse, zero advice in the circuit) set
-     * {@code Fe25519.USE_HINT_INVERSE = false} before building the circuit.</p>
+     * @deprecated Prefer per-circuit {@link #configureHints(CircuitAPI, HintConfig)} to avoid
+     *             cross-thread global mutable state.
      */
+    @Deprecated
     public static volatile boolean USE_HINT_INVERSE = true;
 
-    /** (this * other) mod p, normalized. Routes to {@link #mulHint} when {@link #USE_HINT_MUL}. */
+    /** (this * other) mod p, normalized. Routes to {@link #mulHint} when enabled for this circuit. */
     public Fe25519 mul(Fe25519 other) {
-        return USE_HINT_MUL ? mulHint(other) : mulDeterministic(other);
+        return hintConfig(api).useHintMul() ? mulHint(other) : mulDeterministic(other);
     }
 
     /** Deterministic schoolbook multiply (the frozen reference path; never uses advice). */

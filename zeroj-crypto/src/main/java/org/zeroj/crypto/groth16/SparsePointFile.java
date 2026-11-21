@@ -87,17 +87,69 @@ public final class SparsePointFile {
         final long ptsOff;
 
         public Index(MemorySegment seg) {
+            if (seg == null) throw new NullPointerException("seg");
+            if (seg.byteSize() < 32L) {
+                throw new IllegalArgumentException("ZJSP sparse point file is truncated");
+            }
             this.seg = seg;
             if (seg.get(LE_INT, 0) != MAGIC || seg.get(LE_INT, 4) != VERSION)
                 throw new IllegalArgumentException("not a ZJSP v1 sparse point file");
             this.stride = seg.get(LE_INT, 8);
+            if (this.stride != 96 && this.stride != 192) {
+                throw new IllegalArgumentException("unsupported ZJSP stride: " + this.stride);
+            }
             if (seg.get(LE_INT, 12) != BLOCK)
                 throw new IllegalArgumentException("unsupported block size");
             this.count = seg.get(LE_LONG, 16);
             this.nnz = seg.get(LE_LONG, 24);
-            long words = (count + 63) >>> 6;
-            this.rankOff = 32 + words * 8;
+            if (this.count < 0L || this.count > Integer.MAX_VALUE
+                    || this.nnz < 0L || this.nnz > this.count) {
+                throw new IllegalArgumentException(
+                        "invalid ZJSP counts: count=" + this.count + ", nnz=" + this.nnz);
+            }
+            long words = (count + 63L) >>> 6;
+            this.rankOff = 32L + words * 8L;
             this.ptsOff = pointsOffset(count);
+            long expectedSize;
+            try {
+                expectedSize = Math.addExact(this.ptsOff, Math.multiplyExact(this.nnz, (long) this.stride));
+            } catch (ArithmeticException e) {
+                throw new IllegalArgumentException("ZJSP file size overflow", e);
+            }
+            if (seg.byteSize() != expectedSize) {
+                throw new IllegalArgumentException(
+                        "ZJSP segment size mismatch: expected " + expectedSize + ", got " + seg.byteSize());
+            }
+            validateBitmapAndRanks(words);
+        }
+
+        private void validateBitmapAndRanks(long words) {
+            int remBits = (int) (count & 63L);
+            long running = 0L;
+            long block = 0L;
+            for (long w = 0L; w < words; w++) {
+                if ((w & 7L) == 0L) {
+                    long storedRank = Integer.toUnsignedLong(seg.get(LE_INT, rankOff + block * 4L));
+                    if (storedRank != running) {
+                        throw new IllegalArgumentException(
+                                "ZJSP rank mismatch at block " + block + ": stored " + storedRank
+                                        + " != computed " + running);
+                    }
+                    block++;
+                }
+                long word = seg.get(LE_LONG, 32L + w * 8L);
+                if (w == words - 1L && remBits != 0) {
+                    long trailingMask = ~((1L << remBits) - 1L);
+                    if ((word & trailingMask) != 0L) {
+                        throw new IllegalArgumentException("ZJSP bitmap has set bits beyond logical count");
+                    }
+                }
+                running += Long.bitCount(word);
+            }
+            if (running != nnz) {
+                throw new IllegalArgumentException(
+                        "ZJSP bitmap popcount (" + running + ") does not match header nnz (" + nnz + ")");
+            }
         }
 
         public int count() { return (int) count; }
@@ -126,7 +178,12 @@ public final class SparsePointFile {
     public static final class SparseG1Reader implements PippengerFlatBLS381.G1AffineReader {
         private final Index idx;
 
-        public SparseG1Reader(MemorySegment seg) { this.idx = new Index(seg); }
+        public SparseG1Reader(MemorySegment seg) {
+            this.idx = new Index(seg);
+            if (this.idx.stride != 96) {
+                throw new IllegalArgumentException("Expected G1 sparse stride 96, got " + this.idx.stride);
+            }
+        }
 
         @Override public int count() { return idx.count(); }
 
@@ -144,7 +201,12 @@ public final class SparsePointFile {
     public static final class SparseG2Reader implements G2AffineReader {
         private final Index idx;
 
-        public SparseG2Reader(MemorySegment seg) { this.idx = new Index(seg); }
+        public SparseG2Reader(MemorySegment seg) {
+            this.idx = new Index(seg);
+            if (this.idx.stride != 192) {
+                throw new IllegalArgumentException("Expected G2 sparse stride 192, got " + this.idx.stride);
+            }
+        }
 
         @Override public int count() { return idx.count(); }
 

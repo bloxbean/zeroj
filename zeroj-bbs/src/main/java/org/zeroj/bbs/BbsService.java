@@ -93,13 +93,29 @@ public final class BbsService {
         return new BbsPresentation(proof, header, presentationHeader, revealedMessages);
     }
 
+    /**
+     * Verify a BBS selective-disclosure presentation.
+     *
+     * <p>Throws {@link BbsException} when the presentation's disclosed index structure is
+     * malformed (e.g., duplicate or out-of-range disclosed indices). Returns {@code false}
+     * on ciphersuite mismatch, invalid encodings, or cryptographic verification failure.</p>
+     */
     public boolean verifyPresentation(BbsPublicKey publicKey, BbsPresentation presentation) {
+        Objects.requireNonNull(publicKey, "publicKey required");
         Objects.requireNonNull(presentation, "presentation required");
+        if (publicKey.ciphersuite() != presentation.proof().ciphersuite()
+                || publicKey.ciphersuite() != provider.ciphersuite()) {
+            return false;
+        }
+        int hiddenCount = hiddenMessageCountFromProof(presentation.proof());
+        if (hiddenCount < 0) {
+            return false;
+        }
         List<BbsRevealedMessage> revealed = presentation.revealedMessages().stream()
                 .sorted(Comparator.comparingInt(BbsRevealedMessage::index))
                 .toList();
         int[] indexes = revealed.stream().mapToInt(BbsRevealedMessage::index).toArray();
-        validateDisclosedIndexes(indexes, hiddenMessageCountFromProof(presentation.proof()) + revealed.size());
+        validateDisclosedIndexes(indexes, hiddenCount + revealed.size());
         List<byte[]> messages = revealed.stream().map(BbsRevealedMessage::message).toList();
         return provider.proofVerify(
                 publicKey,
@@ -128,6 +144,10 @@ public final class BbsService {
     private static int hiddenMessageCountFromProof(BbsProof proof) {
         BbsCiphersuite ciphersuite = proof.ciphersuite();
         int scalarBytes = proof.bytes().length - 3 * ciphersuite.g1Bytes();
+        if (scalarBytes < 4 * ciphersuite.scalarBytes()
+                || scalarBytes % ciphersuite.scalarBytes() != 0) {
+            return -1;
+        }
         int scalarCount = scalarBytes / ciphersuite.scalarBytes();
         return scalarCount - 4;
     }

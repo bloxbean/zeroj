@@ -15,6 +15,18 @@ public final class ZkArray<T extends ZkValue> implements ZkValue {
 
     public ZkArray(List<T> values) {
         Objects.requireNonNull(values, "values");
+        Signal firstSignal = null;
+        for (T value : values) {
+            Objects.requireNonNull(value, "values element");
+            for (Signal signal : value.signals()) {
+                Objects.requireNonNull(signal, "signal");
+                if (firstSignal == null) {
+                    firstSignal = signal;
+                } else if (!firstSignal.hasSameBuilder(signal)) {
+                    throw new IllegalArgumentException("Symbolic values belong to different circuit builders");
+                }
+            }
+        }
         this.values = List.copyOf(values);
     }
 

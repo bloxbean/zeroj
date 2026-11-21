@@ -59,6 +59,13 @@ public final class InCircuitPedersenVector {
             throw new IllegalArgumentException("blinding width must be exactly "
                     + InCircuitPedersen.BLINDING_BITS + ", got " + blinding.width() + " (ADR-0051 D2)");
         }
+        int blindingWireId = blinding.source().id();
+        for (int i = 0; i < values.size(); i++) {
+            if (values.get(i).source().id() == blindingWireId) {
+                throw new IllegalArgumentException("wire " + blindingWireId
+                        + " is used as both value[" + i + "] and the blinding (ADR-0051 D2)");
+            }
+        }
         api.requireNotPublicOrConstant(blinding.source());
         api.requireHidingRange(blinding.source(), InCircuitPedersen.BLINDING_BITS);
 

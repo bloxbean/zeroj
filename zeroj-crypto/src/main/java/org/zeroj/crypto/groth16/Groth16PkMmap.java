@@ -80,7 +80,7 @@ public final class Groth16PkMmap implements AutoCloseable {
      * risks OOM / heavy GC. Native (mmap) memory is not counted against {@code -Xmx}.
      */
     public static boolean shouldEngage(Groth16ProvingKeyBLS381 pk, double headroomFraction) {
-        long g1Bytes = (long) (pk.pointsA().length + pk.pointsB1().length
+        long g1Bytes = ((long) pk.pointsA().length + pk.pointsB1().length
                 + pk.pointsH().length + pk.pointsL().length) * Long.BYTES;
         long maxHeap = Runtime.getRuntime().maxMemory();
         return g1Bytes > headroomFraction * maxHeap;

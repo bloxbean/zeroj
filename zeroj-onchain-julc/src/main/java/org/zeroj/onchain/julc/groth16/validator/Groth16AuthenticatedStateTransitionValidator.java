@@ -87,6 +87,7 @@ public class Groth16AuthenticatedStateTransitionValidator {
                 || !hasStateToken(continuingOutput)
                 || !Builtins.equalsData(
                         continuingOutput.value(), ownInput.resolved().value())
+                || !continuingOutput.referenceScript().isEmpty()
                 || !hasInlineStateDatum(
                         continuingOutput,
                         transition.newRoot(),

@@ -88,6 +88,7 @@ public final class Groth16SetupBLS381 {
     private Groth16SetupBLS381() {}
 
     private static final BigInteger FR = MontFr381.modulus();
+    public static final int MAX_CONSTRAINTS = 1 << 29;
 
     /**
      * Generate a Groth16 proving key from R1CS constraints and known tau.
@@ -126,6 +127,10 @@ public final class Groth16SetupBLS381 {
                 + "Use snarkjs multi-party ceremony for production.");
 
         int nConstraints = constraints.size();
+        if (nConstraints > MAX_CONSTRAINTS) {
+            throw new IllegalArgumentException("nConstraints (" + nConstraints
+                    + ") exceeds maximum supported Groth16 setup size (" + MAX_CONSTRAINTS + ")");
+        }
 
         // Domain size: next power of 2 >= nConstraints
         int domainSize = Integer.highestOneBit(nConstraints);
@@ -133,14 +138,21 @@ public final class Groth16SetupBLS381 {
         if (domainSize < 4) domainSize = 4;
         int logN = Integer.numberOfTrailingZeros(domainSize);
 
-        BigInteger gammaInv = gamma.modInverse(FR);
-        BigInteger deltaInv = delta.modInverse(FR);
+        final BigInteger tauVal = requireValidSetupScalar(tau, "tau");
+        final BigInteger alphaVal = requireValidSetupScalar(alpha, "alpha");
+        final BigInteger betaVal = requireValidSetupScalar(beta, "beta");
+        final BigInteger gammaVal = requireValidSetupScalar(gamma, "gamma");
+        final BigInteger deltaVal = requireValidSetupScalar(delta, "delta");
+        requireTauOutsideDomain(tauVal, domainSize);
+
+        BigInteger gammaInv = gammaVal.modInverse(FR);
+        BigInteger deltaInv = deltaVal.modInverse(FR);
 
         // Compute omega (primitive domainSize-th root of unity)
         MontFr381 omega = FieldFFTBLS381.rootOfUnity(logN);
 
         // Compute Lagrange basis evaluations at tau: L_i(tau) = (tau^N - 1) / (N * (tau - omega^i))
-        BigInteger tauN = tau.modPow(BigInteger.valueOf(domainSize), FR);
+        BigInteger tauN = tauVal.modPow(BigInteger.valueOf(domainSize), FR);
         BigInteger zh = tauN.subtract(BigInteger.ONE).mod(FR); // tau^N - 1
         BigInteger nInv = BigInteger.valueOf(domainSize).modInverse(FR);
 
@@ -155,7 +167,7 @@ public final class Groth16SetupBLS381 {
         final BigInteger[] lagrange = new BigInteger[domainSize];
         java.util.stream.IntStream.range(0, domainSize).parallel().forEach(i -> {
             // L_i(tau) = omega^i * (tau^N - 1) / (N * (tau - omega^i))
-            BigInteger diff = tau.subtract(omegaPows[i]).mod(FR);
+            BigInteger diff = tauVal.subtract(omegaPows[i]).mod(FR);
             lagrange[i] = (diff.signum() == 0) ? BigInteger.ONE
                     : omegaPows[i].multiply(zhNInv).mod(FR).multiply(diff.modInverse(FR)).mod(FR);
         });
@@ -180,17 +192,17 @@ public final class Groth16SetupBLS381 {
         // ADR-0045 S2: the public-query scalars (beta*u_s + alpha*v_s + w_s)/gamma are checked for
         // zero here, before any point is generated, so a key the verifiers would reject is never
         // built (and a large relation fails in seconds rather than after the MSM work).
-        BigInteger[] icScalars = publicQueryScalars(us, vs, ws, numPublic, alpha, beta, gammaInv);
+        BigInteger[] icScalars = publicQueryScalars(us, vs, ws, numPublic, alphaVal, betaVal, gammaInv);
 
         // Compute group elements
         var g1 = JacobianG1BLS381.GENERATOR;
         var g2 = JacobianG2BLS381.GENERATOR;
 
-        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alpha);
-        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(beta);
-        AffineG2 betaG2 = g2.scalarMul(beta).toAffine();
-        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
-        AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
+        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alphaVal);
+        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(betaVal);
+        AffineG2 betaG2 = g2.scalarMul(betaVal).toAffine();
+        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(deltaVal);
+        AffineG2 deltaG2 = g2.scalarMul(deltaVal).toAffine();
 
         // ADR-0029 M5a: the per-wire scalar-muls are independent (each writes its own slot), so run
         // them in parallel across cores. This — not blst — is the setup-time lever: blst's speedup is
@@ -218,7 +230,7 @@ public final class Groth16SetupBLS381 {
         long[] pointsL = new long[Math.max(0, numPrivate) * Groth16ProvingKeyBLS381.G1_STRIDE];
         java.util.stream.IntStream.range(0, numPrivate).parallel().forEach(j -> {
             int s = numPublic + 1 + j;
-            BigInteger lVal = beta.multiply(us[s]).add(alpha.multiply(vs[s])).add(ws[s])
+            BigInteger lVal = betaVal.multiply(us[s]).add(alphaVal.multiply(vs[s])).add(ws[s])
                     .multiply(deltaInv).mod(FR);
             Groth16ProvingKeyBLS381.writeG1(pointsL, j,
                     lVal.signum() == 0 ? AffineG1.INFINITY : FixedBaseG1BLS381.mulAffine(lVal));
@@ -229,7 +241,7 @@ public final class Groth16SetupBLS381 {
         int domainSize2 = 2 * domainSize;
         MontFr381 omega2 = FieldFFTBLS381.rootOfUnity(logN + 1); // primitive 2N-th root
         BigInteger omega2Bi = omega2.toBigInteger();
-        BigInteger tauN2 = tau.modPow(BigInteger.valueOf(domainSize2), FR);
+        BigInteger tauN2 = tauVal.modPow(BigInteger.valueOf(domainSize2), FR);
         BigInteger zh2 = tauN2.subtract(BigInteger.ONE).mod(FR);
         BigInteger nInv2 = BigInteger.valueOf(domainSize2).modInverse(FR);
 
@@ -239,7 +251,7 @@ public final class Groth16SetupBLS381 {
             int lagIdx = 2 * i + 1; // odd index
             // omega2^lagIdx
             BigInteger omegaPow = omega2Bi.modPow(BigInteger.valueOf(lagIdx), FR);
-            BigInteger diff = tau.subtract(omegaPow).mod(FR);
+            BigInteger diff = tauVal.subtract(omegaPow).mod(FR);
             BigInteger hLagrange;
             if (diff.signum() == 0) {
                 hLagrange = BigInteger.ONE;
@@ -254,7 +266,7 @@ public final class Groth16SetupBLS381 {
         });
 
         // Verification key components: gamma_G2 and IC points
-        AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
+        AffineG2 gammaG2 = g2.scalarMul(gammaVal).toAffine();
 
         // IC[s] = (beta*u_s + alpha*v_s + w_s) / gamma * G1  for public wires s = 0..numPublic
         // (scalars pre-checked nonzero by publicQueryScalars — never AffineG1.INFINITY, ADR-0045)
@@ -300,6 +312,39 @@ public final class Groth16SetupBLS381 {
                 + " (of " + numPublic + ") is zero, so IC[" + s + "] would be the point at infinity, which every"
                 + " verifier profile rejects (ADR-0045). The relation binds the wire; the sampled setup"
                 + " randomness cancelled its combination (probability ~N/r). Re-run setup with fresh randomness.");
+    }
+
+    /**
+     * Validate Groth16 setup constraint count and {@code tau} before creating directories or
+     * allocating key buffers.
+     */
+    public static void validateSetupParameters(int nConstraints, BigInteger tau) {
+        if (nConstraints < 1 || nConstraints > MAX_CONSTRAINTS) {
+            throw new IllegalArgumentException("nConstraints (" + nConstraints
+                    + ") must be in [1, " + MAX_CONSTRAINTS + "]");
+        }
+        int domainSize = Integer.highestOneBit(nConstraints);
+        if (domainSize < nConstraints) domainSize <<= 1;
+        if (domainSize < 4) domainSize = 4;
+        BigInteger tauVal = requireValidSetupScalar(tau, "tau");
+        requireTauOutsideDomain(tauVal, domainSize);
+    }
+
+    private static BigInteger requireValidSetupScalar(BigInteger value, String name) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must not be null");
+        }
+        BigInteger reduced = value.mod(FR);
+        if (reduced.signum() == 0) {
+            throw new IllegalArgumentException(name + " must be non-zero modulo Fr");
+        }
+        return reduced;
+    }
+
+    private static void requireTauOutsideDomain(BigInteger tau, int domainSize) {
+        if (tau.modPow(BigInteger.valueOf(2L * domainSize), FR).equals(BigInteger.ONE)) {
+            throw new IllegalArgumentException("tau must not be a 2N-th root of unity for domain size " + domainSize);
+        }
     }
 
     /**
@@ -371,22 +416,33 @@ public final class Groth16SetupBLS381 {
                 + "Use snarkjs multi-party ceremony for production.");
 
         int nConstraints = flat.rows();
+        if (nConstraints > MAX_CONSTRAINTS) {
+            throw new IllegalArgumentException("nConstraints (" + nConstraints
+                    + ") exceeds maximum supported Groth16 setup size (" + MAX_CONSTRAINTS + ")");
+        }
         int domainSize = Integer.highestOneBit(nConstraints);
         if (domainSize < nConstraints) domainSize <<= 1;
         if (domainSize < 4) domainSize = 4;
         int logN = Integer.numberOfTrailingZeros(domainSize);
         final int domain = domainSize;
 
-        BigInteger gammaInv = gamma.modInverse(FR);
-        BigInteger deltaInv = delta.modInverse(FR);
+        final BigInteger tauVal = requireValidSetupScalar(tau, "tau");
+        final BigInteger alphaVal = requireValidSetupScalar(alpha, "alpha");
+        final BigInteger betaVal = requireValidSetupScalar(beta, "beta");
+        final BigInteger gammaVal = requireValidSetupScalar(gamma, "gamma");
+        final BigInteger deltaVal = requireValidSetupScalar(delta, "delta");
+        requireTauOutsideDomain(tauVal, domain);
+
+        BigInteger gammaInv = gammaVal.modInverse(FR);
+        BigInteger deltaInv = deltaVal.modInverse(FR);
 
         // ---- Lagrange basis L_i(tau) as flat Montgomery limbs; omega powers are walked
         //      per-chunk (omega^lo by modPow, then one multiply per step) — no boxed arrays.
         BigInteger omegaBi = FieldFFTBLS381.rootOfUnity(logN).toBigInteger();
-        BigInteger tauN = tau.modPow(BigInteger.valueOf(domain), FR);
+        BigInteger tauN = tauVal.modPow(BigInteger.valueOf(domain), FR);
         BigInteger zhNInv = tauN.subtract(BigInteger.ONE).mod(FR)
                 .multiply(BigInteger.valueOf(domain).modInverse(FR)).mod(FR);
-        long[] lagMont = computeLagrangeMont(domain, tau, omegaBi, zhNInv);
+        long[] lagMont = computeLagrangeMont(domain, tauVal, omegaBi, zhNInv);
 
         // ---- QAP evaluations u_s/v_s/w_s(tau) as flat Montgomery limbs (ADR-0035 M2):
         //      one pass over the CSR rows, dictionary Montgomery-converted once.
@@ -426,15 +482,15 @@ public final class Groth16SetupBLS381 {
 
         // ---- single points + VK bits (tiny)
         var g2 = JacobianG2BLS381.GENERATOR;
-        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alpha);
-        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(beta);
-        AffineG2 betaG2 = g2.scalarMul(beta).toAffine();
-        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(delta);
-        AffineG2 deltaG2 = g2.scalarMul(delta).toAffine();
-        AffineG2 gammaG2 = g2.scalarMul(gamma).toAffine();
+        AffineG1 alphaG1 = FixedBaseG1BLS381.mulAffine(alphaVal);
+        AffineG1 betaG1 = FixedBaseG1BLS381.mulAffine(betaVal);
+        AffineG2 betaG2 = g2.scalarMul(betaVal).toAffine();
+        AffineG1 deltaG1 = FixedBaseG1BLS381.mulAffine(deltaVal);
+        AffineG2 deltaG2 = g2.scalarMul(deltaVal).toAffine();
+        AffineG2 gammaG2 = g2.scalarMul(gammaVal).toAffine();
 
-        long[] alphaMont = MontFr381.fromBigInteger(alpha).toLimbs();
-        long[] betaMont = MontFr381.fromBigInteger(beta).toLimbs();
+        long[] alphaMont = MontFr381.fromBigInteger(alphaVal).toLimbs();
+        long[] betaMont = MontFr381.fromBigInteger(betaVal).toLimbs();
         long[] deltaInvMont = MontFr381.fromBigInteger(deltaInv).toLimbs();
         long[] gammaInvMont = MontFr381.fromBigInteger(gammaInv).toLimbs();
 
@@ -534,7 +590,7 @@ public final class Groth16SetupBLS381 {
             MontFr381 omega2 = FieldFFTBLS381.rootOfUnity(logN + 1);
             BigInteger omega2Bi = omega2.toBigInteger();
             BigInteger omega2Sq = omega2Bi.multiply(omega2Bi).mod(FR);
-            BigInteger tauN2 = tau.modPow(BigInteger.valueOf(2L * domain), FR);
+            BigInteger tauN2 = tauVal.modPow(BigInteger.valueOf(2L * domain), FR);
             BigInteger zh2NInv2 = tauN2.subtract(BigInteger.ONE).mod(FR)
                     .multiply(BigInteger.valueOf(2L * domain).modInverse(FR)).mod(FR);
             // H is dense by nature (its Lagrange values are never zero for a random tau), so its
@@ -572,7 +628,7 @@ public final class Groth16SetupBLS381 {
                     boolean zeroDiff = false;
                     for (int k = 0; k < m; k++) {
                         omPows[k] = omPow;
-                        diffs[k] = tau.subtract(omPow).mod(FR);
+                        diffs[k] = tauVal.subtract(omPow).mod(FR);
                         if (diffs[k].signum() == 0) zeroDiff = true;
                         omPow = omPow.multiply(omega2Sq).mod(FR);
                     }

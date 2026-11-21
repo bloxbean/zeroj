@@ -126,15 +126,15 @@ public final class Halo2Codec {
     }
 
     private static CurveId detectCurve(JsonNode root) {
-        if (root.has("curve")) {
-            String curve = root.get("curve").asText();
-            try {
-                return CurveId.fromValue(curve);
-            } catch (IllegalArgumentException e) {
-                // Fall through to default
-            }
+        if (root == null || !root.has("curve") || !root.get("curve").isTextual()) {
+            throw new CodecException("Missing required 'curve' field in Halo2 result JSON");
         }
-        return CurveId.PALLAS; // default for Halo2 IPA
+        String curve = root.get("curve").asText();
+        try {
+            return CurveId.fromValue(curve);
+        } catch (IllegalArgumentException e) {
+            throw new CodecException("Unsupported curve in Halo2 result JSON: " + curve, e);
+        }
     }
 
     private static PublicInputs parsePublicInputs(JsonNode root) {

@@ -65,10 +65,16 @@ public record PlonKConstraintSystem(
 
         // Compute virtual wires from additions (in order)
         for (var add : additions) {
+            if (add.wireA() < 0 || add.wireA() >= numWires
+                    || add.wireB() < 0 || add.wireB() >= numWires
+                    || add.outputWire() < 0 || add.outputWire() >= numWires) {
+                throw new IllegalArgumentException("PlonK addition references wire index outside [0, " + numWires + ")");
+            }
             BigInteger a = extended[add.wireA()];
             BigInteger b = extended[add.wireB()];
-            if (a == null) a = BigInteger.ZERO;
-            if (b == null) b = BigInteger.ZERO;
+            if (a == null || b == null) {
+                throw new IllegalArgumentException("PlonK witness is missing required wire value for virtual addition");
+            }
             extended[add.outputWire()] = add.factorA().multiply(a).add(add.factorB().multiply(b)).mod(p);
         }
         return extended;

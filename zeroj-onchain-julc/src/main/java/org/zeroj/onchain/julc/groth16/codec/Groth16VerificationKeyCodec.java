@@ -1,5 +1,9 @@
 package org.zeroj.onchain.julc.groth16.codec;
 
+import org.zeroj.bls12381.Bls12381Codecs;
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.G2Point;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -27,25 +31,51 @@ public final class Groth16VerificationKeyCodec {
     private Groth16VerificationKeyCodec() {}
 
     public static byte[] encode(SnarkjsToCardano.VkCompressed key) {
-        Objects.requireNonNull(key, "key");
-        requireLength("alpha", key.alpha(), G1_BYTES);
-        requireLength("beta", key.beta(), G2_BYTES);
-        requireLength("gamma", key.gamma(), G2_BYTES);
-        requireLength("delta", key.delta(), G2_BYTES);
-        List<byte[]> ic = List.copyOf(Objects.requireNonNull(key.ic(), "ic"));
-        if (ic.isEmpty() || ic.size() > MAX_IC_POINTS) {
-            throw new IllegalArgumentException("IC count must be in [1, " + MAX_IC_POINTS + "]");
-        }
-        for (int index = 0; index < ic.size(); index++) {
-            requireLength("ic[" + index + "]", ic.get(index), G1_BYTES);
-        }
+        SnarkjsToCardano.VkCompressed validated = snapshotAndValidate(key);
+        List<byte[]> ic = validated.ic();
         int size = Math.toIntExact(Math.addExact(
                 FIXED_BYTES, Math.multiplyExact((long) ic.size(), G1_BYTES)));
         ByteBuffer output = ByteBuffer.allocate(size).order(ByteOrder.BIG_ENDIAN);
         output.put(MAGIC).putInt(ic.size());
-        output.put(key.alpha()).put(key.beta()).put(key.gamma()).put(key.delta());
+        output.put(validated.alpha()).put(validated.beta()).put(validated.gamma()).put(validated.delta());
         for (byte[] point : ic) output.put(point);
         return output.array();
+    }
+
+    /**
+     * Validate that every point in {@code key} has canonical compressed length, lies on BLS12-381
+     * G1/G2, is in the prime-order subgroup, and is not the point at infinity.
+     */
+    public static void validate(SnarkjsToCardano.VkCompressed key) {
+        snapshotAndValidate(key);
+    }
+
+    private static SnarkjsToCardano.VkCompressed snapshotAndValidate(SnarkjsToCardano.VkCompressed key) {
+        Objects.requireNonNull(key, "key");
+        List<byte[]> rawIc = List.copyOf(Objects.requireNonNull(key.ic(), "ic"));
+        if (rawIc.isEmpty() || rawIc.size() > MAX_IC_POINTS) {
+            throw new IllegalArgumentException("IC count must be in [1, " + MAX_IC_POINTS + "]");
+        }
+        byte[] alpha = snapshot("alpha", key.alpha(), G1_BYTES);
+        byte[] beta = snapshot("beta", key.beta(), G2_BYTES);
+        byte[] gamma = snapshot("gamma", key.gamma(), G2_BYTES);
+        byte[] delta = snapshot("delta", key.delta(), G2_BYTES);
+        requireNonInfinityG1("alpha", alpha);
+        requireNonInfinityG2("beta", beta);
+        requireNonInfinityG2("gamma", gamma);
+        requireNonInfinityG2("delta", delta);
+        List<byte[]> ic = new ArrayList<>(rawIc.size());
+        for (int index = 0; index < rawIc.size(); index++) {
+            byte[] point = snapshot("ic[" + index + "]", rawIc.get(index), G1_BYTES);
+            requireNonInfinityG1("ic[" + index + "]", point);
+            ic.add(point);
+        }
+        return new SnarkjsToCardano.VkCompressed(alpha, beta, gamma, delta, List.copyOf(ic));
+    }
+
+    private static byte[] snapshot(String name, byte[] value, int expected) {
+        requireLength(name, value, expected);
+        return value.clone();
     }
 
     public static SnarkjsToCardano.VkCompressed decode(byte[] encoded) {
@@ -66,14 +96,32 @@ public final class Groth16VerificationKeyCodec {
         if (expected != encoded.length) {
             throw new IllegalArgumentException("Groth16 verification-key length does not match IC count");
         }
-        byte[] alpha = take(input, G1_BYTES);
-        byte[] beta = take(input, G2_BYTES);
-        byte[] gamma = take(input, G2_BYTES);
-        byte[] delta = take(input, G2_BYTES);
+        byte[] alpha = requireNonInfinityG1("alpha", take(input, G1_BYTES));
+        byte[] beta = requireNonInfinityG2("beta", take(input, G2_BYTES));
+        byte[] gamma = requireNonInfinityG2("gamma", take(input, G2_BYTES));
+        byte[] delta = requireNonInfinityG2("delta", take(input, G2_BYTES));
         List<byte[]> ic = new ArrayList<>(icCount);
-        for (int index = 0; index < icCount; index++) ic.add(take(input, G1_BYTES));
+        for (int index = 0; index < icCount; index++) {
+            ic.add(requireNonInfinityG1("ic[" + index + "]", take(input, G1_BYTES)));
+        }
         if (input.hasRemaining()) throw new IllegalArgumentException("trailing verification-key bytes");
         return new SnarkjsToCardano.VkCompressed(alpha, beta, gamma, delta, List.copyOf(ic));
+    }
+
+    private static byte[] requireNonInfinityG1(String name, byte[] bytes) {
+        G1Point point = Bls12381Codecs.g1FromCompressed(bytes);
+        if (point.isInfinity()) {
+            throw new IllegalArgumentException("Groth16 verification key " + name + " must not be infinity");
+        }
+        return bytes;
+    }
+
+    private static byte[] requireNonInfinityG2(String name, byte[] bytes) {
+        G2Point point = Bls12381Codecs.g2FromCompressed(bytes);
+        if (point.isInfinity()) {
+            throw new IllegalArgumentException("Groth16 verification key " + name + " must not be infinity");
+        }
+        return bytes;
     }
 
     private static void requireLength(String name, byte[] value, int expected) {

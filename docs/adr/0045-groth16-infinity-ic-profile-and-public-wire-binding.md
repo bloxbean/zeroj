@@ -87,9 +87,9 @@ therefore already consistent with the ADR-0025 profile. Only the native setup di
 - **Untrusted shape at setup time:** the relation (`constraints`, `numWires`, `numPublic`) is
   caller-supplied. As in issue #46, the setup must not weaken or silently reshape a relation;
   it must reject one it cannot produce a profile-conforming key for.
-- **Untrusted at import time:** a `.zkey` file. `ZkeyPkStoreImporter` currently accepts an
-  infinity `IC` entry (`isOnCurve() || isInfinity()`); after this ADR it rejects it, matching
-  the verifier profile at the import boundary.
+- **Untrusted at import/load time:** a `.zkey` file or cached/stored key bundle.
+  `ZkeyPkStoreImporter`, `Groth16SetupCache`, and `Groth16PkStore.load` all enforce the
+  verifier profile and reject any infinity `IC` entry at the import/load boundary.
 - **Secret:** `tau, alpha, beta, gamma, delta` in the dev setup (dev/test only, behind the
   ADR-0025 insecure-setup opt-in) and the prover blinders `r, s`. The new checks read only
   relation shape and the derived `IC` scalars; they do not introduce secret-dependent control

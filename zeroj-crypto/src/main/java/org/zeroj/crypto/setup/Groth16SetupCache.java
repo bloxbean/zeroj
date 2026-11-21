@@ -183,6 +183,6 @@ public final class Groth16SetupCache {
         SetupCacheIO.validateG2Array((org.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2[]) pointsB2, true, "Groth16 pointsB2");
         SetupCacheIO.validateG1Array((org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1[]) pointsH, true, "Groth16 pointsH");
         SetupCacheIO.validateG1Array((org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1[]) pointsL, true, "Groth16 pointsL");
-        SetupCacheIO.validateG1Array((org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1[]) ic, true, "Groth16 IC");
+        SetupCacheIO.validateG1Array((org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1[]) ic, false, "Groth16 IC");
     }
 }

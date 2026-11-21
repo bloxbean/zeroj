@@ -18,9 +18,17 @@ public final class ZkBytes implements ZkValue {
         if (bytes.isEmpty()) {
             throw new IllegalArgumentException("bytes must not be empty");
         }
+        Signal firstSignal = null;
         for (ZkUInt value : bytes) {
+            Objects.requireNonNull(value, "bytes element");
             if (value.bits() != 8) {
                 throw new IllegalArgumentException("bytes must contain only 8-bit ZkUInt values");
+            }
+            Signal current = value.signal();
+            if (firstSignal == null) {
+                firstSignal = current;
+            } else if (!firstSignal.hasSameBuilder(current)) {
+                throw new IllegalArgumentException("Symbolic values belong to different circuit builders");
             }
         }
         this.bytes = List.copyOf(bytes);
@@ -70,7 +78,10 @@ public final class ZkBytes implements ZkValue {
     }
 
     public void assertEqual(ZkBytes other) {
-        isEqual(other).assertTrue();
+        requireSameSize(other);
+        for (int i = 0; i < bytes.size(); i++) {
+            bytes.get(i).assertEqual(other.bytes.get(i));
+        }
     }
 
     @Override

@@ -1,7 +1,11 @@
 package org.zeroj.crypto.groth16;
 
+import org.zeroj.bls12381.ec.G1Point;
+import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
+import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
+import org.zeroj.bls12381.field.Fp;
 import org.zeroj.bls12381.field.MontFp2_381;
 import org.zeroj.bls12381.field.MontFp381;
 import org.zeroj.crypto.msm.G2AffineReader;
@@ -176,9 +180,15 @@ public final class Groth16PkStore {
 
         AffineG1 alphaG1, betaG1, deltaG1; AffineG2 betaG2, deltaG2, gammaG2; AffineG1[] ic = new AffineG1[numIc];
         try (var aux = dis(dir.resolve("aux.bin"))) {
-            alphaG1 = getG1(aux); betaG1 = getG1(aux); deltaG1 = getG1(aux);
-            betaG2 = getG2(aux); deltaG2 = getG2(aux); gammaG2 = getG2(aux);
-            for (int i = 0; i < numIc; i++) ic[i] = getG1(aux);
+            alphaG1 = requireNonInfinityG1(getG1(aux), "alphaG1");
+            betaG1 = requireNonInfinityG1(getG1(aux), "betaG1");
+            deltaG1 = requireNonInfinityG1(getG1(aux), "deltaG1");
+            betaG2 = requireNonInfinityG2(getG2(aux), "betaG2");
+            deltaG2 = requireNonInfinityG2(getG2(aux), "deltaG2");
+            gammaG2 = requireNonInfinityG2(getG2(aux), "gammaG2");
+            for (int i = 0; i < numIc; i++) {
+                ic[i] = requireNonInfinityG1(getG1(aux), "IC[" + i + "]");
+            }
         }
 
         Arena arena = Arena.ofShared();
@@ -289,10 +299,34 @@ public final class Groth16PkStore {
         o.write(b);
     }
 
+    private static AffineG1 requireNonInfinityG1(AffineG1 p, String label) throws IOException {
+        if (p == null || p.isInfinity() || !p.isOnCurve()) {
+            throw new IOException("Groth16 " + label + " must be a non-infinity point on BLS12-381 G1");
+        }
+        if (!JacobianG1BLS381.fromAffine(p.x(), p.y()).scalarMul(G1Point.R).isInfinity()) {
+            throw new IOException("Groth16 " + label + " is not in the BLS12-381 G1 prime-order subgroup");
+        }
+        return p;
+    }
+
+    private static AffineG2 requireNonInfinityG2(AffineG2 p, String label) throws IOException {
+        if (p == null || p.isInfinity() || !p.isOnCurve()) {
+            throw new IOException("Groth16 " + label + " must be a non-infinity point on BLS12-381 G2");
+        }
+        if (!JacobianG2BLS381.fromAffine(p.x(), p.y()).scalarMul(G1Point.R).isInfinity()) {
+            throw new IOException("Groth16 " + label + " is not in the BLS12-381 G2 prime-order subgroup");
+        }
+        return p;
+    }
+
     private static MontFp381 getFp(DataInputStream in) throws IOException {
         byte[] b = new byte[FP_BYTES];
         in.readFully(b);
-        return MontFp381.fromBigInteger(new BigInteger(1, b));
+        BigInteger v = new BigInteger(1, b);
+        if (v.compareTo(Fp.P) >= 0) {
+            throw new IOException("Non-canonical BLS12-381 Fp coordinate in Groth16 aux.bin");
+        }
+        return MontFp381.fromBigInteger(v);
     }
 
     private static void putG1(DataOutputStream o, AffineG1 p) throws IOException { putFp(o, p.x()); putFp(o, p.y()); }

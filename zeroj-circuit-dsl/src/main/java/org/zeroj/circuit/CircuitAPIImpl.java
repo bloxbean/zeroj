@@ -222,10 +222,71 @@ class CircuitAPIImpl implements CircuitAPI {
     }
 
     @Override
-    public Variable[] hintN(Gate.HintKind kind, java.math.BigInteger[] params, int numOutputs, Variable[] inputs) {
+    public Variable[] hintN(Gate.HintKind kind, BigInteger[] params, int numOutputs, Variable[] inputs) {
         // Hoist the lifecycle guard: with zero outputs newIntermediate() is never called, so
         // relying on its guard would let a post-build HintN mutate the snapshotted gate list.
         requireNotFrozen();
+        Objects.requireNonNull(kind, "kind");
+        Objects.requireNonNull(params, "params");
+        Objects.requireNonNull(inputs, "inputs");
+        if (numOutputs < 0) {
+            throw new IllegalArgumentException("numOutputs must be non-negative");
+        }
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] == null) {
+                throw new IllegalArgumentException("hintN params[" + i + "] must not be null");
+            }
+        }
+        for (int i = 0; i < inputs.length; i++) {
+            Variable v = inputs[i];
+            if (v == null || v.id() < 0 || v.id() >= nextId) {
+                throw new IllegalArgumentException("hintN inputs[" + i + "] is not a wire of this circuit");
+            }
+        }
+        switch (kind) {
+            case MUL_MOD_REDUCE -> {
+                if (params.length != 4) {
+                    throw new IllegalArgumentException("MUL_MOD_REDUCE requires 4 params [modulus, radixBits, numLimbsAB, numLimbsQ]");
+                }
+                int radixBits;
+                int nAB;
+                int nQ;
+                try {
+                    radixBits = params[1].intValueExact();
+                    nAB = params[2].intValueExact();
+                    nQ = params[3].intValueExact();
+                } catch (ArithmeticException e) {
+                    throw new IllegalArgumentException("MUL_MOD_REDUCE limb params must fit in a 32-bit int", e);
+                }
+                if (params[0].signum() <= 0 || radixBits <= 0 || radixBits > MAX_SAFE_BITS || nAB <= 0 || nQ <= 0) {
+                    throw new IllegalArgumentException(
+                            "MUL_MOD_REDUCE params must be positive and radixBits <= " + MAX_SAFE_BITS);
+                }
+                if (inputs.length != 2 * nAB || numOutputs != nQ + nAB) {
+                    throw new IllegalArgumentException("MUL_MOD_REDUCE input/output counts do not match limb params");
+                }
+            }
+            case INV_MOD -> {
+                if (params.length != 3) {
+                    throw new IllegalArgumentException("INV_MOD requires 3 params [modulus, radixBits, numLimbs]");
+                }
+                int radixBits;
+                int numLimbs;
+                try {
+                    radixBits = params[1].intValueExact();
+                    numLimbs = params[2].intValueExact();
+                } catch (ArithmeticException e) {
+                    throw new IllegalArgumentException("INV_MOD limb params must fit in a 32-bit int", e);
+                }
+                if (params[0].signum() <= 0 || radixBits <= 0 || radixBits > MAX_SAFE_BITS || numLimbs <= 0) {
+                    throw new IllegalArgumentException(
+                            "INV_MOD params must be positive and radixBits <= " + MAX_SAFE_BITS);
+                }
+                if (inputs.length != numLimbs || numOutputs != numLimbs) {
+                    throw new IllegalArgumentException("INV_MOD input/output counts do not match numLimbs");
+                }
+            }
+        }
         var outputs = new Variable[numOutputs];
         for (int i = 0; i < numOutputs; i++) outputs[i] = newIntermediate();
         gates.add(new Gate.HintN(outputs, kind, inputs.clone(), params.clone()));

@@ -6,6 +6,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.math.BigInteger;
+import java.util.Arrays;
 
 /**
  * Batched BLS12-381 G1 multi-scalar multiplication via blst's native Pippenger
@@ -61,34 +62,42 @@ public final class BlstG1Msm {
     public static byte[] singleMul(byte[] uncompressedPoint, BigInteger scalar) {
         BlstMsmInputs.requireLength(uncompressedPoint, 96, 0);
         byte[] le = new byte[32];
-        BlstMsmInputs.scalarLe(scalar, le);
-        return singleMulCore(uncompressedPoint, le, false);
+        try {
+            BlstMsmInputs.scalarLe(scalar, le);
+            return singleMulCore(uncompressedPoint, le, false);
+        } finally {
+            Arrays.fill(le, (byte) 0);
+        }
     }
 
     private static byte[] singleMulCore(byte[] encoded, byte[] le, boolean validateBase) {
         BlstMsmInputs.requireUncompressedFlags(encoded, 0);
         try (Arena a = Arena.ofConfined()) {
-            MemorySegment in = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            MemorySegment.copy(encoded, 0, in, BYTE, 0, 96);
-            MemorySegment aff = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            int err = (int) DESERIALIZE.invoke(aff, in);
-            if (err != 0) throw new IllegalArgumentException("deserialize err=" + err);
-            if (validateBase && !(boolean) IN_G1.invoke(aff)) {
-                throw new IllegalArgumentException("Point 0 is not in the G1 subgroup");
-            }
-            MemorySegment jac = a.allocate(P1, LIMB_ALIGN);
-            FROM_AFFINE.invoke(jac, aff);
             MemorySegment sc = a.allocate(SCALAR);
-            MemorySegment.copy(le, 0, sc, BYTE, 0, 32);
-            MemorySegment ret = a.allocate(P1, LIMB_ALIGN);
-            P1_MULT.invoke(ret, jac, sc, NBITS);
-            MemorySegment retAff = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            TO_AFFINE.invoke(retAff, ret);
-            MemorySegment out = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            AFFINE_SERIALIZE.invoke(out, retAff);
-            byte[] r = new byte[96];
-            MemorySegment.copy(out, BYTE, 0, r, 0, 96);
-            return r;
+            try {
+                MemorySegment in = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                MemorySegment.copy(encoded, 0, in, BYTE, 0, 96);
+                MemorySegment aff = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                int err = (int) DESERIALIZE.invoke(aff, in);
+                if (err != 0) throw new IllegalArgumentException("deserialize err=" + err);
+                if (validateBase && !(boolean) IN_G1.invoke(aff)) {
+                    throw new IllegalArgumentException("Point 0 is not in the G1 subgroup");
+                }
+                MemorySegment jac = a.allocate(P1, LIMB_ALIGN);
+                FROM_AFFINE.invoke(jac, aff);
+                MemorySegment.copy(le, 0, sc, BYTE, 0, 32);
+                MemorySegment ret = a.allocate(P1, LIMB_ALIGN);
+                P1_MULT.invoke(ret, jac, sc, NBITS);
+                MemorySegment retAff = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                TO_AFFINE.invoke(retAff, ret);
+                MemorySegment out = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                AFFINE_SERIALIZE.invoke(out, retAff);
+                byte[] r = new byte[96];
+                MemorySegment.copy(out, BYTE, 0, r, 0, 96);
+                return r;
+            } finally {
+                sc.fill((byte) 0);
+            }
         } catch (RuntimeException e) { throw e; } catch (Throwable t) { throw new RuntimeException(t); }
     }
 
@@ -178,60 +187,72 @@ public final class BlstG1Msm {
             // base with Z = 1, so an identity base (all-zero affine) corrupts the whole result.
             MemorySegment pts = a.allocate(P1_AFFINE * n, LIMB_ALIGN);
             MemorySegment scal = a.allocate(SCALAR * n);
-            MemorySegment inBuf = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            int m = 0;
-            for (int i = 0; i < n; i++) {
-                points.encode(i, buf);
-                scalars.encode(i, sbuf);
-                BlstMsmInputs.requireUncompressedFlags(buf, i);
-                BlstMsmInputs.requireCanonicalScalar(sbuf, i);
-                MemorySegment.copy(buf, 0, inBuf, BYTE, 0, 96);
-                MemorySegment slot = pts.asSlice(m * P1_AFFINE, P1_AFFINE);
-                int err = (int) DESERIALIZE.invoke(slot, inBuf);
-                if (err != 0) throw new IllegalArgumentException("blst_p1_deserialize failed at " + i + " (err=" + err + ")");
-                if ((buf[0] & 0x40) != 0) continue; // a well-formed identity encoding
-                if (validateBases && !(boolean) IN_G1.invoke(slot)) {
-                    throw new IllegalArgumentException("Point " + i + " is not in the G1 subgroup");
+            MemorySegment scratch = null;
+            try {
+                MemorySegment inBuf = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                int m = 0;
+                for (int i = 0; i < n; i++) {
+                    points.encode(i, buf);
+                    scalars.encode(i, sbuf);
+                    BlstMsmInputs.requireUncompressedFlags(buf, i);
+                    BlstMsmInputs.requireCanonicalScalar(sbuf, i);
+                    MemorySegment.copy(buf, 0, inBuf, BYTE, 0, 96);
+                    MemorySegment slot = pts.asSlice(m * P1_AFFINE, P1_AFFINE);
+                    int err = (int) DESERIALIZE.invoke(slot, inBuf);
+                    if (err != 0) throw new IllegalArgumentException("blst_p1_deserialize failed at " + i + " (err=" + err + ")");
+                    if ((buf[0] & 0x40) != 0) continue; // a well-formed identity encoding
+                    if (validateBases && !(boolean) IN_G1.invoke(slot)) {
+                        throw new IllegalArgumentException("Point " + i + " is not in the G1 subgroup");
+                    }
+                    MemorySegment.copy(sbuf, 0, scal, BYTE, m * SCALAR, 32);
+                    m++;
                 }
-                MemorySegment.copy(sbuf, 0, scal, BYTE, m * SCALAR, 32);
-                m++;
+                if (m == 0) return infinity();
+                if (m == 1) { // pippenger is batch-only
+                    byte[] base = new byte[96];
+                    AFFINE_SERIALIZE.invoke(inBuf, pts.asSlice(0, P1_AFFINE));
+                    MemorySegment.copy(inBuf, BYTE, 0, base, 0, 96);
+                    byte[] le = new byte[32];
+                    try {
+                        MemorySegment.copy(scal, BYTE, 0, le, 0, 32);
+                        return singleMulCore(base, le, false);
+                    } finally {
+                        Arrays.fill(le, (byte) 0);
+                    }
+                }
+                final int count = m;
+
+                // points[]/scalars[] are arrays of n pointers into the contiguous buffers.
+                MemorySegment ptsPtr = a.allocate(ValueLayout.ADDRESS, count);
+                MemorySegment scalPtr = a.allocate(ValueLayout.ADDRESS, count);
+                for (int i = 0; i < count; i++) {
+                    ptsPtr.setAtIndex(ValueLayout.ADDRESS, i, pts.asSlice(i * P1_AFFINE, P1_AFFINE));
+                    scalPtr.setAtIndex(ValueLayout.ADDRESS, i, scal.asSlice(i * SCALAR, SCALAR));
+                }
+
+                long scratchBytes = (long) SCRATCH_SIZEOF.invoke((long) count);
+                scratch = a.allocate(Math.max(8, scratchBytes), LIMB_ALIGN);
+                MemorySegment ret = a.allocate(P1, LIMB_ALIGN);
+                PIPPENGER.invoke(ret, ptsPtr, (long) count, scalPtr, NBITS, scratch);
+
+                MemorySegment retAff = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                TO_AFFINE.invoke(retAff, ret);
+                MemorySegment out = a.allocate(P1_AFFINE, LIMB_ALIGN);
+                AFFINE_SERIALIZE.invoke(out, retAff);
+
+                byte[] result = new byte[96];
+                MemorySegment.copy(out, BYTE, 0, result, 0, 96);
+                return result;
+            } finally {
+                scal.fill((byte) 0);
+                if (scratch != null) scratch.fill((byte) 0);
             }
-            if (m == 0) return infinity();
-            if (m == 1) { // pippenger is batch-only
-                byte[] base = new byte[96];
-                AFFINE_SERIALIZE.invoke(inBuf, pts.asSlice(0, P1_AFFINE));
-                MemorySegment.copy(inBuf, BYTE, 0, base, 0, 96);
-                byte[] le = new byte[32];
-                MemorySegment.copy(scal, BYTE, 0, le, 0, 32);
-                return singleMulCore(base, le, false);
-            }
-            final int count = m;
-
-            // points[]/scalars[] are arrays of n pointers into the contiguous buffers.
-            MemorySegment ptsPtr = a.allocate(ValueLayout.ADDRESS, count);
-            MemorySegment scalPtr = a.allocate(ValueLayout.ADDRESS, count);
-            for (int i = 0; i < count; i++) {
-                ptsPtr.setAtIndex(ValueLayout.ADDRESS, i, pts.asSlice(i * P1_AFFINE, P1_AFFINE));
-                scalPtr.setAtIndex(ValueLayout.ADDRESS, i, scal.asSlice(i * SCALAR, SCALAR));
-            }
-
-            long scratchBytes = (long) SCRATCH_SIZEOF.invoke((long) count);
-            MemorySegment scratch = a.allocate(Math.max(8, scratchBytes), LIMB_ALIGN);
-            MemorySegment ret = a.allocate(P1, LIMB_ALIGN);
-            PIPPENGER.invoke(ret, ptsPtr, (long) count, scalPtr, NBITS, scratch);
-
-            MemorySegment retAff = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            TO_AFFINE.invoke(retAff, ret);
-            MemorySegment out = a.allocate(P1_AFFINE, LIMB_ALIGN);
-            AFFINE_SERIALIZE.invoke(out, retAff);
-
-            byte[] result = new byte[96];
-            MemorySegment.copy(out, BYTE, 0, result, 0, 96);
-            return result;
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable t) {
             throw new RuntimeException("blst G1 MSM failed", t);
+        } finally {
+            Arrays.fill(sbuf, (byte) 0);
         }
     }
 

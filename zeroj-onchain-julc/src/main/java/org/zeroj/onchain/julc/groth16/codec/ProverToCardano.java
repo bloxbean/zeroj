@@ -3,6 +3,7 @@ package org.zeroj.onchain.julc.groth16.codec;
 import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381;
+import org.zeroj.bls12381.field.Fp;
 import org.zeroj.crypto.groth16.Groth16ProofBLS381;
 import org.zeroj.crypto.groth16.Groth16Keys;
 import org.zeroj.crypto.setup.Groth16SetupBLS381;
@@ -120,6 +121,9 @@ public final class ProverToCardano {
      * Write a field element as 48-byte big-endian into buffer at offset.
      */
     private static void writeFp(byte[] buf, int offset, BigInteger value) {
+        if (value == null || value.signum() < 0 || value.compareTo(Fp.P) >= 0) {
+            throw new IllegalArgumentException("Field element is outside BLS12-381 Fp [0, p)");
+        }
         byte[] bytes = value.toByteArray();
         int srcStart = Math.max(0, bytes.length - FP_SIZE);
         int count = Math.min(bytes.length, FP_SIZE);

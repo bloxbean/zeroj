@@ -48,6 +48,10 @@ public final class ZkPedersen {
      */
     public static ZkJubjubPoint commit(ZkContext zk, ZkUInt value, ZkUInt blinding) {
         validateScalarInputs(zk, value, blinding);
+        if (value.signal().variable().id() == blinding.signal().variable().id()) {
+            throw new IllegalArgumentException("wire " + blinding.signal().variable().id()
+                    + " is used as both the value and the blinding (ADR-0051 D2)");
+        }
         // Mint (or retrieve) both owned decompositions at their actual widths FIRST, so the
         // canonicality check below is satisfied from the range cache rather than emitting a
         // second, wider decomposition.

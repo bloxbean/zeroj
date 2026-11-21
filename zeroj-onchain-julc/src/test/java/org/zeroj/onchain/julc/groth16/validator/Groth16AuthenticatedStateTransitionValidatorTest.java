@@ -21,6 +21,8 @@ import org.julclang.testkit.ContractTest;
 import org.julclang.testkit.ScriptContextTestBuilder;
 import org.julclang.testkit.TestDataBuilder;
 import org.zeroj.api.AuthenticatedStateCircuitManifest;
+import org.zeroj.bls12381.Bls12381Codecs;
+import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.onchain.julc.groth16.codec.Groth16AuthenticatedStateTransitionScriptFactory;
 import org.zeroj.onchain.julc.groth16.codec.Groth16VerificationKeyCodec;
 import org.zeroj.onchain.julc.groth16.codec.SnarkjsToCardano;
@@ -29,9 +31,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -199,6 +204,39 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
         }
     }
 
+    @Test
+    void releaseFactoryRejectsInvalidVerificationKeyEvenWhenManifestHashMatches() throws Exception {
+        Program template = compileValidator(Groth16AuthenticatedStateTransitionValidator.class)
+                .program();
+        String templateSha256 = Groth16AuthenticatedStateTransitionScriptFactory
+                .unappliedValidatorSha256(template);
+        var genesis = new Groth16AuthenticatedStateTransitionScriptFactory
+                .StateTokenGenesisAttestation(GENESIS_TX_ID, 0, GENESIS_EVIDENCE);
+
+        // Positive control: valid VK applies cleanly.
+        var validManifest = transitionManifest(vk);
+        String validFingerprint = validManifest.dimensionFingerprint() + "-r" + validManifest.r1csSha256();
+        assertTrue(Groth16AuthenticatedStateTransitionScriptFactory.apply(
+                template, templateSha256, validManifest.canonicalSha256(), validManifest, validFingerprint, vk,
+                STATE_POLICY_BYTES, STATE_TOKEN_BYTES, AUTHORIZED_SIGNER, genesis).flatProgram().length > 0);
+
+        // Negative: VK with infinity IC point whose raw ZJG1VK01 bytes match the manifest hash
+        // must still be rejected by ScriptFactory.apply().
+        byte[] g1Inf = Bls12381Codecs.g1ToCompressed(G1Point.INFINITY);
+        var badVk = new SnarkjsToCardano.VkCompressed(
+                vk.alpha(), vk.beta(), vk.gamma(), vk.delta(),
+                List.of(vk.ic().get(0), vk.ic().get(1), g1Inf));
+        byte[] rawBadVkBytes = rawVkBytesUnchecked(badVk);
+        String badKeySha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(rawBadVkBytes));
+        var badManifest = transitionManifestWithKeySha(badKeySha);
+        String badFingerprint = badManifest.dimensionFingerprint() + "-r" + badManifest.r1csSha256();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> Groth16AuthenticatedStateTransitionScriptFactory.apply(
+                        template, templateSha256, badManifest.canonicalSha256(), badManifest, badFingerprint, badVk,
+                        STATE_POLICY_BYTES, STATE_TOKEN_BYTES, AUTHORIZED_SIGNER, genesis));
+    }
+
     private Program appliedProgram(byte[] release, SnarkjsToCardano.VkCompressed key) {
         return compileValidator(Groth16AuthenticatedStateTransitionValidator.class)
                 .program()
@@ -266,7 +304,9 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
         } else {
             outputValue = STATE_VALUE;
         }
-        TxOut continuingOutput = txOut(continuingAddress, outputValue, outputDatum);
+        TxOut continuingOutput = mutation == Mutation.OUTPUT_REFERENCE_SCRIPT
+                ? new TxOut(continuingAddress, outputValue, outputDatum, Optional.of(ScriptHash.of(SCRIPT_HASH)))
+                : txOut(continuingAddress, outputValue, outputDatum);
 
         PlutusData argumentDatum = stateDatum(argumentRoot, argumentVersion);
         PlutusData redeemer = PlutusData.constr(0,
@@ -352,8 +392,21 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
     private static AuthenticatedStateCircuitManifest transitionManifest(
             SnarkjsToCardano.VkCompressed key) throws Exception {
         byte[] encodedKey = Groth16VerificationKeyCodec.encode(key);
-        String keySha = java.util.HexFormat.of().formatHex(
-                java.security.MessageDigest.getInstance("SHA-256").digest(encodedKey));
+        String keySha = HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(encodedKey));
+        return transitionManifestWithKeySha(keySha);
+    }
+
+    private static byte[] rawVkBytesUnchecked(SnarkjsToCardano.VkCompressed key) {
+        byte[] magic = "ZJG16VK1".getBytes(StandardCharsets.US_ASCII);
+        ByteBuffer buf = ByteBuffer.allocate(magic.length + 4 + 48 + 3 * 96 + key.ic().size() * 48);
+        buf.put(magic).putInt(key.ic().size())
+                .put(key.alpha()).put(key.beta()).put(key.gamma()).put(key.delta());
+        for (byte[] p : key.ic()) buf.put(p);
+        return buf.array();
+    }
+
+    private static AuthenticatedStateCircuitManifest transitionManifestWithKeySha(String keySha) {
         return new AuthenticatedStateCircuitManifest(
                 AuthenticatedStateCircuitManifest.SCHEMA_VERSION,
                 "zeroj-mpf-v1-value-update-s8-p2",
@@ -397,6 +450,7 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
         OUTPUT_NO_DATUM,
         OUTPUT_TOKEN,
         OUTPUT_VALUE,
+        OUTPUT_REFERENCE_SCRIPT,
         MINT,
         MISSING_SIGNER,
         NO_CONTINUING_OUTPUT,

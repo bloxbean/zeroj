@@ -11,6 +11,11 @@ import java.math.BigInteger;
 /**
  * Cardano-profile BLS12-381 PlonK verifier for one-public-input circuits.
  *
+ * <p><b>SECURITY WARNING — NOT FOR VALUE-BEARING UTxOs:</b> This standalone
+ * validator performs cryptographic proof verification only and ignores
+ * {@code ScriptContext} (no signer, output, value, replay, or nullifier checks).
+ * Do not lock funds under this validator directly.</p>
+ *
  * <p>The cryptographic verifier is implemented in {@link PlonkBLS12381Lib} so
  * application validators can reuse the same reviewed pairing-check logic while
  * adding their own ScriptContext policy.</p>

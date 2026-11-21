@@ -139,10 +139,12 @@ public class FiatShamirTranscript {
     /** Alias for {@link #getChallenge()}. */
     public BigInteger squeezeChallenge() { return getChallenge(); }
 
-    /** Squeeze a non-zero challenge. */
+    /** Squeeze a non-zero challenge; fails closed if the transcript hashes to zero. */
     public BigInteger squeezeNonZeroChallenge() {
         BigInteger c = getChallenge();
-        // In practice Keccak-256 output mod Fr is never zero
+        if (c.signum() == 0) {
+            throw new IllegalStateException("Fiat-Shamir transcript squeezed zero challenge");
+        }
         return c;
     }
 

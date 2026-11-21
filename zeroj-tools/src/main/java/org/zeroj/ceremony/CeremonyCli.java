@@ -69,12 +69,25 @@ public final class CeremonyCli {
 
         @Override
         public Integer call() throws Exception {
-            ClassLoader loader = CeremonyCli.class.getClassLoader();
-            if (circuitJar != null) {
-                if (!Files.isReadable(circuitJar)) { System.err.println("Cannot read jar: " + circuitJar); return 2; }
-                loader = new URLClassLoader(new URL[]{circuitJar.toUri().toURL()}, loader);
+            if (circuitJar != null && !Files.isReadable(circuitJar)) {
+                System.err.println("Cannot read jar: " + circuitJar);
+                return 2;
             }
-            CircuitBuilder builder = loadCircuit(circuit, loader);
+            CircuitBuilder builder;
+            if (circuitJar != null) {
+                try (URLClassLoader jarLoader = new URLClassLoader(
+                        new URL[]{circuitJar.toUri().toURL()}, CeremonyCli.class.getClassLoader())) {
+                    builder = loadCircuit(circuit, jarLoader);
+                    exportCircuit(builder);
+                }
+            } else {
+                builder = loadCircuit(circuit, CeremonyCli.class.getClassLoader());
+                exportCircuit(builder);
+            }
+            return 0;
+        }
+
+        private void exportCircuit(CircuitBuilder builder) throws Exception {
             System.out.println("Compiling circuit " + circuit + " (BLS12-381) ...");
             long t0 = System.nanoTime();
             R1CSConstraintSystem r1cs = builder.compileR1CS(CurveId.BLS12_381);
@@ -84,7 +97,6 @@ public final class CeremonyCli {
             R1csExporter.export(r1cs.constraints(), r1cs.numWires(), r1cs.numPublicInputs(), out);
             System.out.printf("Wrote %s (%,d bytes)%n", out, Files.size(out));
             System.out.println("Next: snarkjs groth16 setup " + out.getFileName() + " <prepared.ptau> key_0000.zkey");
-            return 0;
         }
     }
 

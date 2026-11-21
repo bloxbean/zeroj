@@ -10,6 +10,7 @@ import org.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Objects;
 
 /**
@@ -196,6 +197,7 @@ public final class PlonKSetupBLS381 {
         validateSigma("sigmaA", sigmaA, numGates);
         validateSigma("sigmaB", sigmaB, numGates);
         validateSigma("sigmaC", sigmaC, numGates);
+        validateSigmaBijection(sigmaA, sigmaB, sigmaC, numGates);
         return validateSrs(srs, domainSize);
     }
 
@@ -223,6 +225,24 @@ public final class PlonKSetupBLS381 {
             if (sigma[i] < 0 || sigma[i] >= maxTarget) {
                 throw new IllegalArgumentException(name + "[" + i + "] is outside [0, 3*numGates)");
             }
+        }
+    }
+
+    private static void validateSigmaBijection(int[] sigmaA, int[] sigmaB, int[] sigmaC, int numGates) {
+        int totalPositions = 3 * numGates;
+        BitSet seen = new BitSet(totalPositions);
+        markSigmaTargets(seen, sigmaA);
+        markSigmaTargets(seen, sigmaB);
+        markSigmaTargets(seen, sigmaC);
+    }
+
+    private static void markSigmaTargets(BitSet seen, int[] sigma) {
+        for (int target : sigma) {
+            if (seen.get(target)) {
+                throw new IllegalArgumentException(
+                        "PlonK sigma permutation is not a bijection: duplicate target " + target);
+            }
+            seen.set(target);
         }
     }
 

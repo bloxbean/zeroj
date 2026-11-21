@@ -194,6 +194,9 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
                 xin = xin.multiply(xin).mod(Fr);
             }
             BigInteger zh = xin.subtract(BigInteger.ONE).mod(Fr);
+            if (zh.signum() == 0) {
+                return VerificationResult.proofInvalid("PlonK BLS12-381 challenge is inside the evaluation domain");
+            }
 
             // Step 3: Lagrange evaluations for public input positions.
             BigInteger nBI = BigInteger.valueOf(n);
@@ -361,15 +364,16 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
     }
 
     private void validateVkShape(int nPublic, int power) {
-        if (nPublic < 0 || nPublic > MAX_PUBLIC_INPUTS) {
-            throw new VerificationInputException(
-                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
-                    "Invalid PlonK BLS12-381 public input count");
-        }
         if (power <= 0 || power > MAX_DOMAIN_POWER) {
             throw new VerificationInputException(
                     VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
                     "Invalid PlonK BLS12-381 domain size");
+        }
+        int domainSize = 1 << power;
+        if (nPublic < 0 || nPublic > MAX_PUBLIC_INPUTS || nPublic > domainSize) {
+            throw new VerificationInputException(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Invalid PlonK BLS12-381 public input count");
         }
     }
 

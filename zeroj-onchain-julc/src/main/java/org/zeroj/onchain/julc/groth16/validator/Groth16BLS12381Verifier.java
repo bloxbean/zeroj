@@ -8,15 +8,22 @@ import org.zeroj.onchain.julc.groth16.lib.Groth16BLS12381Lib;
 
 /**
  * On-chain Groth16 BLS12-381 verifier as a Plutus V3 spending validator.
- * <p>
- * Verification key points are baked in at deploy time. The full IC vector is
+ *
+ * <p><b>SECURITY WARNING — NOT FOR VALUE-BEARING UTxOs:</b> This standalone
+ * validator performs cryptographic proof verification only and ignores
+ * {@code ScriptContext} (no signer, output, value, replay, or nullifier checks).
+ * Do not lock funds under this validator directly; compose
+ * {@link Groth16BLS12381Lib} into an application-bound validator that enforces
+ * full transaction and state-transition authorization.</p>
+ *
+ * <p>Verification key points are baked in at deploy time. The full IC vector is
  * passed as a Plutus list parameter, so this verifier supports any public-input
- * count for Groth16 circuits over BLS12-381.
- * <p>
- * Datum: list of public input integers in verification-key schema order.
+ * count for Groth16 circuits over BLS12-381.</p>
+ *
+ * <p>Datum: list of public input integers in verification-key schema order.
  * Redeemer: compressed Groth16 proof points.
  * Parameter {@code vkIc}: list of compressed G1 IC points, where
- * {@code len(vkIc) == len(publicInputs) + 1}.
+ * {@code len(vkIc) == len(publicInputs) + 1}.</p>
  */
 @SpendingValidator
 public class Groth16BLS12381Verifier {

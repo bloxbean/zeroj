@@ -6,6 +6,7 @@ import org.zeroj.api.PublicInputs;
 import org.zeroj.api.VerificationKeyRef;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.Signal;
+import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -14,8 +15,10 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZkSymbolicTypesTest {
 
@@ -510,5 +513,80 @@ class ZkSymbolicTypesTest {
                 .secretVar("b")
                 .defineSignals(c -> ZkUInt.secret(c, "a", ZkUInt.MAX_BITS)
                         .lt(ZkUInt.secret(c, "b", ZkUInt.MAX_BITS))));
+    }
+
+    @Test
+    void contextConstantsContainerSingleBuilderAndBls12381AdversarialR1cs() {
+        // ZkContext.constantBool & constantUInt + range bounds + linear ZkBytes/ZkBits assertEqual on BLS12-381.
+        var circuit = CircuitBuilder.create("zk-const-and-linear-eq")
+                .publicVar("byte_0").publicVar("byte_1")
+                .secretVar("sbyte_0").secretVar("sbyte_1")
+                .secretVar("bit_0").secretVar("bit_1")
+                .defineSignals(c -> {
+                    var zk = new ZkContext(c);
+                    var pubBytes = ZkBytes.publicInput(c, "byte", 2);
+                    var secBytes = ZkBytes.secret(c, "sbyte", 2);
+                    pubBytes.assertEqual(secBytes);
+
+                    var secBits = ZkBits.secret(c, "bit", 2);
+                    var expectedBits = new ZkBits(List.of(zk.constantBool(true), zk.constantBool(false)));
+                    secBits.assertEqual(expectedBits);
+
+                    zk.constantUInt(255L, 8).assertEqual(pubBytes.get(0));
+                    assertThrows(IllegalArgumentException.class, () -> zk.constantUInt(-1L, 8));
+                    assertThrows(IllegalArgumentException.class, () -> zk.constantUInt(256L, 8));
+                    assertThrows(IllegalArgumentException.class, () -> zk.constantUInt(BigInteger.valueOf(256), 8));
+                });
+
+        var validInputs = Map.of(
+                "byte_0", List.of(BigInteger.valueOf(255)),
+                "byte_1", List.of(BigInteger.valueOf(42)),
+                "sbyte_0", List.of(BigInteger.valueOf(255)),
+                "sbyte_1", List.of(BigInteger.valueOf(42)),
+                "bit_0", List.of(BigInteger.ONE),
+                "bit_1", List.of(BigInteger.ZERO));
+        BigInteger[] witness = circuit.calculateWitness(validInputs, CurveId.BLS12_381);
+        var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
+        assertTrue(satisfiesR1cs(r1cs, witness), "Honest BLS12-381 witness must satisfy R1CS");
+
+        // Adversarial R1CS witness tampering: flip one witness wire and verify R1CS rejects it.
+        BigInteger[] tampered = witness.clone();
+        tampered[2] = BigInteger.valueOf(43); // pub byte_1 != sec sbyte_1
+        assertFalse(satisfiesR1cs(r1cs, tampered), "Tampered BLS12-381 witness must fail R1CS");
+
+        // Container constructors must reject elements from different builders.
+        ZkUInt[] foreignByte = new ZkUInt[1];
+        ZkBool[] foreignBit = new ZkBool[1];
+        CircuitBuilder.create("foreign-b")
+                .secretVar("fb").secretVar("fbit")
+                .defineSignals(c -> {
+                    foreignByte[0] = ZkUInt.secret(c, "fb", 8);
+                    foreignBit[0] = ZkBool.secret(c, "fbit");
+                });
+        CircuitBuilder.create("local-b")
+                .secretVar("lb").secretVar("lbit")
+                .defineSignals(c -> {
+                    var localByte = ZkUInt.secret(c, "lb", 8);
+                    var localBit = ZkBool.secret(c, "lbit");
+                    assertThrows(IllegalArgumentException.class, () -> new ZkBytes(List.of(localByte, foreignByte[0])));
+                    assertThrows(IllegalArgumentException.class, () -> new ZkBits(List.of(localBit, foreignBit[0])));
+                    assertThrows(IllegalArgumentException.class, () -> new ZkArray<>(List.of(localByte, foreignByte[0])));
+                });
+    }
+
+    private static boolean satisfiesR1cs(R1CSConstraintSystem r1cs, BigInteger[] witness) {
+        BigInteger p = r1cs.fieldConfig().prime();
+        for (var c : r1cs.constraints()) {
+            BigInteger a = BigInteger.ZERO;
+            for (var e : c.a().entrySet()) a = a.add(e.getValue().multiply(witness[e.getKey()])).mod(p);
+            BigInteger b = BigInteger.ZERO;
+            for (var e : c.b().entrySet()) b = b.add(e.getValue().multiply(witness[e.getKey()])).mod(p);
+            BigInteger cv = BigInteger.ZERO;
+            for (var e : c.c().entrySet()) cv = cv.add(e.getValue().multiply(witness[e.getKey()])).mod(p);
+            if (!a.multiply(b).mod(p).equals(cv)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -18,6 +18,16 @@ public final class ZkBits implements ZkValue {
         if (bits.isEmpty()) {
             throw new IllegalArgumentException("bits must not be empty");
         }
+        Signal firstSignal = null;
+        for (ZkBool bit : bits) {
+            Objects.requireNonNull(bit, "bits element");
+            Signal current = bit.signal();
+            if (firstSignal == null) {
+                firstSignal = current;
+            } else if (!firstSignal.hasSameBuilder(current)) {
+                throw new IllegalArgumentException("Symbolic values belong to different circuit builders");
+            }
+        }
         this.bits = List.copyOf(bits);
     }
 
@@ -65,7 +75,10 @@ public final class ZkBits implements ZkValue {
     }
 
     public void assertEqual(ZkBits other) {
-        isEqual(other).assertTrue();
+        requireSameSize(other);
+        for (int i = 0; i < bits.size(); i++) {
+            bits.get(i).assertEqual(other.bits.get(i));
+        }
     }
 
     @Override

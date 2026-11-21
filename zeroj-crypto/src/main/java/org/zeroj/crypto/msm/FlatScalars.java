@@ -61,8 +61,17 @@ public final class FlatScalars {
         return new FlatScalars(limbs, 0, n);
     }
 
-    /** Wrap already-canonical limbs (value {@code i} at {@code i*4}; caller must not mutate). */
+    /**
+     * Wrap already-canonical little-endian Fr limbs (value {@code i} at {@code i*4}; caller must
+     * ensure every 4-limb value is strictly reduced {@code 0 <= v < r} and must not mutate the
+     * array after wrapping).
+     */
     public static FlatScalars wrap(long[] canonicalLimbs, int count) {
+        if (canonicalLimbs == null) throw new NullPointerException("canonicalLimbs");
+        if (count < 0 || (long) count * 4L > canonicalLimbs.length) {
+            throw new IllegalArgumentException("canonicalLimbs length " + canonicalLimbs.length
+                    + " is smaller than required " + ((long) count * 4L));
+        }
         return new FlatScalars(canonicalLimbs, 0, count);
     }
 

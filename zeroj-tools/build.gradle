@@ -75,6 +75,9 @@ tasks.register('fatJar', Jar) {
     dependsOn configurations.runtimeClasspath
     from sourceSets.main.output
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    from("${rootDir}/LICENSE") { into 'META-INF' }
+    from("${rootDir}/NOTICE") { into 'META-INF' }
+    from("${rootDir}/licenses/Apache-2.0.txt") { into 'META-INF/licenses' }
     // BC jar signatures don't survive repacking (we use the lightweight digest API, not the JCE provider)
     exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/versions/*/OSGI-INF/**'
 }
@@ -126,6 +129,9 @@ tasks.register('nativeDistZip', Zip) {
             filePermissions { unix(0755) }
         }
         from("${rootDir}/docs/ceremony/USER-GUIDE.md") { rename { 'README.md' } }
+        from("${rootDir}/LICENSE")
+        from("${rootDir}/NOTICE")
+        from("${rootDir}/licenses/Apache-2.0.txt") { into 'licenses' }
     }
 }
 

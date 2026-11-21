@@ -18,19 +18,18 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Full-stack E2E: Java DSL circuit → pure Java BLS12-381 prove → off-chain verify → Julc VM on-chain verify.
+ * Off-chain E2E: Java DSL circuit → pure Java BLS12-381 prove → off-chain pairing verify.
  *
  * <h3>DEV/TEST path (this test)</h3>
  * <p>Uses single-party {@code PowersOfTauBLS381.generate(10)} — toxic waste is known.
  * <b>DO NOT use this setup for production.</b></p>
  *
  * <h3>PRODUCTION path</h3>
+ * <p>Production Groth16 keys must come from an independently verified BLS12-381 multi-party
+ * ceremony (e.g., {@code snarkjs groth16 setup} + {@code zkey contribute} + {@code zkey beacon}
+ * + {@code zkey verify}). Production {@code .ptau} files never expose {@code tau}.</p>
  * <pre>
- * // Option A: Import .ptau from MPC ceremony (Hermez, PPOT)
- * var srs = PtauImporterBLS381.importPtau(new FileInputStream("hermez_pot20.ptau"));
- * var setup = Groth16SetupBLS381.setup(constraints, numWires, numPublic, srs.tauScalar());
- *
- * // Option B: Import snarkjs .zkey (from multi-party ceremony)
+ * // Import snarkjs .zkey (from an independently verified BLS12-381 MPC ceremony)
  * var zkeyData = ZkeyImporterBLS381.importZkeyFull(Files.readAllBytes(Path.of("circuit.zkey")));
  * var proof = Groth16ProverBLS381.prove(zkeyData.provingKey(), witness, ...);
  * </pre>
@@ -38,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SealedBidPureJavaE2ETest {
 
     /**
-     * Pure Java end-to-end: circuit → prove → off-chain pairing verify → Julc VM on-chain verify.
+     * Pure Java end-to-end: circuit → prove → off-chain pairing verify.
      */
     @Test
     void devTau_sealedBid_fullStack() {

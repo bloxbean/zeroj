@@ -6,10 +6,10 @@
 
 [![snapshot](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo.bloxbean.org%2Fmaven%2Fsnapshots%2Forg%2Fzeroj%2Fzeroj-crypto%2Fmaven-metadata.xml&strategy=latestProperty&label=snapshot)](#development-snapshots)
 
-> ## **Preview Status**
-> **ZeroJ** is currently in preview and under active development. Core functionality is available and usable for experimentation and testnet development, but some components and edge cases are still being implemented and hardened.
+> ## **Research & Pre-Release Status**
+> **ZeroJ** is experimental research software under active development. Components are labeled **Beta** (feature-complete and correctness-tested, testnet/evaluation only) or **Experimental** (opt-in, evolving) in the Support Matrix below.
 >
-> ZeroJ has **not been externally audited**. APIs, serialization formats, and on-chain verifier scripts may change between releases. **Production use is not yet recommended.**
+> ZeroJ has **not been externally audited**. APIs, serialization formats, and on-chain verifier scripts may change between releases. **Not for value-bearing or production/mainnet use.**
 
 Java-first zero-knowledge proof toolkit for Cardano.
 
@@ -25,20 +25,20 @@ ZeroJ lets Java developers **define ZK circuits**, **generate proofs**, **verify
 
 ## Support Matrix
 
-**Beta** means feature-complete and correctness-tested (3,500+ tests; the full
-Groth16 flow is verified end-to-end on-chain against Yaci DevKit), but **not
-externally audited and not for value-bearing/mainnet use**. **Experimental**
-components are opt-in and may change or have known limitations. Statuses and
-remaining production gates are tracked in
+**Beta** means feature-complete and correctness-tested (including end-to-end
+Groth16 verification on-chain against Yaci DevKit), but **not externally audited
+and not for value-bearing/mainnet use** (tests are not a security or maturity
+proof). **Experimental** components are opt-in and may change or have known
+limitations. Statuses and remaining production gates are tracked in
 [ADR-0026](docs/adr/0026-production-readiness-review-and-remediation-plan.md).
 
 | Area | Components | Status |
 |------|-----------|--------|
 | Core proof model, codecs, verifier SPI/orchestrator | `zeroj-api`, `zeroj-codec`, `zeroj-backend-spi` | **Beta** |
 | Circuit definition (DSL, symbolic annotations, gadgets) | `zeroj-circuit-dsl`, `zeroj-circuit-annotation-*`, `zeroj-circuit-lib` ([per-gadget table](zeroj-circuit-lib/README.md)) | **Beta** |
-| Groth16 BLS12-381 — pure Java prove + verify | `zeroj-crypto`, `zeroj-verifier-groth16` | **Beta** (production trusted setup requires an external snarkjs MPC ceremony; in-repo setup is dev-only and flag-gated) |
-| Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16BLS12381TxOutRefBindingVerifier`) |
-| PlonK BLS12-381 — pure Java prove + verify, `.ptau` SRS import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** — universal `.ptau` SRS import (`PtauImporterBLS381`) + pure-Java prove/verify; snarkjs PlonK `.zkey` import is unsupported ([ADR-0066](docs/adr/0066-plonk-bls12381-ptau-and-zkey-import.md)) |
+| Groth16 BLS12-381 — pure Java prove + verify | `zeroj-crypto`, `zeroj-verifier-groth16` | **Beta** — proving is offline/isolated only (witness scalars are not heap-zeroized or constant-time in the JVM); production trusted setup requires an external snarkjs MPC ceremony (in-repo setup is dev-only and flag-gated) |
+| Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16AuthenticatedStateTransitionValidator` and `Groth16BLS12381TxOutRefBindingVerifier`) |
+| PlonK BLS12-381 — pure Java prove + verify, `.ptau` SRS import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** — universal `.ptau` SRS import (`PtauImporterBLS381`) + pure-Java prove/verify; proving is offline/isolated only (witness scalars are not heap-zeroized or constant-time in the JVM); snarkjs PlonK `.zkey` import is unsupported ([ADR-0066](docs/adr/0066-plonk-bls12381-ptau-and-zkey-import.md)) |
 | PlonK BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Experimental** — full KZG check implemented; labeled testnet trials only |
 | BBS (CFRG draft-10) — verification | `zeroj-bbs` | **Beta** (spec is an IRTF draft, not yet an RFC) |
 | BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — offline/isolated only: no provider (pure Java or blst) has an evidenced side-channel contract ([ADR-0062](docs/adr/0062-bls12381-independent-review-and-remediation.md)) |
@@ -58,7 +58,7 @@ remaining production gates are tracked in
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
-- **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies. GraalVM compatible. Allocation-lean flat arithmetic, an `mmap`-able proving key, and a streaming trusted setup keep large circuits (millions of constraints) within commodity memory, no JNI (ADR-0029/0033/0034/0035).
+- **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies (offline/isolated host model; witness scalars are not heap-zeroized or constant-time in the JVM). Allocation-lean flat arithmetic, an `mmap`-able proving key, and a streaming trusted setup keep large circuits (millions of constraints) within commodity memory, no JNI (ADR-0029/0033/0034/0035). (GraalVM `native-image` CI currently builds and verifies the `zeroj-ceremony` CLI; native-image proving is not yet CI-verified.)
 - **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); a faster Groth16 proving backend, bit-identical proofs. The MSM's `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
 - **snarkjs CLI** — external CLI for circom-based circuits
 - **snarkjs key & SRS import** — import Groth16 `.zkey` files and streaming BLS12-381 `.ptau` SRS files, prove with the pure Java prover
@@ -79,10 +79,6 @@ remaining production gates are tracked in
 Reusable on-chain verifiers only verify the cryptographic proof statement. A
 real application validator must also bind replay protection, nullifiers,
 authorization, and any `ScriptContext` policy required by the business flow.
-
-### Anchor on Cardano L1
-- 4 anchor patterns: proof hash, state root + proof hash, full verification ref, nullifier commitment
-- CCL integration — fluent helpers for attaching proof metadata to transactions
 
 ## Quick Start — Zero Dependencies
 
@@ -204,7 +200,8 @@ The **pure Java prover and verifier require no optional dependencies**.
 ## Building
 
 ```bash
-# Build the full repository, including opt-in WASM/native modules
+# Build the default product surface (opt-in assurance WASM and benchmark modules require
+# -PincludeAssurance or -PincludeBenchmarks)
 ./gradlew build
 
 # Build the core privacy path only
@@ -251,6 +248,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 
 | Module | Description |
 |--------|-------------|
+| [`zeroj-bom-core`](zeroj-bom-core/) | Published BOM (Bill of Materials) for the default core product surface |
 | [`zeroj-api`](zeroj-api/) | Core proof model, envelopes, verification result types |
 | [`zeroj-codec`](zeroj-codec/) | Proof serialization — snarkjs JSON, CBOR, canonical hashing |
 | [`zeroj-backend-spi`](zeroj-backend-spi/) | Service Provider Interface for verification backends, plus verifier orchestration and backend routing |
@@ -261,7 +259,9 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-crypto-blst`](zeroj-crypto-blst/) | **Opt-in blst prover backend** — thin bridge wiring `zeroj-blst`'s native MSM into the `zeroj-crypto` prover SPI (keeps `zeroj-crypto` pure-Java by default; pure Java matches blst at large sizes since ADR-0033/0034) |
 | [`zeroj-tools`](zeroj-tools/) | Reusable operator tools and the `zeroj-ceremony` CLI — snarkjs-compatible Groth16 phase-2 contributor (`ZkeyContributor`), hash-to-G2 challenge derivation; embeddable in coordinator services and wallets |
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
-| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit Blake2b / SHA-256 / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
+| [`zeroj-circuit-annotation-api`](zeroj-circuit-annotation-api/) | Symbolic circuit annotations (`@ZKCircuit`, `@Prove`, `@Public`, `@Secret`) and typed symbolic values (`ZkField`, `ZkBool`, `ZkUInt`, `ZkArray`, `ZkBits`, `ZkBytes`) |
+| [`zeroj-circuit-annotation-processor`](zeroj-circuit-annotation-processor/) | Compile-time annotation processor generating typed `*Circuit` builders, schemas, and `Inputs` facades |
+| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, Merkle, Comparators, Binary, Mux, RangeCheck; in-circuit Blake2b / SHA-256 / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
 | [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
 #### Explicit Opt-In Product Modules
@@ -283,7 +283,6 @@ documented independently; it does not mean untested.
 |--------|-------------|
 | [`zeroj-test-vectors`](zeroj-test-vectors/) | Shared test fixtures — pre-generated proofs and VKs |
 | [`zeroj-integration-tests`](zeroj-integration-tests/) | Cross-module security and end-to-end regressions (Groth16/PlonK E2E, tampering, invalid witness, snarkjs interop, Julc/Yaci on-chain) |
-| [`zeroj-bom-core`](zeroj-bom-core/) | The single stable BOM for the default product surface |
 
 #### Opt-In Assurance and Benchmark Projects
 
@@ -306,7 +305,7 @@ BloxBean Maven repository (`https://repo.bloxbean.org/maven/releases`), with the
 
 ```gradle
 dependencies {
-    implementation platform('org.zeroj:zeroj-bom-core:0.1.0')
+    implementation platform('org.zeroj:zeroj-bom-core:0.1.0-pre13')
 
     // Circuit definition + standard library
     implementation 'org.zeroj:zeroj-circuit-dsl'
@@ -320,7 +319,7 @@ dependencies {
     implementation 'org.zeroj:zeroj-verifier-groth16'
 
     // Opt-in product artifacts are outside the stable BOM — give them a version
-    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0'
+    implementation 'org.zeroj:zeroj-verifier-plonk:0.1.0-pre13'
 
     // On-chain verification (Cardano Plutus V3)
     implementation 'org.zeroj:zeroj-onchain-julc'
