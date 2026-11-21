@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
@@ -117,13 +118,26 @@ public final class CeremonyCli {
         @Option(names = "--out", required = true, description = "Output .zkey") Path out;
         @Option(names = "--name", defaultValue = "zeroj contributor", description = "Contributor name (in the transcript)")
         String name;
+        @Option(names = "--overwrite", description = "Replace --out if it already exists (in-place --in == --out is always rejected)")
+        boolean overwrite;
 
         @Override
         public Integer call() throws Exception {
             if (!Files.isReadable(in)) { System.err.println("Cannot read .zkey: " + in); return 2; }
+            Path inAbs = in.toAbsolutePath().normalize();
+            Path outAbs = out.toAbsolutePath().normalize();
+            boolean outExists = Files.exists(outAbs, LinkOption.NOFOLLOW_LINKS);
+            if ((outExists && Files.isSameFile(inAbs, outAbs)) || inAbs.equals(outAbs)) {
+                System.err.println("Refusing in-place overwrite: --in and --out refer to the same file: " + out);
+                return 2;
+            }
+            if (outExists && !overwrite) {
+                System.err.println("Output file already exists (pass --overwrite to replace): " + out);
+                return 2;
+            }
             System.out.printf("Contributing to %s (%,d bytes) -> %s ...%n", in, Files.size(in), out);
             long t0 = System.nanoTime();
-            byte[] hash = ZkeyContributor.contribute(in, out, name);
+            byte[] hash = ZkeyContributor.contribute(in, out, name, overwrite);
             System.out.printf("Done in %.1fs.%n", (System.nanoTime() - t0) / 1e9);
             StringBuilder hex = new StringBuilder("Contribution Hash:\n\t\t");
             for (int i = 0; i < hash.length; i++) {

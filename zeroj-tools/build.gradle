@@ -26,6 +26,7 @@ dependencies {
     annotationProcessor 'info.picocli:picocli-codegen:4.7.6' // emits GraalVM reflection configs at compile time
 
     testImplementation project(':zeroj-codec')     // SnarkjsJsonCodec (VK parsing in the E2E test)
+    testImplementation testFixtures(project(':zeroj-crypto')) // SnarkjsCliLocator (ADR-0031/0047)
 }
 
 publishing {
@@ -131,4 +132,11 @@ tasks.register('nativeDistZip', Zip) {
 test {
     useJUnitPlatform()
     systemProperty 'zeroj.allowInsecureTrustedSetup', 'true'
+    if (System.getProperty('zeroj.snarkjs') != null) {
+        systemProperty 'zeroj.snarkjs', System.getProperty('zeroj.snarkjs')
+    }
+    if (project.hasProperty('requireSnarkjs')) {
+        systemProperty 'zeroj.assurance.requireSnarkjs', 'true'
+        outputs.upToDateWhen { false }
+    }
 }

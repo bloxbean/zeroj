@@ -5,6 +5,7 @@ import org.zeroj.bls12381.field.MontFr381;
 import org.zeroj.circuit.CircuitBuilder;
 import org.zeroj.circuit.r1cs.R1CSConstraintSystem;
 import org.zeroj.crypto.groth16.R1csExporter;
+import org.zeroj.crypto.testsupport.SnarkjsCliLocator;
 import org.zeroj.examples.dsl.common.SnarkjsProver;
 import org.zeroj.examples.dsl.common.WitnessExporter;
 
@@ -24,21 +25,22 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * Shared plumbing for the ADR-0047 bidirectional snarkjs interop suites.
  *
- * <p>snarkjs is discovered by {@link SnarkjsProver#findSnarkjs()} ({@code SNARKJS_BIN}, then common
- * npm locations, then {@code PATH}). Locally, an absent snarkjs — or one other than the pinned
- * {@value #PINNED_VERSION} — <b>skips</b> the suites; in the assurance workflow the build passes
- * {@code -PrequireSnarkjs}, which sets {@code zeroj.assurance.requireSnarkjs=true} and turns both
- * into a failure, so the oracle can never silently vanish or drift. Verdicts come from
- * {@link #verify}, which distinguishes a rejection from a crash.</p>
+ * <p>snarkjs is discovered and version-checked by {@link SnarkjsCliLocator#resolvePinned()}
+ * ({@code -Dzeroj.snarkjs}, then {@code SNARKJS_BIN} — both authoritative if set — then
+ * {@code PATH}, then common global npm locations). Locally, an absent snarkjs — or one other than
+ * the pinned {@value #PINNED_VERSION} — <b>skips</b> the suites; in the assurance workflow the
+ * build passes {@code -PrequireSnarkjs}, which sets {@code zeroj.assurance.requireSnarkjs=true}
+ * and turns both into a failure, so the oracle can never silently vanish or drift. Verdicts come
+ * from {@link #verify}, which distinguishes a rejection from a crash.</p>
  */
 final class SnarkjsInteropSupport {
 
     private SnarkjsInteropSupport() {}
 
     /** The snarkjs release ADR-0047 pins as the normative reference for the JSON formats. */
-    static final String PINNED_VERSION = "0.7.6";
+    static final String PINNED_VERSION = SnarkjsCliLocator.PINNED_VERSION;
 
-    static final String REQUIRE_PROPERTY = "zeroj.assurance.requireSnarkjs";
+    static final String REQUIRE_PROPERTY = SnarkjsCliLocator.REQUIRE_PROPERTY;
 
     static final BigInteger FR = MontFr381.modulus();
 
@@ -48,26 +50,23 @@ final class SnarkjsInteropSupport {
     /** How long a single snarkjs invocation may take before it is killed and reported as an error. */
     static final long SNARKJS_TIMEOUT_SECONDS = 300;
 
+    private static volatile String resolvedBin;
+
     /**
      * Returns a ready snarkjs driver. Absent snarkjs: skip locally, fail under {@link #REQUIRE_PROPERTY}.
      * A snarkjs other than {@value #PINNED_VERSION}: skip locally (the byte-for-byte assertions are
      * only meaningful against the pinned oracle), fail under {@link #REQUIRE_PROPERTY}.
      */
     static SnarkjsProver requireSnarkjs() {
-        boolean required = Boolean.getBoolean(REQUIRE_PROPERTY);
-        String bin = SnarkjsProver.findSnarkjs();
-        String version = version(bin);
-        if (version == null) {
-            String msg = "snarkjs not found or not answering `--version` within 10 s (SNARKJS_BIN / PATH; see SnarkjsProver.findSnarkjs())";
-            if (required) fail(msg + " — required by -PrequireSnarkjs");
-            assumeTrue(false, msg + " — skipping");
+        var res = SnarkjsCliLocator.resolvePinned();
+        if (!res.isReady()) {
+            if (SnarkjsCliLocator.isRequired()) {
+                fail(res.reason() + " — required by -PrequireSnarkjs");
+            }
+            assumeTrue(false, res.reason() + " — skipping");
         }
-        if (!("snarkjs@" + PINNED_VERSION).equals(version)) {
-            String msg = "ADR-0047 pins snarkjs " + PINNED_VERSION + " as the interop oracle, found " + version;
-            if (required) fail(msg + " — required by -PrequireSnarkjs");
-            assumeTrue(false, msg + " — skipping");
-        }
-        return new SnarkjsProver(bin, SNARKJS_TIMEOUT_SECONDS);
+        resolvedBin = res.binary();
+        return new SnarkjsProver(res.binary(), SNARKJS_TIMEOUT_SECONDS);
     }
 
     /**
@@ -111,8 +110,9 @@ final class SnarkjsInteropSupport {
      * test can only pass on a genuine {@code INVALID}.
      */
     static Verdict verify(String protocol, Path dir) throws IOException, InterruptedException {
+        String bin = resolvedBin != null ? resolvedBin : SnarkjsProver.findSnarkjs();
         var out = dir.resolve("verify-" + protocol + "-" + System.nanoTime() + ".log");
-        var pb = new ProcessBuilder(SnarkjsProver.findSnarkjs(), protocol, "verify",
+        var pb = new ProcessBuilder(bin, protocol, "verify",
                 "verification_key.json", "public.json", "proof.json")
                 .directory(dir.toFile()).redirectErrorStream(true).redirectOutput(out.toFile());
         var p = pb.start();
