@@ -4,10 +4,12 @@ import org.zeroj.api.CircuitId;
 import org.zeroj.api.CurveId;
 import org.zeroj.api.ProofSystemId;
 import org.zeroj.api.PublicInputs;
+import org.zeroj.api.VerificationKeyRef;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -150,6 +152,19 @@ class SnarkjsJsonCodecTest {
         assertEquals(2, envelope.publicInputs().size());
         assertTrue(envelope.proofBytes().length > 0);
         assertEquals("snarkjs-json", envelope.proofFormat().orElse(null));
+
+        // Emitted proofBytes and toVerificationKeyBytes must round-trip as canonical snarkjs JSON
+        var reparsedProof = SnarkjsJsonCodec.parseProof(
+                new String(envelope.proofBytes(), StandardCharsets.UTF_8));
+        assertEquals(proof, reparsedProof);
+
+        byte[] vkBytes = SnarkjsJsonCodec.toVerificationKeyBytes(vk);
+        var reparsedVk = SnarkjsJsonCodec.parseVerificationKey(
+                new String(vkBytes, StandardCharsets.UTF_8));
+        assertEquals(vk, reparsedVk);
+        assertArrayEquals(
+                CanonicalHash.sha256(vkBytes),
+                ((VerificationKeyRef.ByHash) envelope.vkRef()).hash());
     }
 
     @Test

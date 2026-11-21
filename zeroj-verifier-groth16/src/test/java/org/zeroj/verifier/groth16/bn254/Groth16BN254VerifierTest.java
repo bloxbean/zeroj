@@ -121,6 +121,21 @@ class Groth16BN254VerifierTest {
     }
 
     @Test
+    void isAvailableTracksPolicyAndNeverAppearsInServiceLoader() {
+        System.clearProperty(LegacyCurvePolicy.ALLOW_LEGACY_BN254_PROPERTY);
+        assertFalse(verifier.isAvailable(), "Legacy BN254 verifier must be unavailable by default");
+        assertTrue(LegacyCurvePolicy.legacyBn254DisabledMessage().contains("unsound against adversarial input"));
+
+        enableLegacyBn254();
+        assertTrue(verifier.isAvailable(), "Legacy BN254 verifier becomes available only when explicitly enabled");
+        var discovered = java.util.ServiceLoader.load(org.zeroj.backend.spi.ZkVerifier.class).stream()
+                .map(p -> p.type().getName())
+                .toList();
+        assertFalse(discovered.contains(Groth16BN254Verifier.class.getName()),
+                "Legacy Groth16BN254Verifier must never be registered in META-INF/services");
+    }
+
+    @Test
     void descriptorIsBN254Groth16() {
         var desc = verifier.descriptor();
         assertEquals(ProofSystemId.GROTH16, desc.proofSystem());

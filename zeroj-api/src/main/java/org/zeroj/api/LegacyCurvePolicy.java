@@ -2,6 +2,11 @@ package org.zeroj.api;
 
 /**
  * Central policy for legacy curves that are not part of the Cardano production surface.
+ *
+ * <p><b>Security warning:</b> Legacy BN254 verifiers and importers lack adversarial point,
+ * subgroup, infinity, and envelope-binding validation and are <b>unsound against adversarial
+ * input</b>. They are disabled by default and intended solely for trusted local off-chain
+ * experiments.</p>
  */
 public final class LegacyCurvePolicy {
 
@@ -17,9 +22,9 @@ public final class LegacyCurvePolicy {
 
     public static String legacyBn254DisabledMessage() {
         return "BN254 is disabled by default because ZeroJ targets Cardano "
-                + "production flows and Cardano only supports BLS12-381 on-chain. "
-                + "For legacy off-chain experiments, start the JVM with -D"
-                + ALLOW_LEGACY_BN254_PROPERTY + "=true.";
+                + "production flows (BLS12-381 only) and legacy BN254 verifiers/importers are "
+                + "unsound against adversarial input. For trusted local off-chain experiments only, "
+                + "start the JVM with -D" + ALLOW_LEGACY_BN254_PROPERTY + "=true.";
     }
 
     public static void requireLegacyBn254Enabled() {

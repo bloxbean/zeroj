@@ -6,7 +6,9 @@ import org.zeroj.crypto.ec.JacobianG1BN254.AffineG1;
 import org.zeroj.crypto.ec.JacobianG2BN254.AffineG2;
 import org.zeroj.crypto.field.MontFp254;
 import org.zeroj.crypto.field.MontFp2_254;
+import org.zeroj.crypto.field.MontFr254;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -267,40 +269,127 @@ public final class ZkeyImporter {
     // --- .wtns witness file parsing ---
 
     private static final byte[] WTNS_MAGIC = {0x77, 0x74, 0x6e, 0x73}; // "wtns"
+    private static final int MAX_WTNS_VERSION = 2; // matches snarkjs 0.7.6 src/wtns_utils.js readBinFile(fd, "wtns", 2)
+    private static final int MAX_WTNS_BYTES = 128 * 1024 * 1024;
+    private static final int MAX_WTNS_SECTIONS = 16;
+    private static final int MAX_WITNESS_VALUES = 1 << 22;
+    private static final BigInteger BN254_FR = MontFr254.modulus();
 
     /**
-     * Parse a snarkjs .wtns binary witness file.
+     * Parse a legacy BN254 snarkjs {@code .wtns} binary witness file (versions {@code 1..2}).
      *
-     * @param input the .wtns file contents
-     * @return witness vector as BigInteger array
+     * <p>Requires {@link LegacyCurvePolicy#requireLegacyBn254Enabled()} (disabled by default).</p>
+     *
+     * @param input the {@code .wtns} file contents
+     * @return canonical BN254 witness vector in {@code [0, Fr)}
+     * @throws IllegalStateException if legacy BN254 support is not explicitly enabled
+     * @throws IOException if the file format, version, prime, section bounds, or witness scalars are invalid
      */
     public static BigInteger[] importWtns(InputStream input) throws IOException {
-        byte[] data = input.readAllBytes();
+        LegacyCurvePolicy.requireLegacyBn254Enabled();
+        byte[] data = readBounded(input, MAX_WTNS_BYTES, ".wtns input");
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+        if (buf.remaining() < 12) {
+            throw new IOException("Truncated .wtns header");
+        }
 
         // Global header
         byte[] magic = new byte[4];
         buf.get(magic);
-        if (!Arrays.equals(magic, WTNS_MAGIC))
+        if (!Arrays.equals(magic, WTNS_MAGIC)) {
             throw new IOException("Invalid .wtns magic: expected 'wtns'");
+        }
 
         int version = buf.getInt();
         int numSections = buf.getInt();
+        if (version < 1 || version > MAX_WTNS_VERSION) {
+            throw new IOException("Unsupported .wtns version: " + version + " (supported: 1.." + MAX_WTNS_VERSION + ")");
+        }
+        if (numSections <= 0 || numSections > MAX_WTNS_SECTIONS) {
+            throw new IOException("Invalid .wtns section count: " + numSections);
+        }
 
-        // Section 1: Header
-        int sType = buf.getInt();
-        long sSize = buf.getLong();
+        Map<Integer, long[]> sections = readWtnsSections(buf, numSections);
+        if (!sections.containsKey(1) || !sections.containsKey(2)) {
+            throw new IOException("Missing required .wtns section (expected sections 1 and 2)");
+        }
+
+        // Section 1: Header (n8 + 32-byte prime + nWitness = 40 bytes)
+        long[] sec1 = sections.get(1);
+        if (sec1[1] != 4 + 32 + 4) {
+            throw new IOException("Invalid .wtns header section size: " + sec1[1]);
+        }
+        buf.position((int) sec1[0]);
         int n8 = buf.getInt();
+        if (n8 != 32) {
+            throw new IOException("Not a BN254 witness (n8=" + n8 + ", expected 32)");
+        }
         BigInteger prime = readFieldElementLE(buf, n8);
+        if (!BN254_FR.equals(prime)) {
+            throw new IOException("Wrong BN254 witness scalar-field prime");
+        }
         int nWitness = buf.getInt();
+        if (nWitness < 0 || nWitness > MAX_WITNESS_VALUES) {
+            throw new IOException("Invalid .wtns witness count: " + nWitness);
+        }
 
         // Section 2: Witness values
-        sType = buf.getInt();
-        sSize = buf.getLong();
+        long[] sec2 = sections.get(2);
+        long expectedWitnessBytes = (long) nWitness * n8;
+        if (sec2[1] != expectedWitnessBytes) {
+            throw new IOException("Invalid .wtns witness section size: " + sec2[1]);
+        }
+        buf.position((int) sec2[0]);
         BigInteger[] witness = new BigInteger[nWitness];
         for (int i = 0; i < nWitness; i++) {
-            witness[i] = readFieldElementLE(buf, n8);
+            BigInteger value = readFieldElementLE(buf, n8);
+            if (value.compareTo(BN254_FR) >= 0) {
+                throw new IOException("Non-canonical BN254 witness scalar at index " + i);
+            }
+            witness[i] = value;
         }
         return witness;
+    }
+
+    private static Map<Integer, long[]> readWtnsSections(ByteBuffer buf, int numSections) throws IOException {
+        Map<Integer, long[]> sections = new LinkedHashMap<>();
+        int limit = buf.limit();
+        for (int i = 0; i < numSections; i++) {
+            if (buf.remaining() < 12) {
+                throw new IOException("Truncated .wtns section header " + i);
+            }
+            int sType = buf.getInt();
+            long sSize = buf.getLong();
+            long dataStart = buf.position();
+            if (sSize < 0 || sSize > limit - dataStart) {
+                throw new IOException("Invalid .wtns section " + sType + " size: " + sSize);
+            }
+            if (sections.putIfAbsent(sType, new long[]{dataStart, sSize}) != null) {
+                throw new IOException("Duplicate .wtns section type: " + sType);
+            }
+            buf.position((int) (dataStart + sSize));
+        }
+        if (buf.remaining() != 0) {
+            throw new IOException("Trailing bytes after .wtns sections: " + buf.remaining());
+        }
+        return sections;
+    }
+
+    private static byte[] readBounded(InputStream input, int maxBytes, String label) throws IOException {
+        if (input == null) {
+            throw new IOException(label + " must not be null");
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException(label + " exceeds maximum size of " + maxBytes + " bytes");
+            }
+            out.write(buffer, 0, read);
+        }
+        return out.toByteArray();
     }
 }

@@ -6,6 +6,7 @@ import org.zeroj.api.CurveId;
 import org.zeroj.api.ProofSystemId;
 import org.zeroj.api.VerificationKeyRef;
 import org.zeroj.api.VerificationMaterial;
+import org.zeroj.api.VerificationResult;
 import org.zeroj.api.ZkProofEnvelope;
 import org.zeroj.bls12381.ec.G2Point;
 import org.zeroj.bls12381.field.Fp;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -84,6 +86,90 @@ class Groth16AdversarialEnvelopeParityTest {
             check(proof, replaceArray(vk, "vk_gamma_2", rescaleG2(k.vkGamma2(), lambda)), false, "gamma λ=" + lambda);
             check(proof, replaceArray(vk, "vk_delta_2", rescaleG2(k.vkDelta2(), lambda)), false, "delta λ=" + lambda);
         }
+    }
+
+    @Test void bindingMetadataFormatAndParsedJsonParityBetweenJavaAndBlst() throws Exception {
+        String proof = load("proof.json"), vk = load("verification_key.json"), pub = load("public.json");
+        byte[] vkBytes = vk.getBytes(StandardCharsets.UTF_8);
+        byte[] vkHash = MessageDigest.getInstance("SHA-256").digest(vkBytes);
+        var validInputs = SnarkjsJsonCodec.parsePublicInputs(pub);
+        var validMaterial = VerificationMaterial.of(vkBytes, ProofSystemId.GROTH16, CurveId.BLS12_381, CIRCUIT);
+
+        // Mismatched circuitId -> VK_MISMATCH
+        var wrongCircuit = ZkProofEnvelope.builder().proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(new CircuitId("other-circuit")).proofFormat("snarkjs-json")
+                .proofBytes(proof.getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash)).build();
+        assertParityError(wrongCircuit, validMaterial, VerificationResult.ReasonCode.VK_MISMATCH, "wrong circuitId");
+
+        // Mismatched ByHash -> VK_MISMATCH
+        var wrongHash = ZkProofEnvelope.builder().proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(CIRCUIT).proofFormat("snarkjs-json")
+                .proofBytes(proof.getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(new byte[32])).build();
+        assertParityError(wrongHash, validMaterial, VerificationResult.ReasonCode.VK_MISMATCH, "wrong vkRef hash");
+
+        // Spoofed material.vkHash() -> VK_MISMATCH
+        var validEnvelope = SnarkjsJsonCodec.toEnvelopeFromJson(proof, vk, pub, CIRCUIT);
+        var spoofedMaterial = new VerificationMaterial(vkBytes, ProofSystemId.GROTH16, CurveId.BLS12_381,
+                CIRCUIT, java.util.Optional.of(new byte[32]));
+        assertParityError(validEnvelope, spoofedMaterial, VerificationResult.ReasonCode.VK_MISMATCH, "spoofed material hash");
+
+        // Unsupported proofFormat -> MALFORMED_ENVELOPE
+        var badFormat = ZkProofEnvelope.builder().proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(CIRCUIT).proofFormat("gnark-plonk-json")
+                .proofBytes(proof.getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash)).build();
+        assertParityError(badFormat, validMaterial, VerificationResult.ReasonCode.MALFORMED_ENVELOPE, "bad proofFormat");
+
+        // Unsupported envelope version -> MALFORMED_ENVELOPE
+        var badVersion = ZkProofEnvelope.builder().version(99).proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(CIRCUIT).proofFormat("snarkjs-json")
+                .proofBytes(proof.getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash)).build();
+        assertParityError(badVersion, validMaterial, VerificationResult.ReasonCode.MALFORMED_ENVELOPE, "bad version");
+
+        // Unparseable JSON -> MALFORMED_ENVELOPE (never INTERNAL_ERROR)
+        var brokenJson = ZkProofEnvelope.builder().proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(CIRCUIT).proofFormat("snarkjs-json")
+                .proofBytes("{not json".getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash)).build();
+        assertParityError(brokenJson, validMaterial, VerificationResult.ReasonCode.MALFORMED_ENVELOPE, "broken JSON");
+
+        // Parsed JSON wrong protocol / wrong curve
+        String wrongProtocolProof = proof.replace("\"groth16\"", "\"plonk\"");
+        var wrongProtocolEnv = ZkProofEnvelope.builder().proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(CIRCUIT).proofFormat("snarkjs-json")
+                .proofBytes(wrongProtocolProof.getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash)).build();
+        assertParityError(wrongProtocolEnv, validMaterial, VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM, "wrong JSON protocol");
+
+        String wrongCurveProof = proof.replace("\"bls12381\"", "\"bn128\"").replace("\"bls12-381\"", "\"bn128\"");
+        var wrongCurveEnv = ZkProofEnvelope.builder().proofSystem(ProofSystemId.GROTH16).curve(CurveId.BLS12_381)
+                .circuitId(CIRCUIT).proofFormat("snarkjs-json")
+                .proofBytes(wrongCurveProof.getBytes(StandardCharsets.UTF_8)).publicInputs(validInputs)
+                .vkRef(new VerificationKeyRef.ByHash(vkHash)).build();
+        assertParityError(wrongCurveEnv, validMaterial, VerificationResult.ReasonCode.UNSUPPORTED_CURVE, "wrong JSON curve");
+
+        // SnarkjsJsonCodec.toEnvelope(parsed...) + toVerificationKeyBytes(vk) verifies on both backends
+        var parsedProof = SnarkjsJsonCodec.parseProof(proof);
+        var parsedVk = SnarkjsJsonCodec.parseVerificationKey(vk);
+        var serializedEnvelope = SnarkjsJsonCodec.toEnvelope(parsedProof, parsedVk, validInputs, CIRCUIT);
+        var serializedMaterial = VerificationMaterial.of(
+                SnarkjsJsonCodec.toVerificationKeyBytes(parsedVk),
+                ProofSystemId.GROTH16, CurveId.BLS12_381, CIRCUIT);
+        assertTrue(pure.verify(serializedEnvelope, serializedMaterial).proofValid(), "Java toEnvelope round-trip");
+        assertTrue(nativeVerifier.verify(serializedEnvelope, serializedMaterial).proofValid(), "blst toEnvelope round-trip");
+    }
+
+    private void assertParityError(ZkProofEnvelope env, VerificationMaterial mat,
+                                   VerificationResult.ReasonCode expected, String label) {
+        var pj = pure.verify(env, mat);
+        var bl = nativeVerifier.verify(env, mat);
+        assertFalse(pj.proofValid(), "Java " + label);
+        assertFalse(bl.proofValid(), "blst " + label);
+        assertEquals(expected, pj.reasonCode().orElse(null), "Java reason " + label);
+        assertEquals(expected, bl.reasonCode().orElse(null), "blst reason " + label);
     }
 
     private static String rescaleG1(List<BigInteger> point, BigInteger lambda) {

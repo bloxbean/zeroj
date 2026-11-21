@@ -3,10 +3,9 @@ package org.zeroj.backend.spi;
 import org.zeroj.api.VerificationKeyRef;
 import org.zeroj.api.VerificationMaterial;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,6 +21,7 @@ public class InMemoryVerificationKeyRegistry implements VerificationKeyRegistry 
 
     @Override
     public Optional<VerificationMaterial> lookup(VerificationKeyRef ref) {
+        Objects.requireNonNull(ref, "VerificationKeyRef must not be null");
         return switch (ref) {
             case VerificationKeyRef.ById id -> Optional.ofNullable(byId.get(id.id()));
             case VerificationKeyRef.ByHash h -> Optional.ofNullable(byHash.get(new HashKey(h.hash())));
@@ -30,21 +30,17 @@ public class InMemoryVerificationKeyRegistry implements VerificationKeyRegistry 
 
     @Override
     public void register(VerificationMaterial material) {
-        // Register by hash (computed from VK bytes if not provided)
-        byte[] hash = material.vkHash()
-                .orElseGet(() -> sha256(material.vkBytes()));
-        byHash.put(new HashKey(hash), material);
+        Objects.requireNonNull(material, "VerificationMaterial must not be null");
+        byte[] actualHash = EnvelopeBinding.sha256(material.vkBytes());
+        if (material.vkHash().isPresent()
+                && !Arrays.equals(material.vkHash().orElseThrow(), actualHash)) {
+            throw new IllegalArgumentException(
+                    "VerificationMaterial vkHash does not match SHA-256 of vkBytes");
+        }
+        byHash.put(new HashKey(actualHash), material);
 
         // Also register by circuit id for convenience
         byId.put(material.circuitId().value(), material);
-    }
-
-    private static byte[] sha256(byte[] data) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(data);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 not available", e);
-        }
     }
 
     private record HashKey(byte[] hash) {

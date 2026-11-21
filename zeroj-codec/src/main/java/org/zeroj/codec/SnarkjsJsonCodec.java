@@ -6,6 +6,8 @@ import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -18,6 +20,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Codec for snarkjs JSON proof files (proof.json, verification_key.json, public.json).
@@ -212,9 +215,13 @@ public final class SnarkjsJsonCodec {
     /**
      * Build a {@link ZkProofEnvelope} from parsed snarkjs components.
      *
-     * <p>Note: the proof bytes are stored as Jackson-serialized JSON (record field names).
-     * Use {@link #toEnvelopeFromJson(String, String, String, CircuitId)} to preserve the
-     * original snarkjs JSON format in the envelope.</p>
+     * <p>Serializes {@code proof} and {@code vk} into canonical snarkjs JSON ({@code pi_a},
+     * {@code pi_b}, {@code pi_c}, {@code vk_alpha_1}, ..., {@code IC} with decimal string
+     * coordinates) so the resulting envelope can be parsed and verified directly by ZeroJ
+     * Groth16 verifiers. The envelope's {@link VerificationKeyRef.ByHash} hashes the canonical
+     * bytes returned by {@link #toVerificationKeyBytes(SnarkjsVerificationKey)}. When you hold
+     * raw {@code verification_key.json} bytes whose SHA-256 must match an existing registry entry,
+     * use {@link #toEnvelopeFromJson(String, String, String, CircuitId)} instead.</p>
      *
      * @param proof     parsed snarkjs proof
      * @param vk        parsed snarkjs verification key
@@ -224,6 +231,10 @@ public final class SnarkjsJsonCodec {
      */
     public static ZkProofEnvelope toEnvelope(SnarkjsProof proof, SnarkjsVerificationKey vk,
                                               PublicInputs inputs, CircuitId circuitId) {
+        Objects.requireNonNull(proof, "proof is required");
+        Objects.requireNonNull(vk, "vk is required");
+        Objects.requireNonNull(inputs, "inputs is required");
+        Objects.requireNonNull(circuitId, "circuitId is required");
         ProofSystemId proofSystem = ProofSystemId.fromValue(proof.protocol());
         CurveId curve = CurveId.fromValue(proof.curve());
         validateProofVkInputs(proof, vk, inputs);
@@ -257,6 +268,7 @@ public final class SnarkjsJsonCodec {
      */
     public static ZkProofEnvelope toEnvelopeFromJson(String proofJson, String vkJson,
                                                       String publicJson, CircuitId circuitId) {
+        Objects.requireNonNull(circuitId, "circuitId is required");
         var proof = parseProof(proofJson);
         var vk = parseVerificationKey(vkJson);
         var inputs = parsePublicInputs(publicJson);
@@ -265,42 +277,162 @@ public final class SnarkjsJsonCodec {
         ProofSystemId proofSystem = ProofSystemId.fromValue(proof.protocol());
         CurveId curve = CurveId.fromValue(proof.curve());
 
-        byte[] vkBytes = vkJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] vkBytes = vkJson.getBytes(StandardCharsets.UTF_8);
         byte[] vkHash = sha256(vkBytes);
 
         return ZkProofEnvelope.builder()
                 .proofSystem(proofSystem)
                 .curve(curve)
                 .circuitId(circuitId)
-                .proofBytes(proofJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
                 .publicInputs(inputs)
                 .vkRef(new VerificationKeyRef.ByHash(vkHash))
                 .proofFormat("snarkjs-json")
                 .build();
     }
 
+    /**
+     * Serialize a parsed {@link SnarkjsVerificationKey} to canonical snarkjs JSON UTF-8 bytes
+     * matching the {@link VerificationKeyRef.ByHash} produced by
+     * {@link #toEnvelope(SnarkjsProof, SnarkjsVerificationKey, PublicInputs, CircuitId)}.
+     */
+    public static byte[] toVerificationKeyBytes(SnarkjsVerificationKey vk) {
+        return serializeVkToBytes(vk);
+    }
+
     // --- Serialization helpers ---
 
     /**
-     * Serialize a snarkjs proof to its canonical JSON bytes (UTF-8, deterministic field order).
+     * Serialize a snarkjs proof to canonical snarkjs JSON bytes (UTF-8, deterministic field order,
+     * decimal string coordinates).
      */
     static byte[] serializeProofToBytes(SnarkjsProof proof) {
+        Objects.requireNonNull(proof, "proof is required");
         try {
-            return MAPPER.writeValueAsBytes(proof);
+            ObjectNode root = MAPPER.createObjectNode();
+            root.set("pi_a", encodeG1Point(proof.piA(), "pi_a"));
+            root.set("pi_b", encodeG2Point(proof.piB(), "pi_b"));
+            root.set("pi_c", encodeG1Point(proof.piC(), "pi_c"));
+            root.put("protocol", requireValidText(proof.protocol(), "protocol"));
+            root.put("curve", requireValidText(proof.curve(), "curve"));
+            return MAPPER.writeValueAsBytes(root);
+        } catch (CodecException e) {
+            throw e;
         } catch (Exception e) {
             throw new CodecException("Failed to serialize proof", e);
         }
     }
 
     /**
-     * Serialize a snarkjs verification key to its canonical JSON bytes.
+     * Serialize a snarkjs verification key to canonical snarkjs JSON bytes (UTF-8, deterministic
+     * field order, decimal string coordinates).
      */
     static byte[] serializeVkToBytes(SnarkjsVerificationKey vk) {
+        Objects.requireNonNull(vk, "vk is required");
         try {
-            return MAPPER.writeValueAsBytes(vk);
+            if (vk.nPublic() < 0 || vk.nPublic() > MAX_PUBLIC_INPUTS) {
+                throw new CodecException("Invalid verification_key nPublic: " + vk.nPublic());
+            }
+            if (vk.ic() == null || vk.ic().size() != vk.nPublic() + 1) {
+                throw new CodecException("verification_key IC length must be nPublic + 1");
+            }
+            ObjectNode root = MAPPER.createObjectNode();
+            root.put("protocol", requireValidText(vk.protocol(), "protocol"));
+            root.put("curve", requireValidText(vk.curve(), "curve"));
+            root.put("nPublic", vk.nPublic());
+            root.set("vk_alpha_1", encodeG1Point(vk.vkAlpha1(), "vk_alpha_1"));
+            root.set("vk_beta_2", encodeG2Point(vk.vkBeta2(), "vk_beta_2"));
+            root.set("vk_gamma_2", encodeG2Point(vk.vkGamma2(), "vk_gamma_2"));
+            root.set("vk_delta_2", encodeG2Point(vk.vkDelta2(), "vk_delta_2"));
+            root.set("vk_alphabeta_12", encodeGtElement(vk.vkAlphabeta12(), "vk_alphabeta_12"));
+            root.set("IC", encodeG1PointArray(vk.ic(), "IC"));
+            return MAPPER.writeValueAsBytes(root);
+        } catch (CodecException e) {
+            throw e;
         } catch (Exception e) {
             throw new CodecException("Failed to serialize verification key", e);
         }
+    }
+
+    private static ArrayNode encodeG1Point(List<BigInteger> point, String fieldName) {
+        if (point == null || point.size() != 3) {
+            throw new CodecException("G1 point must have 3 coordinates: " + fieldName);
+        }
+        ArrayNode arr = MAPPER.createArrayNode();
+        for (BigInteger coord : point) {
+            arr.add(encodeDecimal(coord, fieldName));
+        }
+        return arr;
+    }
+
+    private static ArrayNode encodeG2Point(List<List<BigInteger>> point, String fieldName) {
+        if (point == null || point.size() != 3) {
+            throw new CodecException("G2 point must have 3 Fp2 coordinates: " + fieldName);
+        }
+        ArrayNode arr = MAPPER.createArrayNode();
+        for (List<BigInteger> pair : point) {
+            if (pair == null || pair.size() != 2) {
+                throw new CodecException("G2 coordinate must be a 2-element Fp2 array: " + fieldName);
+            }
+            ArrayNode pairNode = MAPPER.createArrayNode();
+            pairNode.add(encodeDecimal(pair.get(0), fieldName));
+            pairNode.add(encodeDecimal(pair.get(1), fieldName));
+            arr.add(pairNode);
+        }
+        return arr;
+    }
+
+    private static ArrayNode encodeGtElement(List<List<List<BigInteger>>> gt, String fieldName) {
+        if (gt == null || gt.size() != 2) {
+            throw new CodecException("GT element must have 2 outer Fp6 entries: " + fieldName);
+        }
+        ArrayNode outer = MAPPER.createArrayNode();
+        for (List<List<BigInteger>> mid : gt) {
+            if (mid == null || mid.size() != 3) {
+                throw new CodecException("GT Fp6 entry must have 3 Fp2 entries: " + fieldName);
+            }
+            ArrayNode midNode = MAPPER.createArrayNode();
+            for (List<BigInteger> pair : mid) {
+                if (pair == null || pair.size() != 2) {
+                    throw new CodecException("GT Fp2 entry must have 2 Fp elements: " + fieldName);
+                }
+                ArrayNode pairNode = MAPPER.createArrayNode();
+                pairNode.add(encodeDecimal(pair.get(0), fieldName));
+                pairNode.add(encodeDecimal(pair.get(1), fieldName));
+                midNode.add(pairNode);
+            }
+            outer.add(midNode);
+        }
+        return outer;
+    }
+
+    private static ArrayNode encodeG1PointArray(List<List<BigInteger>> points, String fieldName) {
+        if (points == null || points.isEmpty() || points.size() > MAX_IC_POINTS) {
+            throw new CodecException("Invalid G1 point array size: " + fieldName);
+        }
+        ArrayNode arr = MAPPER.createArrayNode();
+        for (int i = 0; i < points.size(); i++) {
+            arr.add(encodeG1Point(points.get(i), fieldName + "[" + i + "]"));
+        }
+        return arr;
+    }
+
+    private static String encodeDecimal(BigInteger value, String fieldName) {
+        if (value == null || value.signum() < 0) {
+            throw new CodecException("Coordinate must be a non-negative integer: " + fieldName);
+        }
+        String text = value.toString();
+        if (text.length() > MAX_DECIMAL_CHARS) {
+            throw new CodecException("Coordinate exceeds maximum decimal length: " + fieldName);
+        }
+        return text;
+    }
+
+    private static String requireValidText(String value, String fieldName) {
+        if (value == null || value.isBlank() || value.length() > MAX_TEXT_CHARS) {
+            throw new CodecException("Invalid text field: " + fieldName);
+        }
+        return value;
     }
 
     // --- Internal parsing helpers ---

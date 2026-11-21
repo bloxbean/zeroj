@@ -50,21 +50,17 @@ class Groth16BLS12381PureJavaVerifierTest {
     void rejectWrongPublicInputs() {
         String proofJson = loadString("/test-vectors/groth16-bls12381/proof.json");
         String vkJson = loadString("/test-vectors/groth16-bls12381/verification_key.json");
-        // Wrong public inputs (different values)
-        var wrongInputs = new PublicInputs(java.util.List.of(java.math.BigInteger.valueOf(999)));
-        var envelope = ZkProofEnvelope.builder()
-                .proofSystem(ProofSystemId.GROTH16)
-                .curve(CurveId.BLS12_381)
-                .circuitId(new CircuitId("multiplier-bls"))
-                .proofBytes(proofJson.getBytes(StandardCharsets.UTF_8))
-                .publicInputs(wrongInputs)
-                .vkRef(new VerificationKeyRef.ByHash(new byte[32]))
-                .proofFormat("snarkjs-json")
-                .build();
+        String publicJson = loadString("/test-vectors/groth16-bls12381/public.json");
+        var inputs = SnarkjsJsonCodec.parsePublicInputs(publicJson);
+        String wrongPublicJson = replaceFirstDecimal(publicJson, inputs.get(0), BigInteger.valueOf(999));
+        // Wrong public inputs (different value, matching count & valid VK hash) so pairing check is reached
+        var envelope = SnarkjsJsonCodec.toEnvelopeFromJson(
+                proofJson, vkJson, wrongPublicJson, new CircuitId("multiplier-bls"));
         var material = loadMaterial("/test-vectors/groth16-bls12381/verification_key.json", "multiplier-bls");
 
         var result = verifier.verify(envelope, material);
         assertFalse(result.proofValid(), "Wrong public inputs should fail");
+        assertEquals(VerificationResult.ReasonCode.INVALID_PROOF, result.reasonCode().orElseThrow());
     }
 
     @Test
