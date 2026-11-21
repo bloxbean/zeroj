@@ -210,6 +210,24 @@ class SetupCacheTest {
     void partialPrefixSrsCacheRoundTripsAndSupportsPlonkSetup() throws Exception {
         var full = PowersOfTauBLS381.generate(4);
 
+        // Generator-only 1-point tau-free prefix (e.g. maxPoints=1 import) round-trips cleanly,
+        // while saving a 1-point SRS with a retained tau scalar is still rejected.
+        var partial1 = new PtauImporterBLS381.SRS(
+                Arrays.copyOf(full.tauG1(), 1), full.tauG2(), full.power(), null);
+        Path path1 = tempDir.resolve("srs-partial-1.bin");
+        Groth16SetupCache.saveBls12381Srs(partial1, path1);
+        var loaded1 = Groth16SetupCache.loadBls12381Srs(path1);
+        assertEquals(4, loaded1.power());
+        assertEquals(1, loaded1.tauG1().length);
+        assertNull(loaded1.tauScalar());
+        assertArrayEquals(partial1.tauG1(), loaded1.tauG1());
+        assertArrayEquals(partial1.tauG2(), loaded1.tauG2());
+
+        var partial1WithTau = new PtauImporterBLS381.SRS(
+                Arrays.copyOf(full.tauG1(), 1), full.tauG2(), full.power(), full.tauScalar());
+        assertThrows(IOException.class, () -> Groth16SetupCache.saveBls12381InsecureDevSrsWithTau(
+                partial1WithTau, tempDir.resolve("srs-partial-1-tau.bin")));
+
         // Partial 14-point prefix (e.g. domainSize=8 + 6) of a power-4 ceremony round-trips cleanly.
         var partial14 = new PtauImporterBLS381.SRS(
                 Arrays.copyOf(full.tauG1(), 14), full.tauG2(), full.power(), null);

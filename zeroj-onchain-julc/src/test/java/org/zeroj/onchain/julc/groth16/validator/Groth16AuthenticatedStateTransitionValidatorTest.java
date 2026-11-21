@@ -398,7 +398,7 @@ class Groth16AuthenticatedStateTransitionValidatorTest extends ContractTest {
     }
 
     private static byte[] rawVkBytesUnchecked(SnarkjsToCardano.VkCompressed key) {
-        byte[] magic = "ZJG1VK01".getBytes(StandardCharsets.US_ASCII);
+        byte[] magic = "ZJG16VK1".getBytes(StandardCharsets.US_ASCII);
         ByteBuffer buf = ByteBuffer.allocate(magic.length + 4 + 48 + 3 * 96 + key.ic().size() * 48);
         buf.put(magic).putInt(key.ic().size())
                 .put(key.alpha()).put(key.beta()).put(key.gamma()).put(key.delta());

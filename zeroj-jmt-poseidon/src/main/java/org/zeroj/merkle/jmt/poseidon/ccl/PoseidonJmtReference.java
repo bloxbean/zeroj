@@ -101,18 +101,19 @@ public final class PoseidonJmtReference {
         }
     }
 
-    private static final int MAX_WIRE_BYTES = 1_048_576;
+    static final int MAX_WIRE_BYTES = 1_048_576;
     private static final int MAX_INTERNAL_NODE_ITEMS = 2 + 16; // tag + bitmap + up to 16 child hashes
     private static final int MAX_NODE_BYTES = 1024;            // v1 internal node with 16 x 32B hashes is ~550B
 
     /**
      * Independent wire-proof verification for the Poseidon JMT v1 statement.
      *
-     * <p>Parses the CBOR classic JMT proof array iteratively with strict depth,
-     * count, and remaining-length bounds (RFC 8949 §10) before calling the CCL
-     * node decoder, enforces v1 non-compressed step-by-step path traversal
-     * without skipped levels, validates canonical Poseidon field digests, and
-     * recomputes the root via {@link PoseidonJmtCommitments}.</p>
+     * <p>Bounds and snapshots caller-owned byte arrays at ingress, parses the
+     * CBOR classic JMT proof array iteratively with strict depth, count, and
+     * remaining-length bounds (RFC 8949 §10) before calling the CCL node
+     * decoder on the same private bytes, enforces v1 non-compressed step-by-step
+     * path traversal without skipped levels, validates canonical Poseidon field
+     * digests, and recomputes the root via {@link PoseidonJmtCommitments}.</p>
      */
     public static boolean verifyWire(
             byte[] expectedRoot,
@@ -126,6 +127,20 @@ public final class PoseidonJmtReference {
                 || including != (expectedValue != null)) {
             return false;
         }
+        return verifyWireSnapshot(
+                expectedRoot.clone(),
+                key.clone(),
+                expectedValue == null ? null : expectedValue.clone(),
+                including,
+                proofWire.clone());
+    }
+
+    static boolean verifyWireSnapshot(
+            byte[] expectedRoot,
+            byte[] key,
+            byte[] expectedValue,
+            boolean including,
+            byte[] proofWire) {
         try {
             PoseidonJmtHash.decode(expectedRoot);
             byte[] queryKeyHash = PoseidonJmtHash.digest(key);

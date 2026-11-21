@@ -363,6 +363,8 @@ ZeroJ upgrades `julcVersion` from `0.1.0-pre18` to `0.1.0-pre22` alongside [ADR-
 | `PlonkBLS12381MultiInputVerifier` | 4,668 | `4172c86d5e8e8e69dfd91f92776176b567c4c2200108dc98273d4a1e` |
 | `PlonkBLS12381MultiInputParamVerifier` | 4,707 | `7e78ad1bbf6ef553a4401fab1025250f14e3f5271816bcc8a732f38f` |
 
+Note: `Groth16AuthenticatedStateTransitionValidator` was originally `2,817` bytes (`46c77c445f4d16b156797d05aee6964f9c93d7446dd4f12d26824d4d`) under the initial `0.1.0-pre22` migration and was updated in place to `2,845` bytes (`5192732cf2c70ce2f03859f1e9f728d986f6a0e1c18e1a1ab86f8eb2`) when the `continuingOutput.referenceScript().isEmpty()` guard was added.
+
 Downstream validators embedding `BbsProofVerify`, `PedersenG1Lib`, `Groth16BLS12381Lib`, or `PlonkBLS12381Lib` (including `zeroj-integration-tests` example validators and `zeroj-usecases` validators) also receive regenerated UPLC bytes and new script hashes.
 
 ## Open questions

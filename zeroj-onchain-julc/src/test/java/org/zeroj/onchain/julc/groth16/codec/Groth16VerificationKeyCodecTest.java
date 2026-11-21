@@ -84,12 +84,15 @@ class Groth16VerificationKeyCodecTest {
         for (var bad : badKeys) {
             assertThrows(IllegalArgumentException.class, () -> Groth16VerificationKeyCodec.encode(bad));
             byte[] rawWire = rawEncodeUnchecked(bad);
-            assertThrows(IllegalArgumentException.class, () -> Groth16VerificationKeyCodec.decode(rawWire));
+            IllegalArgumentException decodeEx = assertThrows(
+                    IllegalArgumentException.class, () -> Groth16VerificationKeyCodec.decode(rawWire));
+            assertFalse(decodeEx.getMessage().contains("magic"),
+                    "raw wire test must exercise point validation, got: " + decodeEx.getMessage());
         }
     }
 
     private static byte[] rawEncodeUnchecked(SnarkjsToCardano.VkCompressed key) {
-        byte[] magic = "ZJG1VK01".getBytes(StandardCharsets.US_ASCII);
+        byte[] magic = "ZJG16VK1".getBytes(StandardCharsets.US_ASCII);
         int size = magic.length + 4 + 48 + 3 * 96 + key.ic().size() * 48;
         ByteBuffer buf = ByteBuffer.allocate(size);
         buf.put(magic);
