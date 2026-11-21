@@ -115,7 +115,7 @@ Java circuit definition and compilation:
 - `CircuitBuilder` / `CircuitAPI` -- define circuits in Java
 - `SignalBuilder` -- OO Signal-style API
 - Compiles to R1CS (Groth16) or PlonK gates
-- `zeroj-circuit-lib` -- Poseidon, MiMC, Merkle, comparators, binary ops
+- `zeroj-circuit-lib` -- Poseidon, Merkle, comparators, binary ops, SHA-2, BLAKE2b, Jubjub/Ed25519 gadgets
 
 ### Layer 6: Orchestration (`zeroj-backend-spi`)
 `VerifierRegistry` and `VerifierOrchestrator` route verification requests to the

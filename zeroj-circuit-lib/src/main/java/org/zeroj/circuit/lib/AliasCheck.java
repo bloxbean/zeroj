@@ -5,57 +5,40 @@ import org.zeroj.circuit.Signal;
 import org.zeroj.circuit.SignalBuilder;
 import org.zeroj.circuit.Variable;
 
-import java.math.BigInteger;
-
 /**
- * AliasCheck — asserts that a field element is in canonical range [0, p-1].
+ * Deprecated misnamed wrapper around {@link RangeCheck}.
  *
- * <p>In finite field arithmetic, {@code p} and {@code 0} are the same element.
- * An "alias" occurs when a value >= p is accepted. This circuit enforces the
- * canonical representation by decomposing to bits and checking the bit pattern
- * is strictly less than the prime.</p>
+ * <p><b>Important:</b> Despite its historical name, this gadget does <em>not</em> implement
+ * circomlib's {@code AliasCheck()} ({@code bits < p}). It delegates to
+ * {@link CircuitAPI#toBinary(Variable, int)}, which enforces {@code 0 <= value < 2^nBits} for
+ * {@code 1 <= nBits <= 253} — throwing at 254/255 bits and rejecting ~72.4% of valid BLS12-381
+ * scalar field elements at {@code nBits = 253}.</p>
  *
- * <p>Implementation: decomposes the value to nBits and verifies bit reconstruction
- * matches the original value. Since {@code toBinary} already enforces each bit is
- * boolean and the reconstruction equals the value, any value >= 2^nBits would fail.
- * For values in [p, 2^nBits), we additionally check that the value != p (which the
- * field reduces to 0).</p>
- *
- * <p>Constraint cost: nBits + 1 constraints.</p>
- *
- * <p>Circom equivalent: {@code AliasCheck()} from circomlib.</p>
+ * @deprecated Misnamed: enforces {@code 0 <= value < 2^nBits}, not {@code < p}. Use
+ *             {@link RangeCheck} for unsigned bit-width range checks.
  */
+@Deprecated(forRemoval = true)
 public final class AliasCheck {
 
     private AliasCheck() {}
 
     /**
-     * Assert that {@code value} is in canonical field range [0, p-1].
+     * Assert that {@code value} fits in {@code nBits} unsigned bits ({@code 0 <= value < 2^nBits}).
      *
-     * <p>The binary decomposition via {@code toBinary} already constrains the value to
-     * [0, 2^nBits). For primes where p < 2^nBits (which is always the case),
-     * this is sufficient because the field automatically reduces values mod p,
-     * so any value that would be >= p is already reduced by the witness calculator.</p>
-     *
-     * <p>The explicit check here is a defense-in-depth: it verifies the bits
-     * reconstruct to the original value, preventing a malicious prover from
-     * supplying an aliased representation.</p>
-     *
-     * @param api   circuit API
-     * @param value the field element to check
-     * @param nBits number of bits to decompose (must be >= bitLength of the prime)
+     * @deprecated Use {@link RangeCheck#check(CircuitAPI, Variable, int)}.
      */
+    @Deprecated(forRemoval = true)
     public static void check(CircuitAPI api, Variable value, int nBits) {
-        // toBinary decomposes to nBits, constrains each bit to {0,1},
-        // and constrains reconstruction to equal the value.
-        // This enforces value ∈ [0, 2^nBits) ∩ F_p = [0, p-1].
-        api.toBinary(value, nBits);
+        RangeCheck.check(api, value, nBits);
     }
 
     /**
      * Signal API wrapper.
+     *
+     * @deprecated Use {@link RangeCheck#check(SignalBuilder, Signal, int)}.
      */
+    @Deprecated(forRemoval = true)
     public static void check(SignalBuilder c, Signal value, int nBits) {
-        check(c.api(), value.variable(), nBits);
+        RangeCheck.check(c, value, nBits);
     }
 }

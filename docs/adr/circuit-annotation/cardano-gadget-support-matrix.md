@@ -108,12 +108,12 @@ Relevant source:
 | `Mux` | Conditional select and array access | Generic | Direct scalar select through `ZkBool.select` | Yes on BLS12-381 Groth16 | Add `ZkArray.select` or dynamic array access helper if needed. |
 | `AliasCheck` | Canonical field representation check | Generic | Mostly covered by `ZkUInt` range checks | Yes on BLS12-381 Groth16 | Optional `ZkAliasCheck` for raw `ZkField`. |
 | `Sha256`, `Sha512` | Full standard SHA-2 digests of fixed-length byte-aligned messages | Bit-oriented; supported scalar fields | `ZkSha256.hash`, `ZkSha512.hash` | BLS12-381 Groth16 building blocks; SHA-256 experimental pending external review | Bind the complete digest with constrained packing; use exact byte serialization. Official vectors, compiled-relation negatives and optional Circom assurance in ADR-0063. |
-| `MiMC` / `SignalMiMC` | MiMC-7 two-input hash | BN254 only in current circuit lib | Direct through `ZkMiMC` | No for Cardano on-chain, because the circuit requires BN254 | Use Poseidon for Cardano. Consider a separate BLS12-381 MiMC variant only if there is a concrete interop need. |
-| `MiMCSponge` | Variable-length MiMC sponge | BN254 only, because it calls `MiMC` | No direct `ZkMiMCSponge` | No for Cardano on-chain | Add symbolic wrapper only for BN254/off-chain legacy use. |
+| `MiMC` / `SignalMiMC` | Legacy MiMC-7 keyed permutation (**deprecated for removal — insecure**) | BN254 only | Deprecated (`ZkMiMC`) | **Do not use** — trivially invertible keyed bijection (no Davies-Meyer / Miyaguchi-Preneel feed-forward), not a collision-resistant hash or circomlib-compatible | Deprecated for removal (`@Deprecated(forRemoval = true)`). Use `Poseidon` with explicit `PoseidonParamsBLS12_381T3.INSTANCE`. |
+| `MiMCSponge` | Legacy MiMC-7 sponge wrapper (**deprecated for removal — insecure**) | BN254 only | None | **Do not use** — wraps broken `MiMC`, not circomlib-compatible | Deprecated for removal (`@Deprecated(forRemoval = true)`). Use `Poseidon` / `PoseidonN`. |
 | `Poseidon` | Two-input Poseidon T3 hash | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidon` for two inputs | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | Make BLS12-381 params prominent in Cardano examples. |
 | `PoseidonN` | Variable-arity folded Poseidon | BN254 default; BLS12-381 supported with explicit params | Direct through `ZkPoseidonN` with explicit params | Yes if `PoseidonParamsBLS12_381T3.INSTANCE` is used | None. |
 | `Merkle` / `SignalMerkle` | Fixed-depth Merkle membership | Hash-dependent | Direct through `ZkMerkle`; params-aware Poseidon helpers are available | Yes when `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` is used | None. |
-| `ZkMerkle.HashType.MIMC` | Merkle with MiMC | BN254 only | Direct | No for Cardano on-chain | Mark as BN254/off-chain in docs. |
+| `ZkMerkle.HashType.MIMC` | Legacy Merkle with MiMC (**deprecated for removal — insecure**) | BN254 only | Deprecated | **Do not use** — delegates to broken invertible `MiMC` | Deprecated for removal (`@Deprecated(forRemoval = true)`). Use `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)`. |
 | `ZkMerkle.HashType.POSEIDON` | Merkle with default Poseidon | BN254 by default today | Direct | No if using default enum path | Use params-aware `ZkMerkle.*Poseidon(...)` for Cardano. |
 | `ZkMerkle` with custom hash lambda | Merkle with caller-provided hash | Depends on lambda | Direct | Yes with a BLS12-381-compatible lambda | Keep as advanced escape hatch. |
 | `ZkMpf*` / `zeroj-mpf-poseidon` | CCL Poseidon MPF inclusion, two non-inclusion forms, value update, and split insertion | BLS12-381 Poseidon authenticated-state v1 only | Strict CCL verification plus canonical operation-specific witnesses/templates | Pure-Java Groth16 and Julc VM paths passed on a retained 5M root; external review, production setup, Yaci, and public-network gates remain. Not compatible with native Aiken/Blake2b MPF roots. | S9 covered the measured 5M root at 56,635 constraints and ~4.17 s prove. Physical delete/canonical collapse is deferred. See ADR-0042. |
@@ -190,18 +190,25 @@ The verifier rejects empty `IC` lists and any mismatch where
 Generated fixed-count validators remain a possible future optimization if
 budget-critical circuits need lower script cost.
 
-### MiMC Is BN254-Only in the Circuit Library
+### MiMC Is Deprecated for Removal (Insecure Invertible Bijection)
 
-The current `MiMC`, `SignalMiMC`, `ZkMiMC`, and `MiMCSponge` path is BN254-only.
-`MiMC.hash(...)` calls `api.requireField(FieldConfig.BN254)`.
+The legacy `MiMC`, `SignalMiMC`, `ZkMiMC`, `MiMCSponge`, and `ZkMerkle.HashType.MIMC`
+APIs are **deprecated for removal (`@Deprecated(forRemoval = true)`)** and must not be
+used in new or existing circuits. `MiMC.hash(...)` computes a 91-round keyed bijection
+on BN254 without Miyaguchi–Preneel / Davies–Meyer feed-forward (allowing trivial
+preimage, collision, and Merkle-proof forgery), derives round constants with SHA-256
+rather than Keccak-256, and is not circomlib-compatible.
 
-This is not a problem for off-chain BN254 circuits, but it is not a good default
-for Cardano. Cardano-facing examples should use BLS12-381 Poseidon instead.
+**Existing-deployment migration:** upgrading ZeroJ only emits compile-time deprecation
+warnings — existing MiMC commitments, Merkle roots, compiled circuits, and verification
+keys remain usable under the broken relation. Deployments that ever used MiMC must:
 
-Existing examples that compute MiMC with a BLS12-381 prime outside the circuit
-should be treated as legacy/test code that needs migration or clarification.
-The in-circuit gadget now correctly prevents compiling that path as a
-BLS12-381 circuit.
+1. Recompute all commitments and Merkle roots from trusted source data using BLS12-381
+   Poseidon (`PoseidonParamsBLS12_381T3.INSTANCE`).
+2. Recompile the circuit with `Poseidon` / `ZkPoseidon` / `ZkMerkle.*Poseidon(...)`.
+3. Regenerate circuit-specific proving and verifying keys (including a new Groth16
+   phase-2 ceremony where applicable).
+4. Retire acceptance under the old MiMC verification key.
 
 ### Poseidon Defaults Are BN254 for Back Compatibility
 

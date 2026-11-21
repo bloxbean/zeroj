@@ -17,7 +17,7 @@ shared Fiat-Shamir transcript utilities used by PlonK.
 | Legacy BN254 Groth16 | `Groth16Setup`, `Groth16Prover`, `ZkeyImporter` (requires `-Dzeroj.allowLegacyBn254=true`) |
 | Legacy BN254 PlonK | `PlonKSetup`, `PlonKProver`, `PlonKZkeyImporter`, `PtauImporter` (requires `-Dzeroj.allowLegacyBn254=true`) |
 | R1CS import | `R1CSImporter` |
-| snarkjs interop (ADR-0047) | `R1csExporter` (iden3 `.r1cs` for a snarkjs ceremony), `ZkeyImporterBLS381`, `PlonKZkeyImporterBLS381`; `SnarkjsGroth16Json` / `SnarkjsPlonkJson` write `proof.json`, `verification_key.json`, `public.json` byte-for-byte as snarkjs 0.7.6 does, so ZeroJ proofs and ZeroJ-native keys verify under `snarkjs groth16/plonk verify` |
+| snarkjs interop (ADR-0047 / ADR-0066) | `R1csExporter` (iden3 `.r1cs` for a snarkjs ceremony), `ZkeyImporterBLS381` (Groth16 `.zkey`), `PtauImporterBLS381` (streaming BLS12-381 `.ptau` SRS); `SnarkjsGroth16Json` / `SnarkjsPlonkJson` write `proof.json`, `verification_key.json`, `public.json` byte-for-byte as snarkjs 0.7.6 does, so ZeroJ proofs and ZeroJ-native keys verify under `snarkjs groth16/plonk verify` (snarkjs PlonK `.zkey` import is unsupported) |
 | Polynomial tools | `FieldFFT`, `FieldFFTBLS381`, `KZGCommitment`, `Pippenger` |
 | Setup helpers | `PowersOfTau`, `PowersOfTauBLS381`, `Groth16SetupCache`, `PlonkSetupCache` |
 | Transcript | `FiatShamirTranscript`, `Keccak256` |

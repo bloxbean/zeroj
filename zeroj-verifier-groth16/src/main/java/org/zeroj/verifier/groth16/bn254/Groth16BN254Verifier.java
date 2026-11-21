@@ -10,7 +10,13 @@ import org.zeroj.codec.SnarkjsVerificationKey;
 import java.math.BigInteger;
 
 /**
- * Groth16 verifier for BN254 curve using pure Java pairing arithmetic.
+ * Legacy Groth16 verifier for BN254 curve using pure Java pairing arithmetic.
+ *
+ * <p><b>SECURITY WARNING — LEGACY EXPERIMENTAL ONLY — UNSOUND AGAINST ADVERSARIAL INPUT:</b>
+ * This verifier omits canonical coordinate, curve/subgroup, infinity, and envelope-binding
+ * checks enforced by the BLS12-381 verifiers. It is NOT registered via {@code ServiceLoader},
+ * reports {@link #isAvailable()} as {@code false} unless {@link LegacyCurvePolicy#legacyBn254Enabled()}
+ * is explicitly enabled, and must only be used for trusted local off-chain experiments.</p>
  *
  * <p>Verification algorithm:</p>
  * <ol>
@@ -27,6 +33,11 @@ public class Groth16BN254Verifier implements ZkVerifier {
     @Override
     public BackendDescriptor descriptor() {
         return DESCRIPTOR;
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return LegacyCurvePolicy.legacyBn254Enabled();
     }
 
     @Override

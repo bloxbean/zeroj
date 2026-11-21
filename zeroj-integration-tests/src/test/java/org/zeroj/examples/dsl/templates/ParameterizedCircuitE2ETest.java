@@ -136,6 +136,7 @@ class ParameterizedCircuitE2ETest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void merkle_mimcIsBn254Only_poseidonIsBlsCardanoPath() {
         int mimcC = NWayMerkleCircuit.build(2, NWayMerkleCircuit.HashType.MIMC)
                 .compileR1CS(CurveId.BN254).numConstraints();

@@ -41,7 +41,8 @@ You received `key_N.zkey` from the ceremony coordinator, plus the published hash
 # 1. check what you received matches what the coordinator published
 shasum -a 256 key_N.zkey
 
-# 2. contribute (seconds for small circuits; ~1 h for a 19M-constraint circuit — multi-core)
+# 2. contribute (seconds for small circuits; ~4 h for a 19M-constraint circuit on 16 cores with
+#    per-point subgroup validation and ADR-0062 ctScalarMul)
 zeroj-ceremony contribute --in key_N.zkey --out key_N+1.zkey --name "your name / org"
 
 # 3. record the Contribution Hash the tool prints — it goes in your attestation
@@ -54,10 +55,13 @@ zeroj-ceremony contribute --in key_N.zkey --out key_N+1.zkey --name "your name /
 | option | required | meaning |
 |---|---|---|
 | `--in <file>` | yes | the `.zkey` you received |
-| `--out <file>` | yes | the `.zkey` you send back |
+| `--out <file>` | yes | the `.zkey` you send back (must not equal `--in`, and must not already exist unless `--overwrite` is passed) |
 | `--name <text>` | no | recorded in the public transcript (default: "zeroj contributor") |
+| `--overwrite` | no | atomically replace an existing `--out` file (in-place `--in == --out` is always rejected) |
 
-Your randomness is drawn from the OS secure random source, used once, and never written anywhere.
+Your randomness is drawn from the OS secure random source, applied via ADR-0062 `ctScalarMul` after
+validating the input `.zkey`, used once, and never written anywhere. Run contributions on a
+dedicated, offline/isolated machine (pure-Java `ctScalarMul` is not a JVM constant-time guarantee).
 The output is byte-compatible with snarkjs: anyone can independently check the whole ceremony with
 `snarkjs zkey verify <circuit.r1cs> <pot.ptau> key_N+1.zkey` — the verifying tool is *not* ZeroJ.
 
@@ -164,8 +168,10 @@ I confirm the entropy was generated fresh and destroyed after use.
 
 - **Do I have to trust this tool?** No — verification is always done with *snarkjs* (`zkey verify`),
   which independently re-checks every contribution including ZeroJ-made ones.
-- **zeroj-ceremony or snarkjs for contributing?** Identical result; ZeroJ is ~3× faster on large
-  circuits (measured: ~0.9 h vs ~2.5–3 h for a 19M-constraint key) and ships as a single binary.
+- **zeroj-ceremony or snarkjs for contributing?** Bit-compatible result; `zeroj-ceremony` ships as
+  a single native/JVM binary with pre-secret validation and per-point subgroup checks via ADR-0062
+  `ctScalarMul` (~4.0 h extrapolated on 16 cores for a 19M-constraint key, vs ~2.5–3 h for
+  `snarkjs` on Node). Use whichever fits your contributor environment.
 - **How much machine do I need?** Contributing needs modest memory (the tool streams the file);
   disk = ~2× the `.zkey` size. A 19M-constraint key is ~30 GB.
 - **What must I keep secret?** Nothing after you finish — your randomness is used and discarded.

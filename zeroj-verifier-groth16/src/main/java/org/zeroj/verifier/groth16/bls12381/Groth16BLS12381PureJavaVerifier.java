@@ -2,13 +2,16 @@ package org.zeroj.verifier.groth16.bls12381;
 
 import org.zeroj.api.*;
 import org.zeroj.backend.spi.BackendDescriptor;
+import org.zeroj.backend.spi.EnvelopeBinding;
 import org.zeroj.backend.spi.ZkVerifier;
+import org.zeroj.codec.CodecException;
 import org.zeroj.codec.SnarkjsJsonCodec;
 import org.zeroj.bls12381.ec.*;
 import org.zeroj.bls12381.field.*;
 import org.zeroj.bls12381.pairing.BLS12381Pairing;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -37,9 +40,54 @@ public class Groth16BLS12381PureJavaVerifier implements ZkVerifier {
 
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
+        if (envelope == null) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Proof envelope must not be null");
+        }
+        if (envelope.proofSystem() != ProofSystemId.GROTH16) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
+                    "Expected Groth16 proof envelope");
+        }
+        if (envelope.curve() != CurveId.BLS12_381) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.UNSUPPORTED_CURVE,
+                    "Expected BLS12-381 proof envelope");
+        }
+        var bindingError = EnvelopeBinding.validateBinding(envelope, material);
+        if (bindingError.isPresent()) {
+            return bindingError.get();
+        }
+        if (envelope.proofFormat().isPresent()
+                && !"snarkjs-json".equals(envelope.proofFormat().orElseThrow())) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Unsupported Groth16 proof format: " + envelope.proofFormat().orElseThrow());
+        }
+
         try {
-            var proof = SnarkjsJsonCodec.parseProof(new String(envelope.proofBytes()));
-            var vk = SnarkjsJsonCodec.parseVerificationKey(new String(material.vkBytes()));
+            var proof = SnarkjsJsonCodec.parseProof(
+                    new String(envelope.proofBytes(), StandardCharsets.UTF_8));
+            var vk = SnarkjsJsonCodec.parseVerificationKey(
+                    new String(material.vkBytes(), StandardCharsets.UTF_8));
+
+            if (!"groth16".equals(proof.protocol()) || !"groth16".equals(vk.protocol())) {
+                return VerificationResult.error(
+                        VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
+                        "Expected Groth16 proof and verification key");
+            }
+            if (!CurveId.BLS12_381.value().equals(proof.curve())
+                    || !CurveId.BLS12_381.value().equals(vk.curve())) {
+                return VerificationResult.error(
+                        VerificationResult.ReasonCode.UNSUPPORTED_CURVE,
+                        "Expected BLS12-381 proof and verification key");
+            }
+            if (vk.ic().size() != vk.nPublic() + 1) {
+                return VerificationResult.error(
+                        VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                        "Verification key IC length must equal nPublic + 1");
+            }
 
             var publicInputs = envelope.publicInputs();
             if (publicInputs.size() != vk.nPublic()) {
@@ -79,6 +127,10 @@ public class Groth16BLS12381PureJavaVerifier implements ZkVerifier {
             return valid ? VerificationResult.cryptoValid()
                     : VerificationResult.proofInvalid("Groth16 BLS12-381 pairing check failed");
 
+        } catch (CodecException e) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Malformed Groth16 BLS12-381 proof or verification key JSON: " + e.getMessage());
         } catch (IllegalArgumentException | UnsupportedOperationException e) {
             return VerificationResult.proofInvalid("Malformed Groth16 BLS12-381 proof or verification key: " + e.getMessage());
         } catch (Exception e) {

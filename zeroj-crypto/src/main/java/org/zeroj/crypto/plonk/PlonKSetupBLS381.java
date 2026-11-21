@@ -2,18 +2,14 @@ package org.zeroj.crypto.plonk;
 
 import org.zeroj.bls12381.ec.G1Point;
 import org.zeroj.bls12381.ec.G2Point;
-import org.zeroj.bls12381.ec.JacobianG1BLS381;
 import org.zeroj.bls12381.ec.JacobianG1BLS381.AffineG1;
-import org.zeroj.bls12381.ec.JacobianG2BLS381;
 import org.zeroj.bls12381.ec.JacobianG2BLS381.AffineG2;
-import org.zeroj.bls12381.field.Fp;
-import org.zeroj.bls12381.field.Fp2;
 import org.zeroj.bls12381.field.MontFr381;
-import org.zeroj.bls12381.pairing.BLS12381Pairing;
 import org.zeroj.crypto.kzg.KZGCommitmentBLS381;
 import org.zeroj.crypto.poly.FieldFFTBLS381;
 
 import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Objects;
 
@@ -59,7 +55,8 @@ public final class PlonKSetupBLS381 {
         // numerator has degree ~3n+6. The 4n coset needs 4n > 3n+6, i.e., n > 6.
         int domainSize = domainSizeFor(numGates);
         int logN = Integer.numberOfTrailingZeros(domainSize);
-        validateSetupInputs(numGates, numPublic, gateSelectors, sigmaA, sigmaB, sigmaC, numWires, srs, domainSize);
+        ValidatedSrs validatedSrs = validateSetupInputs(
+                numGates, numPublic, gateSelectors, sigmaA, sigmaB, sigmaC, numWires, srs, domainSize);
 
         MontFr381 omega = FieldFFTBLS381.rootOfUnity(logN);
         BigInteger k1 = BigInteger.TWO;
@@ -95,18 +92,24 @@ public final class PlonKSetupBLS381 {
         MontFr381 k1Fr = MontFr381.fromBigInteger(k1);
         MontFr381 k2Fr = MontFr381.fromBigInteger(k2);
 
+        MontFr381[] omegaPows = new MontFr381[domainSize];
+        omegaPows[0] = MontFr381.ONE;
+        for (int i = 1; i < domainSize; i++) {
+            omegaPows[i] = omegaPows[i - 1].mul(omega);
+        }
+
         for (int i = 0; i < domainSize; i++) {
             // Default: identity permutation
             // Position i in col A -> omega^i
             // Position i in col B -> k1 * omega^i
             // Position i in col C -> k2 * omega^i
-            MontFr381 omegaI = evalOmegaPow(omega, i);
+            MontFr381 omegaI = omegaPows[i];
 
             if (i < numGates) {
                 // sigma_a[i] gives the flattened target: target = row + col * numGates
-                s1[i] = decodeSigmaTarget(sigmaA[i], numGates, omega, k1Fr, k2Fr);
-                s2[i] = decodeSigmaTarget(sigmaB[i], numGates, omega, k1Fr, k2Fr);
-                s3[i] = decodeSigmaTarget(sigmaC[i], numGates, omega, k1Fr, k2Fr);
+                s1[i] = decodeSigmaTarget(sigmaA[i], numGates, omegaPows, k1Fr, k2Fr);
+                s2[i] = decodeSigmaTarget(sigmaB[i], numGates, omegaPows, k1Fr, k2Fr);
+                s3[i] = decodeSigmaTarget(sigmaC[i], numGates, omegaPows, k1Fr, k2Fr);
             } else {
                 // Padding rows: identity permutation
                 s1[i] = omegaI;
@@ -125,7 +128,7 @@ public final class PlonKSetupBLS381 {
         var s2Coeffs = FieldFFTBLS381.ifft(s2);
         var s3Coeffs = FieldFFTBLS381.ifft(s3);
 
-        AffineG1[] srsG1 = srs.tauG1();
+        AffineG1[] srsG1 = validatedSrs.tauG1();
 
         var qmCommit = KZGCommitmentBLS381.commit(srsG1, qmCoeffs).toAffine();
         var qlCommit = KZGCommitmentBLS381.commit(srsG1, qlCoeffs).toAffine();
@@ -140,17 +143,17 @@ public final class PlonKSetupBLS381 {
                 domainSize, numPublic, numGates, k1, k2, omega,
                 ql, qr, qm, qo, qc, s1, s2, s3,
                 srsG1, srsG1, // lagrange SRS = standard SRS for now
-                srs.x2(),
+                validatedSrs.tauG2()[1],
                 qmCommit, qlCommit, qrCommit, qoCommit, qcCommit,
                 s1Commit, s2Commit, s3Commit);
     }
 
     /** Decode a sigma permutation target from flattened index. */
     private static MontFr381 decodeSigmaTarget(int flatIdx, int numGates,
-                                                 MontFr381 omega, MontFr381 k1, MontFr381 k2) {
+                                                 MontFr381[] omegaPows, MontFr381 k1, MontFr381 k2) {
         int row = flatIdx % numGates;
         int col = flatIdx / numGates;
-        MontFr381 omegaRow = evalOmegaPow(omega, row);
+        MontFr381 omegaRow = omegaPows[row];
         return switch (col) {
             case 0 -> omegaRow;                 // column A: omega^row
             case 1 -> k1.mul(omegaRow);          // column B: k1 * omega^row
@@ -172,7 +175,9 @@ public final class PlonKSetupBLS381 {
         return Math.max(domainSize, MIN_DOMAIN_SIZE);
     }
 
-    private static void validateSetupInputs(
+    private record ValidatedSrs(AffineG1[] tauG1, AffineG2[] tauG2) {}
+
+    private static ValidatedSrs validateSetupInputs(
             int numGates,
             int numPublic,
             BigInteger[][] gateSelectors,
@@ -193,7 +198,7 @@ public final class PlonKSetupBLS381 {
         validateSigma("sigmaB", sigmaB, numGates);
         validateSigma("sigmaC", sigmaC, numGates);
         validateSigmaBijection(sigmaA, sigmaB, sigmaC, numGates);
-        validateSrs(srs, domainSize);
+        return validateSrs(srs, domainSize);
     }
 
     private static void validateGateSelectors(BigInteger[][] gateSelectors, int numGates) {
@@ -241,23 +246,32 @@ public final class PlonKSetupBLS381 {
         }
     }
 
-    private static void validateSrs(PtauImporterBLS381.SRS srs, int domainSize) {
+    private static ValidatedSrs validateSrs(PtauImporterBLS381.SRS srs, int domainSize) {
         Objects.requireNonNull(srs, "srs");
-        AffineG1[] tauG1 = srs.tauG1();
-        AffineG2[] tauG2 = srs.tauG2();
-        int requiredG1 = 2 * domainSize;
-        if (tauG1 == null || tauG1.length < requiredG1) {
+        AffineG1[] rawG1 = srs.tauG1();
+        AffineG2[] rawG2 = srs.tauG2();
+        int requiredG1 = domainSize + 6;
+        if (rawG1 == null || rawG1.length < requiredG1) {
             throw new IllegalArgumentException("BLS12-381 SRS G1 length must be at least " + requiredG1);
         }
-        if (tauG2 == null || tauG2.length < 2) {
+        if (rawG2 == null || rawG2.length < 2) {
             throw new IllegalArgumentException("BLS12-381 SRS G2 length must be at least 2");
         }
-        for (int i = 0; i < requiredG1; i++) {
-            requireValidSrsG1(tauG1[i], "tauG1[" + i + "]");
+        // Pin private snapshots BEFORE validation/challenge drawing and reuse them through all
+        // commitments and the returned proving key so concurrent or post-setup caller edits to
+        // srs.tauG1()/tauG2() cannot bypass checks or alter the returned key (ADR-0068).
+        AffineG1[] snapshotG1 = Arrays.copyOf(rawG1, requiredG1);
+        AffineG2[] snapshotG2 = Arrays.copyOf(rawG2, 2);
+        if (SrsConsistencyBLS381.isUnmodifiedVerified(srs, snapshotG1, snapshotG2)) {
+            return new ValidatedSrs(snapshotG1, snapshotG2);
         }
-        requireValidSrsG2(tauG2[0], "tauG2[0]");
-        requireValidSrsG2(tauG2[1], "tauG2[1]");
-        validateSrsConsistency(tauG1, tauG2, requiredG1);
+        for (int i = 0; i < requiredG1; i++) {
+            requireValidSrsG1(snapshotG1[i], "tauG1[" + i + "]");
+        }
+        requireValidSrsG2(snapshotG2[0], "tauG2[0]");
+        requireValidSrsG2(snapshotG2[1], "tauG2[1]");
+        SrsConsistencyBLS381.verifyConsistency(snapshotG1, snapshotG2, requiredG1, "BLS12-381");
+        return new ValidatedSrs(snapshotG1, snapshotG2);
     }
 
     private static void requireScalar(BigInteger value, String label) {
@@ -270,7 +284,7 @@ public final class PlonKSetupBLS381 {
         if (point == null || point.isInfinity() || !point.isOnCurve()) {
             throw new IllegalArgumentException(label + " must be a non-infinity BLS12-381 G1 point");
         }
-        G1Point p = new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
+        G1Point p = SrsConsistencyBLS381.toG1(point);
         if (!p.isValid()) {
             throw new IllegalArgumentException(label + " must be in the BLS12-381 G1 subgroup");
         }
@@ -280,47 +294,9 @@ public final class PlonKSetupBLS381 {
         if (point == null || point.isInfinity() || !point.isOnCurve()) {
             throw new IllegalArgumentException(label + " must be a non-infinity BLS12-381 G2 point");
         }
-        G2Point p = new G2Point(
-                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
-                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
+        G2Point p = SrsConsistencyBLS381.toG2(point);
         if (!p.isValid()) {
             throw new IllegalArgumentException(label + " must be in the BLS12-381 G2 subgroup");
         }
-    }
-
-    private static void validateSrsConsistency(AffineG1[] tauG1, AffineG2[] tauG2, int count) {
-        if (!tauG1[0].equals(JacobianG1BLS381.GENERATOR.toAffine())) {
-            throw new IllegalArgumentException("BLS12-381 SRS G1 generator anchor mismatch");
-        }
-        if (!tauG2[0].equals(JacobianG2BLS381.GENERATOR.toAffine())) {
-            throw new IllegalArgumentException("BLS12-381 SRS G2 generator anchor mismatch");
-        }
-        G2Point g2 = toG2(tauG2[0]);
-        G2Point tauG2Point = toG2(tauG2[1]);
-        for (int i = 1; i < count; i++) {
-            boolean consistent = BLS12381Pairing.pairingCheck(
-                    new G1Point[]{toG1(tauG1[i]), toG1(tauG1[i - 1]).negate()},
-                    new G2Point[]{g2, tauG2Point});
-            if (!consistent) {
-                throw new IllegalArgumentException("BLS12-381 SRS powers are inconsistent at G1 index " + i);
-            }
-        }
-    }
-
-    private static G1Point toG1(AffineG1 point) {
-        return new G1Point(Fp.of(point.xBigInt()), Fp.of(point.yBigInt()));
-    }
-
-    private static G2Point toG2(AffineG2 point) {
-        return new G2Point(
-                Fp2.of(Fp.of(point.x().reBigInt()), Fp.of(point.x().imBigInt())),
-                Fp2.of(Fp.of(point.y().reBigInt()), Fp.of(point.y().imBigInt())));
-    }
-
-    private static MontFr381 evalOmegaPow(MontFr381 omega, int exp) {
-        if (exp == 0) return MontFr381.ONE;
-        MontFr381 result = omega;
-        for (int i = 1; i < exp; i++) result = result.mul(omega);
-        return result;
     }
 }

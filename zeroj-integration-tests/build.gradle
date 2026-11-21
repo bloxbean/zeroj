@@ -39,6 +39,7 @@ dependencies {
     testImplementation project(':zeroj-circuit-annotation-api')
     testImplementation project(':zeroj-mpf-poseidon')
     testImplementation project(':zeroj-crypto')
+    testImplementation testFixtures(project(':zeroj-crypto'))
     testImplementation project(':zeroj-bls12381')
     testImplementation project(':zeroj-blst')
     testImplementation project(':zeroj-test-vectors')
@@ -70,6 +71,9 @@ test {
     // ADR-0047: the snarkjs interop suites (it.snarkjs.*) skip when snarkjs is absent locally. The
     // assurance workflow passes -PrequireSnarkjs so that absence, or a snarkjs other than the pinned
     // 0.7.6, fails the job instead of silently reducing the suite to its offline half.
+    if (System.getProperty('zeroj.snarkjs') != null) {
+        systemProperty 'zeroj.snarkjs', System.getProperty('zeroj.snarkjs')
+    }
     if (project.hasProperty('requireSnarkjs')) {
         systemProperty 'zeroj.assurance.requireSnarkjs', 'true'
         // The oracle is an external binary Gradle cannot fingerprint: never report the interop run

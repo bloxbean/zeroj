@@ -6,8 +6,10 @@ import org.zeroj.api.VerificationMaterial;
 import org.zeroj.api.VerificationResult;
 import org.zeroj.api.ZkProofEnvelope;
 import org.zeroj.backend.spi.BackendDescriptor;
+import org.zeroj.backend.spi.EnvelopeBinding;
 import org.zeroj.backend.spi.ZkVerifier;
 import org.zeroj.bbs.BbsCiphersuite;
+import org.zeroj.bbs.BbsException;
 import org.zeroj.bbs.BbsPresentationCodec;
 import org.zeroj.bbs.BbsPublicKey;
 import org.zeroj.bbs.BbsService;
@@ -19,9 +21,10 @@ import java.util.Set;
 /**
  * ZeroJ verifier adapter for CFRG BBS draft-10 presentations.
  *
- * <p>BBS presentations carry disclosed messages and presentation headers inside
- * the CBOR {@code proofBytes} payload; {@link ZkProofEnvelope#publicInputs()}
- * is not used by BBS and must be empty.</p>
+ * <p>Authenticated BBS disclosures (revealed messages, header, and presentation header) are carried
+ * inside the canonical CBOR presentation in {@code envelope.proofBytes()}, not in the SNARK-oriented
+ * {@code envelope.publicInputs()} field-element vector. Consequently, {@code envelope.publicInputs()}
+ * must be empty.</p>
  */
 public final class BbsZkVerifier implements ZkVerifier {
     private static final BackendDescriptor DESCRIPTOR =
@@ -64,29 +67,38 @@ public final class BbsZkVerifier implements ZkVerifier {
 
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {
-        try {
-            if (envelope.proofSystem() != ProofSystemId.BBS || material.proofSystemId() != ProofSystemId.BBS) {
-                return VerificationResult.error(
-                        VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
-                        "BBS verifier only supports proof system bbs");
-            }
-            if (envelope.curve() != CurveId.BLS12_381 || material.curveId() != CurveId.BLS12_381) {
-                return VerificationResult.error(
-                        VerificationResult.ReasonCode.UNSUPPORTED_CURVE,
-                        "BBS verifier only supports BLS12-381");
-            }
-            if (envelope.publicInputs().size() != 0) {
-                return VerificationResult.error(
-                        VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
-                        "BBS envelopes must not carry field publicInputs; disclosed messages are encoded in proofBytes");
-            }
-            if (envelope.proofFormat().isPresent()
-                    && !BbsCiphersuite.DEFAULT_PROOF_FORMAT.equals(envelope.proofFormat().get())) {
-                return VerificationResult.error(
-                        VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
-                        "Unsupported BBS proof format: " + envelope.proofFormat().get());
-            }
+        if (envelope == null) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Proof envelope must not be null");
+        }
+        if (envelope.proofSystem() != ProofSystemId.BBS) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
+                    "BBS verifier only supports proof system bbs");
+        }
+        if (envelope.curve() != CurveId.BLS12_381) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.UNSUPPORTED_CURVE,
+                    "BBS verifier only supports BLS12-381");
+        }
+        var bindingError = EnvelopeBinding.validateBinding(envelope, material);
+        if (bindingError.isPresent()) {
+            return bindingError.get();
+        }
+        if (envelope.proofFormat().isPresent()
+                && !BbsCiphersuite.DEFAULT_PROOF_FORMAT.equals(envelope.proofFormat().get())) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Unsupported BBS proof format: " + envelope.proofFormat().get());
+        }
+        if (envelope.publicInputs().size() != 0) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.INVALID_PUBLIC_INPUTS,
+                    "BBS proof envelopes carry disclosures in the CBOR presentation; publicInputs must be empty");
+        }
 
+        try {
             var presentation = BbsPresentationCodec.decode(envelope.proofBytes());
             BbsCiphersuite ciphersuite = presentation.proof().ciphersuite();
             if (!acceptedCiphersuites.contains(ciphersuite)) {
@@ -108,6 +120,10 @@ public final class BbsZkVerifier implements ZkVerifier {
             boolean valid = verifierService.verifyPresentation(publicKey, presentation);
             return valid ? VerificationResult.cryptoValid()
                     : VerificationResult.proofInvalid("BBS proof verification failed");
+        } catch (BbsException | IllegalArgumentException e) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Malformed BBS presentation or public key: " + e.getMessage());
         } catch (Exception e) {
             return VerificationResult.error(
                     VerificationResult.ReasonCode.INTERNAL_ERROR,

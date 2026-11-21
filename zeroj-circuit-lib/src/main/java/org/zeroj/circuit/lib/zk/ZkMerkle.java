@@ -7,6 +7,7 @@ import org.zeroj.circuit.annotation.ZkField;
 import org.zeroj.circuit.Signal;
 import org.zeroj.circuit.lib.SignalMerkle;
 import org.zeroj.circuit.lib.poseidon.PoseidonParams;
+import org.zeroj.circuit.lib.poseidon.PoseidonParamsBLS12_381T3;
 
 import java.util.Objects;
 
@@ -18,6 +19,17 @@ public final class ZkMerkle {
     private ZkMerkle() {}
 
     public enum HashType {
+        /**
+         * @deprecated Scheduled for removal — {@link ZkMiMC} is an invertible keyed bijection on
+         *             BN254, making Merkle membership proofs trivially forgeable. For BLS12-381 /
+         *             Cardano circuits, use
+         *             {@link ZkMerkle#computeRootPoseidon(ZkContext, PoseidonParams, ZkField, ZkArray, ZkArray)},
+         *             {@link ZkMerkle#verifyPoseidon(ZkContext, PoseidonParams, ZkField, ZkField, ZkArray, ZkArray)},
+         *             or {@link ZkMerkle#isMemberPoseidon(ZkContext, PoseidonParams, ZkField, ZkField, ZkArray, ZkArray)}
+         *             with {@link PoseidonParamsBLS12_381T3#INSTANCE} (note that {@link #POSEIDON}
+         *             selects the BN254 default overload).
+         */
+        @Deprecated(forRemoval = true)
         MIMC,
         POSEIDON
     }
@@ -27,6 +39,7 @@ public final class ZkMerkle {
         ZkField hash(ZkContext zk, ZkField left, ZkField right);
     }
 
+    @SuppressWarnings("removal")
     public static ZkField computeRoot(
             ZkContext zk,
             ZkField leaf,

@@ -321,7 +321,9 @@ When the symbolic types can't express something, drop to `CircuitSpec` and the `
 - `ZkArray` elements must be `ZkField`, `ZkBool`, `ZkUInt`, or one nested `ZkArray` of those.
 - `ZkBits` and `ZkBytes` store one constrained field element per bit or byte. Packed encodings
   aren't available yet, and symbolic bitwise operations on `ZkBits` are limited.
-- `ZkMiMC` and `ZkMerkle.HashType.MIMC` are BN254-only, so they aren't usable for Cardano circuits.
+- `ZkMiMC` and `ZkMerkle.HashType.MIMC` are **deprecated for removal (insecure)** — the underlying
+  `MiMC` gadget is an invertible keyed bijection rather than a collision-resistant hash. Use
+  `ZkPoseidon` / `ZkMerkle.*Poseidon(...)` with explicit `PoseidonParamsBLS12_381T3.INSTANCE`.
 
 ## Next steps
 

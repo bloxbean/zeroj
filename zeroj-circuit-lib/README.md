@@ -11,14 +11,14 @@ or Jubjub-style primitives.
 
 | Area | Key Types |
 |------|-----------|
-| Hashes | `Poseidon`, `PoseidonN`, optimized `FastPoseidonBls12381T3`, `MiMC`, `MiMCSponge`, `Blake2b`, `Sha256`, `Sha512`, `HmacSha512` |
+| Hashes | `Poseidon`, `PoseidonN`, optimized `FastPoseidonBls12381T3`, `Blake2b`, `Sha256`, `Sha512`, `HmacSha512` (legacy `MiMC`, `MiMCSponge` deprecated for removal — insecure) |
 | Cardano key derivation | `Cip1852Derivation`, `Bip32Ed25519`, `Ed25519Point`, `Fe25519` — in-circuit root key → payment key hash |
 | Merkle proofs | `Merkle`, `SignalMerkle` |
 | Comparisons | `Comparators`, `SignalComparators` |
 | Binary gadgets | `Binary`, `SignalBinary`, `AliasCheck` |
 | Selection | `Mux` |
-| Signal helpers | `SignalPoseidon`, `SignalMiMC` |
-| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMiMC`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha256`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` |
+| Signal helpers | `SignalPoseidon` (`SignalMiMC` deprecated for removal — insecure) |
+| Annotation helpers | `ZkPoseidon`, `ZkPoseidonN`, `ZkMerkle`, `ZkJubjubPoint`, `ZkPedersen`, `ZkEdDSAJubjub`, `ZkBlake2b`, `ZkSha256`, `ZkSha512`, `ZkHmacSha512`, `ZkCip1852` (`ZkMiMC` deprecated for removal — insecure) |
 | Jubjub primitives | `JubjubCurve`, `PedersenCommitment`, `PedersenBytesCommitment`, `PedersenScalarCommitment`, `PedersenVectorBoundPolicy`, opening codecs, `EdDSAJubjub`, in-circuit variants |
 | Poseidon parameters | `PoseidonParams*`, `PoseidonHash`, Grain LFSR generation helpers |
 
@@ -40,11 +40,11 @@ final proof, verification key data, and public inputs.
 | Binary decomposition | `Binary`, `SignalBinary`, `AliasCheck` | Partly via `ZkUInt`, `ZkBits`, `ZkBool` | Generic | Ready on BLS12-381 Groth16 | `AliasCheck` remains a lower-level helper for canonical field representation checks. |
 | Comparators and ranges | `Comparators`, `SignalComparators` | Mostly through `ZkUInt` | Generic | Ready on BLS12-381 Groth16 | Optional symbolic `min`/`max` helpers can be added later if needed. |
 | Selection / mux | `Mux` | `ZkBool.select(...)` | Generic for scalar values | Ready on BLS12-381 Groth16 | Dynamic array access remains a lower-level `Mux.arrayAccess(...)` pattern (bounds-constrained `0 <= index < arr.length`, rejects empty arrays; use `CircuitAPI.arrayAccessOrZero` only for independently bounded / masked padding rows per ADR-0065). `ZkJubjubPoint.select(...)` inherits the Jubjub-row status below, not this one. |
-| MiMC | `MiMC`, `SignalMiMC` | `ZkMiMC` | BN254 only | Not Cardano-ready | `MiMC` and `SignalMiMC` call `requireField(FieldConfig.BN254)`. Use Poseidon for Cardano circuits. |
-| MiMC sponge | `MiMCSponge` | No direct `ZkMiMCSponge` | BN254 only, because it uses MiMC | Not Cardano-ready | Useful for BN254/off-chain legacy circuits only. |
+| MiMC | `MiMC`, `SignalMiMC` | `ZkMiMC` | BN254 only | **Deprecated for removal (INSECURE)** | Computes an invertible keyed bijection without feed-forward; preimages and Merkle proofs are trivially forgeable. Not circomlib-compatible. Use `Poseidon` on BLS12-381. |
+| MiMC sponge | `MiMCSponge` | No direct `ZkMiMCSponge` | BN254 only | **Deprecated for removal (INSECURE)** | Inherits the broken `MiMC` construction and is not circomlib-compatible. Do not use. |
 | Poseidon T3 | `Poseidon`, `SignalPoseidon` | `ZkPoseidon` | BN254 default; BLS12-381 with explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | No-params overloads are BN254 for backward compatibility. |
 | Folded Poseidon N | `PoseidonN` | `ZkPoseidonN` | BN254 default in DSL overloads; symbolic API requires explicit params | Ready when using `PoseidonParamsBLS12_381T3.INSTANCE` | Folded two-input Poseidon, not a separate variable-width Poseidon permutation. |
-| Merkle membership | `Merkle`, `SignalMerkle` | `ZkMerkle` | Hash-dependent | Ready with params-aware BLS12-381 Poseidon helpers | Use `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` for Cardano. `HashType.MIMC` and default `HashType.POSEIDON` are BN254-oriented convenience paths. |
+| Merkle membership | `Merkle`, `SignalMerkle` | `ZkMerkle` | Hash-dependent | Ready with params-aware BLS12-381 Poseidon helpers | Use `ZkMerkle.*Poseidon(..., PoseidonParamsBLS12_381T3.INSTANCE, ...)` for Cardano. `HashType.MIMC` is **deprecated for removal (insecure)**; default `HashType.POSEIDON` is BN254-oriented. |
 | Poseidon MPF/JMT authenticated state | Operation APIs live in `zeroj-mpf-poseidon` and `zeroj-jmt-poseidon` | Named `ZkMpf*` / `ZkJmt*` operation classes in those modules | BLS12-381 Poseidon profile only | Experimental; pure-Java Groth16 and Julc paths locally benchmarked at 5M entries | Kept outside the generic circuit library to preserve host/profile boundaries. Inclusion, two non-inclusion forms, update, and split insert primitives are implemented; see ADR-0042. Not compatible with native Aiken/Blake2b roots. |
 | Jubjub point arithmetic | `InCircuitJubjub`, `JubjubPoint` | `ZkJubjubPoint` | BLS12-381 scalar field only | Ready for algebraic/public-data use on BLS12-381 Groth16, pending external review (ADR-0037/0038) | Generic off-circuit secret-scalar use remains offline/isolated because `BigInteger` arithmetic is variable-time. Bind every prover-supplied in-circuit point with `witnessAffine(...)` (curve equation, `Z = 1`, `T = u·v`; 5 constraints) or `assertWellFormed(...)` for projective input (13 constraints, idempotent). The raw `Point` constructor is unchecked and documented as gadget-internal. Neither binder establishes subgroup membership. `ZkJubjubPoint.fromTrustedAffine` is deprecated and delegates to `witnessAffine`. |
 | Pedersen commitment (in-circuit) | `InCircuitPedersen` | `ZkPedersen` | BLS12-381 scalar field only | Ready on BLS12-381 Groth16, pending external review | Profile spec: [`pedersen-jubjub-v1`](../docs/specs/pedersen-jubjub-v1.md). The blinding is always 252 bits and may not be a public input or constant (ADR-0051 D2); only the value has a caller-chosen width. 3,020 constraints for two 252-bit vectors in the gadget alone; the complete `ZkPedersen` commitment with public `(u, v)` costs 2,410 (64-bit value) / 4,042 (252-bit value). `InCircuitPedersen` proves the represented residues but does not establish integer `< l`; `ZkPedersen` adds that canonicality check. |
@@ -241,13 +241,20 @@ See [ADR-0063](../docs/adr/0063-sha256-gadget-and-sha2-assurance.md), the
 
 Curve and parameter guidance:
 
-- **MiMC** — `ZkMiMC` is guarded as BN254-only. Use Poseidon when targeting BLS12-381.
+- **MiMC (deprecated for removal — insecure)** — `MiMC`, `SignalMiMC`, `MiMCSponge`,
+  `ZkMiMC`, and `ZkMerkle.HashType.MIMC` are deprecated for removal because `MiMC.hash`
+  computes an invertible keyed bijection without feed-forward (not a collision-resistant
+  hash). Do not use; use Poseidon with explicit `PoseidonParamsBLS12_381T3.INSTANCE`.
+  *Migrating existing MiMC deployments:* upgrading only adds compile-time deprecation
+  warnings; recompute commitments and Merkle roots from trusted source data, recompile
+  the circuit with BLS12-381 Poseidon, regenerate circuit-specific keys (including a new
+  Groth16 phase-2 ceremony where applicable), and retire acceptance under the old VK.
 - **Poseidon** — `ZkPoseidonN` requires explicit Poseidon params and is the
   symbolic path for folded multi-input commitments. The no-params Poseidon
   helpers are BN254-oriented for backward compatibility.
-- **Merkle** — `ZkMerkle.HashType.MIMC` and the no-params `HashType.POSEIDON`
-  paths are BN254/off-chain conveniences. For Cardano Merkle circuits, use
-  `ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
+- **Merkle** — `ZkMerkle.HashType.MIMC` is **deprecated for removal (insecure)**, and the
+  no-params `HashType.POSEIDON` path is a BN254/off-chain convenience. For Cardano Merkle
+  circuits, use `ZkMerkle.computeRootPoseidon`, `isMemberPoseidon`, or `verifyPoseidon` with
   explicit BLS12-381 Poseidon params.
 - **Jubjub / Pedersen / EdDSA-Jubjub** — hardened by
   [ADR-0037](../docs/adr/0037-jubjub-soundness-and-hardening.md); the normative scheme is

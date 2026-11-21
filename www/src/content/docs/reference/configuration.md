@@ -144,6 +144,8 @@ These only matter when you build the ZeroJ repository itself. Use the Gradle wra
 | `-PrequireSnarkjs` | Makes the snarkjs interop suites in `zeroj-integration-tests` **fail** instead of skip when snarkjs 0.7.6 is missing (sets `zeroj.assurance.requireSnarkjs=true`) |
 | `./gradlew :zeroj-integration-tests:e2eTest` | Runs `@Tag("e2e")` tests: Yaci DevKit on-chain flows and snarkjs proving. They skip gracefully when Yaci DevKit (`localhost:8080`) or snarkjs is absent. |
 | `./gradlew verifyDefaultModuleSurface` | Checks the stable module graph has no edge into assurance, benchmark or removed modules |
+| `./gradlew verifyNoSnapshotDependenciesInReleasePoms` | Fails non-SNAPSHOT builds (or any run with `-PrequireNoSnapshotDependencies=true`) if any published POM or resolved classpath references a `-SNAPSHOT` dependency |
+| `-PuseMavenLocal=true` | Opt-in local `~/.m2` repository lookup (off by default so builds and releases stay isolated from local Maven installs) |
 
 ```bash
 ./gradlew -PincludeAssurance :zeroj-bls12381-wasm:test :zeroj-bbs-wasm:test :zeroj-bbs:test

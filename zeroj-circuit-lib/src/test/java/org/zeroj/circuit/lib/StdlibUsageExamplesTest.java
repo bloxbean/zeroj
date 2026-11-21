@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>Each test is a self-contained example that a developer can copy and adapt.</p>
  */
+@SuppressWarnings("removal")
 class StdlibUsageExamplesTest {
 
     // ========================================================================

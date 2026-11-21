@@ -7,6 +7,7 @@ import org.zeroj.api.PublicInputs;
 import org.zeroj.api.VerificationKeyRef;
 import org.zeroj.api.ZkProofEnvelope;
 import org.zeroj.circuit.CircuitBuilder;
+import org.zeroj.circuit.FieldConfig;
 import org.zeroj.circuit.annotation.ZkCircuitMetadata;
 import org.zeroj.circuit.annotation.ZkCircuitSchema;
 import org.zeroj.circuit.lib.poseidon.PoseidonHash;
@@ -36,6 +37,7 @@ import java.util.ServiceLoader;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -389,6 +391,7 @@ class CircuitAnnotationProcessorTest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void parameterizedMerkleMembershipGeneratesBuildWithCircuitParams() throws Exception {
         var compilation = compile("test.MerkleMembership", """
                 package test;
@@ -968,7 +971,8 @@ class CircuitAnnotationProcessorTest {
         var bigIntegerCompilation = compile("test.BigIntegerProof", """
                 package test;
 
-                import java.math.BigInteger;
+                import java.lang.reflect.InvocationTargetException;
+import java.math.BigInteger;
                 import org.zeroj.circuit.annotation.*;
 
                 @ZKCircuit
@@ -1430,6 +1434,93 @@ class CircuitAnnotationProcessorTest {
                         .invoke(null, fakeSameName, inputsObj, CurveId.BLS12_381));
         assertTrue(mismatchEx.getCause() instanceof IllegalArgumentException);
         assertTrue(mismatchEx.getCause().getMessage().contains("public inputs"));
+    }
+
+    @Test
+    void generatedBuildRejectsForeignOrNullProveZkBoolAndValidatesTypedInputs() throws Exception {
+        var foreign = compile("test.ForeignZkBoolCircuit", """
+                package test;
+
+                import org.zeroj.circuit.CircuitBuilder;
+                import org.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class ForeignZkBoolCircuit {
+                    @Prove
+                    ZkBool prove(@Secret ZkField x) {
+                        var other = CircuitBuilder.create("other").secretVar("y");
+                        final ZkBool[] escaped = new ZkBool[1];
+                        other.defineSignals(c -> escaped[0] = ZkBool.secret(c, "y"));
+                        return escaped[0];
+                    }
+                }
+                """);
+        assertTrue(foreign.success(), foreign.diagnosticsText());
+        var foreignEx = assertThrows(InvocationTargetException.class,
+                () -> foreign.load("test.ForeignZkBoolCircuitCircuit").getMethod("build").invoke(null));
+        assertInstanceOf(IllegalArgumentException.class, foreignEx.getCause());
+
+        var returnsNull = compile("test.NullZkBoolCircuit", """
+                package test;
+
+                import org.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class NullZkBoolCircuit {
+                    @Prove
+                    ZkBool prove(@Secret ZkField x) {
+                        return null;
+                    }
+                }
+                """);
+        assertTrue(returnsNull.success(), returnsNull.diagnosticsText());
+        var nullEx = assertThrows(InvocationTargetException.class,
+                () -> returnsNull.load("test.NullZkBoolCircuitCircuit").getMethod("build").invoke(null));
+        assertInstanceOf(NullPointerException.class, nullEx.getCause());
+
+        var typed = compile("test.TypedRangeInputs", """
+                package test;
+
+                import org.zeroj.circuit.annotation.*;
+
+                @ZKCircuit
+                public class TypedRangeInputs {
+                    @Prove
+                    ZkBool prove(
+                            @Public ZkField field,
+                            @Secret ZkBool flag,
+                            @Secret @UInt(bits = 8) ZkUInt amount) {
+                        return flag;
+                    }
+                }
+                """);
+        assertTrue(typed.success(), typed.diagnosticsText());
+        Class<?> gen = typed.load("test.TypedRangeInputsCircuit");
+        CircuitBuilder circuit = (CircuitBuilder) gen.getMethod("build").invoke(null);
+        Object inputs = gen.getMethod("inputs").invoke(null);
+
+        // Out-of-type setters fail immediately
+        var badBool = assertThrows(InvocationTargetException.class,
+                () -> inputs.getClass().getMethod("flag", long.class).invoke(inputs, 2L));
+        assertInstanceOf(IllegalArgumentException.class, badBool.getCause());
+
+        var badUInt = assertThrows(InvocationTargetException.class,
+                () -> inputs.getClass().getMethod("amount", long.class).invoke(inputs, 256L));
+        assertInstanceOf(IllegalArgumentException.class, badUInt.getCause());
+
+        var negField = assertThrows(InvocationTargetException.class,
+                () -> inputs.getClass().getMethod("field", long.class).invoke(inputs, -1L));
+        assertInstanceOf(IllegalArgumentException.class, negField.getCause());
+
+        // Non-canonical >= p field rejected by Inputs.calculateWitness
+        inputs.getClass().getMethod("field", BigInteger.class)
+                .invoke(inputs, FieldConfig.BLS12_381.prime());
+        inputs.getClass().getMethod("flag", long.class).invoke(inputs, 1L);
+        inputs.getClass().getMethod("amount", long.class).invoke(inputs, 42L);
+        var gePrime = assertThrows(InvocationTargetException.class,
+                () -> inputs.getClass().getMethod("calculateWitness", CircuitBuilder.class, CurveId.class)
+                        .invoke(inputs, circuit, CurveId.BLS12_381));
+        assertInstanceOf(IllegalArgumentException.class, gePrime.getCause());
     }
 
     private Compilation compile(String className, String source) throws Exception {

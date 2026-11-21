@@ -274,9 +274,8 @@ regression tests first — the runnable applications and tutorials live in
 ### Example Circuits
 
 - **Sealed Bid Auction** -- prove bid >= reserve without revealing bid amount
-- **Anonymous Voting** -- prove vote is 0/1 with a MiMC commitment in the
-  BN254/off-chain reference flow. For Cardano/BLS12-381 circuits, use Poseidon
-  with explicit BLS12-381 parameters.
+- **Anonymous Voting** -- prove vote is 0/1 with a BLS12-381 Poseidon commitment
+  (`PoseidonParamsBLS12_381T3.INSTANCE`)
 - **Balance Threshold** -- prove balance >= threshold without revealing exact balance
 
 See the [integration-tests README](../zeroj-integration-tests/README.md) for what each test protects.

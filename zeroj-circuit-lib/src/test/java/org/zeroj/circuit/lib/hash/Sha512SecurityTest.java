@@ -56,12 +56,17 @@ class Sha512SecurityTest {
         var relation = circuit.compileR1CS(CURVE);
         var witness = circuit.calculateWitness(inputs, CURVE);
         assertTrue(satisfied(relation, witness));
-        for (BigInteger invalid : List.of(BigInteger.TWO, BigInteger.ONE.negate())) {
+        // Non-canonical negative input rejected before circuit evaluation (ADR-0068)
+        var negativeBit = new HashMap<>(inputs);
+        negativeBit.put("m0", List.of(BigInteger.ONE.negate()));
+        assertThrows(IllegalArgumentException.class, () -> circuit.calculateWitness(negativeBit, CURVE));
+        // Canonical non-binary field elements (2 and p - 1) rejected by circuit boolean constraints
+        for (BigInteger invalid : List.of(BigInteger.TWO, relation.prime().subtract(BigInteger.ONE))) {
             var bad = new HashMap<>(inputs);
             bad.put("m0", List.of(invalid));
             assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(bad, CURVE));
             assertMutationRejected(relation, witness, circuit.constraintGraph().secretInputs().getFirst().id(),
-                    invalid.mod(relation.prime()));
+                    invalid);
         }
         // One changed legitimate input bit, with the old digest, must also reject.
         var wrongMessage = new HashMap<>(inputs);
@@ -88,9 +93,13 @@ class Sha512SecurityTest {
         byte[] digest = MessageDigest.getInstance("SHA-512").digest(message);
         var circuit = byteCircuit(message.length);
         var inputs = byteInputs(message, digest);
-        for (int invalid : new int[]{-1, 256, 257}) {
+        var negativeByte = new HashMap<>(inputs);
+        negativeByte.put("m0", List.of(BigInteger.ONE.negate()));
+        assertThrows(IllegalArgumentException.class, () -> circuit.calculateWitness(negativeByte, CURVE));
+        BigInteger pMinusOne = circuit.compileR1CS(CURVE).prime().subtract(BigInteger.ONE);
+        for (BigInteger invalid : List.of(pMinusOne, BigInteger.valueOf(256), BigInteger.valueOf(257))) {
             var bad = new HashMap<>(inputs);
-            bad.put("m0", List.of(BigInteger.valueOf(invalid)));
+            bad.put("m0", List.of(invalid));
             assertThrows(ArithmeticException.class, () -> circuit.calculateWitness(bad, CURVE));
         }
         var wrongMessage = new HashMap<>(inputs);

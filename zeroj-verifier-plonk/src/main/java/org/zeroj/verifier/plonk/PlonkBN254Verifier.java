@@ -10,7 +10,13 @@ import java.math.BigInteger;
 import java.util.List;
 
 /**
- * Pure Java PlonK verifier for BN254 — snarkjs compatible.
+ * Legacy pure Java PlonK verifier for BN254 — snarkjs compatible.
+ *
+ * <p><b>SECURITY WARNING — LEGACY EXPERIMENTAL ONLY — UNSOUND AGAINST ADVERSARIAL INPUT:</b>
+ * This verifier omits canonical coordinate, curve/subgroup, domain, and envelope-binding checks
+ * enforced by {@link PlonkBLS12381Verifier}. It is NOT registered via {@code ServiceLoader},
+ * reports {@link #isAvailable()} as {@code false} unless {@link LegacyCurvePolicy#legacyBn254Enabled()}
+ * is explicitly enabled, and must only be used for trusted local off-chain experiments.</p>
  *
  * <p>Follows the exact snarkjs PlonK verification algorithm from
  * {@code snarkjs/src/plonk_verify.js} including the Keccak-256 Fiat-Shamir transcript.</p>
@@ -24,6 +30,11 @@ public class PlonkBN254Verifier implements ZkVerifier {
 
     @Override
     public BackendDescriptor descriptor() { return DESCRIPTOR; }
+
+    @Override
+    public boolean isAvailable() {
+        return LegacyCurvePolicy.legacyBn254Enabled();
+    }
 
     @Override
     public VerificationResult verify(ZkProofEnvelope envelope, VerificationMaterial material) {

@@ -10,11 +10,12 @@ import org.zeroj.circuit.annotation.ZkField;
 import org.zeroj.circuit.lib.zk.ZkMiMC;
 
 /**
- * BN254/off-chain MiMC adapter example.
+ * Legacy BN254/off-chain MiMC adapter example (exercises deprecated {@link ZkMiMC}).
  *
- * <p>Cardano-facing hash examples use explicit BLS12-381 Poseidon params
- * instead. This class remains as the small MiMC symbolic adapter example.</p>
+ * <p>Do not use MiMC in real circuits; Cardano-facing hash examples use explicit
+ * BLS12-381 Poseidon params instead.</p>
  */
+@SuppressWarnings("removal")
 @ZKCircuit(name = "annotation-hash-commitment")
 public class AnnotatedHashCommitment {
     @Prove

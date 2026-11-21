@@ -20,43 +20,46 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ZkMpfTransitionCircuitTest {
 
-    // Template names identify semantic/schema versions. ADR-0063 direct Boolean lowering
-    // changes the exact R1CS pins and requires fresh circuit-specific keys.
+    // Template names identify semantic/schema versions. ADR-0068 canonical < Fr key-path
+    // constraints and derived-boolean deduplication update the exact R1CS pins and require
+    // fresh circuit-specific keys.
     @Test
     void transitionTemplateIdentitiesAndReleaseProfilesArePinned() {
-        assertProfile("value-update", 8, 80_119, 509_503, 114,
-                "2bdcd87c53a3ad649cb27c28a3c4caf1d66c5efc37044cd69e737ed991ebb4e0",
-                PoseidonMpfCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 8, 78_917, 502_429, 113,
-                "48a0267e615a670218de76bb08304699efd4b263bdfc67896acd7ddffc12002c",
-                PoseidonMpfCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 8, 100_973, 626_087, 179,
-                "d096de1decc20bb4df12da79a54aa8facc61462e1031bd03ead0b5bbd1c4576d",
-                PoseidonMpfCircuitTemplates::insertDifferentLeaf);
-        assertProfile("value-update", 9, 89_571, 570_648, 120,
-                "dd4ef446732a67c57a8cf97d3f320eca6d76f227ad42625b5f80770c2bd1eb04",
-                PoseidonMpfCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 9, 88_369, 563_574, 119,
-                "d8d132110e41bfc6b646f2775d4ad7d1abb18fd631760a8f76b4ba82eb870ca2",
-                PoseidonMpfCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 9, 110_425, 687_232, 185,
-                "1627ee290b5f9f09056152fd1a9eb222d1d2e1f0fef421a8b101a772cd09b899",
-                PoseidonMpfCircuitTemplates::insertDifferentLeaf);
-        assertProfile("value-update", 12, 117_927, 754_083, 138,
-                "65f6458656d08bf960e76dcd211457341a099cc0ec687b3afb6362a5e45becaa",
-                PoseidonMpfCircuitTemplates::valueUpdate);
-        assertProfile("insert-empty", 12, 116_725, 747_009, 137,
-                "53ee3e54949d973a1e0ae1e7af7c7d7c1cd80020ecb5afdc9221500f0e9585c1",
-                PoseidonMpfCircuitTemplates::insertEmpty);
-        assertProfile("insert-different-leaf", 12, 138_781, 870_667, 203,
-                "4e923b71ad150c2f7cd3a50b51e3df22a6b3276a09b486cd2158d32be13ae3c1",
-                PoseidonMpfCircuitTemplates::insertDifferentLeaf);
+        assertAll(
+                () -> assertProfile("value-update", 8, 80_931, 510_975, 114,
+                        "984d4da5dc29ce4d9ee0de8a572e0e5e3ba350aa75f79e54c76efb2f41d8c300",
+                        PoseidonMpfCircuitTemplates::valueUpdate),
+                () -> assertProfile("insert-empty", 8, 79_729, 503_901, 113,
+                        "112a2b7848dc8a4de818a9476867a239478151ea02e6abc84fd37c83ef94a251",
+                        PoseidonMpfCircuitTemplates::insertEmpty),
+                () -> assertProfile("insert-different-leaf", 8, 102_577, 629_031, 179,
+                        "45adb2a0194e5518341fa3fff4fe8f695a0bf60c2b358c3b70a9c4f2ab308e8e",
+                        PoseidonMpfCircuitTemplates::insertDifferentLeaf),
+                () -> assertProfile("value-update", 9, 90_381, 572_120, 120,
+                        "9bace08aa18e45fa7861265c0a9820b7a179f1da99c7a00b944b2881afdd3df9",
+                        PoseidonMpfCircuitTemplates::valueUpdate),
+                () -> assertProfile("insert-empty", 9, 89_179, 565_046, 119,
+                        "943dadf5b5b83874748d04790c61d72f5295891b43cb0921198bc06ba722f9ea",
+                        PoseidonMpfCircuitTemplates::insertEmpty),
+                () -> assertProfile("insert-different-leaf", 9, 112_027, 690_176, 185,
+                        "9ebc6b9f69d282780c1da9473bb86b855eb1defef278a282a65ccd31cc45c49f",
+                        PoseidonMpfCircuitTemplates::insertDifferentLeaf),
+                () -> assertProfile("value-update", 12, 118_731, 755_555, 138,
+                        "5c5e088da4e39c7ef68f685e09b953eead144fd682b4b7120a646d4aeda80d9e",
+                        PoseidonMpfCircuitTemplates::valueUpdate),
+                () -> assertProfile("insert-empty", 12, 117_529, 748_481, 137,
+                        "5d22c04bf535f54d87c9d765b4a0b0edcc78b0dd275900fdc7410c0b0bc05eca",
+                        PoseidonMpfCircuitTemplates::insertEmpty),
+                () -> assertProfile("insert-different-leaf", 12, 140_377, 873_611, 203,
+                        "b37e1af49bf0f543095fcbbf781fde341f0a1c5e901a474139c0839eac2dda03",
+                        PoseidonMpfCircuitTemplates::insertDifferentLeaf));
     }
 
     private static void assertProfile(
@@ -71,12 +74,13 @@ class ZkMpfTransitionCircuitTest {
         assertEquals("zeroj-mpf-v1-" + operation + "-s" + bound + "-p2",
                 circuit.constraintGraph().name());
         var r1cs = circuit.compileR1CS(CurveId.BLS12_381);
-        assertEquals(constraints, r1cs.numConstraints());
-        assertEquals(wires, r1cs.numWires());
-        assertEquals(2, r1cs.numPublicInputs());
-        assertEquals(privateInputs, r1cs.numPrivateInputs());
-        assertEquals(sha256, R1CSFlatIO.canonicalSha256(
-                r1cs.flat(), r1cs.numWires(), r1cs.numPublicInputs()));
+        assertAll(operation + "-s" + bound,
+                () -> assertEquals(constraints, r1cs.numConstraints()),
+                () -> assertEquals(wires, r1cs.numWires()),
+                () -> assertEquals(2, r1cs.numPublicInputs()),
+                () -> assertEquals(privateInputs, r1cs.numPrivateInputs()),
+                () -> assertEquals(sha256, R1CSFlatIO.canonicalSha256(
+                        r1cs.flat(), r1cs.numWires(), r1cs.numPublicInputs())));
     }
 
     @Test

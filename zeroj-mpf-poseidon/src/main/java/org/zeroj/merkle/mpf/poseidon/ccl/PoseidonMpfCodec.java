@@ -306,9 +306,24 @@ public final class PoseidonMpfCodec {
         }
 
         static Step fork(int skip, int neighborNibble, byte[] prefix, byte[] root) {
+            Objects.requireNonNull(prefix, "prefix");
+            Objects.requireNonNull(root, "root");
+            if (skip < 0 || skip > PoseidonMpfHash.KEY_PATH_NIBBLES) {
+                throw new IllegalArgumentException("fork skip out of range: " + skip);
+            }
+            if (neighborNibble < 0 || neighborNibble > 15) {
+                throw new IllegalArgumentException("fork neighborNibble out of range: " + neighborNibble);
+            }
             if (prefix.length > PoseidonMpfHash.KEY_PATH_NIBBLES) {
                 throw new IllegalArgumentException(
                         "fork prefix length exceeds " + PoseidonMpfHash.KEY_PATH_NIBBLES + ": " + prefix.length);
+            }
+            for (int i = 0; i < prefix.length; i++) {
+                int nibble = prefix[i] & 0xFF;
+                if (nibble > 15) {
+                    throw new IllegalArgumentException(
+                            "fork prefix byte at index " + i + " is not a valid nibble [0, 15]: " + nibble);
+                }
             }
             return new Step(KIND_FORK, skip, List.of(), neighborNibble, prefix.length,
                     prefixChunksForTrailingDigest(prefix),

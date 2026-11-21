@@ -325,6 +325,14 @@ class PoseidonMpfOperationWitnessTest {
         // CBOR wire with fork prefix > 64 bytes rejected at decode.
         assertThrows(IllegalArgumentException.class, () -> PoseidonMpfCodec.decode(
                 encodeProof(forkStepCbor(0, 1, new byte[65], new byte[32]))));
+
+        // CBOR wire with non-nibble fork prefix byte (> 15) or invalid neighborNibble rejected at decode (ADR-0068).
+        assertThrows(IllegalArgumentException.class, () -> PoseidonMpfCodec.decode(
+                encodeProof(forkStepCbor(0, 1, new byte[]{0x01, 0x10}, new byte[32]))));
+        assertThrows(IllegalArgumentException.class, () -> PoseidonMpfCodec.decode(
+                encodeProof(forkStepCbor(0, 1, new byte[]{(byte) 0xFF}, new byte[32]))));
+        assertThrows(IllegalArgumentException.class, () -> PoseidonMpfCodec.decode(
+                encodeProof(forkStepCbor(0, 16, new byte[]{0x01}, new byte[32]))));
     }
 
     private static byte[][] independentSiblings(byte[][] children, int meNibble) {

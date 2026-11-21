@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests for the Signal-based stdlib — all using the OO (Signal chaining) style.
  */
+@SuppressWarnings("removal")
 class SignalStyleTest {
 
     // ========================================================================

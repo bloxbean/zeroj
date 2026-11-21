@@ -37,8 +37,8 @@ limitations. Statuses and remaining production gates are tracked in
 | Core proof model, codecs, verifier SPI/orchestrator | `zeroj-api`, `zeroj-codec`, `zeroj-backend-spi` | **Beta** |
 | Circuit definition (DSL, symbolic annotations, gadgets) | `zeroj-circuit-dsl`, `zeroj-circuit-annotation-*`, `zeroj-circuit-lib` ([per-gadget table](zeroj-circuit-lib/README.md)) | **Beta** |
 | Groth16 BLS12-381 — pure Java prove + verify | `zeroj-crypto`, `zeroj-verifier-groth16` | **Beta** — proving is offline/isolated only (witness scalars are not heap-zeroized or constant-time in the JVM); production trusted setup requires an external snarkjs MPC ceremony (in-repo setup is dev-only and flag-gated) |
-| Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16AuthenticatedStateTransitionValidator`) |
-| PlonK BLS12-381 — pure Java prove + verify, `.ptau` import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** — proving is offline/isolated only (witness scalars are not heap-zeroized or constant-time in the JVM) |
+| Groth16 BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Beta — testnet only**, not value-bearing; bind `ScriptContext` in real validators (see `Groth16AuthenticatedStateTransitionValidator` and `Groth16BLS12381TxOutRefBindingVerifier`) |
+| PlonK BLS12-381 — pure Java prove + verify, `.ptau` SRS import | `zeroj-crypto`, `zeroj-verifier-plonk` | **Experimental** — universal `.ptau` SRS import (`PtauImporterBLS381`) + pure-Java prove/verify; proving is offline/isolated only (witness scalars are not heap-zeroized or constant-time in the JVM); snarkjs PlonK `.zkey` import is unsupported ([ADR-0066](docs/adr/0066-plonk-bls12381-ptau-and-zkey-import.md)) |
 | PlonK BLS12-381 — on-chain (Julc / Plutus V3) | `zeroj-onchain-julc` | **Experimental** — full KZG check implemented; labeled testnet trials only |
 | BBS (CFRG draft-10) — verification | `zeroj-bbs` | **Beta** (spec is an IRTF draft, not yet an RFC) |
 | BBS — issuance / proof generation | `zeroj-bbs` | **Beta with caveat** — offline/isolated only: no provider (pure Java or blst) has an evidenced side-channel contract ([ADR-0062](docs/adr/0062-bls12381-independent-review-and-remediation.md)) |
@@ -54,14 +54,14 @@ limitations. Statuses and remaining production gates are tracked in
 - **CircuitSpec Java DSL** (recommended) — define circuits as reusable Java classes with `CircuitSpec`
 - **Inline lambda DSL** — quick prototyping with `CircuitBuilder.define(api -> ...)`
 - **circom interop** — use externally compiled circom/snarkjs artifacts (`.r1cs`, `.zkey`, `.wtns`)
-- **Standard library** — Poseidon, MiMC, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-256 / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, plus operation-specific Poseidon MPF/JMT circuits in their authenticated-state modules; see the [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md) gadget table and [large-state guide](docs/merkle/practical-large-state-guide.md)
+- **Standard library** — Poseidon, Merkle, Comparators, Binary, Mux, AliasCheck; in-circuit **Blake2b / SHA-256 / SHA-512 / HMAC-SHA512** and **Ed25519 / BIP32 / CIP-1852** key-derivation gadgets (prove Cardano key ownership without revealing the seed); symbolic `Zk*` adapters, plus operation-specific Poseidon MPF/JMT circuits in their authenticated-state modules; see the [`zeroj-circuit-lib`](zeroj-circuit-lib/README.md) gadget table and [large-state guide](docs/merkle/practical-large-state-guide.md)
 - **Multi-backend compilation** — one Java circuit can compile to R1CS for Groth16 or to PlonK
 
 ### Generate Proofs
 - **Pure Java prover** (recommended) — Groth16 + PlonK for BLS12-381. Zero native dependencies (offline/isolated host model; witness scalars are not heap-zeroized or constant-time in the JVM). Allocation-lean flat arithmetic, an `mmap`-able proving key, and a streaming trusted setup keep large circuits (millions of constraints) within commodity memory, no JNI (ADR-0029/0033/0034/0035). (GraalVM `native-image` CI currently builds and verifies the `zeroj-ceremony` CLI; native-image proving is not yet CI-verified.)
 - **blst-accelerated prover backend** — optional, opt-in FFM-bound native MSM (`blst_p1s/p2s_mult_pippenger`); a faster Groth16 proving backend, bit-identical proofs. The MSM's `libblst` is built from source (no third-party wrapper) ([ADR-0029](docs/adr/0029-blst-accelerated-groth16-prover.md)).
 - **snarkjs CLI** — external CLI for circom-based circuits
-- **snarkjs key import** — import `.zkey` files, prove with the pure Java prover
+- **snarkjs key & SRS import** — import Groth16 `.zkey` files and streaming BLS12-381 `.ptau` SRS files, prove with the pure Java prover
 
 ### Verify ZK Proofs (Pure Java, Zero Native Deps)
 - **Groth16 BLS12-381** — pure Java verification; optional blst-backed native verifier is also available
@@ -261,7 +261,7 @@ The **pure Java prover and verifier require no optional dependencies**.
 | [`zeroj-circuit-dsl`](zeroj-circuit-dsl/) | Java Circuit DSL — define circuits with CircuitSpec, compile to R1CS/PlonK |
 | [`zeroj-circuit-annotation-api`](zeroj-circuit-annotation-api/) | Symbolic circuit annotations (`@ZKCircuit`, `@Prove`, `@Public`, `@Secret`) and typed symbolic values (`ZkField`, `ZkBool`, `ZkUInt`, `ZkArray`, `ZkBits`, `ZkBytes`) |
 | [`zeroj-circuit-annotation-processor`](zeroj-circuit-annotation-processor/) | Compile-time annotation processor generating typed `*Circuit` builders, schemas, and `Inputs` facades |
-| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, Merkle, Comparators, Binary, Mux; in-circuit Blake2b / SHA-256 / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
+| [`zeroj-circuit-lib`](zeroj-circuit-lib/) | Circuit standard library — Poseidon, Merkle, Comparators, Binary, Mux, RangeCheck; in-circuit Blake2b / SHA-256 / SHA-512 / HMAC-SHA512 and Ed25519 / BIP32 / CIP-1852 key derivation; symbolic adapters; [per-gadget status](zeroj-circuit-lib/README.md#gadget-status) |
 | [`zeroj-onchain-julc`](zeroj-onchain-julc/) | Reusable Plutus V3 on-chain verifiers and libraries via Julc; Groth16 is the primary supported path, PlonK BLS12-381 validators/libraries are experimental opt-in |
 
 #### Explicit Opt-In Product Modules

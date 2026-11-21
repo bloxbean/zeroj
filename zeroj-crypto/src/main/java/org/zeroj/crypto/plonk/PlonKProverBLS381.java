@@ -332,16 +332,27 @@ public final class PlonKProverBLS381 {
         var tCoeffs = cosetIFFT(tCoset, shift, n4, logN4);
 
         // Split t into three parts; T1/T2 reserve degree n for quotient-split blinders.
-        var t1 = new MontFr381[n + 1]; var t2 = new MontFr381[n + 1];
-        // T3 gets all remaining coefficients (degree 2n onwards) — may exceed n due to blinding
-        int t3Len = Math.max(n, tCoeffs.length - 2 * n);
+        // deg(aBlind), deg(bBlind), deg(cBlind) <= n + 1 and deg(zBlind) <= n + 2, so the
+        // numerator has degree <= 4n + 5 and t(X) has degree <= 3n + 5 (3n + 6 coefficients).
+        // Therefore T3 has exact length n + 6 (indices 2n .. 3n + 5), matching snarkjs 0.7.6
+        // plonk_prove.js and allowing a same-power .ptau (2n - 1 >= n + 6 for n >= 8).
+        var t1 = new MontFr381[n + 1];
+        var t2 = new MontFr381[n + 1];
+        int t3Len = n + 6;
         var t3 = new MontFr381[t3Len];
         for (int i = 0; i < n; i++) {
-            t1[i] = i < tCoeffs.length ? tCoeffs[i] : MontFr381.ZERO;
-            t2[i] = i + n < tCoeffs.length ? tCoeffs[i + n] : MontFr381.ZERO;
+            t1[i] = tCoeffs[i];
+            t2[i] = tCoeffs[i + n];
         }
         for (int i = 0; i < t3Len; i++) {
-            t3[i] = i + 2 * n < tCoeffs.length ? tCoeffs[i + 2 * n] : MontFr381.ZERO;
+            t3[i] = tCoeffs[i + 2 * n];
+        }
+        for (int i = 3 * n + 6; i < tCoeffs.length; i++) {
+            if (!tCoeffs[i].isZero()) {
+                throw new IllegalStateException(
+                        "PlonK quotient polynomial t(X) exceeds degree 3n+5 (non-zero coefficient at index "
+                                + i + "; witness likely does not satisfy the circuit constraints)");
+            }
         }
 
         // PLONK 8.4 / snarkjs v0.7.6: randomize the split without changing T(X).
@@ -422,7 +433,7 @@ public final class PlonKProverBLS381 {
 
         // L1(zeta) = omega^0 * zh / (n * (zeta - omega^0)) = zh / (n * (zeta - 1))
         MontFr381 zetaN = zeta;
-        for (int i = 1; i < n; i++) zetaN = zetaN.mul(zeta);
+        for (int i = 0; i < logN; i++) zetaN = zetaN.square();
         MontFr381 zh = zetaN.sub(MontFr381.ONE);
         if (zh.isZero() || zeta.equals(MontFr381.ONE)) {
             throw new DegenerateProofException("PlonK challenge zeta lies inside the evaluation domain");
@@ -502,11 +513,18 @@ public final class PlonKProverBLS381 {
 
     // --- Polynomial helpers ---
 
-    /** Evaluate polynomial on coset {shift * omega^i}: IFFT → shift coeffs by shift^i → FFT */
+    /** Evaluate polynomial on coset {shift * omega^i}: shift coeffs by shift^i → FFT */
     private static MontFr381[] cosetEval(MontFr381[] coeffs, MontFr381 shift, int n, int logN) {
         MontFr381[] padded = new MontFr381[n];
-        for (int i = 0; i < n; i++)
-            padded[i] = i < coeffs.length ? coeffs[i].mul(powFr(shift, i)) : MontFr381.ZERO;
+        MontFr381 power = MontFr381.ONE;
+        int limit = Math.min(coeffs.length, n);
+        for (int i = 0; i < limit; i++) {
+            padded[i] = coeffs[i].mul(power);
+            power = power.mul(shift);
+        }
+        for (int i = limit; i < n; i++) {
+            padded[i] = MontFr381.ZERO;
+        }
         return FieldFFTBLS381.fft(padded);
     }
 
@@ -591,10 +609,22 @@ public final class PlonKProverBLS381 {
     }
 
     private static MontFr381 powFr(MontFr381 base, int exp) {
-        if (exp == 0) return MontFr381.ONE;
-        MontFr381 r = base;
-        for (int i = 1; i < exp; i++) r = r.mul(base);
-        return r;
+        if (exp < 0) {
+            throw new IllegalArgumentException("Exponent must be non-negative: " + exp);
+        }
+        MontFr381 result = MontFr381.ONE;
+        MontFr381 cur = base;
+        int e = exp;
+        while (e > 0) {
+            if ((e & 1) != 0) {
+                result = result.mul(cur);
+            }
+            e >>>= 1;
+            if (e > 0) {
+                cur = cur.square();
+            }
+        }
+        return result;
     }
 
     private static void addG1(FiatShamirTranscript t, AffineG1 p, TranscriptEncoding encoding) {
@@ -655,8 +685,9 @@ public final class PlonKProverBLS381 {
         if (pk.omega() == null) {
             throw new IllegalArgumentException("omega must not be null");
         }
-        if (pk.srsG1() == null || pk.srsG1().length < 2 * n) {
-            throw new IllegalArgumentException("SRS G1 length must be at least " + (2 * n));
+        int requiredSrsG1 = n + 6;
+        if (pk.srsG1() == null || pk.srsG1().length < requiredSrsG1) {
+            throw new IllegalArgumentException("SRS G1 length must be at least " + requiredSrsG1);
         }
 
         requireWireArray("wireA", wireA, n);

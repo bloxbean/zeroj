@@ -233,6 +233,7 @@ class Groth16EndToEndTest {
      * Validates that validateWitness rejects an invalid witness with a clear error.
      */
     @Test
+    @SuppressWarnings("removal")
     void invalidWitness_validateWitnessThrows() throws IOException {
         var r1csData = R1CSImporter.importR1CS(getClass().getResourceAsStream(R1CS_PATH));
         var witness = ZkeyImporter.importWtns(getClass().getResourceAsStream(WTNS_PATH));

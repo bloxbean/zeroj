@@ -2,19 +2,18 @@ package org.zeroj.verifier.plonk;
 
 import org.zeroj.api.*;
 import org.zeroj.backend.spi.BackendDescriptor;
+import org.zeroj.backend.spi.EnvelopeBinding;
 import org.zeroj.backend.spi.ZkVerifier;
 import org.zeroj.bls12381.Bls12381Codecs;
 import org.zeroj.bls12381.ec.*;
 import org.zeroj.bls12381.field.*;
 import org.zeroj.codec.CodecException;
-import org.zeroj.codec.CanonicalHash;
 import org.zeroj.bls12381.pairing.BLS12381Pairing;
 import org.zeroj.crypto.plonk.PlonKProverBLS381;
 import org.zeroj.crypto.transcript.FiatShamirTranscript;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -333,6 +332,11 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
     }
 
     private VerificationResult validateEnvelopeMaterial(ZkProofEnvelope envelope, VerificationMaterial material) {
+        if (envelope == null) {
+            return VerificationResult.error(
+                    VerificationResult.ReasonCode.MALFORMED_ENVELOPE,
+                    "Proof envelope must not be null");
+        }
         if (envelope.proofSystem() != ProofSystemId.PLONK) {
             return VerificationResult.error(
                     VerificationResult.ReasonCode.UNSUPPORTED_PROOF_SYSTEM,
@@ -343,27 +347,7 @@ public class PlonkBLS12381Verifier implements ZkVerifier {
                     VerificationResult.ReasonCode.UNSUPPORTED_CURVE,
                     "Expected BLS12-381 proof envelope");
         }
-        if (material.proofSystemId() != envelope.proofSystem()
-                || material.curveId() != envelope.curve()
-                || !material.circuitId().equals(envelope.circuitId())) {
-            return VerificationResult.error(
-                    VerificationResult.ReasonCode.VK_MISMATCH,
-                    "Verification material does not match proof envelope");
-        }
-
-        byte[] actualVkHash = CanonicalHash.sha256(material.vkBytes());
-        if (material.vkHash().isPresent() && !Arrays.equals(material.vkHash().orElseThrow(), actualVkHash)) {
-            return VerificationResult.error(
-                    VerificationResult.ReasonCode.VK_MISMATCH,
-                    "Verification material hash does not match VK bytes");
-        }
-        if (envelope.vkRef() instanceof VerificationKeyRef.ByHash byHash
-                && !Arrays.equals(byHash.hash(), actualVkHash)) {
-            return VerificationResult.error(
-                    VerificationResult.ReasonCode.VK_MISMATCH,
-                    "Proof envelope VK hash does not match verification material");
-        }
-        return null;
+        return EnvelopeBinding.validateBinding(envelope, material).orElse(null);
     }
 
     private void validateParsedMetadata(String proofProtocol, String proofCurve, String vkProtocol, String vkCurve) {
