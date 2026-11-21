@@ -197,8 +197,8 @@ public final class WitnessCalculator {
 
                 case Gate.AssertEq(var left, var right) -> {
                     if (!witness.get(left.id()).equals(witness.get(right.id()))) {
-                        throw new ArithmeticException("Constraint violation: "
-                                + left + "=" + witness.get(left.id()) + " != " + right + "=" + witness.get(right.id()));
+                        throw new ArithmeticException("Constraint violation: wire "
+                                + left.id() + " != wire " + right.id());
                     }
                 }
 

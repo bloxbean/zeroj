@@ -14,7 +14,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * ADR-0068: raw CircuitAPI boolean enforcement, fromBinary width guard, strict canonical
@@ -178,6 +180,36 @@ class CircuitDslHardeningTest {
         assertEquals(false, calcEx.getMessage().contains(secretSentinel.toString()),
                 "WitnessCalculator must redact private input value");
         assertThrows(IllegalArgumentException.class, () -> WitnessCalculator.calculateFlat(graph, gePrime, bls));
+
+        // Gate.AssertEq failure must identify the wire IDs while redacting BOTH private witness values.
+        var eqCircuit = CircuitBuilder.create("secret-eq")
+                .secretVar("s1").secretVar("s2")
+                .define(api -> api.assertEqual(api.var("s1"), api.var("s2")));
+        var eqGraph = eqCircuit.constraintGraph();
+        BigInteger secretLeft = new BigInteger("111111111111");
+        BigInteger secretRight = new BigInteger("222222222222");
+        Map<String, List<BigInteger>> unequalSecrets = Map.of(
+                "s1", List.of(secretLeft),
+                "s2", List.of(secretRight));
+        int leftId = eqGraph.secretInputs().get(0).id();
+        int rightId = eqGraph.secretInputs().get(1).id();
+
+        ArithmeticException boxedEqEx = assertThrows(ArithmeticException.class,
+                () -> WitnessCalculator.calculate(eqGraph, unequalSecrets, bls));
+        assertTrue(boxedEqEx.getMessage().contains("wire " + leftId)
+                        && boxedEqEx.getMessage().contains("wire " + rightId),
+                "AssertEq failure must identify wire IDs, got: " + boxedEqEx.getMessage());
+        assertFalse(boxedEqEx.getMessage().contains(secretLeft.toString()),
+                "AssertEq failure must redact left private witness value");
+        assertFalse(boxedEqEx.getMessage().contains(secretRight.toString()),
+                "AssertEq failure must redact right private witness value");
+
+        ArithmeticException flatEqEx = assertThrows(ArithmeticException.class,
+                () -> WitnessCalculator.calculateFlat(eqGraph, unequalSecrets, bls));
+        assertFalse(flatEqEx.getMessage().contains(secretLeft.toString()),
+                "Flat AssertEq failure must redact left private witness value");
+        assertFalse(flatEqEx.getMessage().contains(secretRight.toString()),
+                "Flat AssertEq failure must redact right private witness value");
     }
 
     @Test

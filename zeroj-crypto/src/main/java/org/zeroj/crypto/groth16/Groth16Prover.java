@@ -71,7 +71,7 @@ public final class Groth16Prover {
         if (witness == null || witness.length == 0)
             throw new IllegalArgumentException("Witness must not be null or empty");
         if (!BigInteger.ONE.equals(witness[0]))
-            throw new IllegalArgumentException("witness[0] must be 1 (the constant wire), got " + witness[0]);
+            throw new IllegalArgumentException("witness[0] must be 1 (the constant wire)");
         if (witness.length != numWires)
             throw new IllegalArgumentException(
                     "witness.length (" + witness.length + ") must match numWires (" + numWires + ")");
