@@ -3,11 +3,11 @@
   "site": "https://zeroj.dev",
   "zerojVersion": "0.1.0-pre13",
   "zerojReleased": true,
-  "zerojDevelopmentVersion": "0.1.0-pre13",
+  "zerojDevelopmentVersion": "0.1.0-pre14",
   "julcVersion": "0.1.0-pre18",
   "cclVersion": "0.8.0-pre5",
   "sourceRepository": "https://github.com/bloxbean/zeroj",
-  "sourceRevision": "362744e12a685b09ce2849bbee61b99136716f0f",
+  "sourceRevision": "71ad73867b34d350bb9e90115e58f0c968f20d7a",
   "note": "Source revision at build time. Hashes describe the generated content, including local edits. The documentation tracks the main branch and may describe features newer than the latest published release.",
   "pages": [
     {
@@ -452,7 +452,7 @@
     },
     {
       "url": "https://zeroj.dev/llms-full.txt",
-      "sha256": "96a0d0bf908330ea92a9f6d11939d01b35d8a6f5b22edaaec6df103848f938b0"
+      "sha256": "1a640df0257cbf2fa7a0ebd6ebf0f24eafd5e57f4cccffcdc98f6427e613e3f5"
     },
     {
       "url": "https://zeroj.dev/ai/starter-pack.md",
