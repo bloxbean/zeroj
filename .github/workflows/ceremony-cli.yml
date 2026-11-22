@@ -30,7 +30,7 @@ jobs:
             os: linux-arm64
             ext: ''
             fatjar: false
-          - runner: macos-14
+          - runner: macos-15
             os: macos-arm64
             ext: ''
             fatjar: false
